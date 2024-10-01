@@ -85,8 +85,8 @@ class grmgeneralized extends model_raschmodel {
         $frac[0] = 0;
 
         foreach ($ip['difficulties'] as $fraction => $val) {
-            if ($fraction > 0 && $fraction <= 1) {
-                $frac[] = $fraction;
+            if ((float) $fraction > 0 && (float) $fraction <= 1) {
+                $frac[] = (float) $fraction;
             }
         }
         sort($frac);
