@@ -15,11 +15,16 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * This file contains language strings for the 1plraschbirnbaum model catquiz plugin
+ * This file contains the version information for the 1plraschbirnbaum model catquiz plugin
  *
- * @package catmodel_pcm
+ * @package catmodel_pcmgeneralized
  * @copyright  2022 Georg Maißer <info@wunderbyte.at>
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-$string['pluginname'] = '3PL Graded-Response-Modell';
+defined('MOODLE_INTERNAL') || die();
+
+$plugin->version   = 2022122000;
+$plugin->requires  = 2022041900;
+$plugin->component = 'catmodel_pcmgeneralized';
+

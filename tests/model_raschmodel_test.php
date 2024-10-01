@@ -47,7 +47,7 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  *
  * @covers \local_catquiz\local\model\model_raschmodel
  */
-class model_raschmodel_test extends basic_testcase {
+final class model_raschmodel_test extends basic_testcase {
 
     /**
      * Test if the information criteria functions return the expected values.
@@ -221,7 +221,7 @@ class model_raschmodel_test extends basic_testcase {
     private static function create_person_param_list(array $abilities): model_person_param_list {
         $personabilities = new model_person_param_list();
         foreach ($abilities as $id => $ability) {
-            $pp = (new model_person_param($id))
+            $pp = (new model_person_param($id, '1'))
                 ->set_ability($ability);
             $personabilities->add($pp);
         }

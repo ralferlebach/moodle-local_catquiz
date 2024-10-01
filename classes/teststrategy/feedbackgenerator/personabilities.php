@@ -28,6 +28,7 @@ namespace local_catquiz\teststrategy\feedbackgenerator;
 use core\chart_bar;
 use core\chart_series;
 use local_catquiz\catscale;
+use local_catquiz\data\catscale_structure;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\teststrategy\feedback_helper;
@@ -76,13 +77,12 @@ class personabilities extends feedbackgenerator {
 
         $abilitieschart = $this->render_chart(
             $feedbackdata['personabilities_abilities'],
-            (array) $this->get_progress()->get_quiz_settings(),
-            $feedbackdata['primaryscale'],
+            (array) $this->get_progress()->get_quiz_settings()
         );
 
         $scaleinfo = false;
         $primaryscaleid = isset($feedbackdata['primaryscale'])
-            ? $feedbackdata['primaryscale']['id']
+            ? $feedbackdata['primaryscale']->id
             : false;
         if ($primaryscaleid && array_key_exists($primaryscaleid, $feedbackdata['personabilities_abilities'])) {
             $primaryscale = $feedbackdata['personabilities_abilities'][$primaryscaleid];
@@ -93,12 +93,27 @@ class personabilities extends feedbackgenerator {
                     'feedback_details_lowestskill',
                     'local_catquiz',
                     [
-                        'name' => feedback_helper::add_quotes($primaryscale['name']),
+                        'name' => $primaryscale['name'],
                         'value' => feedback_helper::localize_float($primaryscale['value']),
                         'se' => feedback_helper::localize_float($feedbackdata['se'][$primaryscaleid]),
                     ]
                 );
             }
+
+            if (array_key_exists('primarybecause', $primaryscale)
+                && $primaryscale['primarybecause'] === 'highestskill'
+            ) {
+                $scaleinfo = get_string(
+                    'feedback_details_highestskill',
+                    'local_catquiz',
+                    [
+                        'name' => $primaryscale['name'],
+                        'value' => feedback_helper::localize_float($primaryscale['value']),
+                        'se' => feedback_helper::localize_float($feedbackdata['se'][$primaryscaleid]),
+                    ]
+                );
+            }
+
         }
 
         $pseudoindex = 0;
@@ -121,7 +136,7 @@ class personabilities extends feedbackgenerator {
         $description = get_string(
             'feedback_details_description',
             'local_catquiz',
-            feedback_helper::add_quotes($globalscalename)
+            $globalscalename
         );
         $referencescale = [
             'name' => $globalscalename,
@@ -134,12 +149,25 @@ class personabilities extends feedbackgenerator {
             'itemsplayed' => $this->get_progress()->get_num_playedquestions(),
         ];
 
+        // Create an abilityscore entry to be displayed in a table.
+        // If the scale is marked as hidden, the value is empty ('-'), otherwise it is Ability (± SE).
+        $abilities = array_map(
+            function ($abilityarray) {
+                $ishidden = array_key_exists('hidden', $abilityarray) && $abilityarray['hidden'];
+                $abilityarray['abilityscore'] = $ishidden
+                    ? '-'
+                    : sprintf('%.2f (±%.2f)', $abilityarray['ability'], $abilityarray['standarderror']);
+                return $abilityarray;
+            },
+            $feedbackdata['abilitieslist']
+        );
+
         $feedback = $OUTPUT->render_from_template(
         'local_catquiz/feedback/personabilities',
             [
             'feedback_details_description' => $description,
             'scale_info' => $scaleinfo,
-            'abilities' => $feedbackdata['abilitieslist'],
+            'abilities' => $abilities,
             'referencescale' => $referencescale,
             'chartdisplay' => $abilitieschart,
             'chart_description' => $chartdescription,
@@ -327,6 +355,7 @@ class personabilities extends feedbackgenerator {
         }
 
         return [
+            'hidden' => array_key_exists('hidden', $abilityarray) && $abilityarray['hidden'],
             'standarderror' => $standarderror,
             'ability' => $ability,
             'name' => $catscales[$catscaleid]->name,
@@ -416,12 +445,10 @@ class personabilities extends feedbackgenerator {
      *
      * @param array $personabilities
      * @param array $quizsettings
-     * @param ?array $primarycatscale
      *
      * @return array
-     *
      */
-    private function render_chart(array $personabilities, array $quizsettings, ?array $primarycatscale): array {
+    private function render_chart(array $personabilities, array $quizsettings): array {
         global $OUTPUT;
 
         if (count($personabilities) < 2) {
@@ -476,7 +503,7 @@ class personabilities extends feedbackgenerator {
             'charttitle' => get_string(
                 'personabilitycharttitle',
                 'local_catquiz',
-                feedback_helper::add_quotes($globalscalename)
+                $globalscalename
             ),
             'colorbar_legend' => [
                 'feedbackbarlegend' => feedback_helper::get_colorbarlegend($quizsettings, $quizsettings->catquiz_catscales),

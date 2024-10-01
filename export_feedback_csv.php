@@ -28,30 +28,45 @@
 use local_catquiz\output\catquizstatistics;
 
 require_once('../../config.php');
-$context = \context_system::instance();
-$PAGE->set_context($context);
-require_login();
-require_capability('local/catquiz:canmanage', $context);
-require_once($CFG->dirroot . '/local/catquiz/lib.php');
-require_once($CFG->libdir . '/csvlib.class.php');
 
 $scaleid = required_param('scaleid', PARAM_INT);
+$cid = required_param('cid', PARAM_INT);
+
 $courseid = optional_param('courseid', 0, PARAM_INT) ?: null;
 $testid = optional_param('testid', 0, PARAM_INT) ?: null;
 $starttime = optional_param('starttime', 0, PARAM_INT) ?: null;
 $endtime = optional_param('endtime', 0, PARAM_INT) ?: null;
+
+require_login();
+
+$PAGE->set_context(context_course::instance($cid));
+
+if (!has_capability('local/catquiz:view_users_feedback', context_course::instance($cid)) &&
+    !has_capability('local/catquiz:canmanage', context_system::instance())) {
+
+    die(get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback'));
+}
+
+require_once($CFG->dirroot . '/local/catquiz/lib.php');
+require_once($CFG->libdir . '/csvlib.class.php');
+
 $catquizstatistics = new catquizstatistics($courseid, $testid, $scaleid, $endtime, $starttime);
 
-$filename = "shortcode_export_scale_$scaleid";
-if ($courseid) {
-    $filename .= "_$courseid";
+$filename = "export_testresults_scale_$scaleid";
+if ($courseid != 0) {
+    $filename .= "_course_$courseid";
 }
-if ($starttime) {
-    $filename .= "_$courseid";
+if ($testid != 0) {
+    $filename .= "_test_$testid";
 }
-if ($endtime) {
-    $filename .= "_$courseid";
+if ($starttime != 0) {
+    $filename .= "_from_".userdate($starttime, get_string('strftimedatetime', 'core_langconfig'));
 }
+if ($endtime != 0) {
+    $filename .= "_till_".userdate($endtime, get_string('strftimedatetime', 'core_langconfig'));
+}
+
+$filename .= "_".userdate(time(), get_string('strftimedatetime', 'core_langconfig'));
 
 $downloadfilename = clean_filename ( $filename );
 $csvexport = new csv_export_writer ( 'semicolon' );
@@ -78,18 +93,35 @@ $exporttitle = [
 // -- [/] N Ergebnisskala,
 // -- [/] frac Ergebnisskala,
 // -- [?] JSON aller detektierten Ergebnisse
-// phpcs:enable
     'UserID',
     'UserName',
     'UserE-Mail',
     'Startzeit',
     'Endzeit',
+    'Dauer',
+    'Status',
+    'Test-ID',
     'Strategie',
     'Anz. Fragen gesamt',
+    // 'Ergebnis-Range',
+    'Globalskala',
+    'PP global',
+    'SE global',
+    // 'N global',
+    # 'frac global',
+    'Ergebnis-Skala (je Strategie)',
+    'PP Ergebnisskala',
+    'SE Ergebnisskala',
+    // 'N Ergebnisskala',
+    // 'frac Ergebnisskala',
+// phpcs:enable
 ];
+
 $csvexport->add_data($exporttitle);
 
 foreach ($catquizstatistics->get_export_data() as $row) {
+
+    // phpcs:disable
     $csvexport->add_data(
         [
             $row->userid,
@@ -97,10 +129,30 @@ foreach ($catquizstatistics->get_export_data() as $row) {
             $row->email,
             $row->starttime,
             $row->endtime,
+            $row->timediff,
+            $row->status,
+            $row->testid,
             $row->teststrategy,
             $row->number_of_testitems_used,
+            $row->globalname,
+            $row->globalpp,
+            $row->globalse,
+            /*
+            $row->globaln,
+            $row->globalf,
+            */
+            $row->primaryname,
+            $row->primarypp,
+            $row->primaryse,
+            /*
+            $row->primaryn,
+            $row->primaryf,
+
+            $row->allresults,
+            */
         ]
     );
+    // phpcs:enable
 }
 
 $csvexport->download_file ();

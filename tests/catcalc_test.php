@@ -50,7 +50,7 @@ require_once($CFG->dirroot . '/local/catquiz/tests/lib.php');
  * @covers \local_catquiz\catcalc
  *
  */
-class catcalc_test extends basic_testcase {
+final class catcalc_test extends basic_testcase {
     /**
      * Compares our results with the ones from the SimulatinoSteps radikaler CAT CSV
      *
@@ -140,6 +140,98 @@ class catcalc_test extends basic_testcase {
             $radcatemp
         );
         return $data;
+    }
+
+    /**
+     * This test checks that there are no errors when updating the ability with different models.
+     *
+     * @param model_item_param_list $items
+     * @param array $responses
+     * @return void
+     *
+     * @dataProvider ability_can_be_calculated_with_all_models_provider
+     */
+    public function test_ability_can_be_calculated_with_all_models(model_item_param_list $items, array $responses) {
+        $this->doesNotPerformAssertions();
+        $ability = catcalc::estimate_person_ability($responses, $items);
+    }
+
+    /**
+     * Provider for test_ability_can_be_calculated_with_all_models
+     *
+     * @return array
+     */
+    public static function ability_can_be_calculated_with_all_models_provider(): array {
+        $grmgeneralizedjson = json_encode([
+            'difficulties' => [
+                '0.00' => 0.12,
+                '0.33' => 0.35,
+                '0.66' => 0.68,
+                '1.00' => 0.83,
+            ],
+        ]);
+        $grmjson = json_encode([
+            'difficulties' => [
+                '0.00' => 0.12,
+                '0.33' => 0.35,
+                '0.66' => 0.68,
+                '1.00' => 0.83,
+            ],
+        ]);
+        $pcmgeneralizedjson = json_encode([
+            'intercepts' => [
+                '0.000' => 0.00,
+                '0.333' => 0.42,
+                '0.666' => 0.57,
+                '1.000' => 0.98,
+            ],
+        ]);
+        $pcmjson = json_encode([
+            'intercepts' => [
+                '0.000' => 0.10,
+                '0.333' => 0.48,
+                '0.666' => 0.53,
+                '1.000' => 0.88,
+            ],
+        ]);
+        $defaultrecord = [
+            'discrimination' => '1.2',
+            'contextid' => 1,
+            'timecreated' => time(),
+            'timemodified' => time(),
+        ];
+        $itemid = 'TEST01-01';
+        $grmgeneralizedrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $grmgeneralizedjson]);
+        $grmrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $grmjson]);
+        $pcmgeneralizedrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $pcmgeneralizedjson]);
+        $pcmrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $pcmjson]);
+        $grmgeneralizedparam = new model_item_param($itemid, 'grmgeneralized', [], 4, $grmgeneralizedrecord);
+        $grmparam = new model_item_param($itemid, 'grm', [], 4, $grmrecord);
+        $pcmgeneralizedparam = new model_item_param($itemid, 'pcmgeneralized', [], 4, $pcmgeneralizedrecord);
+        $pcmparam = new model_item_param($itemid, 'pcm', [], 4, $pcmrecord);
+
+        $responses = [
+            $itemid => ['fraction' => 1.0],
+        ];
+
+        return [
+            'grmgeneralized' => [
+                'itemparams' => (new model_item_param_list())->add($grmgeneralizedparam),
+                'responses' => $responses,
+            ],
+            'grm' => [
+                'itemparams' => (new model_item_param_list())->add($grmparam),
+                'responses' => $responses,
+            ],
+            'pcmgeneralized' => [
+                'itemparams' => (new model_item_param_list())->add($pcmgeneralizedparam),
+                'responses' => $responses,
+            ],
+            'pcm' => [
+                'itemparams' => (new model_item_param_list())->add($pcmparam),
+                'responses' => $responses,
+            ],
+        ];
     }
 
     /**

@@ -103,6 +103,18 @@ class feedbackclass {
         $mform->addHelpButton('numberoffeedbackoptionsselect', 'numberoffeedbackoptionpersubscale', 'local_catquiz');
         $elements[] = $element;
 
+        $instance = $data['instance'] ?? $defaultvalues['instance'] ?? "";
+        if (!$instance) {
+            $picturewarning = get_string('picturesavewarning', 'local_catquiz');
+            $element = $mform->createElement(
+                'html',
+                '<div class="alert alert-warning" role="alert">'.$picturewarning.'</div>'
+            );
+            $element->setName('picturesavewarning');
+            $mform->addElement($element);
+            $elements[] = $element;
+        }
+
         // Button to attach JavaScript to reload the form.
         $mform->registerNoSubmitButton('submitnumberoffeedbackoptions');
         $elements[] = $mform->addElement('submit', 'submitnumberoffeedbackoptions', 'numberoffeedbackoptionssubmit',
@@ -110,6 +122,7 @@ class feedbackclass {
             'class' => 'd-none',
             'data-action' => 'submitNumberOfFeedbackOptions',
         ]);
+
         // Generate the options for the colors. Same values are applied to all subscales and subfeedbacks.
         $coloroptions = self::get_array_of_colors($nfeedbpersubscale);
         // We need this to close the collapsable header elements.
@@ -159,15 +172,19 @@ class feedbackclass {
                 // This is the preparation for the header element (to be appended in the end) where we apply the distinction.
 
                 // If reload was triggered (ie via nosubmitbutton), data is set in submitvalues.
-                if (isset($data['feedbackeditor_scaleid_'  . $scale->id . '_' . $j])) {
-                    $feedback = $data['feedbackeditor_scaleid_'  . $scale->id . '_' . $j];
-                } else if (isset($defaultvalues['feedbackeditor_scaleid_'  . $scale->id . '_' . $j])) {
+                $editorfieldname = sprintf('feedbackeditor_scaleid_%s_%s', $scale->id, $j);
+                if (isset($data[$editorfieldname])) {
+                    $feedback = $data[$editorfieldname];
+                } else if (isset($defaultvalues[$editorfieldname])) {
                     // If values of form where saved before, and form is loaded, data is in defaultvalues.
-                    $feedback = $defaultvalues['feedbackeditor_scaleid_'  . $scale->id . '_' . $j];
+                    $feedback = $defaultvalues[$editorfieldname];
                 }
                 // Check type and value.
                 if (!empty($feedback)) {
-                    $feedbacktext = $feedback['text'];
+                    $feedbacktext = $feedback;
+                    if (is_array($feedback)) {
+                        $feedbacktext = $feedback['text'];
+                    }
                     $feedbacktext = strip_tags($feedbacktext ?? '');
                 }
 
@@ -258,7 +275,7 @@ class feedbackclass {
                 $subelements[] = $element;
 
                 // Rich text field for subfeedback.
-                $subelements[] = $mform->addElement(
+                $element = $mform->addElement(
                     'editor',
                     'feedbackeditor_scaleid_' . $scale->id . '_' . $j,
                     get_string('feedback', 'core'),
@@ -269,6 +286,12 @@ class feedbackclass {
                         'subdirs' => true,
                     ]);
                 $mform->setType('feedbackeditor_scaleid_' . $scale->id . '_' . $j, PARAM_RAW);
+                $editorcontentfieldname = $editorfieldname . '_editor';
+                $element->setValue($data[$editorfieldname]
+                    ?? $data[$editorcontentfieldname]
+                    ?? $defaultvalues[$editorcontentfieldname]
+                    ?? ['text' => '', 'format' => 1]);
+                $subelements[] = $element;
 
                 // Text field for feedback legend. Displayed only for parentscale.
                 $subelements[] = $mform->addElement(
@@ -414,7 +437,6 @@ class feedbackclass {
 
             $prevparentscaleid = $scale->parentid;
             $previousdepth = $scale->depth;
-
             $headername = get_string('catquizfeedbackheader', 'local_catquiz', $scale->name) . $headersuffix;
             $headerid = 'catquiz_feedback_header_' . $scale->id;
             $collapseid = 'catquiz_feedback_collapse_' . $scale->id;

@@ -414,7 +414,7 @@ class catquizstatistics {
         $out = $OUTPUT->render_chart($chart, false);
         return [
             'chart' => $out,
-            'charttitle' => get_string('abilityprofile', 'local_catquiz', feedback_helper::add_quotes($scalename)),
+            'charttitle' => get_string('abilityprofile', 'local_catquiz', $scalename),
         ];
     }
 
@@ -558,7 +558,7 @@ class catquizstatistics {
         // Minimum 3 records required to display progress charts.
         if (count($records) < 3) {
             return [
-                'charttitle' => get_string('progress', 'local_catquiz', feedback_helper::add_quotes($scalename)),
+                'charttitle' => get_string('progress', 'local_catquiz', $scalename),
                 'chart' => $this->get_nodata_body(),
             ];
         }
@@ -579,7 +579,7 @@ class catquizstatistics {
 
         if (count($attemptsofpeers) < 3) {
             return [
-                'charttitle' => get_string('progress', 'local_catquiz', feedback_helper::add_quotes($scalename)),
+                'charttitle' => get_string('progress', 'local_catquiz', $scalename),
                 'chart' => $this->get_nodata_body(),
             ];
         }
@@ -591,7 +591,7 @@ class catquizstatistics {
                 [$beginningoftimerange, $this->endtime]);
 
         return [
-            'charttitle' => get_string('progress', 'local_catquiz', feedback_helper::add_quotes($scalename)),
+            'charttitle' => get_string('progress', 'local_catquiz', $scalename),
             'chart' => $progresscomparison,
         ];
     }
@@ -827,6 +827,8 @@ class catquizstatistics {
         // If we are here, there are multiple tests and they all have the same
         // number of ranges. Now we need to check if the ranges have the same
         // limits and, depending on the $level, descriptions.
+
+        $this->quizsettingcompatibility[$level] = true;
         foreach (range(1, $lastranges) as $r) {
             $rangestart = null;
             $rangeend = null;
@@ -839,24 +841,35 @@ class catquizstatistics {
                     $rangestart = $qs->$startkey;
                     $rangeend = $qs->$endkey;
                     $rangetext = $qs->$textkey;
+                    $basetestid = $testid;
                 }
-                if ($qs->$startkey !== $rangestart || $qs->$endkey !== $rangeend
-                    || ($level === self::COMPATIBILITY_LEVEL_DESCRIPTION && $qs->$textkey !== $rangetext)
+
+                if (round($qs->$startkey, 3) !== round($rangestart, 3) || round($qs->$endkey, 3) !== round($rangeend, 3)
+                    || ($level === self::COMPATIBILITY_LEVEL_DESCRIPTION && trim($qs->$textkey) !== trim($rangetext))
                 ) {
                     $this->quizsettingcompatibility[$level] = false;
-                    if ($CFG->debug > 0) {
-                        echo sprintf(
-                            "Quiz settings are not compatible: different range values [%f, %f] for test %d",
-                            $qs->$startkey, $qs->$endkey, $testid
-                        );
+                    if ($CFG->debug > 0 && has_capability('local/catquiz:view_users_feedback',
+                        context_course::instance($this->courseid))) {
+                        if (round($qs->$startkey, 3) !== round($rangestart, 3) || round($qs->$endkey, 3) !== round($rangeend, 3)) {
+                            echo sprintf(
+                                '<div class="alert alert-warning" role="alert">Quiz settings are not compatible:
+                                different range values [%f, %f] for test %d and range values [%f, %f] for test %d.</div>',
+                                $rangestart, $rangeend, $basetestid, $qs->$startkey, $qs->$endkey, $testid
+                            );
+                        }
+                        if (trim($qs->$textkey) !== trim($rangetext)) {
+                            echo sprintf(
+                                '<div class="alert alert-warning" role="alert">Quiz settings are not compatible:
+                                different range descriptions for test %d and test %d in scale %d and range %d.</div>',
+                                $basetestid, $testid, $this->scaleid, $r
+                            );
+                        }
                     }
-                    return false;
                 }
             }
         }
 
-        $this->quizsettingcompatibility[$level] = true;
-        return true;
+        return $this->quizsettingcompatibility[$level];
     }
 
     /**
@@ -1117,18 +1130,29 @@ class catquizstatistics {
             'local/catquiz:view_users_feedback',
             context_course::instance($this->courseid)
         );
+
         if (!$hasglobalaccess && !$haslocalaccess) {
-            return '';
+            return sprintf(
+                '<div class="alert alert-primary mt-1" role="alert">%s</div>',
+                get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback')
+            );
         }
 
         $params = [
+            'cid' => $this->courseid,
             'scaleid' => $this->scaleid,
             'courseid' => $this->courseid,
             'testid' => $this->testid,
             'starttime' => $this->starttime,
             'endtime' => $this->endtime,
         ];
-        return (new moodle_url('/local/catquiz/export_shortcode_csv.php', $params))->out(false);
+
+        $url = (new moodle_url('/local/catquiz/export_statistics_csv.php', $params))->out(false);
+        return sprintf(
+            '<a class="btn btn-info" style="margin: 1em 0" id="download-link" href="%s">%s</a>',
+            $url,
+            get_string('download', 'admin')
+        );
     }
 
     /**
@@ -1139,7 +1163,8 @@ class catquizstatistics {
     public function get_export_data(): array {
         global $DB;
 
-        if (!has_capability('local/catquiz:canmanage', context_system::instance())) {
+        if (!has_capability('local/catquiz:canmanage', context_system::instance()) &&
+            !has_capability('local/catquiz:view_users_feedback', context_course::instance($this->courseid))) {
             return [];
         }
 
@@ -1154,10 +1179,52 @@ class catquizstatistics {
 
         $data = [];
         foreach ($DB->get_recordset_sql($sql, $params) as $r) {
+
+            $r->status = get_string('attemptstatus_'.$r->status, 'local_catquiz');
+            // phpcs:disable
+            // TODO: To be implemented: 'Ergebnis-Range', 'N global', 'frac global', 'N Ergebnisskala', 'frac Ergebnisskala'.
+            $additionalresults = json_decode($r->json);
+
+            $r->testid = $additionalresults->testid ?? '';
+
+            $globalscale = $additionalresults->catscaleid ?? null;
+            $r->globalid = $globalscale ?? '';
+            $r->globalname = $globalscale ? $additionalresults->catscales->$globalscale->name : '';
+            $r->globalpp = $additionalresults->personabilities->$globalscale ?? '';
+            $r->globalse = $additionalresults->se->$globalscale ?? '';
+            /*
+            $r->globaln = $additionalresults->n->$globalscale;
+            $r->globalf = $additionalresults->frac->$globalscale;
+            */
+            // phpcs:enable
+
+            $primaryscale = $additionalresults->primaryscale->id ?? null;
+            $r->primaryid = $primaryscale ?? '';
+            $r->primaryname = $primaryscale ? $additionalresults->catscales->$primaryscale->name : '';
+            $r->primarypp = $additionalresults->personabilities->$primaryscale ?? '';
+            $r->primaryse = $additionalresults->se->$primaryscale ?? '';
+
+            // phpcs:disable
+            /*
+            $r->primaryn = $additionalresults->n->$primaryscale;
+            $r->primaryf = $additionalresults->frac->$primaryscale;
+            */
+            // phpcs:enable
+
             unset($r->json);
-            $r->starttime = userdate($r->starttime, get_string('strftimedatetime', 'core_langconfig'));
-            $r->endtime = userdate($r->endtime, get_string('strftimedatetime', 'core_langconfig'));
+            if (!$r->endtime || $r->endtime == 0) {
+                $r->endtime = '';
+                $r->timediff = '';
+            } else {
+                $r->timediff = gmdate('H:i:s', $r->endtime - $r->starttime);
+                $r->endtime = date("Y-m-d H:i:s", $r->endtime);
+            }
+            $r->starttime = date("Y-m-d H:i:s", $r->starttime);
+
             $r->teststrategy = $this->get_teststrategy_name($r->teststrategy);
+
+            // TODO: Process all results.
+
             $data[] = $r;
         }
         return $data;

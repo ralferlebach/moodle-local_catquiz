@@ -24,6 +24,8 @@
 
 namespace local_catquiz\local\model;
 
+use stdClass;
+
 /**
  * Abstract class for model classes.
  *
@@ -62,6 +64,17 @@ abstract class model_model {
     }
 
     /**
+     * Allows subclasses to overwrite the parameters.
+     *
+     * @param stdClass $record
+     * @param array $parameters
+     * @return stdClass
+     */
+    public static function add_parameters_to_record(stdClass $record, array $parameters): stdClass {
+        return $record;
+    }
+
+    /**
      * Return the name of the current model
      *
      * @return string
@@ -76,7 +89,7 @@ abstract class model_model {
      * @return model_item_param
      */
     protected function create_item_param(int $itemid, array $metadata = []): model_item_param {
-        return new model_item_param($itemid, $this->modelname, $metadata);
+        return new model_item_param($itemid, $this->get_model_name(), $metadata);
     }
 
     /**
@@ -99,6 +112,14 @@ abstract class model_model {
      * @return string[]
      */
     abstract protected static function get_parameter_names(): array;
+
+    /**
+     * Returns the parameters as associative array, where the key is the parameter name.
+     *
+     * @param \stdClass $record
+     * @return array
+     */
+    abstract public static function get_parameters_from_record(stdClass $record): array;
 
     /**
      * Fisher info.
@@ -127,4 +148,15 @@ abstract class model_model {
         model_person_param_list $personabilities,
         model_item_param $itemparams,
         model_responses $k): float;
+
+    /**
+     * Return the difficulty as a single float.
+     *
+     * Can be overwritten by models that need to convert an array of difficulties into a single value.
+     * @param array $parameters
+     * @return float
+     */
+    public static function get_difficulty(array $parameters): float {
+        return $parameters['difficulty'];
+    }
 }

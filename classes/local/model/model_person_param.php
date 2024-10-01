@@ -50,11 +50,53 @@ class model_person_param implements \ArrayAccess {
      */
     const MODEL_POS_INF = 1000;
     /**
+     * The ID of the parameter
+     *
+     * @var ?int
+     */
+    private ?int $id;
+
+    /**
+     * The context of the parameter
+     *
+     * @var ?int
+     */
+    private ?int $contextid;
+
+    /**
+     * The status of the parameter
+     *
+     * @var ?int
+     */
+    private ?int $status;
+
+    /**
+     * The CAT scale ID
+     *
+     * @var int
+     */
+    private int $catscaleid;
+
+    /**
+     * The time this parameter was created
+     *
+     * @var ?int
+     */
+    private ?int $timecreated;
+
+    /**
+     * The timestamp this parameter was last modified
+     *
+     * @var ?int
+     */
+    private ?int $timemodified;
+
+    /**
      * The ID of the user
      *
      * @var string
      */
-    private string $id;
+    private string $userid;
 
     /**
      * @var float ability
@@ -70,11 +112,12 @@ class model_person_param implements \ArrayAccess {
     /**
      * Instantiate parameter.
      *
-     * @param string $id
-     *
+     * @param string $userid
+     * @param int $catscaleid
      */
-    public function __construct(string $id) {
-        $this->id = $id;
+    public function __construct(string $userid, int $catscaleid) {
+        $this->userid = $userid;
+        $this->catscaleid = $catscaleid;
         $this->params = ['ability'];
     }
 
@@ -137,8 +180,17 @@ class model_person_param implements \ArrayAccess {
      *
      * @return string
      */
-    public function get_id(): string {
+    public function get_id(): ?int {
         return $this->id;
+    }
+
+    /**
+     * Return the user ID
+     *
+     * @return string
+     */
+    public function get_userid(): int {
+        return $this->userid;
     }
 
     /**
@@ -161,6 +213,26 @@ class model_person_param implements \ArrayAccess {
      */
     public function set_ability(float $ability): self {
         $this->ability = $ability;
+        return $this;
+    }
+
+    /**
+     * Get the catscale ID of this parameter
+     *
+     * @return int
+     */
+    public function get_catscaleid(): int {
+        return $this->catscaleid;
+    }
+
+    /**
+     * Set the catscale ID of this parameter
+     *
+     * @param int $catscaleid
+     * @return self
+     */
+    public function set_catscaleid(int $catscaleid): self {
+        $this->catscaleid = $catscaleid;
         return $this;
     }
 

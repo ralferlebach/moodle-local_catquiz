@@ -19,7 +19,6 @@ namespace local_catquiz\output;
 use html_writer;
 use local_catquiz\catquiz;
 use local_catquiz\data\dataapi;
-use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\output\catscaledashboard;
 use local_catquiz\subscription;
 use templatable;
@@ -97,22 +96,26 @@ class catscales implements renderable, templatable {
             // Transform object catscale_structur into array, which is needed here.
             $element = get_object_vars($catscaleitem);
 
+            // Walk only elements on the current node, meaning with the given parentid.
+            if ($element['parentid'] !== $parentid) {
+                continue;
+            }
+
             if ($subscribed = subscription::return_subscription_state($USER->id, 'catscale', $element['id'])) {
                 $element['subscribed'] = true;
             } else {
                 $element['subscribed'] = false;
             }
 
-            if ($element['parentid'] == $parentid) {
-                $children = $this->build_tree($elements, $element['id']);
-                if ($children) {
-                    $element['children'] = $children;
-                } else {
-                    // Add empty array. That is needed for mustache templated in order to avoid infinit loop.
-                    $element['children'] = [];
-                }
-                $branch[] = $element;
+            $children = $this->build_tree($elements, $element['id']);
+            if ($children) {
+                $element['children'] = $children;
+            } else {
+                // Add empty array. That is needed for mustache templated in order to avoid infinit loop.
+                $element['children'] = [];
             }
+            $branch[] = $element;
+
         }
         $this->branchitems[$parentid] = $branch;
         return $branch;

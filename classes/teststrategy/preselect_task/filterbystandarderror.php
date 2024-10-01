@@ -29,6 +29,7 @@ use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\result;
 use local_catquiz\local\status;
+use local_catquiz\teststrategy\context\loader\personability_loader;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\progress;
 use local_catquiz\wb_middleware;
@@ -69,9 +70,6 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
         $this->progress = $context['progress'];
 
         if ($this->progress->is_first_question()) {
-            // If this is the first question and the cache is not yet set, set the
-            // root scale active.
-            $this->progress->set_active_scales([$this->context['catscaleid']]);
             return $next($context);
         }
 
@@ -172,11 +170,14 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
      * @return array
      */
     private function get_scale_heirs($scaleid): array {
-        // Subscales inherit values of parent when their ability wasn't calculated yet (is still 0.0).
+        if ($this->context['teststrategy'] == LOCAL_CATQUIZ_STRATEGY_ALLSUBS) {
+            return [];
+        }
+        // Subscales inherit values of parent when their ability wasn't calculated yet (is still the default ability).
         return array_filter(
             array_keys(catscale::get_next_level_subscales_ids_from_parent([$scaleid])),
             fn ($id) => isset($this->context['person_ability'][$id])
-            && $this->context['person_ability'][$id] === 0.0
+            && $this->context['person_ability'][$id] === personability_loader::get_default_ability()
         );
     }
 

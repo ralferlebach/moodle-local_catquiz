@@ -28,7 +28,6 @@ use dml_exception;
 use coding_exception;
 use Exception;
 use local_catquiz\catcalc;
-use local_catquiz\catcontext;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
@@ -236,7 +235,7 @@ class updatepersonability extends preselect_task implements wb_middleware {
                 $this->parentse,
                 $this->get_min_ability_for_scale($catscaleid),
                 $this->get_max_ability_for_scale($catscaleid),
-                $this->ability_was_calculated($this->context['catscaleid'], false)
+                $this->use_tr_factor()
             );
         } catch (moodle_exception $e) {
             // If we get an excpetion, re-throw it with more information.
@@ -270,7 +269,6 @@ class updatepersonability extends preselect_task implements wb_middleware {
             $this->parentability = $updatedability;
             $this->parentse = catscale::get_standarderror($updatedability, $this->get_item_param_list($catscaleid));
         }
-
         $this->update_person_param($catscaleid, $updatedability);
 
         $context['prev_ability'][$catscaleid] = $context['person_ability'][$catscaleid];
@@ -298,7 +296,7 @@ class updatepersonability extends preselect_task implements wb_middleware {
                 // Remove all responses that are not in the item param list and check again.
                 $arrayresponsesforscale = [];
                 foreach ($itemparamlist as $item) {
-                    $arrayresponsesforscale[$item->get_id()] = $this->arrayresponses[$item->get_id()];
+                    $arrayresponsesforscale[$item->get_componentid()] = $this->arrayresponses[$item->get_componentid()];
                 }
                 $this->diverseanswers[$scale] = $this->has_sufficient_responses($arrayresponsesforscale);
                 if ($this->diverseanswers[$scale]) {
@@ -313,7 +311,7 @@ class updatepersonability extends preselect_task implements wb_middleware {
                     $this->parentse,
                     $this->get_min_ability_for_scale($catscaleid),
                     $this->get_max_ability_for_scale($catscaleid),
-                    $this->ability_was_calculated($this->context['catscaleid'])
+                    $this->use_tr_factor()
                 );
 
                 $this->progress->set_ability($ability, $scale);
@@ -384,7 +382,7 @@ class updatepersonability extends preselect_task implements wb_middleware {
         $itemparamlists = [];
         $personparams = model_person_param_list::load_from_db($catscalecontext, $catscaleids);
         foreach (array_keys($modelstrategy->get_installed_models()) as $model) {
-            $itemparamlists[$model] = model_item_param_list::load_from_db(
+            $itemparamlists[$model] = model_item_param_list::get(
                 $catscalecontext,
                 $model,
                 $catscaleids
@@ -571,5 +569,14 @@ class updatepersonability extends preselect_task implements wb_middleware {
         $catscaleclass = new catscale($catscaleid);
         $this->scaleabilityrange[$catscaleid] = $catscaleclass->get_ability_range();
         return $this->scaleabilityrange[$catscaleid]['maxscalevalue'];
+    }
+
+    /**
+     * Use the trusted region factor
+     *
+     * @return bool
+     */
+    protected function use_tr_factor(): bool {
+        return $this->ability_was_calculated($this->context['catscaleid'], false);
     }
 }

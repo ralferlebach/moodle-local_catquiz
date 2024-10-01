@@ -63,15 +63,16 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
      *
      * @param int $contextid
      * @param array $catscaleids
+     * @param array $userids
      * @return self
      * @throws dml_exception
      */
-    public static function load_from_db(int $contextid, array $catscaleids): self {
-        $personrows = catquiz::get_person_abilities($contextid, $catscaleids);
+    public static function load_from_db(int $contextid, array $catscaleids, array $userids = []): self {
+        $personrows = catquiz::get_person_abilities($contextid, $catscaleids, $userids);
 
         $personabilities = new model_person_param_list();
         foreach ($personrows as $r) {
-            $p = new model_person_param($r->userid);
+            $p = new model_person_param($r->userid, $r->catscaleid);
             $p->set_ability($r->ability);
             $personabilities->add($p);
         }
@@ -108,7 +109,7 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
      *
      */
     public function add(model_person_param $personparam) {
-        $this->personparams[$personparam->get_id()] = $personparam;
+        $this->personparams[] = $personparam;
         return $this;
     }
 
@@ -278,5 +279,41 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
         foreach ($updatedrecords as $r) {
             $DB->update_record('local_catquiz_personparams', $r, true);
         }
+    }
+
+    /**
+     * If any of the given userids are missing, default parameters are added
+     *
+     * @param array $userids
+     * @param int $catscaleid
+     * @return void
+     */
+    public function add_missing_users(array $userids, int $catscaleid) {
+        $newusers = array_diff(
+            $userids,
+            array_keys($this->get_person_params())
+        );
+        foreach ($newusers as $userid) {
+            $this->add(new model_person_param($userid, $catscaleid));
+        }
+    }
+
+    /**
+     * Filter the person params with the given function
+     *
+     * The function is called with each person param. If it returns true, the value is kept.
+     *
+     * @param callable $fun
+     * @return self
+     */
+    public function filter(callable $fun) {
+        $filtered = new self();
+        foreach ($this->personparams as $pp) {
+            if (!$fun($pp)) {
+                continue;
+            }
+            $filtered->add($pp);
+        }
+        return $filtered;
     }
 }

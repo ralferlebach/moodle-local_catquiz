@@ -35,7 +35,7 @@ use UnexpectedValueException;
  *
  * @covers \local_catquiz\local\model\model_item_param_list
  */
-class model_item_param_list_test extends advanced_testcase {
+final class model_item_param_list_test extends advanced_testcase {
     /**
      * Test import of files
      *
@@ -65,6 +65,7 @@ class model_item_param_list_test extends advanced_testcase {
             'nameandtreeset' => [
                 'record' => [
                         'componentid' => 0,
+                        'itemid' => 0,
                         'status' => 4,
                         'qtype' => "Multiple-Choice",
                         'model' => "raschbirnbaum",

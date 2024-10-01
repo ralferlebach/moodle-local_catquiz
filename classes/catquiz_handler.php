@@ -30,6 +30,7 @@ use cache_exception;
 use cache_helper;
 use cm_info;
 use coding_exception;
+use context_module;
 use context_system;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\model\model_strategy;
@@ -316,6 +317,35 @@ class catquiz_handler {
             self::write_variables_to_post($formdefaultvalues);
         }
 
+        $context = context_system::instance();
+
+        $options = [
+            'trusttext' => true,
+            'subdirs' => true,
+            'context' => $context,
+            'maxfiles' => EDITOR_UNLIMITED_FILES,
+            'noclean' => true,
+        ];
+
+        foreach ($data as $property) {
+            if (is_array($property) || !preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)_editor/', $property, $matches)) {
+                continue;
+            }
+            $scaleid = intval($matches[1]);
+            $rangeid = intval($matches[2]);
+            $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+            $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
+            $data = (object) file_prepare_standard_editor(
+                $data,
+                sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid),
+                $options,
+                $context,
+                'local_catquiz',
+                $filearea,
+                intval($test->id)
+            );
+        }
+
         $formdefaultvalues['choosetemplate'] = 0;
         $formdefaultvalues['testenvironment_addoredittemplate'] = 0;
     }
@@ -564,6 +594,46 @@ class catquiz_handler {
     public static function add_or_update_instance_callback(stdClass $quizdata) {
 
         $clone = clone($quizdata);
+
+        if ($cm = get_coursemodule_from_instance('adaptivequiz', intval($quizdata->id))) {
+            $context = context_module::instance($cm->id);
+            $textfieldoptions = [
+                'trusttext' => true,
+                'subdirs' => true,
+                'maxfiles' => EDITOR_UNLIMITED_FILES,
+                'context' => $context,
+            ];
+
+            foreach ($clone as $property => $value) {
+                if (!preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)$/', $property, $matches)) {
+                    continue;
+                }
+                if (!property_exists($clone, $property . '_editor')) {
+                    $clone->{$property . '_editor'} = $clone->$property;
+                }
+                $scaleid = intval($matches[1]);
+                $rangeid = intval($matches[2]);
+                $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+                $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
+                $clone = file_postupdate_standard_editor(
+                    $clone,
+                    $fieldname,
+                    $textfieldoptions,
+                    $context,
+                    'local_catquiz',
+                    $filearea,
+                    $clone->id
+                );
+                unset($clone->{$property . '_editor'});
+                file_save_draft_area_files(
+                    $value['itemid'],
+                    $context->id,
+                    'local_catquiz',
+                    $filearea,
+                    $clone->id
+                );
+            }
+        }
 
         // We unset id & instance. We don't want to introduce confusion because of it.
         unset($clone->id);
@@ -948,6 +1018,10 @@ class catquiz_handler {
             $maxquestionsperscale = -1;
         }
 
+        $minquestionsperscale = $hasmaxqpscale
+                ? intval($quizsettings->maxquestionsscalegroup->catquiz_minquestionspersubscale)
+                : 0;
+
         $maxquestions = $quizsettings->maxquestionsgroup->catquiz_maxquestions;
         if (!$maxquestions) {
             $maxquestions = -1;
@@ -993,7 +1067,7 @@ class catquiz_handler {
             'skip_reason' => null,
             'userid' => $USER->id,
             'max_attempts_per_scale' => $maxquestionsperscale,
-            'min_attempts_per_scale' => $quizsettings->maxquestionsscalegroup->catquiz_minquestionspersubscale ?? 0,
+            'min_attempts_per_scale' => $minquestionsperscale,
             'teststrategy' => $quizsettings->catquiz_selectteststrategy,
             'timestamp' => time(),
             'attemptid' => intval($attemptdata->id),
@@ -1006,6 +1080,11 @@ class catquiz_handler {
             'se_min' => $quizsettings->catquiz_standarderrorgroup->catquiz_standarderror_min,
             'pp_min_inc' => $quizsettings->catquiz_pp_min_inc ?? 0.01,
         ];
+
+        if (property_exists($quizsettings, 'fake_use_tr_factor')) {
+            $initialcontext['fake_use_tr_factor'] = $quizsettings->fake_use_tr_factor;
+        }
+
         return $contextcreator->load(
             [
                 'progress',
@@ -1014,6 +1093,7 @@ class catquiz_handler {
                 'questions',
                 'pilot_questions',
                 'se',
+                'initial_scales',
             ],
             $initialcontext
         );

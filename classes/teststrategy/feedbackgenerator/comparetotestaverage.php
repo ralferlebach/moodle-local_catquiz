@@ -29,6 +29,7 @@ use core\chart_series;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\teststrategy\feedback_helper;
@@ -181,13 +182,19 @@ class comparetotestaverage extends feedbackgenerator {
 
         $output = "";
 
+        // Keys of the lowest and highest values in range...
+        // Since it's already defined via scale min max range, no more need to sanitize here.
+        $lowestlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_1";
+        $highestlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $numberoffeedbackoptions;
+
+        $rangestart = (float) $quizsettings->$lowestlimitkey;
+        $rangeend = (float) $quizsettings->$highestlimitkey;
+
+        if (!($rangeend > $rangestart)) {
+            throw new \moodle_exception('error:minmaxrangeequal', 'local_catquiz');
+        }
+
         for ($i = 1; $i <= $numberoffeedbackoptions; $i++) {
-            // Keys of the lowest and highest values in range...
-            // Since it's already defined via scale min max range, no more need to sanitize here.
-            $lowestlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_1";
-            $highestlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $numberoffeedbackoptions;
-            $rangestart = (float) $quizsettings->$lowestlimitkey;
-            $rangeend = (float) $quizsettings->$highestlimitkey;
 
             $lowerlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_" . $i;
             $upperlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $i;
@@ -278,9 +285,12 @@ class comparetotestaverage extends feedbackgenerator {
             $abilityrange['minscalevalue'],
             $abilityrange['maxscalevalue']);
 
-        $b = $middle - (float) $abilityrange['minscalevalue'];
-        $testaverageposition = ($b + $testaverageinrange) / $b * 50;
-        $userabilityposition = ($b + $abilityinrange) / $b * 50;
+        if (!($abilityrange['minscalevalue'] < $abilityrange['maxscalevalue'])) {
+            throw new \moodle_exception('error:minmaxrangeequal', 'local_catquiz');
+        }
+        $scalingfactor = 1 / ((float) $abilityrange['maxscalevalue'] - (float) $abilityrange['minscalevalue']) * 100;
+        $testaverageposition = $scalingfactor * (-(float) $abilityrange['minscalevalue'] + $testaverageinrange);
+        $userabilityposition = $scalingfactor * (-(float) $abilityrange['minscalevalue'] + $abilityinrange);
         $betterthan = '';
         if (round($quantile, 0) >= self::MIN_BETTER_THAN_LIMIT) {
             $betterthan = get_string('feedbackcomparison_betterthan', 'local_catquiz', ['quantile' => round($quantile, 0)]);
@@ -291,7 +301,7 @@ class comparetotestaverage extends feedbackgenerator {
             'local_catquiz',
             [
                 'betterthan' => $betterthan,
-                'quotedscale' => feedback_helper::add_quotes($catscale->name),
+                'quotedscale' => $catscale->name,
                 'ability_global' => feedback_helper::localize_float($abilityinrange),
                 'se_global' => feedback_helper::localize_float($newdata['se'][$catscaleid]),
                 'average_ability' => feedback_helper::localize_float($testaverageinrange),
@@ -360,10 +370,9 @@ class comparetotestaverage extends feedbackgenerator {
             if (!$item->model) {
                 continue;
             }
+            $itemparam = model_item_param::from_record($item);
             $model = model_model::get_instance($item->model);
-            foreach ($model::get_parameter_names() as $paramname) {
-                $params[$paramname] = floatval($item->$paramname);
-            }
+            $params = $itemparam->get_params_array();
             foreach ($abilitysteps as $ability) {
                 $fisherinformation = $model->fisher_info(
                     ['ability' => $ability],

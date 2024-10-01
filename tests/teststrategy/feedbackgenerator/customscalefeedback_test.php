@@ -44,7 +44,7 @@ use UnexpectedValueException;
  *
  * @covers \local_catquiz\teststrategy\preselect_task\customscalefeedback
  */
-class customscalefeedback_test extends basic_testcase {
+final class customscalefeedback_test extends basic_testcase {
 
     /**
      * Test that questions of subscales are removed as needed.
@@ -96,6 +96,7 @@ class customscalefeedback_test extends basic_testcase {
         return [
                 'lowestskillgap' => [
                     'feedbackdata' => [
+                        'testid' => 1,
                         'progress' => 'empty',
                         'attemptid' => '1',
                         'contextid' => '2',
@@ -135,6 +136,7 @@ class customscalefeedback_test extends basic_testcase {
                 ],
                 'noscalestoreport' => [
                     'feedbackdata' => [
+                        'testid' => 1,
                         'progress' => 'empty',
                         'attemptid' => '1',
                         'contextid' => '2',

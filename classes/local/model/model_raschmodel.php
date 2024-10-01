@@ -35,6 +35,13 @@ use local_catquiz\catcalc_item_estimator;
 abstract class model_raschmodel extends model_model implements catcalc_item_estimator, catcalc_ability_estimator {
 
     /**
+     * @var int PRECISION
+     *
+     * The precision used for the item parameters.
+     */
+    public const PRECISION = 3;
+
+    /**
      * Likelihood 1pl.
      *
      * @param mixed $personability
@@ -88,7 +95,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     public function calc_dic_item(model_person_param_list $personabilities, model_item_param $item, model_responses $k) {
         $result = 0;
         foreach ($personabilities->only_valid() as $pp) {
-            $userresponse = $k->get_item_response_for_person($item->get_id(), $pp->get_id());
+            $userresponse = $k->get_item_response_for_person($item->get_componentid(), $pp->get_userid());
             if (is_null($userresponse)) {
                 continue;
             }

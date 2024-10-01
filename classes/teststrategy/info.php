@@ -173,6 +173,7 @@ class info {
                     LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB,
                     LOCAL_CATQUIZ_STRATEGY_ALLSUBS,
                     LOCAL_CATQUIZ_STRATEGY_FASTEST,
+                    LOCAL_CATQUIZ_STRATEGY_RELSUBS,
                     ])) {
                 $strategyhasstandarderrorperscale[] = $ts->id;
             }
@@ -254,7 +255,13 @@ class info {
                 ['size' => '3']
             ),
             ];
-        $mform->_defaultValues['maxquestionsgroup']['catquiz_minquestions'] = get_config('local_catquiz', 'minquestions_default');
+
+        if (!optional_param('catquiz_minquestions', 0, PARAM_FLOAT) &&
+            !isset($defaultvalues['maxquestionsgroup']['catquiz_minquestions'])) {
+            $mform->_defaultValues['maxquestionsgroup']['catquiz_minquestions'] =
+                get_config('local_catquiz', 'minquestions_default');
+        }
+
         $elements[] = $mform->addGroup(
             $maxquestionspertest,
             'maxquestionsgroup',
@@ -431,6 +438,12 @@ class info {
         $scoremodifiers = core_component::get_component_classes_in_namespace(
             "local_catquiz",
             'teststrategy\preselect_task'
+        );
+        // Filter out abstract class.
+        $scoremodifiers = array_filter(
+            $scoremodifiers,
+            fn ($classname) => $classname !== 'local_catquiz\teststrategy\preselect_task\strategyscore',
+            ARRAY_FILTER_USE_KEY
         );
         foreach (array_keys($scoremodifiers) as $classname) {
             $instances[$classname] = new $classname();
