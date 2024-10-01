@@ -295,19 +295,11 @@ class grmgeneralized extends model_raschmodel {
         $fractions = self::get_fractions($ip);
         $kmax = max(array_keys($fractions));
 
-        switch ($frac) {
-            case 0.0:
-                $a = array_values($a);
-                return 1 - 1 / (1 + exp($b * ($a[0] - $ability)));
-            case $fractions[$kmax]:
-                $a = array_values($a);
-                return 1 / (1 + exp($b * ($a[$kmax] - $ability)));
-            default:
-                // Get corresponding category.
-                $k = array_search($frac, array_keys($ip['difficulties']));
-                $a = array_values($a);
-                return 1 / (1 + exp($b * ($a[$k] - $ability))) - 1 / (1 + exp($b * ($a[$k + 1] - $ability)));
-        }
+        $k = array_search($frac, array_keys($ip['difficulties']));
+        $p = ($frac == 0.0)?(1):(1 / (1 + exp($b * ($a[$k] - $ability))));
+        $p .= -($k == $kmax)?(0):(1 / (1 + exp($b * ($a[$k + 1] - $ability))));
+
+        return $p;
     }
 
     // Calculate the LOG Likelihood and its derivatives.
