@@ -57,48 +57,48 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     }
 
     protected static function get_key_by_fractions(float $frac, array $array): int {
-    	$n = 0;
-    	foreach ($array as $key => $val) {
-    		if ((float) $key <= $frac) {
-    			$n++;
-    		} else {
-    			return $n;
-    		}
-    	}
-    	return $n;
+      $n = 0;
+      foreach ($array as $key => $val) {
+        if ((float) $key <= $frac) {
+          $n++;
+        } else {
+          return $n;
+        }
+      }
+      return $n;
     }
 
     protected static function sort_fractions($array, int $precission = 3) {
-    	// Make sure the array is sanitized first.
+      // Make sure the array is sanitized first.
 
-    	$tmp_key = [];
-    	$tmp_val = [];
+      $tmp_key = [];
+      $tmp_val = [];
 
-    	foreach ($array as $key => $val) {
-    		$tmp_key[] = (float) $key;
-    		$tmp_val[] = (float) $val;
-    	}
+      foreach ($array as $key => $val) {
+        $tmp_key[] = (float) $key;
+        $tmp_val[] = (float) $val;
+      }
 
-    	asort($tmp_key);
+      asort($tmp_key);
 
-    	$tmp = [];
-    	foreach ($tmp_key as $array_key => $frac) {
-    		$key = (string) sprintf("%1.". $precission . "f", (float) $frac);
-    		$tmp[$key] = $tmp_val[$array_key];
-    	}
+      $tmp = [];
+      foreach ($tmp_key as $array_key => $frac) {
+        $key = (string) sprintf("%1.". $precission . "f", (float) $frac);
+        $tmp[$key] = $tmp_val[$array_key];
+      }
 
-    	return $tmp;
+      return $tmp;
     }
 
     protected static function sanitize_fractions($array, $precission = 3) {
-    	$tmp = [];
+      $tmp = [];
 
-    	foreach ($array as $key => $val) {
-    		$key = (string) sprintf("%1.". $precission . "f", (float) $key);
-    		$tmp[$key] = (float) $val;
-    	}
+      foreach ($array as $key => $val) {
+        $key = (string) sprintf("%1.". $precission . "f", (float) $key);
+        $tmp[$key] = (float) $val;
+      }
 
-    	return $tmp;
+      return $tmp;
     }
 
         /**
