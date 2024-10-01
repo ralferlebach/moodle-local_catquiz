@@ -56,7 +56,7 @@ final class grmgeneralized_test extends TestCase {
      * @throws ExpectationFailedException
      *
      */
-    public function test_get_log_jacobian(array $pp, float $k, array $ip, array $expected):void {
+    public function test_get_log_jacobian(array $pp, float $k, array $ip, array $expected): void {
     }
 
     /**
@@ -74,7 +74,7 @@ final class grmgeneralized_test extends TestCase {
      * @throws ExpectationFailedException
      *
      */
-    public function test_get_log_hessian(array $pp, float $k, array $ip, array $expected):void {
+    public function test_get_log_hessian(array $pp, float $k, array $ip, array $expected): void {
     }
 
 
@@ -87,7 +87,7 @@ final class grmgeneralized_test extends TestCase {
      * @param float $expected
      * @return void
      */
-    public function test_likelihood(array $pp, float $frac, array $ip, float $expected):void {
+    public function test_likelihood(array $pp, float $frac, array $ip, float $expected): void {
         $result = grmgeneralized::likelihood($pp, $ip, $frac);
 
         // We only verify for four commas after the dot.
@@ -107,7 +107,7 @@ final class grmgeneralized_test extends TestCase {
      * @param float $expected
      * @return void
      */
-    public function test_log_likelihood(array $pp, float $frac, array $ip, float $expected):void {
+    public function test_log_likelihood(array $pp, float $frac, array $ip, float $expected): void {
         $result = grmgeneralized::log_likelihood($pp, $ip, $frac);
 
         // We only verify for four commas after the dot.
@@ -127,7 +127,7 @@ final class grmgeneralized_test extends TestCase {
      * @param float $expected
      * @return void
      */
-    public function test_log_likelihood_p(array $pp, float $frac, array $ip, float $expected):void {
+    public function test_log_likelihood_p(array $pp, float $frac, array $ip, float $expected): void {
         $result = grmgeneralized::log_likelihood_p($pp, $ip, $frac);
 
         // We only verify for four commas after the dot.
@@ -146,7 +146,7 @@ final class grmgeneralized_test extends TestCase {
      * @param float $expected
      * @return void
      */
-    public function test_log_likelihood_p_p(array $pp, float $frac, array $ip, float $expected):void {
+    public function test_log_likelihood_p_p(array $pp, float $frac, array $ip, float $expected): void {
         $result = grmgeneralized::log_likelihood_p_p($pp, $ip, $frac);
 
         // We only verify for four commas after the dot.
@@ -166,7 +166,7 @@ final class grmgeneralized_test extends TestCase {
      * @param array $expected
      * @return void
      */
-    public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected):void {
+    public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
 
     }
 
@@ -180,7 +180,7 @@ final class grmgeneralized_test extends TestCase {
      * @param array $expected
      * @return void
      */
-    public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected):void {
+    public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
     }
 
     /**
