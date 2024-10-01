@@ -298,7 +298,7 @@ class grmgeneralized extends model_raschmodel {
         $fractions = self::get_fractions($ip);
         $kmax = max(array_keys($fractions));
 
-        $k = self::find_key_fractions($frac, $a);
+        $k = self::get_key_by_fractions($frac, $a);
 
         $p = ($frac == 0.0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
         $p .= -($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
