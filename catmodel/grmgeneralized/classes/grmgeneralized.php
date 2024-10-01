@@ -84,12 +84,14 @@ class grmgeneralized extends model_raschmodel {
         $frac = [];
         $frac[0] = 0;
 
-        foreach ($ip['difficulties'] as $fraction => $val) {
+        $a = self::sort_fractions($ip['difficulties']);
+
+        foreach ($a as $fraction => $val) {
             if ((float) $fraction > 0 && (float) $fraction <= 1) {
-                $frac[] = (float) $fraction;
+                $frac[] = $fraction;
             }
         }
-        sort($frac);
+
         return $frac;
     }
 
@@ -296,10 +298,10 @@ class grmgeneralized extends model_raschmodel {
         $fractions = self::get_fractions($ip);
         $kmax = max(array_keys($fractions));
 
-        $k = array_search($frac, array_keys($ip['difficulties']));
+        $k = self::find_key_fractions($frac, $a);
 
-        $p = ($frac == 0.0) ? (1) : (1 / (1 + exp($b * ($a[$k] - $ability))));
-        $p .= -($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$k + 1] - $ability))));
+        $p = ($frac == 0.0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
+        $p .= -($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
 
         return $p;
     }
