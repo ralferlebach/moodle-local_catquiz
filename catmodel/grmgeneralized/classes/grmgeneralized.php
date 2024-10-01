@@ -80,8 +80,9 @@ class grmgeneralized extends model_raschmodel {
      * @param array $ip
      * @return array of string
      */
-    public static function get_fractions(array $ip): array {
+    protected static function get_fractions(array $ip): array {
         $frac = [];
+        $frac[0] = 0;
 
         foreach ($ip['difficulties'] as $fraction => $val) {
             if ($fraction > 0 && $fraction <= 1) {
@@ -296,8 +297,9 @@ class grmgeneralized extends model_raschmodel {
         $kmax = max(array_keys($fractions));
 
         $k = array_search($frac, array_keys($ip['difficulties']));
-        $p = ($frac == 0.0)?(1):(1 / (1 + exp($b * ($a[$k] - $ability))));
-        $p .= -($k == $kmax)?(0):(1 / (1 + exp($b * ($a[$k + 1] - $ability))));
+
+        $p = ($frac == 0.0) ? (1) : (1 / (1 + exp($b * ($a[$k] - $ability))));
+        $p .= -($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$k + 1] - $ability))));
 
         return $p;
     }
