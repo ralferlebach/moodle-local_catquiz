@@ -47,7 +47,7 @@ final class grmgeneralized_test extends TestCase {
      * @dataProvider get_log_jacobian_provider
      *
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param array $expected
      *
@@ -56,7 +56,7 @@ final class grmgeneralized_test extends TestCase {
      * @throws ExpectationFailedException
      *
      */
-    public function test_get_log_jacobian(array $pp, float $k, array $ip, array $expected): void {
+    public function test_get_log_jacobian(array $pp, float $frac, array $ip, array $expected): void {
     }
 
     /**
@@ -65,7 +65,7 @@ final class grmgeneralized_test extends TestCase {
      * @dataProvider get_log_hessian_provider
      *
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param array $expected
      *
@@ -74,15 +74,15 @@ final class grmgeneralized_test extends TestCase {
      * @throws ExpectationFailedException
      *
      */
-    public function test_get_log_hessian(array $pp, float $k, array $ip, array $expected): void {
+    public function test_get_log_hessian(array $pp, float $frac, array $ip, array $expected): void {
     }
 
 
     /**
      * Test likelihood function.
-     * @dataProvider log_likelihood_p_p_provider
+     * @dataProvider likelihood_provider
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param float $expected
      * @return void
@@ -100,9 +100,9 @@ final class grmgeneralized_test extends TestCase {
 
     /**
      * Test log_likelihood function.
-     * @dataProvider log_likelihood_p_p_provider
+     * @dataProvider log_likelihood_provider
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param float $expected
      * @return void
@@ -122,7 +122,7 @@ final class grmgeneralized_test extends TestCase {
      * Test log_likelihood_p function.
      * @dataProvider log_likelihood_p_provider
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param float $expected
      * @return void
@@ -141,7 +141,7 @@ final class grmgeneralized_test extends TestCase {
      * Test log_likelihood_p_p function.
      * @dataProvider log_likelihood_p_p_provider
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param float $expected
      * @return void
@@ -161,12 +161,12 @@ final class grmgeneralized_test extends TestCase {
      * @dataProvider least_mean_squares_1st_derivative_ip_provider
      * @param int $n
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param array $expected
      * @return void
      */
-    public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
+    public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $frac, array $ip, array $expected): void {
 
     }
 
@@ -175,12 +175,12 @@ final class grmgeneralized_test extends TestCase {
      * @dataProvider least_mean_squares_2nd_derivative_ip_provider
      * @param int $n
      * @param array $pp
-     * @param float $k
+     * @param float $frac
      * @param array $ip
      * @param array $expected
      * @return void
      */
-    public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
+    public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $frac, array $ip, array $expected): void {
     }
 
     /**
@@ -210,7 +210,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -223,7 +223,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.5,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -236,7 +236,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 1.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -258,7 +258,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -271,7 +271,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.5,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -284,7 +284,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 1.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -306,7 +306,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -319,7 +319,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.5,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -332,7 +332,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 1.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -354,7 +354,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -367,7 +367,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 0.5,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
@@ -380,7 +380,7 @@ final class grmgeneralized_test extends TestCase {
                 'frac' => 1.0,
                 'ip' => [
                     "discrimination" => 0.7,
-                    "difficulty" => [
+                    "difficulties" => [
                         "0.0" => 0,
                         "0,5" => -3.5,
                         "1.0" => -2.5,
