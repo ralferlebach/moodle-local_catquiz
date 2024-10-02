@@ -275,7 +275,7 @@ class grmgeneralized extends model_raschmodel {
 
         // Make sure $frac is between 0.0 and 1.0.
         $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($ip);
+        $fractions = self::get_fractions($a);
         $kmax = max(array_keys($fractions));
 
         $k = self::get_key_by_fractions($frac, $a);
@@ -316,7 +316,7 @@ class grmgeneralized extends model_raschmodel {
 
         // Make sure $frac is between 0.0 and 1.0.
         $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($ip);
+        $fractions = self::get_fractions($a);
         $kmax = max(array_keys($fractions));
 
         $k = self::get_key_by_fractions($frac, $a);
@@ -345,7 +345,7 @@ class grmgeneralized extends model_raschmodel {
 
         // Make sure $frac is between 0.0 and 1.0.
         $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($ip);
+        $fractions = self::get_fractions($a);
         $kmax = max(array_keys($fractions));
 
         $k = self::get_key_by_fractions($frac, $a);
