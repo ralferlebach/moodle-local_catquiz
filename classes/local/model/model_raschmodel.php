@@ -59,7 +59,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     /**
      * Helper class that gets the key of an ip-array by given fraction
      *
-     * @param float $fraction
+     * @param float $frac
      * @param array $array (e.g. $ip['difficulties'])
      *
      * @return int
@@ -68,11 +68,11 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     protected static function get_key_by_fractions(float $frac, array $array): int {
         $n = 0;
         foreach ($array as $key => $val) {
-        	if ((float) $key < $frac) {
-        		$n++;
-        	} else {
-        		return $n;
-        	}
+            if ((float) $key < $frac) {
+                $n++;
+            } else {
+                return $n;
+            }
         }
         return $n;
     }
@@ -88,25 +88,25 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      */
     protected static function sort_fractions(array $array, int $precission = 3): array {
         // Make sure the array is sanitized first.
-    	$array = self::sanitize_fractions($array, $precission);
+        $array = self::sanitize_fractions($array, $precission);
 
-    	$tmp_key = [];
-    	$tmp_val = [];
+        $tmpkey = [];
+        $tmpval = [];
 
-    	foreach ($array as $key => $val) {
-    		$tmp_key[] = (float) $key;
-    		$tmp_val[] = (float) $val;
-    	}
+        foreach ($array as $key => $val) {
+            $tmpkey[] = (float) $key;
+            $tmpval[] = (float) $val;
+        }
 
-    	asort($tmp_key);
+        asort($tmpkey);
 
-    	$tmp = [];
-    	foreach ($tmp_key as $array_key => $frac) {
-    		$key = (string) sprintf("%1.". $precission . "f", (float) $frac);
-    		$tmp[$key] = $tmp_val[$array_key];
-    	}
+        $tmp = [];
+        foreach ($tmpkey as $array_key => $frac) {
+            $key = (string) sprintf("%1.". $precission . "f", (float) $frac);
+            $tmp[$key] = $tmpval[$array_key];
+        }
 
-    	return $tmp;
+        return $tmp;
     }
 
     /**
