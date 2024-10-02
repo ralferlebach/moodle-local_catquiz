@@ -53,7 +53,7 @@ final class mayberemovescale_test extends basic_testcase {
      * @param mixed $attemptcontext
      * @param mixed $played
      *
-     * @return mixed
+     * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      *
@@ -62,7 +62,7 @@ final class mayberemovescale_test extends basic_testcase {
         $expected,
         $attemptcontext,
         $played
-    ) {
+    ): void {
         $progressstub = $this->createStub(progress::class);
         $progressstub->method('get_playedquestions')
             ->willReturn(

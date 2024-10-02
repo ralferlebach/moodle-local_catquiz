@@ -49,9 +49,10 @@ final class catscale_test extends basic_testcase {
      * @param float $ability
      * @param float $expected
      *
+     * @return void
      * @dataProvider standarderror_is_calculated_correctly_provider
      */
-    public function test_standarderror_is_calculated_correctly(model_item_param_list $items, float $ability, float $expected) {
+    public function test_standarderror_is_calculated_correctly(model_item_param_list $items, float $ability, float $expected): void {
         $standarderror = catscale::get_standarderror($ability, $items);
         $this->assertEqualsWithDelta($expected, $standarderror, 0.01);
     }
@@ -157,6 +158,8 @@ final class catscale_test extends basic_testcase {
      * @param model_item_param_list $remainingitems
      * @param int $remaining
      * @param float $expected
+     *
+     * @return void
      * @dataProvider testpotential_returns_expected_value_provider
      */
     public function test_testpotential_returns_expected_value(
@@ -164,7 +167,7 @@ final class catscale_test extends basic_testcase {
         model_item_param_list $remainingitems,
         int $remaining,
         float $expected
-    ) {
+    ):void {
         $tp = catscale::get_testpotential($ability, $remainingitems, $remaining);
         $this->assertEqualsWithDelta($expected, $tp, 0.01);
     }

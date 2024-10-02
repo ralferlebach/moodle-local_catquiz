@@ -50,6 +50,7 @@ final class model_person_ability_estimator_catcalc_test extends basic_testcase {
      * @param mixed $responses
      * @param mixed $itemparams
      *
+     * @return void
      * @group large
      */
     public function test_person_ability_estimation_returns_expected_values(
@@ -57,7 +58,7 @@ final class model_person_ability_estimator_catcalc_test extends basic_testcase {
         $modelname,
         $responses,
         $itemparams
-    ) {
+    ): void {
         foreach ($responses as $scaleid => $modelresponse) {
             $estimator = new model_person_ability_estimator_catcalc($modelresponse);
             $result = $estimator->get_person_abilities($itemparams, intval($scaleid));
