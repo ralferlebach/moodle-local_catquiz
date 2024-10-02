@@ -101,9 +101,9 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
         asort($tmpkey);
 
         $tmp = [];
-        foreach ($tmpkey as $array_key => $frac) {
+        foreach ($tmpkey as $arraykey => $frac) {
             $key = (string) sprintf("%1.". $precission . "f", (float) $frac);
-            $tmp[$key] = $tmpval[$array_key];
+            $tmp[$key] = $tmpval[$arraykey];
         }
 
         return $tmp;
