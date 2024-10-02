@@ -271,33 +271,6 @@ class grmgeneralized extends model_raschmodel {
         return $result;
     }
 
-/**
-     * Calculates the Likelihood for a given the person ability parameter
-     *
-     * @param array $pp - person ability parameter
-     * @param array $ip - item parameters ('difficulty', 'discrimination')
-     * @param float $frac - answer fraction (0 ... 1.0)
-     * @return float
-     */
-    public static function likelihood(array $pp, array $ip, float $frac): float {
-        $ability = $pp['ability'];
-
-        $a = self::sort_fractions($ip['difficulties']);
-        $b = $ip['discrimination'];
-
-        // Make sure $frac is between 0.0 and 1.0.
-        $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($a);
-        $kmax = max(array_keys($fractions));
-
-        $k = self::get_key_by_fractions($frac, $a);
-
-        $result = ($k == 0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
-        $result -= ($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
-
-        return $result;
-    }
-
     /**
      * Calculates the 1st derivate of the Likelihood
      *
