@@ -130,16 +130,16 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     }
 
     /**
-     * Defines names if item parameter list
+     * Get all fractions out of parts of ip array
      *
-     * @param array $ip
-     * @return array of string
+     * @param array $array
+     * @return array of fractions as strings
      */
-    protected static function get_fractions(array $ip): array {
+    protected static function get_fractions(array $array): array {
         $frac = [];
         $frac[0] = 0;
 
-        $a = self::sort_fractions($ip['difficulties']);
+        $a = self::sort_fractions($array);
 
         foreach ($a as $fraction => $val) {
             if ((float) $fraction > 0 && (float) $fraction <= 1) {
