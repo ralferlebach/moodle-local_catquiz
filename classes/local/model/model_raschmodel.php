@@ -58,38 +58,57 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
 
     protected static function get_key_by_fractions(float $frac, array $array): int {
       $n = 0;
-      foreach ($array as $key => $val) {
-        if ((float) $key <= $frac) {
-          $n++;
-        } else {
-          return $n;
-        }
-      }
-      return $n;
+    	foreach ($array as $key => $val) {
+    		if ((float) $key < $frac) {
+    			$n++;
+    		} else {
+    			return $n;
+    		}
+    	}
+    	return $n;
     }
 
-    protected static function sort_fractions($array, int $precission = 3) {
-      // Make sure the array is sanitized first.
+    /**
+     * Helper class that sort array with fractions as key
+     *
+     * @param array $array (e.g. $ip['difficulties'])
+     * @param int $precission
+     *
+     * @return array
+     *
+     */
+    protected static function sort_fractions(array $array, int $precission = 3): array {
+        // Make sure the array is sanitized first.
+    	$array = self::sanitize_fractions($array, $precission);
 
-      $tmp_key = [];
-      $tmp_val = [];
+    	$tmp_key = [];
+    	$tmp_val = [];
 
-      foreach ($array as $key => $val) {
-        $tmp_key[] = (float) $key;
-        $tmp_val[] = (float) $val;
-      }
+    	foreach ($array as $key => $val) {
+    		$tmp_key[] = (float) $key;
+    		$tmp_val[] = (float) $val;
+    	}
 
-      asort($tmp_key);
+    	asort($tmp_key);
 
-      $tmp = [];
-      foreach ($tmp_key as $array_key => $frac) {
-        $key = (string) sprintf("%1.". $precission . "f", (float) $frac);
-        $tmp[$key] = $tmp_val[$array_key];
-      }
+    	$tmp = [];
+    	foreach ($tmp_key as $array_key => $frac) {
+    		$key = (string) sprintf("%1.". $precission . "f", (float) $frac);
+    		$tmp[$key] = $tmp_val[$array_key];
+    	}
 
-      return $tmp;
+    	return $tmp;
     }
 
+    /**
+     * Helper class that sanitizes an array with fractions as key
+     *
+     * @param array $array (e.g. $ip['difficulties'])
+     * @param int $precission
+     *
+     * @return array
+     *
+     */
     protected static function sanitize_fractions($array, $precission = 3) {
       $tmp = [];
 
