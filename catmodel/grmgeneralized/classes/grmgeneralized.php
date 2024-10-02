@@ -251,10 +251,9 @@ class grmgeneralized extends model_raschmodel {
      */
     public static function calculate_mean_difficulty(array $ip): float {
         $ip['difficulties'] = self::sanitize_fractions( $ip['difficulties']);
-        $fractions = self::get_fractions($ip['difficulties');
+        $fractions = self::get_fractions($ip['difficulties']);
         $kmax = max(array_keys($fractions));
 
-        // Ralf: stimmt das so? Bei fractions 0.00, 0.33, 0.66 und 1.0 berechnet das den Wert von (0.66 + 1.0)/ 2.
         return ($ip['difficulties'][$fractions[1]] + $ip['difficulties'][$fractions[$kmax]]) / 2;
     }
     // Calculate the Likelihood.
@@ -280,7 +279,7 @@ class grmgeneralized extends model_raschmodel {
 
         $k = self::get_key_by_fractions($frac, $a);
 
-        $result = ($frac == 0.0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
+        $result = ($k == 0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
         $result -= ($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
 
         return $result;
