@@ -75,20 +75,6 @@ class grmgeneralized extends model_raschmodel {
     // Definitions and Dimensions.
 
     /**
-     * Defines names if item parameter list
-     *
-     * @param float $frac
-     * @param array $fractions
-     *
-     * @return array of string
-     */
-    public static function get_category(float $frac, array $fractions): int {
-        // TODO: Auf die systemweit eingestellte Precission abrunden, mit Nullen auffüllen, auf nächst-klieinere fraction abrunden.
-
-        return $k = array_search($frac, $fractions);
-    }
-
-    /**
      * Goes modified to mathcat.php.
      *
      * @param array $ip
