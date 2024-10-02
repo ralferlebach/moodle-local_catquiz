@@ -98,7 +98,7 @@ final class model_item_param_test extends advanced_testcase {
                 'parameters' => [
                     'difficulties' => ['0.00' => 0.12, '0.33' => 0.35, '0.66' => 0.68, '1.00' => 0.83],
                     'discrimination' => 5.92,
-                    'difficulty' => 0.755,
+                    'difficulty' => 0.59,
                 ],
             ],
             'rasch' => [
