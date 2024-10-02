@@ -77,27 +77,6 @@ class grmgeneralized extends model_raschmodel {
     /**
      * Defines names if item parameter list
      *
-     * @param array $ip
-     * @return array of string
-     */
-    protected static function get_fractions(array $ip): array {
-        $frac = [];
-        $frac[0] = 0;
-
-        $a = self::sort_fractions($ip['difficulties']);
-
-        foreach ($a as $fraction => $val) {
-            if ((float) $fraction > 0 && (float) $fraction <= 1) {
-                $frac[] = $fraction;
-            }
-        }
-
-        return $frac;
-    }
-
-    /**
-     * Defines names if item parameter list
-     *
      * @param float $frac
      * @param array $fractions
      *
@@ -290,7 +269,7 @@ class grmgeneralized extends model_raschmodel {
     public static function likelihood(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $a = $ip['difficulties'];
+        $a = self::sort_fractions($ip['difficulties']);
         $b = $ip['discrimination'];
 
         // Make sure $frac is between 0.0 and 1.0.
