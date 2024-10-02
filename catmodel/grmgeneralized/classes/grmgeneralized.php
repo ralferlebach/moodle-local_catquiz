@@ -281,7 +281,7 @@ class grmgeneralized extends model_raschmodel {
         $k = self::get_key_by_fractions($frac, $a);
 
         $result = ($frac == 0.0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
-        $result .= -($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
+        $result -= ($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
 
         return $result;
     }
@@ -311,7 +311,7 @@ class grmgeneralized extends model_raschmodel {
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $a = array_values($ip['difficulties']);
+        $a = self::sort_fractions($ip['difficulties']);
         $b = $ip['discrimination'];
 
         // Make sure $frac is between 0.0 and 1.0.
@@ -319,19 +319,14 @@ class grmgeneralized extends model_raschmodel {
         $fractions = self::get_fractions($ip);
         $kmax = max(array_keys($fractions));
 
-        switch ($frac) {
-            case 0.0:
-                return -$b / (exp($b * ($a[0] - $ability)) + 1);
-            case $fractions[$kmax]:
-                $a = array_values($a);
-                return ($b * exp($a[$kmax] * $b)) / (exp($a[$kmax] * $b) + exp($b * $ability));
-            default:
-                // Get corresponding category.
-                $k = array_search($frac, $ip['difficulties']);
-                $a = array_values($a);
-                return ($b * (exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)) - 1))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) * (exp($b * ($a[$k + 1] - $ability)) + 1));
-        }
+        $k = self::get_key_by_fractions($frac, $a);
+
+        $result = ($frac == 0.0) ? (0) : (($b * exp($a[$fractions[$k]] * $b)) /
+            (exp($a[$fractions[$k]] * $b) + exp($b * $ability)));
+        $result -= ($k == $kmax) ? (0) : (($b * exp($a[$fractions[$k + 1]] * $b)) /
+            (exp($a[$fractions[$k + 1]] * $b) + exp($b * $ability)));
+
+        return $result;
     }
 
     /**
@@ -345,7 +340,7 @@ class grmgeneralized extends model_raschmodel {
     public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $a = $ip['difficulties'];
+        $a = self::sort_fractions($ip['difficulties']);
         $b = $ip['discrimination'];
 
         // Make sure $frac is between 0.0 and 1.0.
@@ -353,24 +348,14 @@ class grmgeneralized extends model_raschmodel {
         $fractions = self::get_fractions($ip);
         $kmax = max(array_keys($fractions));
 
-        switch ($frac) {
-            case 0.0:
-                $a = array_values($a);
-                return -($b ** 2 * exp($b * ($a[0] - $ability))) / (exp($b * ($a[0] - $ability)) + 1) ** 2;
-            case $fractions[$kmax]:
-                $a = array_values($a);
-                return -($b ** 2 * exp($a[$kmax] * $b + $b * $ability)) / (exp($a[$kmax] * $b) + exp($b * $ability)) ** 2;
-            default:
-                // Get corresponding category.
-                $k = array_search($frac, array_keys($ip['difficulties']));
-                $a = array_values($a);
-                return -(2 * $b ** 2 * exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) * (exp($b * ($a[$k + 1] - $ability)) + 1))
-                    + ($b ** 2 * exp($b * ($a[$k] - $ability)) * (exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)) - 1))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) ** 2 * (exp($b * ($a[$k + 1] - $ability)) + 1))
-                    + ($b ** 2 * exp($b * ($a[$k + 1] - $ability)) * (exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)) - 1))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) * (exp($b * ($a[$k + 1] - $ability)) + 1) ** 2);
-        }
+        $k = self::get_key_by_fractions($frac, $a);
+
+        $result = ($frac == 0.0) ? (0) : (($b ** 2 * exp($b * ($a[$fractions[$k]] - $ability))) /
+            (exp($b * ($a[$fractions[$k]] - $ability)) + 1) ** 2);
+        $result -= ($k == $kmax) ? (0) : (($b ** 2 * exp($b * ($a[$fractions[$k + 1]] - $ability))) /
+            (exp($b * ($a[$fractions[$k + 1]] - $ability)) + 1) ** 2);
+
+        return $result;
     }
 
     /**
