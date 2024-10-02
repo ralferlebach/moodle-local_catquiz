@@ -271,6 +271,86 @@ class grmgeneralized extends model_raschmodel {
         return $result;
     }
 
+/**
+     * Calculates the Likelihood for a given the person ability parameter
+     *
+     * @param array $pp - person ability parameter
+     * @param array $ip - item parameters ('difficulty', 'discrimination')
+     * @param float $frac - answer fraction (0 ... 1.0)
+     * @return float
+     */
+    public static function likelihood(array $pp, array $ip, float $frac): float {
+        $ability = $pp['ability'];
+
+        $a = self::sort_fractions($ip['difficulties']);
+        $b = $ip['discrimination'];
+
+        // Make sure $frac is between 0.0 and 1.0.
+        $frac = min(1.0, max(0.0, $frac));
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+
+        $k = self::get_key_by_fractions($frac, $a);
+
+        $result = ($k == 0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
+        $result -= ($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
+
+        return $result;
+    }
+
+    /**
+     * Calculates the 1st derivate of the Likelihood
+     *
+     * @param array $pp - person ability parameter
+     * @param array $ip - item parameters ('difficulty', 'discrimination')
+     * @param float $frac - answer fraction (0 ... 1.0)
+     * @return float
+     */
+    protected static function likelihood_p(array $pp, array $ip, float $frac): float {
+        $ability = $pp['ability'];
+
+        $a = self::sort_fractions($ip['difficulties']);
+        $b = $ip['discrimination'];
+
+        // Make sure $frac is between 0.0 and 1.0.
+        $frac = min(1.0, max(0.0, $frac));
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+
+        $k = self::get_key_by_fractions($frac, $a);
+
+        $result = ($k == 0) ? (1) : ($b * exp($b * ($a[$fractions[$k]] - $ability)) /
+            (1 + exp($b * ($a[$fractions[$k]] - $ability))) ** 2);
+        $result -= ($k == $kmax) ? (0) : ($b * exp($b * ($a[$fractions[$k + 1]] - $ability)) /
+            (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))) ** 2);
+
+        return $result;
+    }
+
+    /**
+     * Calculates the 2nd derivate of the Likelihood
+     *
+     * @param array $pp - person ability parameter
+     * @param array $ip - item parameters ('difficulty', 'discrimination')
+     * @param float $frac - answer fraction (0 ... 1.0)
+     * @return float
+     */
+    protected static function likelihood_p_p(array $pp, array $ip, float $frac): float {
+        $ability = $pp['ability'];
+
+        $a = self::sort_fractions($ip['difficulties']);
+        $b = $ip['discrimination'];
+
+        // Make sure $frac is between 0.0 and 1.0.
+        $frac = min(1.0, max(0.0, $frac));
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+
+        $k = self::get_key_by_fractions($frac, $a);
+
+        return $result;
+    }
+
     // Calculate the LOG Likelihood and its derivatives.
 
     /**
@@ -294,24 +374,8 @@ class grmgeneralized extends model_raschmodel {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
-        $ability = $pp['ability'];
 
-        $a = self::sort_fractions($ip['difficulties']);
-        $b = $ip['discrimination'];
-
-        // Make sure $frac is between 0.0 and 1.0.
-        $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($a);
-        $kmax = max(array_keys($fractions));
-
-        $k = self::get_key_by_fractions($frac, $a);
-
-        $result = ($frac == 0.0) ? (0) : (($b * exp($a[$fractions[$k]] * $b)) /
-            (exp($a[$fractions[$k]] * $b) + exp($b * $ability)));
-        $result -= ($k == $kmax) ? (0) : (($b * exp($a[$fractions[$k + 1]] * $b)) /
-            (exp($a[$fractions[$k + 1]] * $b) + exp($b * $ability)));
-
-        return $result;
+        return self::likelihood_p($pp, $ip, $frac) / self::likelihood($pp, $ip, $frac);
     }
 
     /**
