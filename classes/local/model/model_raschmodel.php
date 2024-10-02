@@ -56,16 +56,25 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
         return (1 / (1 + exp($discrimination * ($itemdifficulty - $personability))));
     }
 
+    /**
+     * Helper class that gets the key of an ip-array by given fraction
+     *
+     * @param float $fraction
+     * @param array $array (e.g. $ip['difficulties'])
+     *
+     * @return int
+     *
+     */
     protected static function get_key_by_fractions(float $frac, array $array): int {
-      $n = 0;
-    	foreach ($array as $key => $val) {
-    		if ((float) $key < $frac) {
-    			$n++;
-    		} else {
-    			return $n;
-    		}
-    	}
-    	return $n;
+        $n = 0;
+        foreach ($array as $key => $val) {
+        	if ((float) $key < $frac) {
+        		$n++;
+        	} else {
+        		return $n;
+        	}
+        }
+        return $n;
     }
 
     /**
@@ -109,15 +118,15 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      * @return array
      *
      */
-    protected static function sanitize_fractions($array, $precission = 3) {
-      $tmp = [];
+    protected static function sanitize_fractions(array $array, int $precission = 3): array {
+        $tmp = [];
 
-      foreach ($array as $key => $val) {
-        $key = (string) sprintf("%1.". $precission . "f", (float) $key);
-        $tmp[$key] = (float) $val;
-      }
+        foreach ($array as $key => $val) {
+            $key = (string) sprintf("%1.". $precission . "f", (float) $key);
+            $tmp[$key] = (float) $val;
+        }
 
-      return $tmp;
+        return $tmp;
     }
 
     /**
