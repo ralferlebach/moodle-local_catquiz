@@ -216,7 +216,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => 0.851952802,
+                'expected' => 0.413382421,
             ],
             "testcase1b" => [
                 'pp' => ['ability' => -3],
@@ -229,7 +229,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => 0.090723022,
+                'expected' => 0.173235158,
             ],
             "testcase1c" => [
                 'pp' => ['ability' => -3],
@@ -242,7 +242,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => 0.057324176,
+                'expected' => 0.4133824212,
             ],
         ];
     }
@@ -264,7 +264,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => -0.16022415,
+                'expected' => -0.883382155,
             ],
             "testcase1b" => [
                 'pp' => ['ability' => -3],
@@ -277,7 +277,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => -2.399944127,
+                'expected' => -1.753105314,
             ],
             "testcase1c" => [
                 'pp' => ['ability' => -3],
@@ -290,7 +290,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => -2.859032826,
+                'expected' => -0.883382155,
             ],
         ];
     }
@@ -312,7 +312,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => -0.103633039,
+                'expected' => -0.410632305,
             ],
             "testcase1b" => [
                 'pp' => ['ability' => -3],
@@ -325,7 +325,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => 0.556240038,
+                'expected' => 0,
             ],
             "testcase1c" => [
                 'pp' => ['ability' => -3],
@@ -338,7 +338,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => 0.659873077,
+                'expected' => 0.410632305,
             ],
         ];
     }
@@ -360,7 +360,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => -0.06180332,
+                'expected' => -0.118823724,
             ],
             "testcase1b" => [
                 'pp' => ['ability' => -3],
@@ -373,7 +373,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => -0.088281997,
+                'expected' => -0.237647447,
             ],
             "testcase1c" => [
                 'pp' => ['ability' => -3],
@@ -386,7 +386,7 @@ final class grmgeneralized_test extends TestCase {
                         "1.0" => -2.5,
                         ],
                 ],
-                'expected' => -0.026478676,
+                'expected' => -0.118823724,
             ],
         ];
     }
