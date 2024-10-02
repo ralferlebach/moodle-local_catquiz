@@ -2251,7 +2251,7 @@ final class strategy_test extends advanced_testcase {
      * @param \stdClass $course
      * @return \qformat_xml XML question format object.
      */
-    private function create_qformat($filename, $course): qformat_xml {
+    private function create_qformat($filename, $course): \qformat_xml {
         $qformat = new \qformat_xml();
         $qformat->setContexts((new question_edit_contexts(context_course::instance($course->id)))->all());
         $qformat->setCourse($course);
