@@ -319,7 +319,7 @@ class grmgeneralized extends model_raschmodel {
 
         $k = self::get_key_by_fractions($frac, $a);
 
-        $result = ($k == 0) ? (1) : ($b * exp($b * ($a[$fractions[$k]] - $ability)) /
+        $result = ($k == 0) ? (0) : ($b * exp($b * ($a[$fractions[$k]] - $ability)) /
             (1 + exp($b * ($a[$fractions[$k]] - $ability))) ** 2);
         $result -= ($k == $kmax) ? (0) : ($b * exp($b * ($a[$fractions[$k + 1]] - $ability)) /
             (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))) ** 2);
@@ -348,6 +348,13 @@ class grmgeneralized extends model_raschmodel {
 
         $k = self::get_key_by_fractions($frac, $a);
 
+        $result = ($k == 0) ? 0 : ($b ** 2 * exp($b * ($a[$fractions[$k]] - $ability)) *
+            (exp($b * ($a[$fractions[$k]] - $ability)) - 1) /
+            (1 + exp($b * ($a[$fractions[$k]] - $ability))) ** 3);
+        $result -= ($k == $kmax) ? (0) : ($b ** 2 * exp($b * ($a[$fractions[$k + 1]] - $ability)) *
+            (exp($b * ($a[$fractions[$k + 1]] - $ability)) - 1) /
+            (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))) ** 3);
+
         return $result;
     }
 
@@ -374,7 +381,7 @@ class grmgeneralized extends model_raschmodel {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
-
+        // We do it the easy way by using the log'f(x) = f'(x)/f(x) method.
         return self::likelihood_p($pp, $ip, $frac) / self::likelihood($pp, $ip, $frac);
     }
 
@@ -387,24 +394,9 @@ class grmgeneralized extends model_raschmodel {
      * @return float - 2nd derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
-        $ability = $pp['ability'];
-
-        $a = self::sort_fractions($ip['difficulties']);
-        $b = $ip['discrimination'];
-
-        // Make sure $frac is between 0.0 and 1.0.
-        $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($a);
-        $kmax = max(array_keys($fractions));
-
-        $k = self::get_key_by_fractions($frac, $a);
-
-        $result = ($frac == 0.0) ? (0) : (($b ** 2 * exp($b * ($a[$fractions[$k]] - $ability))) /
-            (exp($b * ($a[$fractions[$k]] - $ability)) + 1) ** 2);
-        $result -= ($k == $kmax) ? (0) : (($b ** 2 * exp($b * ($a[$fractions[$k + 1]] - $ability))) /
-            (exp($b * ($a[$fractions[$k + 1]] - $ability)) + 1) ** 2);
-
-        return $result;
+        // We do it the easy way by using the log''f(x) = (f(x)*f''(x)-f'(x)^2)/f(x)^2 method.
+        return (self::likelihood($pp, $ip, $frac) * self::likelihood_p_p($pp, $ip, $frac) -
+            self::likelihood_p($pp, $ip, $frac) ** 2) / self::likelihood($pp, $ip, $frac) ** 2;
     }
 
     /**
