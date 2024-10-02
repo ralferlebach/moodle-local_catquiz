@@ -212,7 +212,7 @@ final class grmgeneralized_test extends TestCase {
                     "discrimination" => 0.7,
                     "difficulties" => [
                         "0.0" => 0,
-                        "0,5" => -3.5,
+                        "0.5" => -3.5,
                         "1.0" => -2.5,
                         ],
                 ],
@@ -225,7 +225,7 @@ final class grmgeneralized_test extends TestCase {
                     "discrimination" => 0.7,
                     "difficulties" => [
                         "0.0" => 0,
-                        "0,5" => -3.5,
+                        "0.5" => -3.5,
                         "1.0" => -2.5,
                         ],
                 ],
@@ -238,7 +238,7 @@ final class grmgeneralized_test extends TestCase {
                     "discrimination" => 0.7,
                     "difficulties" => [
                         "0.0" => 0,
-                        "0,5" => -3.5,
+                        "0.5" => -3.5,
                         "1.0" => -2.5,
                         ],
                 ],
