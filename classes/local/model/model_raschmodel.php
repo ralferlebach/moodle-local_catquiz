@@ -86,7 +86,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      * @return array
      *
      */
-    protected static function sort_fractions(array $array, int $precission = 3): array {
+    protected static function sort_fractions(array $array, int $precission = self::PRECISION): array {
         // Make sure the array is sanitized first.
         $array = self::sanitize_fractions($array, $precission);
 
@@ -118,7 +118,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      * @return array
      *
      */
-    protected static function sanitize_fractions(array $array, int $precission = 3): array {
+    protected static function sanitize_fractions(array $array, int $precission = self::PRECISION): array {
         $tmp = [];
 
         foreach ($array as $key => $val) {
