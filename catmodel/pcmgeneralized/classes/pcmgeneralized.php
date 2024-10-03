@@ -222,13 +222,17 @@ class pcmgeneralized extends model_raschmodel {
         $denominator = 0;
         $intercepts = 0;
         for ($k = 0; $k < $kmax; $k++) {
-            $intercepts += $a[$fractions[$k]];
+            $intercepts += ($k == 0) ? (0) : $a[$fractions[$k]];
             $denominator += exp($k * $ability - $intercepts);
         }
 
         // Calculation the probability.
-        $k = self::get_key_by_fractions($frac, $a);
-        return exp($b * $k * $pp['ability'] - $intercepts) / $denominator;
+        $kfrack = self::get_key_by_fractions($frac, $a);
+        $intercepts = 0;
+        for ($k = 0; $k < $kfrac; $k++) {
+            $intercepts += ($k == 0) ? (0) : $a[$fractions[$k]];
+        }
+        return exp($b * $kfrac * $pp['ability'] - $intercepts) / $denominator;
     }
 
     // Calculate the LOG Likelihood and its derivatives.
