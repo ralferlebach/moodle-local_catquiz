@@ -136,15 +136,11 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      * @return array of fractions as strings
      */
     protected static function get_fractions(array $array): array {
+        $a = self::sanitize_fractions($array);
         $frac = [];
-        $frac[0] = 0;
-
-        $a = self::sort_fractions($array);
 
         foreach ($a as $fraction => $val) {
-            if ((float) $fraction > 0 && (float) $fraction <= 1) {
-                $frac[] = $fraction;
-            }
+            $frac[] = $fraction;
         }
         return $frac;
     }
