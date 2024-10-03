@@ -85,39 +85,6 @@ class pcmgeneralized extends model_raschmodel {
     // Definitions and Dimensions.
 
     /**
-     * Defines names if item parameter list
-     *
-     * @param array $ip
-     * @return array of string
-     */
-    public static function get_fractions(array $ip): array {
-        $frac = [];
-
-        foreach ($ip['intercept'] as $fraction => $val) {
-            $frac[] = $fraction;
-        }
-
-        $frac = array_unique($frac);
-        sort($frac);
-        return $frac;
-    }
-
-    /**
-     * Defines names if item parameter list
-     *
-     * @param float $frac
-     * @param array $fractions
-     *
-     * @return array of string
-     */
-    public static function get_category(float $frac, array $fractions): int {
-
-        for ($k = 0; $fractions[$k] < $frac; $k++);
-
-        return $k;
-    }
-
-    /**
      * Goes modified to mathcat.php.
      *
      * @param array $ip
@@ -225,16 +192,12 @@ class pcmgeneralized extends model_raschmodel {
      *
      */
     public static function calculate_mean_difficulty(array $ip): float {
-
-        $fractions = self::get_fractions($ip);
+        $ip['difficulties'] = self::sanitize_fractions($ip['difficulties']);
+        $fractions = self::get_fractions($ip['difficulties']);
         $kmax = max(array_keys($fractions));
-        $sum = 0;
 
-        for ($k = 1; $k < $kmax; $k++) {
-            $sum += $ip['intercept'][$fractions[$k]];
-        }
-        return $sum / $kmax;
-    }
+        return ($ip['intercept'][$fractions[1]] + $ip['intercept'][$fractions[$kmax]]) / 2;
+    }    }
 
     // Calculate the Likelihood.
 
@@ -250,7 +213,7 @@ class pcmgeneralized extends model_raschmodel {
         $ability = $pp['ability'];
         $discrimination = $ip['discrimination'];
 
-        $fractions = self::get_fractions($ip);
+        $fractions = self::get_fractions($ip['intercept']);
         $kmax = max(array_keys($fractions));
 
         // Making sure, that the first intercept is 0, so that for k=0: 1=exp(0*pp - intercept).
