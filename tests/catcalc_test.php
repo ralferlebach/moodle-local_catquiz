@@ -164,18 +164,18 @@ final class catcalc_test extends basic_testcase {
     public static function ability_can_be_calculated_with_all_models_provider(): array {
         $grmgeneralizedjson = json_encode([
             'difficulties' => [
-                '0.00' => 0.12,
-                '0.33' => 0.35,
-                '0.66' => 0.68,
-                '1.00' => 0.83,
+                '0.000' => 0.12,
+                '0.333' => 0.35,
+                '0.666' => 0.68,
+                '1.000' => 0.83,
             ],
         ]);
         $grmjson = json_encode([
             'difficulties' => [
-                '0.00' => 0.12,
-                '0.33' => 0.35,
-                '0.66' => 0.68,
-                '1.00' => 0.83,
+                '0.000' => 0.12,
+                '0.333' => 0.35,
+                '0.666' => 0.68,
+                '1.000' => 0.83,
             ],
         ]);
         $pcmgeneralizedjson = json_encode([
