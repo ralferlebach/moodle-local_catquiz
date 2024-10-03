@@ -242,6 +242,7 @@ class grmgeneralized extends model_raschmodel {
 
         return ($ip['difficulties'][$fractions[1]] + $ip['difficulties'][$fractions[$kmax]]) / 2;
     }
+
     // Calculate the Likelihood.
 
     /**
