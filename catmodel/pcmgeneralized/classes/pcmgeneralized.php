@@ -197,7 +197,7 @@ class pcmgeneralized extends model_raschmodel {
         $kmax = max(array_keys($fractions));
 
         return ($ip['intercept'][$fractions[1]] + $ip['intercept'][$fractions[$kmax]]) / 2;
-    }    }
+    }
 
     // Calculate the Likelihood.
 
