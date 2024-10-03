@@ -220,7 +220,7 @@ final class grmgeneralized_test extends TestCase {
                     'frac' => $frac[$case],
                     'ip' => $parameter[$key],
                     'expected' => $expectedvalue,
-                ];                ]
+                ];
             }
         }
 
@@ -232,47 +232,48 @@ final class grmgeneralized_test extends TestCase {
      * @return array
      */
     public static function log_likelihood_p_provider(): array {
-        return [
-            "testcase1a" => [
-                'pp' => ['ability' => -3],
-                'frac' => 0.0,
-                'ip' => [
-                    "discrimination" => 0.7,
-                    "difficulties" => [
-                        "0.0" => 0,
-                        "0.5" => -3.5,
-                        "1.0" => -2.5,
-                        ],
-                ],
-                'expected' => -0.410632305,
-            ],
-            "testcase1b" => [
-                'pp' => ['ability' => -3],
-                'frac' => 0.5,
-                'ip' => [
-                    "discrimination" => 0.7,
-                    "difficulties" => [
-                        "0.0" => 0,
-                        "0.5" => -3.5,
-                        "1.0" => -2.5,
-                        ],
-                ],
-                'expected' => 0,
-            ],
-            "testcase1c" => [
-                'pp' => ['ability' => -3],
-                'frac' => 1.0,
-                'ip' => [
-                    "discrimination" => 0.7,
-                    "difficulties" => [
-                        "0.0" => 0,
-                        "0.5" => -3.5,
-                        "1.0" => -2.5,
-                        ],
-                ],
-                'expected' => 0.410632305,
-            ],
+        $labels = ["testcase1", "testcase2", "testcase3"];
+        $ability = [-3, -1.5, 1.5];
+        $frac = [0, 0.5, 1];
+        $parameter = [
+            ["discrimination" => 0.7,
+            "difficulties" => [
+                "0.0" => 0,
+                "0.5" => -3.5,
+                "1.0" => -2.5,
+            ]],
+            ["discrimination" => 2.0,
+            "difficulties" => [
+                "0.0" => 0,
+                "0.5" => -1,
+                "1.0" => 1.5,
+            ]],
+            ["discrimination" => 1.5,
+            "difficulties" => [
+                "0.0" => 0,
+                "0.5" => 0.5,
+                "1.0" => 1.0,
+            ]],
         ];
+        $expected = [
+            [-0.410632305, 0, 0.410632305],
+            [-0.048320905, -0.655467956, 84.92485814],
+            [-0.004542728, -0.020745245, 0.005447409],
+        ];
+
+        $providedarray = [];
+
+        foreach ($labels as $key => $label) {
+            foreach ($expected[$key] as $case => $expectedvalue) {
+                $providedarray[$label."-".$case] = ['pp' => ['ability' => $ability[$key]],
+                    'frac' => $frac[$case],
+                    'ip' => $parameter[$key],
+                    'expected' => $expectedvalue,
+                ];
+            }
+        }
+
+        return $providedarray;
     }
 
     /**
@@ -280,47 +281,48 @@ final class grmgeneralized_test extends TestCase {
      * @return array
      */
     public static function log_likelihood_p_p_provider(): array {
-        return [
-            "testcase1a" => [
-                'pp' => ['ability' => -3],
-                'frac' => 0.0,
-                'ip' => [
-                    "discrimination" => 0.7,
-                    "difficulties" => [
-                        "0.0" => 0,
-                        "0.5" => -3.5,
-                        "1.0" => -2.5,
-                        ],
-                ],
-                'expected' => -0.118823724,
-            ],
-            "testcase1b" => [
-                'pp' => ['ability' => -3],
-                'frac' => 0.5,
-                'ip' => [
-                    "discrimination" => 0.7,
-                    "difficulties" => [
-                        "0.0" => 0,
-                        "0.5" => -3.5,
-                        "1.0" => -2.5,
-                        ],
-                ],
-                'expected' => -0.237647447,
-            ],
-            "testcase1c" => [
-                'pp' => ['ability' => -3],
-                'frac' => 1.0,
-                'ip' => [
-                    "discrimination" => 0.7,
-                    "difficulties" => [
-                        "0.0" => 0,
-                        "0.5" => -3.5,
-                        "1.0" => -2.5,
-                        ],
-                ],
-                'expected' => -0.118823724,
-            ],
+        $labels = ["testcase1", "testcase2", "testcase3"];
+        $ability = [-3, -1.5, 1.5];
+        $frac = [0, 0.5, 1];
+        $parameter = [
+            ["discrimination" => 0.7,
+            "difficulties" => [
+                "0.0" => 0,
+                "0.5" => -3.5,
+                "1.0" => -2.5,
+            ]],
+            ["discrimination" => 2.0,
+            "difficulties" => [
+                "0.0" => 0,
+                "0.5" => -1,
+                "1.0" => 1.5,
+            ]],
+            ["discrimination" => 1.5,
+            "difficulties" => [
+                "0.0" => 0,
+                "0.5" => 0.5,
+                "1.0" => 1.0,
+            ]],
         ];
+        $expected = [
+            [-0.118823724, -0.237647447, -0.118823724],
+            [0.090830461, 0.515090231, -7341.588081],
+            [0.006785923, 0.030499129, -0.008160379],
+        ];
+
+        $providedarray = [];
+
+        foreach ($labels as $key => $label) {
+            foreach ($expected[$key] as $case => $expectedvalue) {
+                $providedarray[$label."-".$case] = ['pp' => ['ability' => $ability[$key]],
+                    'frac' => $frac[$case],
+                    'ip' => $parameter[$key],
+                    'expected' => $expectedvalue,
+                ];
+            }
+        }
+
+        return $providedarray;
     }
 
     /**
