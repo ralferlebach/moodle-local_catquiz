@@ -236,7 +236,7 @@ class grmgeneralized extends model_raschmodel {
      *
      */
     public static function calculate_mean_difficulty(array $ip): float {
-        $ip['difficulties'] = self::sanitize_fractions( $ip['difficulties']);
+        $ip['difficulties'] = self::sanitize_fractions($ip['difficulties']);
         $fractions = self::get_fractions($ip['difficulties']);
         $kmax = max(array_keys($fractions));
 
