@@ -183,7 +183,7 @@ final class pcmgeneralized_test extends TestCase {
      * @return array
      */
     public static function likelihood_provider(): array {
-        $labels = ["testcase1", "testcase2", "testcase3"];
+        $labels = ["gpcm likelihood case1", "gpcm likelihood case2", "gpcm likelihood case3"];
         $ability = [-3, -1.5, 1.5];
         $frac = [0, 0.5, 1];
         $parameter = [
@@ -207,9 +207,9 @@ final class pcmgeneralized_test extends TestCase {
             ]],
         ];
         $expected = [
-            [0.413382421, 0.173235158, 0.413382421],
-            [0.731058579, 0.266468798, 0.002472623],
-            [0.182425524, 0.138395777, 0.679178699],
+            [0.292477404, 0.415045192, 0.292477404],
+            [0.292477404, 0.107596424, 0.000266705],
+            [0.292477404, 1.310792784, 2.774948345],
         ];
 
         $providedarray = [];
@@ -232,7 +232,7 @@ final class pcmgeneralized_test extends TestCase {
      * @return array
      */
     public static function log_likelihood_p_provider(): array {
-        $labels = ["testcase1", "testcase2", "testcase3"];
+        $labels = ["gpcm d/dp log likelihood case1", "gpcm d/dp log likelihood case2", "gpcm d/dp log likelihood case3"];
         $ability = [-3, -1.5, 1.5];
         $frac = [0, 0.5, 1];
         $parameter = [
@@ -281,7 +281,7 @@ final class pcmgeneralized_test extends TestCase {
      * @return array
      */
     public static function log_likelihood_p_p_provider(): array {
-        $labels = ["testcase1", "testcase2", "testcase3"];
+        $labels = ["gpcm d²/dp² log likelihood case1", "gpcm d²/dp² log likelihood case2", "gpcm d²/dp² log likelihood case3"];
         $ability = [-3, -1.5, 1.5];
         $frac = [0, 0.5, 1];
         $parameter = [
