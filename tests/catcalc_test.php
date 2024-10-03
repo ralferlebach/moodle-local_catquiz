@@ -205,6 +205,7 @@ final class catcalc_test extends basic_testcase {
         $grmrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $grmjson]);
         $pcmgeneralizedrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $pcmgeneralizedjson]);
         $pcmrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $pcmjson]);
+
         $grmgeneralizedparam = new model_item_param($itemid, 'grmgeneralized', [], 4, $grmgeneralizedrecord);
         $grmparam = new model_item_param($itemid, 'grm', [], 4, $grmrecord);
         $pcmgeneralizedparam = new model_item_param($itemid, 'pcmgeneralized', [], 4, $pcmgeneralizedrecord);
