@@ -242,7 +242,7 @@ class pcm extends model_raschmodel {
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $fractions = self::get_fractions($ip);
+        $fractions = self::get_fractions($ip['intercept']);
         $kmax = max(array_keys($fractions));
 
         // Making sure, that the first intercept is 0, so that for k=0: 1=exp(0*pp - intercept).
@@ -275,7 +275,7 @@ class pcm extends model_raschmodel {
     public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $fractions = self::get_fractions($ip);
+        $fractions = self::get_fractions($ip['intercept']);
         $kmax = max(array_keys($fractions));
 
         // Making sure, that the first intercept is 0, so that for k=0: 1=exp(0*pp - intercept).
