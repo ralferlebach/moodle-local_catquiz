@@ -243,6 +243,26 @@ class grmgeneralized extends model_raschmodel {
         return ($ip['difficulties'][$fractions[1]] + $ip['difficulties'][$fractions[$kmax]]) / 2;
     }
 
+    /**
+     * Get all fractions out of parts of ip array
+     *
+     * @param array $array
+     * @return array of fractions as strings
+     */
+    protected static function get_fractions(array $array): array {
+        $frac = [];
+        $frac[0] = 0;
+
+        $a = self::sort_fractions($array);
+
+        foreach ($a as $fraction => $val) {
+            if ((float) $fraction > 0 && (float) $fraction <= 1) {
+                $frac[] = $fraction;
+            }
+        }
+        return $frac;
+    }
+
     // Calculate the Likelihood.
 
     /**
