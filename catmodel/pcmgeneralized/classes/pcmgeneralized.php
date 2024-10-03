@@ -223,7 +223,7 @@ class pcmgeneralized extends model_raschmodel {
         $intercepts = 0;
         for ($k = 0; $k < $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : $a[$fractions[$k]];
-            $denominator += exp($k * $ability - $intercepts);
+            $denominator += exp($b * ($k * $ability - $intercepts));
         }
 
         // Calculation the probability.
@@ -232,7 +232,7 @@ class pcmgeneralized extends model_raschmodel {
         for ($k = 0; $k < $kfrac; $k++) {
             $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
         }
-        return exp($b * $kfrac * $pp['ability'] - $intercepts) / $denominator;
+        return exp($b * ($kfrac * $ability - $intercepts)) / $denominator;
     }
 
     // Calculate the LOG Likelihood and its derivatives.
@@ -269,13 +269,11 @@ class pcmgeneralized extends model_raschmodel {
         // Calculation the denominator of the formulae.
         $denominator = 0;
         $firstderivative = 0;
-        $secondderivative = 0;
         $intercepts = 0;
         for ($k = 0; $k < $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
-            $denominator += exp($k * $ability - $intercepts);
-            $firstderivative += $k * exp($k * $ability - $intercepts);
-            $secondderivative += $k ** 2 * exp($k * $ability - $intercepts);
+            $denominator += exp($b * ($k * $ability - $intercepts));
+            $firstderivative += $k * $b * exp($b * ($k * $ability - $intercepts));
         }
 
         $k = self::get_key_by_fractions($frac, $a);
@@ -307,8 +305,8 @@ class pcmgeneralized extends model_raschmodel {
         for ($k = 0; $k < $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
             $denominator += exp($k * $ability - $intercepts);
-            $firstderivative += $k * exp($k * $ability - $intercepts);
-            $secondderivative += $k ** 2 * exp($k * $ability - $intercepts);
+            $firstderivative += $k * $b * exp($b * ($k * $ability - $intercepts));
+            $secondderivative += $k ** 2 * $b ** 2 * exp($b * ($k * $ability - $intercepts));
         }
 
         return $firstderivative ** 2 / $denominator ** 2 - $secondderivative / $denominator;
