@@ -192,8 +192,8 @@ class pcmgeneralized extends model_raschmodel {
      *
      */
     public static function calculate_mean_difficulty(array $ip): float {
-        $ip['intecept'] = self::sanitize_fractions($ip['intecept']);
-        $fractions = self::get_fractions($ip['intecept']);
+        $ip['intercept'] = self::sanitize_fractions($ip['intercept']);
+        $fractions = self::get_fractions($ip['intercept']);
         $kmax = max(array_keys($fractions));
 
         return ($ip['intercept'][$fractions[1]] + $ip['intercept'][$fractions[$kmax]]) / 2;
