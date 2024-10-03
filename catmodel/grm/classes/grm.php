@@ -73,38 +73,6 @@ class grm extends model_raschmodel {
     // Definitions and Dimensions.
 
     /**
-     * Defines names if item parameter list
-     *
-     * @param array $ip
-     * @return array of string
-     */
-    public static function get_fractions(array $ip): array {
-        $frac = [];
-
-        foreach ($ip['difficulties'] as $fraction => $val) {
-            if ($fraction > 0 && $fraction <= 1) {
-                $frac[] = $fraction;
-            }
-        }
-        sort($frac);
-        return $frac;
-    }
-
-    /**
-     * Defines names if item parameter list
-     *
-     * @param float $frac
-     * @param array $fractions
-     *
-     * @return array of string
-     */
-    public static function get_category(float $frac, array $fractions): int {
-        // TODO: Auf die systemweit eingestellte Precission abrunden, mit Nullen auffüllen, auf nächst-klieinere fraction abrunden.
-
-        return $k = array_search($frac, $fractions);
-    }
-
-    /**
      * Goes modified to mathcat.php.
      *
      * @param array $ip
@@ -156,7 +124,7 @@ class grm extends model_raschmodel {
      * @return array
      */
     public static function get_parameter_names(): array {
-        return ['difficulty', 'discrimination'];
+        return ['difficulties', 'discrimination', 'difficulty'];
 
     }
 
@@ -166,8 +134,7 @@ class grm extends model_raschmodel {
      * @return int
      */
     public static function get_model_dim(): int {
-        // Adds +1 for the person ability.
-        return array_sum(array_map("count", self::get_parameter_names())) + 1;
+        return array_sum(array_map("count", self::get_parameter_names()));
     }
 
     /**
