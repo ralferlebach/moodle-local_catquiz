@@ -223,7 +223,7 @@ class pcmgeneralized extends model_raschmodel {
         $intercepts = 0;
         for ($k = 0; $k < $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : $a[$fractions[$k]];
-            $denominator += exp($b * ($k * $ability - $intercepts));
+            # $denominator += exp($b * ($k * $ability - $intercepts));
         }
 
         // Calculation the probability.
