@@ -272,7 +272,7 @@ class pcmgeneralized extends model_raschmodel {
         $secondderivative = 0;
         $intercepts = 0;
         for ($k = 0; $k < $kmax; $k++) {
-            $intercepts += $a[$fractions[$k]];
+            $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
             $denominator += exp($k * $ability - $intercepts);
             $firstderivative += $k * exp($k * $ability - $intercepts);
             $secondderivative += $k ** 2 * exp($k * $ability - $intercepts);
@@ -305,7 +305,7 @@ class pcmgeneralized extends model_raschmodel {
         $secondderivative = 0;
         $intercepts = 0;
         for ($k = 0; $k < $kmax; $k++) {
-            $intercepts += $a[$fractions[$k]];
+            $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
             $denominator += exp($k * $ability - $intercepts);
             $firstderivative += $k * exp($k * $ability - $intercepts);
             $secondderivative += $k ** 2 * exp($k * $ability - $intercepts);
