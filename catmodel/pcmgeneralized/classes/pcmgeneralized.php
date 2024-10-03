@@ -227,10 +227,10 @@ class pcmgeneralized extends model_raschmodel {
         }
 
         // Calculation the probability.
-        $kfrack = self::get_key_by_fractions($frac, $a);
+        $kfrac = self::get_key_by_fractions($frac, $a);
         $intercepts = 0;
         for ($k = 0; $k < $kfrac; $k++) {
-            $intercepts += ($k == 0) ? (0) : $a[$fractions[$k]];
+            $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
         }
         return exp($b * $kfrac * $pp['ability'] - $intercepts) / $denominator;
     }
