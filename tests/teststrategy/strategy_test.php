@@ -82,6 +82,11 @@ final class strategy_test extends advanced_testcase {
      */
     private \stdClass $adaptivequiz;
 
+    /**
+     * Set up method.
+     *
+     * @return void
+     */
     public function setUp(): void {
         $this->import('simulation.xml', 'simulation.csv');
         // Needed to simulate question answers.
@@ -93,6 +98,11 @@ final class strategy_test extends advanced_testcase {
         $this->quba = $quba;
     }
 
+    /**
+     * Test import worked method.
+     *
+     * @return void
+     */
     public function test_import_worked(): void {
         global $DB;
         $questions = $DB->get_records('question');
@@ -100,7 +110,6 @@ final class strategy_test extends advanced_testcase {
         $itemparams = $DB->get_records('local_catquiz_itemparams');
         $this->assertNotEmpty($itemparams, 'No itemparams were imported');
     }
-
 
     /**
      * Check if a second import updates saved items as expected
@@ -172,6 +181,7 @@ final class strategy_test extends advanced_testcase {
 
     /**
      * This just checks that running the importer does not throw any exceptions
+     * @return void
      */
     public function test_import_csv_with_polytomous_model(): void {
         $result = $this->import_itemparams("simulation_multiparam.csv");

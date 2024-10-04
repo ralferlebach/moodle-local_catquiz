@@ -43,7 +43,7 @@ final class model_item_param_list_test extends advanced_testcase {
      *
      * @param array $record
      * @param array $expected
-     *
+     * @return void
      * @group large
      */
     public function test_save_or_update_testitem_in_db(array $record, array $expected): void {

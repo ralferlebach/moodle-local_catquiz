@@ -24,8 +24,12 @@
 
 namespace local_catquiz\local\model;
 
+use cache_helper;
+use context_system;
 use local_catquiz\catquiz;
+use local_catquiz\event\testitemstatus_updated;
 use local_catquiz\local\model\model_model;
+use MoodleQuickForm;
 use stdClass;
 
 defined('MOODLE_INTERNAL') || die();
@@ -70,9 +74,9 @@ class model_item_param {
     private static array $models = [];
 
     /**
-     * @var array<float>
+     * @var ?array<float>
      */
-    private array $parameters;
+    private ?array $parameters = null;
 
 
     /**
@@ -161,6 +165,7 @@ class model_item_param {
         $this->modelname = $modelname;
         $this->metadata = $metadata;
         $this->status = $status;
+        $this->parameters = null;
 
         if (!$record) {
             return;
@@ -168,7 +173,7 @@ class model_item_param {
 
         $params = $this->get_model_object()::get_parameters_from_record($record);
         $this->set_parameters($params);
-        $this->itemid = $record->itemid;
+        $this->itemid = $record->itemid ?? null;
         $this->id = $record->id ?? null;
         $this->contextid = $record->contextid ?? null;
         $this->timecreated = $record->timecreated ?? null;
@@ -202,7 +207,7 @@ class model_item_param {
             'timecreated' => $this->timecreated ?? time(),
             'timemodified' => $this->timemodified,
             'itemid' => $this->itemid,
-            'difficulty' => $this->parameters['difficulty'],
+            'difficulty' => $this->parameters['difficulty'] ?? null,
             'discrimination' => $this->parameters['discrimination'] ?? 0.0,
             'json' => $this->json,
         ];
@@ -222,9 +227,9 @@ class model_item_param {
     /**
      * Get params array
      *
-     * @return array
+     * @return ?array
      */
-    public function get_params_array(): array {
+    public function get_params_array(): ?array {
         return $this->parameters;
     }
 
@@ -233,8 +238,8 @@ class model_item_param {
      *
      * @return int
      */
-    public function get_id(): int {
-        return $this->id;
+    public function get_id(): ?int {
+        return $this->id ?? null;
     }
 
     /**
@@ -372,22 +377,26 @@ class model_item_param {
      */
     public function save(): self {
         $record = $this->to_record();
-        if ($this->id) {
+        if ($this->get_id()) {
             catquiz::update_item_param($record);
-            return $this;
+        } else {
+            $this->id = catquiz::save_item_param($record);
         }
-        $this->id = catquiz::save_item_param($record);
+        cache_helper::purge_by_event('changesintestitems');
         return $this;
     }
 
     /**
      * Returns the model class
      *
-     * @return string
+     * @return model_model
      */
     private function get_model_object() {
         if (!self::$models) {
-                self::$models = model_strategy::get_installed_models();
+            self::$models = model_strategy::get_installed_models();
+            foreach (self::$models as $modelname => $modelclass) {
+                self::$models[$modelname] = model_model::get_instance($modelname);
+            }
         }
         return self::$models[$this->modelname];
     }
@@ -403,5 +412,75 @@ class model_item_param {
             $value = $value < 0 ? self::MIN : self::MAX;
         }
         return $value;
+    }
+
+    /**
+     * Add form fields
+     *
+     * @param MoodleQuickForm $form
+     * @param string $groupid
+     * @return void
+     */
+    public function add_form_fields(MoodleQuickForm $form, string $groupid): void {
+        $model = $this->get_model_object();
+        $model->definition_after_data_callback($form, $this, $groupid);
+    }
+
+    /**
+     * Returns parameters as flat array.
+     *
+     * @return array
+     */
+    public function get_parameter_fields(): array {
+        return $this->get_model_object()->get_parameter_fields($this);
+    }
+
+    /**
+     * Converts the array we get from the form to a record representation of the itme param.
+     *
+     * @param array $formarray
+     * @return stdClass
+     */
+    public function form_array_to_record(array $formarray): stdClass {
+        return $this->get_model_object()->form_array_to_record($formarray);
+    }
+
+    /**
+     * Set default parameters
+     *
+     * @return model_item_param
+     */
+    public function set_default_parameters(): self {
+        $this->set_parameters($this->get_model_object()->get_default_params());
+        return $this;
+    }
+
+    /**
+     * Set the item id
+     *
+     * @param int $itemid
+     * @return model_item_param
+     */
+    public function set_item_id(int $itemid): self {
+        $this->itemid = $itemid;
+        return $this;
+    }
+
+    /**
+     * Get the item id
+     *
+     * @return null|int
+     */
+    public function get_item_id(): ?int {
+        return $this->itemid;
+    }
+
+    /**
+     * Returns the item parameters as flat array with the keys being a translated label
+     *
+     * @return array
+     */
+    public function get_static_param_array(): array {
+        return $this->get_model_object()->get_static_param_array($this);
     }
 }

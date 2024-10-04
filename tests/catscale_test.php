@@ -48,6 +48,7 @@ final class catscale_test extends basic_testcase {
      * @param model_item_param_list $items
      * @param float $ability
      * @param float $expected
+     * @return void
      *
      * @return void
      * @dataProvider standarderror_is_calculated_correctly_provider
@@ -252,6 +253,7 @@ final class catscale_test extends basic_testcase {
      * @param float $ability
      * @param model_item_param_list $items
      * @param float $expected
+     * @return void
      *
      * @return void
      * @dataProvider testinformation_returns_expected_value_provider

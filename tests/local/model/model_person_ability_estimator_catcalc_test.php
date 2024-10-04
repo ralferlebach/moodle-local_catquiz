@@ -104,7 +104,7 @@ final class model_person_ability_estimator_catcalc_test extends basic_testcase {
      * @param mixed $modelname
      * @return array
      */
-    private static function createmodelresponse($modelname) {
+    private static function createmodelresponse($modelname): array {
         global $CFG;
         switch ($modelname) {
             case 'rasch':
@@ -163,7 +163,7 @@ final class model_person_ability_estimator_catcalc_test extends basic_testcase {
      *
      * @return model_item_param_list
      */
-    private static function createitemparams($modelname) {
+    private static function createitemparams($modelname): model_item_param_list {
         global $CFG;
         require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/items.php');
         $itemparamlist = new model_item_param_list();

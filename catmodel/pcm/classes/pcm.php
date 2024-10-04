@@ -26,7 +26,9 @@ namespace catmodel_pcm;
 
 use Exception;
 use local_catquiz\catcalc;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_multiparam;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_raschmodel;
 use stdClass;
@@ -38,7 +40,7 @@ use stdClass;
  * @copyright  2023 Wunderbyte GmbH <georg.maisser@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class pcm extends model_raschmodel {
+class pcm extends model_multiparam {
 
     /**
      * Returns the item parameter array from a database record.
@@ -48,14 +50,9 @@ class pcm extends model_raschmodel {
      */
     public static function get_parameters_from_record(stdClass $record): array {
 
-        $intercepts = json_decode($record->json, true)['intercepts'];
-
-        $meandifficulty = self::calculate_mean_difficulty([
-            'intercept' => $intercepts,
-        ]);
+        $intercepts = json_decode($record->json, true)['intercept'];
 
         return [
-            'difficulty' => round($meandifficulty, self::PRECISION),
             'intercept' => $intercepts,
         ];
     }
@@ -123,7 +120,7 @@ class pcm extends model_raschmodel {
      * @return array
      */
     public static function get_parameter_names(): array {
-        return ['intercept'];
+        return ['intercept', 'discrimination'];
 
     }
 
@@ -460,6 +457,34 @@ class pcm extends model_raschmodel {
                 0, // Calculates d/da d/db.
                 -($bs ** 2 * exp($bs * ($bp + $ip['discrimination']))) /
                     (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculates d²/db².
+            ],
+        ];
+    }
+
+    /**
+     * Retrieve the name of the multiple parameter.
+     *
+     * This method returns the string 'intercept', which is used as
+     * the name of the multiple parameter in this context.
+     *
+     * @return string The name of the multiple parameter.
+     */
+    protected function get_multi_param_name(): string {
+        return 'intercept';
+    }
+
+    /**
+     * Get default params
+     *
+     * @return array
+     */
+    public function get_default_params(): array {
+        return [
+            'discrimination' => 0.0,
+            'intercept' => [
+                '0.00' => 0.0,
+                '0.50' => 0.5,
+                '1.00' => 1.0,
             ],
         ];
     }

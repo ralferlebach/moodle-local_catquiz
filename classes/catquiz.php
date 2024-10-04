@@ -2518,6 +2518,7 @@ class catquiz {
      */
     public static function save_item_param(stdClass $record): int {
         global $DB;
+        $record->timemodified = time();
         $id = $DB->insert_record('local_catquiz_itemparams', $record);
         return $id;
     }
@@ -2530,8 +2531,40 @@ class catquiz {
      */
     public static function update_item_param(stdClass $record): int {
         global $DB;
+        $record->timemodified = time();
         $DB->update_record('local_catquiz_itemparams', $record);
         return $record->id;
+    }
+
+    /**
+     * Retrieve an item based on the context ID, component ID, and component name.
+     *
+     * @param int $contextid The context ID for the item.
+     * @param int $componentid The ID of the component.
+     * @param string $componentname The name of the component.
+     * @return stdClass The record object retrieved from the database.
+     */
+    public static function get_item(int $contextid, int $componentid, string $componentname): stdClass {
+        global $DB;
+        return $DB->get_record(
+            'local_catquiz_items',
+            [
+                'contextid' => $contextid,
+                'componentid' => $componentid,
+                'componentname' => $componentname,
+            ]
+        );
+    }
+
+    /**
+     * Update an item record in the 'local_catquiz_items' table.
+     *
+     * @param stdClass $item The item object containing the updated data.
+     * @return void
+     */
+    public static function update_item(stdClass $item): void {
+        global $DB;
+        $DB->update_record('local_catquiz_items', $item);
     }
 
     /**
