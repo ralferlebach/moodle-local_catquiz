@@ -134,7 +134,6 @@ class pcmgeneralized extends model_multiparam {
      */
     public static function get_parameter_names(): array {
         return ['intercepts', 'discrimination', 'difficulty'];
-
     }
 
     /**
