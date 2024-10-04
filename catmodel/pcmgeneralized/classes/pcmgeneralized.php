@@ -221,7 +221,7 @@ class pcmgeneralized extends model_raschmodel {
         // Calculation the denominator of the formulae.
         $denominator = 0;
         $intercepts = 0;
-        for ($k = 0; $k < $kmax; $k++) {
+        for ($k = 0; $k <= $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : $a[$fractions[$k]];
             # $denominator += exp($b * ($k * $ability - $intercepts));
         }
@@ -229,7 +229,7 @@ class pcmgeneralized extends model_raschmodel {
         // Calculation the probability.
         $kfrac = self::get_key_by_fractions($frac, $a);
         $intercepts = 0;
-        for ($k = 0; $k < $kfrac; $k++) {
+        for ($k = 0; $k <= $kfrac; $k++) {
             $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
         }
         return exp($b * ($kfrac * $ability - $intercepts)) / $denominator;
@@ -270,7 +270,7 @@ class pcmgeneralized extends model_raschmodel {
         $denominator = 0;
         $firstderivative = 0;
         $intercepts = 0;
-        for ($k = 0; $k < $kmax; $k++) {
+        for ($k = 0; $k <= $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
             $denominator += exp($b * ($k * $ability - $intercepts));
             $firstderivative += $k * $b * exp($b * ($k * $ability - $intercepts));
@@ -302,7 +302,7 @@ class pcmgeneralized extends model_raschmodel {
         $firstderivative = 0;
         $secondderivative = 0;
         $intercepts = 0;
-        for ($k = 0; $k < $kmax; $k++) {
+        for ($k = 0; $k <= $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
             $denominator += exp($k * $ability - $intercepts);
             $firstderivative += $k * $b * exp($b * ($k * $ability - $intercepts));
