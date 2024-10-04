@@ -101,6 +101,24 @@ final class model_item_param_test extends advanced_testcase {
                     'difficulty' => 0.59,
                 ],
             ],
+            'grm' => [
+                'record' => [
+                        'componentid' => 0,
+                        'componentname' => "question",
+                        'contextid' => 1,
+                        'model' => 'grm',
+                        'difficulty' => -4.45,
+                        'discrimination' => 5.92,
+                        'guessing' => 0,
+                        'status' => 4,
+                        'itemid' => 0,
+                        'json' => $json,
+                    ],
+                'parameters' => [
+                    'difficulties' => ['0.00' => 0.12, '0.33' => 0.35, '0.66' => 0.68, '1.00' => 0.83],
+                    'difficulty' => 0.59,
+                ],
+            ],
             'rasch' => [
                 'record' => [
                         'componentid' => 0,
@@ -160,7 +178,7 @@ final class model_item_param_test extends advanced_testcase {
                         'json' => $pcmgeneralizedjson,
                     ],
                 'parameters' => [
-                    'difficulty' => 0.33,
+                    'difficulty' => 0.7,
                     'discrimination' => 2.1,
                     'intercept' => ['0.000' => 0.0, '0.333' => 0.42, '0.666' => 0.57, '1.000' => 0.98],
                 ],
@@ -179,8 +197,7 @@ final class model_item_param_test extends advanced_testcase {
                         'json' => $pcmjson,
                     ],
                 'parameters' => [
-                    'difficulty' => 0.337,
-                    'discrimination' => 2.1,
+                    'difficulty' => 0.680,
                     'intercept' => ['0.000' => 0.10, '0.333' => 0.48, '0.666' => 0.53, '1.000' => 0.88],
                 ],
             ],
