@@ -15,6 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace local_catquiz\output;
+use core\chart_axis;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -129,18 +130,32 @@ class testitemdashboard implements renderable, templatable {
                     get_string('pluginname', sprintf('catmodel_%s', $modelname)),
                     $difficulty
                 ),
-                array_values($likelihoods));
+                array_values($likelihoods)
+            );
             $labels = range(-5, 5, 0.5);
             $chart->add_series($series1);
             $chart->set_labels($labels);
             $chart->get_xaxis(0, true)->set_label(get_string('personability', 'local_catquiz'));
-
+            $status = sprintf(
+                '%s: %s',
+                get_string('status', 'core'),
+                get_string(sprintf('itemstatus_%d', $item->get_status()), 'local_catquiz')
+            );
+            $heading = html_writer::tag(
+                'h3',
+                get_string('pluginname', sprintf('catmodel_%s', $item->get_model_name()))
+            );
         }
-        $body = html_writer::tag('div', $OUTPUT->render($chart), ['dir' => 'ltr']);
+        $yaxis = new chart_axis();
+        $yaxis->set_min(0);
+        $chart->set_yaxis($yaxis);
+        $chart = html_writer::tag('div', $OUTPUT->render($chart), ['dir' => 'ltr']);
 
         $returnarray[] = [
             'title' => get_string('likelihood', 'local_catquiz'),
-            'body' => $body,
+            'heading' => $heading,
+            'status' => $status,
+            'chart' => $chart,
         ];
 
         return $returnarray;
@@ -300,7 +315,6 @@ class testitemdashboard implements renderable, templatable {
             'statcards' => $this->get_testitems_stats_data(),
             'contextselector' => scaleandcontexselector::render_contextselector($this->contextid),
             'overridesforms' => $this->render_overrides_form(),
-            'itemstatus' => $this->get_itemstatus(),
         ];
         return $data;
     }

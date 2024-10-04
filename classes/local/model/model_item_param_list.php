@@ -104,6 +104,28 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
     }
 
     /**
+     * Retrieve item parameters based on the context ID and question ID.
+     *
+     * @param int $contextid The context ID to search within.
+     * @param int $questionid The ID of the question for which to retrieve parameters.
+     * @return model_item_param_list The item parameters retrieved from the cache or database.
+     */
+    public static function get_by_questionid(int $contextid, $questionid): model_item_param_list {
+        // Try to get the item params from the cache.
+        $cache = cache::make('local_catquiz', 'catquiz_item_params');
+        $cachekey = sprintf('params_%d_%d', $contextid, $questionid);
+        if ($itemparamlist = $cache->get($cachekey)) {
+            return $itemparamlist;
+        }
+
+        if (!$itemparamlist = self::load_from_db_by_questionid($contextid, $questionid)) {
+            return new model_item_param_list();
+        }
+        $cache->set($cachekey, $itemparamlist);
+        return $itemparamlist;
+    }
+
+    /**
      * Try to load existing item params from the DB.
      * If none are found, it returns an empty list.
      *
@@ -143,6 +165,39 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
     }
 
     /**
+     * Try to load existing item params from the DB.
+     * If none are found, it returns an empty list.
+     *
+     * @param int $contextid
+     * @param int $questionid
+     *
+     * @return self
+     *
+     */
+    public static function load_from_db_by_questionid(int $contextid, int $questionid): self {
+        global $DB;
+
+        $itemrows = $DB->get_records(
+            'local_catquiz_itemparams',
+            [
+                'contextid' => $contextid,
+                'componentid' => $questionid,
+            ],
+        );
+        $itemparameters = new model_item_param_list();
+        foreach ($itemrows as $r) {
+            // Skip NaN values here.
+            if ($r->difficulty === "NaN") {
+                continue;
+            }
+            $i = model_item_param::from_record($r);
+            $itemparameters->add($i, true);
+        }
+
+        return $itemparameters;
+    }
+
+    /**
      * Return Iterator.
      *
      * @return Traversable
@@ -156,11 +211,17 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
      * Add a parameter
      *
      * @param model_item_param $itemparam
+     * @param bool $bymodel Index itemparams by model name instead of component id.
      *
      * @return self
      *
      */
-    public function add(model_item_param $itemparam) {
+    public function add(model_item_param $itemparam, bool $bymodel = false) {
+        if ($bymodel) {
+            $this->itemparams[$itemparam->get_model_name()] = $itemparam;
+            return $this;
+        }
+
         $this->itemparams[$itemparam->get_componentid()] = $itemparam;
         return $this;
     }

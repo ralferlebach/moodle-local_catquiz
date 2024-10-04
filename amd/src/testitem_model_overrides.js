@@ -24,7 +24,36 @@ import DynamicForm from 'core_form/dynamicform';
 const SELECTORS = {
     FORMCONTAINER: '#lcq_model_override_form',
     NOEDITBUTTON: '[name="noedititemparams"]',
+    MODELSTATUSSELECTS: '#lcq_model_override_form .custom-select[name^="override_"]',
+    ACTIVEMODELSELECT: '[name="active_model"]'
 };
+
+const disabledStates = ["0", "-5"];
+
+/**
+ * Updates the active_model select according to the state of the model status
+ *
+ * If the state of the model is changed to excluded or not yet calculated, it can not be set as active model.
+ * If the state is changed to something else, the disabled attribute is removed.
+ *
+ * @param {HTMLSelectElement} model
+ */
+const syncSelectedState = (model) => {
+        const selected = model.value;
+        const selectorModel = model.id.match(/id_override_(.*)_select/)[1];
+        let optionUpdateFun = (option) => option.removeAttribute('disabled');
+        if (disabledStates.includes(selected)) {
+            optionUpdateFun = (option) => option.setAttribute('disabled', 'disabled');
+        }
+        const activeModelSelect = document.querySelector(SELECTORS.ACTIVEMODELSELECT);
+        activeModelSelect.options.forEach((o) => {
+            if (o.value == selectorModel) {
+                optionUpdateFun(o);
+                return;
+            }
+        });
+};
+
 /**
  * Add event listener to the form
  */
@@ -37,8 +66,6 @@ export const init = () => {
 
     dynamicForm.addEventListener(dynamicForm.events.FORM_SUBMITTED, (e) => {
 
-        // eslint-disable-next-line no-console
-        console.log("form submitted");
         e.preventDefault();
         let formcontainer = document.querySelector(
             SELECTORS.FORMCONTAINER);
@@ -51,12 +78,9 @@ export const init = () => {
             component: searchParams.get("component"),
             updateitem: true,
         });
-        // eslint-disable-next-line
-        //window.location.reload();
     });
 
     dynamicForm.addEventListener(dynamicForm.events.NOSUBMIT_BUTTON_PRESSED, (e) => {
-
         let formcontainer = document.querySelector(
             SELECTORS.FORMCONTAINER);
         e.preventDefault();
@@ -68,7 +92,16 @@ export const init = () => {
             contextid: searchParams.get("contextid"),
             scaleid: searchParams.get("scaleid"),
             component: searchParams.get("component"),
-        });
+        }).then(
+            // Now that the model fields were added, we can add listeners to them.
+            (result) => {
+                const modelSelectors = document.querySelectorAll(SELECTORS.MODELSTATUSSELECTS);
+                modelSelectors.forEach(model => {
+                    syncSelectedState(model);
+                    model.addEventListener('change', (e) => syncSelectedState(e.target));
+            });
+                return result;
+            }
+        ).catch(err => err);
     });
-
 };

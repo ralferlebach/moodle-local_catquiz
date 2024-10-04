@@ -26,7 +26,9 @@ namespace catmodel_pcm;
 
 use Exception;
 use local_catquiz\catcalc;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_multiparam;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_raschmodel;
 use stdClass;
@@ -38,7 +40,7 @@ use stdClass;
  * @copyright  2023 Wunderbyte GmbH <georg.maisser@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class pcm extends model_raschmodel {
+class pcm extends model_multiparam {
 
     /**
      * Returns the item parameter array from a database record.
@@ -50,13 +52,8 @@ class pcm extends model_raschmodel {
 
         $intercepts = json_decode($record->json, true)['intercepts'];
 
-        $meandifficulty = self::calculate_mean_difficulty([
-            'intercept' => $intercepts,
-        ]);
-
         return [
-            'difficulty' => round($meandifficulty, self::PRECISION),
-            'intercept' => $intercepts,
+            'intercepts' => $intercepts,
         ];
     }
 
@@ -81,7 +78,7 @@ class pcm extends model_raschmodel {
     public static function convert_ip_to_vector(array $ip): array {
 
         // TODO: This is very dirty and needs more attention on length / dimensionality.
-        return array_merge($ip['intercept'], [$ip['intercept']]);
+        return array_merge($ip['intercepts'], [$ip['intercepts']]);
     }
 
     /**
@@ -96,7 +93,7 @@ class pcm extends model_raschmodel {
 
         // TODO: This is very dirty and needs more attention on length / dimensionality.
         return [
-            'intercept' => array_combine($fractions, array_splice($vector, count($vector) - 1)),
+            'intercepts' => array_combine($fractions, array_splice($vector, count($vector) - 1)),
         ];
     }
 
@@ -123,7 +120,7 @@ class pcm extends model_raschmodel {
      * @return array
      */
     public static function get_parameter_names(): array {
-        return ['intercept'];
+        return ['intercepts', 'discrimination'];
 
     }
 
@@ -178,11 +175,11 @@ class pcm extends model_raschmodel {
      *
      */
     public static function calculate_mean_difficulty(array $ip): float {
-        $ip['intercept'] = self::sanitize_fractions($ip['intercept']);
-        $fractions = self::get_fractions($ip['intercept']);
+        $ip['intercepts'] = self::sanitize_fractions($ip['intercepts']);
+        $fractions = self::get_fractions($ip['intercepts']);
         $kmax = max(array_keys($fractions));
 
-        return ($ip['intercept'][$fractions[1]] + $ip['intercept'][$fractions[$kmax]]) / 2;
+        return ($ip['intercepts'][$fractions[1]] + $ip['intercepts'][$fractions[$kmax]]) / 2;
     }
 
     // Calculate the Likelihood.
@@ -198,7 +195,7 @@ class pcm extends model_raschmodel {
     public static function likelihood(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $a = self::sanitize_fractions($ip['intercept']);
+        $a = self::sanitize_fractions($ip['intercepts']);
 
         $fractions = self::get_fractions($a);
         $kmax = max(array_keys($fractions));
@@ -245,7 +242,7 @@ class pcm extends model_raschmodel {
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $a = self::sanitize_fractions($ip['intercept']);
+        $a = self::sanitize_fractions($ip['intercepts']);
 
         $fractions = self::get_fractions($a);
         $kmax = max(array_keys($fractions));
@@ -275,7 +272,7 @@ class pcm extends model_raschmodel {
     public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $a = self::sanitize_fractions($ip['intercept']);
+        $a = self::sanitize_fractions($ip['intercepts']);
 
         $fractions = self::get_fractions($a);
         $kmax = max(array_keys($fractions));
@@ -369,7 +366,7 @@ class pcm extends model_raschmodel {
     public static function item_information(array $pp, array $ip): float {
         $iif = self::category_information($pp, $ip, 0.0) * self::likelihood($pp, $ip, 0.0);
         // Ralf hab ich von $ip['difficulty'] geändert.
-        foreach ($ip['intercept'] as $f => $val) {
+        foreach ($ip['intercepts'] as $f => $val) {
             $iif += self::category_information($pp, $ip, $f) * self::likelihood($pp, $ip, $f);
         }
         return $iif;
@@ -460,6 +457,34 @@ class pcm extends model_raschmodel {
                 0, // Calculates d/da d/db.
                 -($bs ** 2 * exp($bs * ($bp + $ip['discrimination']))) /
                     (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculates d²/db².
+            ],
+        ];
+    }
+
+    /**
+     * Retrieve the name of the multiple parameter.
+     *
+     * This method returns the string 'intercepts', which is used as
+     * the name of the multiple parameter in this context.
+     *
+     * @return string The name of the multiple parameter.
+     */
+    protected function get_multi_param_name(): string {
+        return 'intercepts';
+    }
+
+    /**
+     * Get default params
+     *
+     * @return array
+     */
+    public function get_default_params(): array {
+        return [
+            'discrimination' => 0.0,
+            'intercepts' => [
+                '0.00' => 0.0,
+                '0.50' => 0.5,
+                '1.00' => 1.0,
             ],
         ];
     }
