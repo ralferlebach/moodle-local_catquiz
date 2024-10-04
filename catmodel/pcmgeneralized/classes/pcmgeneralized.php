@@ -277,7 +277,7 @@ class pcmgeneralized extends model_raschmodel {
         }
 
         $k = self::get_key_by_fractions($frac, $a);
-        return $k - $firstderivative / $denominator;
+        return $b * $k - $firstderivative / $denominator;
     }
 
     /**
@@ -304,7 +304,7 @@ class pcmgeneralized extends model_raschmodel {
         $intercepts = 0;
         for ($k = 0; $k <= $kmax; $k++) {
             $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
-            $denominator += exp($k * $ability - $intercepts);
+            $denominator += exp($b * ($k * $ability - $intercepts));
             $firstderivative += $k * $b * exp($b * ($k * $ability - $intercepts));
             $secondderivative += $k ** 2 * $b ** 2 * exp($b * ($k * $ability - $intercepts));
         }
