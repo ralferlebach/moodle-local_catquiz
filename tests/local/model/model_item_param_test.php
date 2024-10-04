@@ -66,7 +66,7 @@ final class model_item_param_test extends advanced_testcase {
 
         $json = json_encode(['difficulties' => ['0.00' => 0.12, '0.33' => 0.35, '0.66' => 0.68, '1.00' => 0.83]]);
         $pcmgeneralizedjson = json_encode([
-            'intercept' => [
+            'intercepts' => [
                 '0.000' => 0.00,
                 '0.333' => 0.42,
                 '0.666' => 0.57,
@@ -74,7 +74,7 @@ final class model_item_param_test extends advanced_testcase {
             ],
         ]);
         $pcmjson = json_encode([
-            'intercept' => [
+            'intercepts' => [
                 '0.000' => 0.10,
                 '0.333' => 0.48,
                 '0.666' => 0.53,
@@ -180,7 +180,7 @@ final class model_item_param_test extends advanced_testcase {
                 'parameters' => [
                     'difficulty' => 0.7,
                     'discrimination' => 2.1,
-                    'intercept' => ['0.000' => 0.0, '0.333' => 0.42, '0.666' => 0.57, '1.000' => 0.98],
+                    'intercepts' => ['0.000' => 0.0, '0.333' => 0.42, '0.666' => 0.57, '1.000' => 0.98],
                 ],
             ],
             'pcm' => [
@@ -198,7 +198,7 @@ final class model_item_param_test extends advanced_testcase {
                     ],
                 'parameters' => [
                     'difficulty' => 0.680,
-                    'intercept' => ['0.000' => 0.10, '0.333' => 0.48, '0.666' => 0.53, '1.000' => 0.88],
+                    'intercepts' => ['0.000' => 0.10, '0.333' => 0.48, '0.666' => 0.53, '1.000' => 0.88],
                 ],
             ],
         ];
