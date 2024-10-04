@@ -93,7 +93,7 @@ final class strategy_test extends advanced_testcase {
         $this->quba = $quba;
     }
 
-    public function test_import_worked() {
+    public function test_import_worked(): void {
         global $DB;
         $questions = $DB->get_records('question');
         $this->assertNotEmpty($questions, 'No questions were imported');
@@ -173,7 +173,7 @@ final class strategy_test extends advanced_testcase {
     /**
      * This just checks that running the importer does not throw any exceptions
      */
-    public function test_import_csv_with_polytomous_model() {
+    public function test_import_csv_with_polytomous_model(): void {
         $result = $this->import_itemparams("simulation_multiparam.csv");
         $this->assertEquals(0, count($result['errors']), implode(', ', $result['errors']));
     }
@@ -194,6 +194,7 @@ final class strategy_test extends advanced_testcase {
      * @param array $settings Additional testsettings
      * @param array $finalabilities Array with abilities in all scales when the attempt finished.
      *
+     * @return void
      * TODO: add group large?
      * TODO: Use different testenvironment.json files for different teststrategies.
      * @dataProvider strategy_returns_expected_questions_provider
@@ -205,7 +206,7 @@ final class strategy_test extends advanced_testcase {
         float $initialse = 1.0,
         array $settings = [],
         array $finalabilities = []
-    ) {
+    ): void {
         putenv(
             sprintf(
                 'USE_TESTING_CLASS_FOR=%s',
@@ -2020,13 +2021,14 @@ final class strategy_test extends advanced_testcase {
      * @param int $strategy The test strategy to use
      * @param array $responsepattern The given responses
      * @param float $abilityafter The expected ability
+     *
      * @return void
      */
     public function test_given_responses_lead_to_expected_abilities(
         int $strategy,
         array $responsepattern,
         float $abilityafter
-    ) {
+    ): void {
         $this->markTestIncomplete('Calculated value is not yet correct');
         global $DB, $USER;
         $this
@@ -2249,7 +2251,7 @@ final class strategy_test extends advanced_testcase {
      * @param \stdClass $course
      * @return \qformat_xml XML question format object.
      */
-    private function create_qformat($filename, $course) {
+    private function create_qformat($filename, $course): \qformat_xml {
         $qformat = new \qformat_xml();
         $qformat->setContexts((new question_edit_contexts(context_course::instance($course->id)))->all());
         $qformat->setCourse($course);

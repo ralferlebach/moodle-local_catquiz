@@ -46,7 +46,7 @@ final class model_item_param_list_test extends advanced_testcase {
      *
      * @group large
      */
-    public function test_save_or_update_testitem_in_db(array $record, array $expected) {
+    public function test_save_or_update_testitem_in_db(array $record, array $expected): void {
         $this->resetAfterTest();
         $result = model_item_param_list::save_or_update_testitem_in_db($record);
 
