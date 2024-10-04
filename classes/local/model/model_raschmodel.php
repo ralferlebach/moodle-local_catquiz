@@ -23,8 +23,11 @@
 
 namespace local_catquiz\local\model;
 
+use coding_exception;
 use local_catquiz\catcalc_ability_estimator;
 use local_catquiz\catcalc_item_estimator;
+use MoodleQuickForm;
+use stdClass;
 
 /**
  * This class implements model raschmodel.
@@ -433,5 +436,75 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
         }
 
         return $pp;
+    }
+
+    /**
+     * Definition after data callback
+     *
+     * @param MoodleQuickForm $mform
+     * @param model_item_param $param
+     * @param string $groupid
+     * @return void
+     * @throws coding_exception
+     */
+    public function definition_after_data_callback(MoodleQuickForm &$mform, model_item_param $param, string $groupid): void {
+        $group = [];
+        $fields = $this->get_parameter_fields($param);
+        foreach ($fields as $label => $val) {
+            $this->add_element_to_group($label, $groupid, $group, $mform);
+        }
+        $mform->addGroup($group, $groupid, '', '<span class="break"></span>');
+    }
+
+    /**
+     * Add element to group
+     *
+     * @param string $name
+     * @param string $id
+     * @param array $group
+     * @param mixed $mform
+     * @return void
+     * @throws coding_exception
+     */
+    protected function add_element_to_group(string $name, string $id, array &$group, &$mform) {
+        if (preg_match('/(.*)_(\d+)$/', $name, $matches)) {
+            $label = get_string($matches[1], 'local_catquiz') . ' ' . $matches[2];
+        } else {
+            $label = get_string($name, 'local_catquiz');
+        }
+        $value = $mform->createElement('text', $name, $label, ["class" => 'form-control param-input']);
+        $value->setType($name, PARAM_FLOAT);
+        $group[] = $value;
+    }
+
+    /**
+     * Get parameter fields
+     *
+     * @param model_item_param $param
+     * @return array
+     */
+    public function get_parameter_fields(model_item_param $param): array {
+        if (!$params = $param->get_params_array()) {
+            return $this->get_default_params();
+        }
+        return $params;
+    }
+
+    /**
+     * Get default params
+     * @return array
+     */
+    public function get_default_params(): array {
+        return ['difficulty' => 0.0, 'discrimination' => 0.0];
+    }
+
+    /**
+     * Convert form array to record
+     *
+     * @param array $formarray
+     * @return stdClass
+     */
+    public function form_array_to_record(array $formarray): stdClass {
+        return (object) $formarray;
     }
 }

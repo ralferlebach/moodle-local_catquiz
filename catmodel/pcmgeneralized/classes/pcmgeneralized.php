@@ -25,7 +25,9 @@
 namespace catmodel_pcmgeneralized;
 
 use local_catquiz\catcalc;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_multiparam;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_raschmodel;
 use stdClass;
@@ -48,7 +50,7 @@ use stdClass;
  * @copyright  2023 Wunderbyte GmbH <georg.maisser@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class pcmgeneralized extends model_raschmodel {
+class pcmgeneralized extends model_multiparam {
 
     /**
      * {@inheritDoc}
@@ -58,16 +60,10 @@ class pcmgeneralized extends model_raschmodel {
      */
     public static function get_parameters_from_record(stdClass $record): array {
 
-        $intercepts = json_decode($record->json, true)['intercepts'];
+        $intercepts = json_decode($record->json, true)['intercept'];
         $discrimination = round($record->discrimination, self::PRECISION);
 
-        $meandifficulty = self::calculate_mean_difficulty([
-            'intercept' => $intercepts,
-            'discrimination' => $discrimination,
-        ]);
-
         return [
-            'difficulty' => round($meandifficulty, self::PRECISION),
             'discrimination' => $discrimination,
             'intercept' => $intercepts,
         ];
@@ -499,5 +495,30 @@ class pcmgeneralized extends model_raschmodel {
                     (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculates d²/db².
             ],
         ];
+    }
+
+    /**
+     * Get default params
+     *
+     * @return array
+     */
+    public function get_default_params(): array {
+        return [
+            'discrimination' => 1.0,
+            'intercept' => [
+                '0.00' => 0.00,
+                '0.50' => 0.50,
+                '1.00' => 1.00,
+            ],
+        ];
+    }
+
+    /**
+     * Get multi param name
+     *
+     * @return string
+     */
+    protected function get_multi_param_name(): string {
+        return 'intercept';
     }
 }
