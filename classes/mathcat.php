@@ -82,6 +82,8 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
 
+            print_r($mxgradient);
+            
             $mxdirection = $mxinvhessian->multiply($mxgradient->transpose());
 
             // Note: Perform line search sensitive to given limitations.
