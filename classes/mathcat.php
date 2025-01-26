@@ -70,9 +70,9 @@ class mathcat {
 
         // Note: Takte the identity matrx as first approximation of the inverse Hessian.
         print_r($parameter);
-        $mxinvhessian = new matrix (count($parameter), count($parameter));
-        print_r($mxinvhessian);
-        $mxinvhessian = $mxinvhessian->identity();
+        $mxidentity = new matrix (count($parameter), count($parameter));
+        print_r($mxidentity);
+        $mxinvhessian = $mxidentity->identity();
         print_r($mxinvhessian);
 
         $valjacobian = $fnderivative(self::vector_to_array($parameter, $parameterstructure));
@@ -132,8 +132,6 @@ class mathcat {
 
             if ($rho <> 0) {
                 // Note: Update inverse hessian matrix.
-                $mxidentity = (new matrix (count($parameter), count($parameter)))->identity();
-
                 $mxparamxgrad = ($mxparameterdiff->transpose())->multiply($mxgradientdiff);
                 $mxgradxparam = ($mxgradientdiff->transpose())->multiply($mxparameterdiff);
                 $mxparamxparam = ($mxparameterdiff->transpose())->multiply($mxparameterdiff);

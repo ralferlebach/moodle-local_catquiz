@@ -277,7 +277,7 @@ class matrix extends ArrayObject {
                 $identityarray[$i][$j] = 0;
             }
         }
-        for ($r = 0; $r < $this->_rows; $r++) {
+        for ($i = 0; $i < $this->_rows; $i++) {
             $identityarray[$i][$i] = 1;
         }
         new self($identityarray);
