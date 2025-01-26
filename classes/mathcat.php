@@ -82,10 +82,10 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
 
-            print_r($mxgradient);
-            echo "<br><br>";
-            print_r($mxgradient->transpose());
-
+            print_r($mxgradient); echo "<br><br>";
+            print_r($mxgradient->transpose()); echo "<br><br>";
+            print_r($mxinvhessian);
+            
             $x = $mxgradient->transpose();
             $mxdirection = $mxinvhessian->multiply($x);
 
