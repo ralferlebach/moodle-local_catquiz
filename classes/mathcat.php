@@ -69,7 +69,11 @@ class mathcat {
         $valfunction = $fnfunction(self::vector_to_array($parameter, $parameterstructure));
 
         // Note: Takte the identity matrx as first approximation of the inverse Hessian.
-        $mxinvhessian = (new matrix (count($parameter), count($parameter)))->identity();
+        print_r($parameter);
+        $mxinvhessian = new matrix (count($parameter), count($parameter));
+        print_r($mxinvhessian);
+        $mxinvhessian = $mxinvhessian->identity();
+        print_r($mxinvhessian);
 
         $valjacobian = $fnderivative(self::vector_to_array($parameter, $parameterstructure));
         $mxgradient = new matrix ($valjacobian); // Note: Line vector.
