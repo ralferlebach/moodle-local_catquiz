@@ -85,12 +85,10 @@ class mathcat {
                 // Note: There is nothing to be climed on, we are already at a local extrema.
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
-
-            print_r($mxgradient); echo "<br><br>";
-            print_r($mxgradient->transpose()); echo "<br><br>";
-            print_r($mxinvhessian);
             
             $mxdirection = $mxinvhessian->multiply($mxgradient->transpose());
+
+            echo "Direction: "; print_r($mxdirection); echo "<br><br>";
 
             // Note: Perform line search sensitive to given limitations.
             $directionlength = $mxdirection->rooted_summed_squares();
@@ -100,10 +98,12 @@ class mathcat {
             }
             $mxparametertest = $mxparameter->add($mxdirection->multiply($steplength /
                 $directionlength));
+            echo "Test-Parameter: "; print_r($mxgradient->transpose()); echo "<br><br>";
             $valfunctiontest = $fnfunction(self::vector_to_array(((array) $mxparametertest)[0], $parameterstructure));
-
+            echo "Test-Parameter (Array): "; print_r(self::vector_to_array(((array) $mxparametertest)[0], $parameterstructure));
             $stepdirection = ($valfunctiontest - $valfunction) <=> 0;
-
+            echo "Step Direction: "; print_r($stepdirection);
+            
             do {
                 $mxparameternew = $mxparametertest;
                 $valfunctionnew = $valfunctiontest;
