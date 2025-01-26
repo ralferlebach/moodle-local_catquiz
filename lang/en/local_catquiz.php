@@ -755,3 +755,4 @@ $string['cachedef_testenvironments'] = 'Testenvironments';
 $string['cachedef_testitemstable'] = 'Data of testitem in table';
 $string['cachedef_teststrategies'] = 'Teststrategies';
 
+$string['trusted_region_min_a'] = '';
