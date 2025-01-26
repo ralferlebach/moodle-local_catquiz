@@ -70,8 +70,7 @@ class mathcat {
 
         // Note: Takte the identity matrx as first approximation of the inverse Hessian.
         echo "Parameter: "; print_r($parameter); echo "\n";
-        $mxidentity = new matrix (count($parameter), count($parameter));
-        $mxidentity = $mxidentity->identity();
+        $mxidentity = (new matrix (count($parameter), count($parameter)))->identity();
         echo "Identity-Matrix: "; print_r($mxidentity); echo "\n";
         $mxinvhessian = $mxidentity;
         echo "Inverse Hesse-Matrix: "; print_r($mxinvhessian); echo "\n";
@@ -91,8 +90,7 @@ class mathcat {
             print_r($mxgradient->transpose()); echo "<br><br>";
             print_r($mxinvhessian);
             
-            $x = $mxgradient->transpose();
-            $mxdirection = $mxinvhessian->multiply($x);
+            $mxdirection = $mxinvhessian->multiply($mxgradient->transpose());
 
             // Note: Perform line search sensitive to given limitations.
             $directionlength = $mxdirection->rooted_summed_squares();
