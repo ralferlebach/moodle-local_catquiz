@@ -86,7 +86,8 @@ class mathcat {
             echo "<br><br>";
             print_r($mxgradient->transpose());
 
-            $mxdirection = $mxinvhessian->multiply($mxgradient->transpose());
+            $x = $mxgradient->transpose();
+            $mxdirection = $mxinvhessian->multiply($x);
 
             // Note: Perform line search sensitive to given limitations.
             $directionlength = $mxdirection->rooted_summed_squares();
