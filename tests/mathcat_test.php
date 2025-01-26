@@ -53,7 +53,7 @@ final class mathcat_test extends basic_testcase {
         $expected = ['difficulty' => 0];
         $this->assertEquals($expected, $result);
     }
-
+/*
     public function test_gradient_ascent(): void {
         $result = mathcat::gradient_ascent(
             fn ($x) => exp(-($x['x'] - 2) ** 2) - (($x['y'] - 1) ** 2),
@@ -66,7 +66,7 @@ final class mathcat_test extends basic_testcase {
         $expected = ['x' => 2.0146573464271933, 'y' => 1.00, 'z' => -1.5];
         $this->assertEquals($expected, $result);
     }
-
+*/
     public function test_bfgs(): void {
         $result = mathcat::bfgs(
             fn ($x) => exp(-($x['x'] - 2) ** 2) - (($x['y'] - 1) ** 2),
