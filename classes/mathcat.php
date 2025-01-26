@@ -62,7 +62,7 @@ class mathcat {
 
         $parameter = $parameterstart;
         $parameterstructure = self::array_to_vector($parameter);
-        $steplength = 1;
+        $steplength = 1.0;
         $mxparameter = new matrix ($parameter);
 
         // Calculate the function values from the given functions for current $parameter.
@@ -88,7 +88,7 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
             
-            $mxdirection = $mxinvhessian->multiply($mxgradient->transpose());
+            $mxdirection = $mxinvhessian->multiply($mxgradient->transpose())->transpose();
             echo "Direction: "; print_r($mxdirection); echo "<br><br>";
 
             // Note: Perform line search sensitive to given limitations.
