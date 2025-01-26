@@ -269,6 +269,7 @@ class matrix extends ArrayObject {
     public function identity() {
         if (!$this->isSquare()) {
             throw new MatrixException('Cannot make identity matrix of non square matrix!');
+            echo "AUSNAHME __FILE__ __LINE__";
         }
         $identityarray = [];
         for ($i = 0; $i < $this->_rows; $i++) {
