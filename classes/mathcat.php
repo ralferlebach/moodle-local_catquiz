@@ -83,6 +83,8 @@ class mathcat {
             }
 
             print_r($mxgradient);
+            echo "<br><br>";
+            print_r($mxgradient->transpose());
 
             $mxdirection = $mxinvhessian->multiply($mxgradient->transpose());
 
