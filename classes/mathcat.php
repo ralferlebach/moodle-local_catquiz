@@ -72,7 +72,8 @@ class mathcat {
         print_r($parameter);
         $mxidentity = new matrix (count($parameter), count($parameter));
         print_r($mxidentity);
-        $mxinvhessian = $mxidentity->identity();
+        $mxidentity = $mxidentity->identity();
+        $mxinvhessian = $mxidentity;
         print_r($mxinvhessian);
 
         $valjacobian = $fnderivative(self::vector_to_array($parameter, $parameterstructure));
