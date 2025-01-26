@@ -97,6 +97,11 @@ class mathcat {
                 // Note: We hit the maximum.
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
+            echo "Parameter: "; print_r($mxparameter);
+            echo "Direction: "; print_r($mxdirection);
+            echo "Direction (scaled by ".$steplength /
+                $directionlength.") :"; print_r($mxdirection->multiply($steplength /
+                $directionlength)); 
             $mxparametertest = $mxparameter->add($mxdirection->multiply($steplength /
                 $directionlength));
             echo "Test-Parameter: "; print_r($mxgradient->transpose()); echo "<br><br>";
