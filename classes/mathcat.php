@@ -135,11 +135,11 @@ class mathcat {
             $mxgradientdiff = $mxgradientnew->subtract($mxgradient);
 
             // Note: Calculate scaling factor.
-            $rho = (float) $mxparameterdiff->multiply($mxgradientdiff->transpose())[0][0];
+            $rho = (float) ($mxparameterdiff->multiply($mxgradientdiff->transpose()))[0][0];
 
             echo "Rho: "; print_r($rho);
             // Note: Update inverse hessian matrix.
-            if ((float) $rho[0][0] <> 0.0) {
+            if ($rho <> 0.0) {
                 $mxparamxgrad = ($mxparameterdiff->transpose())->multiply($mxgradientdiff);
                 echo "Param x Grad: "; print_r($mxparamxgrad);
                 $mxgradxparam = ($mxgradientdiff->transpose())->multiply($mxparameterdiff);
@@ -150,7 +150,7 @@ class mathcat {
                 $part2 = $mxidentity->subtract($mxgradxparam->multiply((1.0 / $rho)));
                 $part3 = $mxparamxparam->multiply(1.0 / $rho);
 
-                $mxinvhessian = $part1->multiply($mxinvhessian)->multiply($part2)->add($part3);
+                $mxinvhessian = ($part1->multiply($mxinvhessian)->multiply($part2))->add($part3);
             } else {
                 // Note: There is no progress in parameter, no further gradient or gradient is transverse to progrssion.
                 return self::vector_to_array(((array) $mxparameternew)[0], $parameterstructure);
