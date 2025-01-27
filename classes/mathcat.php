@@ -79,9 +79,7 @@ class mathcat {
         // Begin with numerical iteration.
         for ($i = 0; $i < $maxiterations; $i++) {
             echo "--- Iteration $i ---".'
-            Parameter: '; print_r($mxparameter); echo '
             ';
-            echo "Inverse Hesse-Matrix: "; print_r($mxinvhessian); echo "\n";
             
             if ($mxgradient->rooted_summed_squares() == 0) {
                 // Note: There is nothing to be climed on, we are already at a local extrema.
@@ -147,9 +145,10 @@ class mathcat {
 
             $mxparameter = $mxparameternew;
             $mxgradient = $mxgradientnew;
+            /*
             if ((abs($valfunctionnew - $valfunction)) < (10 ** (-$precission))) {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
-            }
+            }*/
             $valfunction = $valfunctionnew;
 
             echo 'Summary:
