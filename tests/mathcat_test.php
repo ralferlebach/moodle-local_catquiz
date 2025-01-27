@@ -70,7 +70,7 @@ final class mathcat_test extends basic_testcase {
             fn ($x) => [0,
                 2 - 2 * $x['y'],
                 0],
-            ['x' => $result[0], 'y' => 1.66, 'z' => -1.5],
+            ['x' => $result['x'], 'y' => 1.66, 'z' => -1.5],
             6
         );
         
@@ -79,7 +79,7 @@ final class mathcat_test extends basic_testcase {
             fn ($x) => [2 * exp(-($x['x'] - 2) ** 2) * (2 - $x['x']),
                 2 - 2 * $x['y'],
                 0],
-            ['x' => $result[0], 'y' => $result[1], 'z' => -1.5],
+            ['x' => $result['x'], 'y' => $result['y'], 'z' => -1.5],
             6
         );
         

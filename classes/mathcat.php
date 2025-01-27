@@ -145,11 +145,9 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameternew)[0], $parameterstructure);
             }
 
-
-            /*
             if ((abs($valfunctionnew - $valfunction)) < (10 ** (-$precission))) {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
-            }*/
+            }
 
             echo 'Summary:
             Position (old): '; $mxparameter->print_m(); echo'
@@ -329,7 +327,9 @@ class mathcat {
 
         // Begin with numerical iteration.
         for ($i = 0; $i < $maxiterations; $i++) {
-
+            echo "--- Iteration $i ---".'
+            ';
+            
             $mxparameter = new matrix($parameter);
 
             // Calculate the derivative values from $fn_derivative for current $parameter.
@@ -338,11 +338,11 @@ class mathcat {
             $mxgradient = new matrix($valderivative);
             $gradientlength = $mxgradient->rooted_summed_squares();
 
-            debugging ('Iteration i: '.$i.'
-            Position: '.print_r($parameter, true).'
-            Gradient: '.print_r($mxgradient, true).'
+            echo 'Position: '; $mxparameter->print_m(); echo'
+            Gradient: '; $mxgradient->print_m(); echo '
             Length: '.$gradientlength.'
-            Step Length: '.$steplength, DEBUG_DEVELOPER);
+            Step Length: '.$steplength;
+            
             if ($gradientlength == 0.0) {
                 // There is nothing to climb on anymore. Quit the job.
                 return self::vector_to_array($parameter, $parameterstructure);
