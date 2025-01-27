@@ -81,7 +81,7 @@ class mathcat {
             echo "--- Iteration $i ---".'
             Parameter: '; print_r($mxparameter); echo '
             ';
-            // echo "Inverse Hesse-Matrix: "; print_r($mxinvhessian); echo "\n";
+            echo "Inverse Hesse-Matrix: "; print_r($mxinvhessian); echo "\n";
             
             if ($mxgradient->rooted_summed_squares() == 0) {
                 // Note: There is nothing to be climed on, we are already at a local extrema.
@@ -109,7 +109,7 @@ class mathcat {
                 $valfunctionnew = $valfunctiontest;
 
                 $steplength *= 2 ** $stepdirection;
-                $mxparametertest = $mxparameternew->add($mxdirection->multiply($steplength / $directionlength));
+                $mxparametertest = $mxparameter->add($mxdirection->multiply($steplength / $directionlength));
                 $valfunctiontest = $fnfunction(self::vector_to_array(((array) $mxparametertest)[0],
                     $parameterstructure));
 
