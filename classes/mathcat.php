@@ -155,9 +155,9 @@ class mathcat {
 
             echo 'Summary:
             Function: '.print_r($valfunction, true).'
-            Position: '.print_r($mxparameter, true).'
-            Gradient: '.print_r($mxgradient, true).'
-            Direction: '.print_r($mxdirection, true).'
+            Position: '; $mxparameter->print_m(); echo'
+            Gradient: '; $mxgradient->print_m(); echo '
+            Direction: '; $mxdirection->print_m(); '
             Length: '.$directionlength.'
             Step Length: '.$steplength;
         }
