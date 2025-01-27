@@ -135,7 +135,7 @@ class mathcat {
             $mxgradientdiff = $mxgradientnew->subtract($mxgradient);
 
             // Note: Calculate scaling factor.
-            $rho = $mxparameterdiff->multiply($mxgradientdiff->transpose());
+            $rho = (float) $mxparameterdiff->multiply($mxgradientdiff->transpose())[0][0];
 
             echo "Rho: "; print_r($rho);
             // Note: Update inverse hessian matrix.
