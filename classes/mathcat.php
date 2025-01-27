@@ -157,9 +157,10 @@ class mathcat {
             Function: '.print_r($valfunction, true).'
             Position: '; $mxparameter->print_m(); echo'
             Gradient: '; $mxgradient->print_m(); echo '
-            Direction: '; $mxdirection->print_m(); '
+            Direction: '; $mxdirection->print_m(); echo '
             Length: '.$directionlength.'
-            Step Length: '.$steplength;
+            Step Length: '.$steplength.'
+';
         }
 
         // Return the concurrent solution even the precission criteria hasn't been met.
