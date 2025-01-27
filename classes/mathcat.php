@@ -95,7 +95,8 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
             
-            $mxparametertest = $mxparameter->add($mxdirection->multiply($steplength /
+            $steplengthtest = $steplength;
+            $mxparametertest = $mxparameter->add($mxdirection->multiply($steplengthtest /
                 $directionlength));
             
             $valfunctiontest = $fnfunction(self::vector_to_array(((array) $mxparametertest)[0], $parameterstructure));
@@ -105,13 +106,14 @@ class mathcat {
             do {
                 $mxparameternew = $mxparametertest;
                 $valfunctionnew = $valfunctiontest;
+                $steplength = $steplengthtest;
 
-                $steplength *= 2 ** $stepdirection;
-                $mxparametertest = $mxparameter->add($mxdirection->multiply($steplength / $directionlength));
+                $steplengthtest = $steplength * (2 ** $stepdirection);
+                $mxparametertest = $mxparameter->add($mxdirection->multiply($steplengthtest / $directionlength));
                 $valfunctiontest = $fnfunction(self::vector_to_array(((array) $mxparametertest)[0],
                     $parameterstructure));
 
-                if ($steplength < 10 ** (-$precission)) {
+                if ($steplengthtest < 10 ** (-$precission)) {
                     break;
                 }
                 // Do here a check against filterfunction as well!
