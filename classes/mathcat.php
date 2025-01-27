@@ -78,8 +78,9 @@ class mathcat {
 
         // Begin with numerical iteration.
         for ($i = 0; $i < $maxiterations; $i++) {
-            echo "--- Iteration $i ---\n";
-            echo "Parameter: "; print_r($mxparameter); echo "\n";
+            echo "--- Iteration $i ---".'
+            Parameter: '; print_r($mxparameter); echo '
+            ';
             // echo "Inverse Hesse-Matrix: "; print_r($mxinvhessian); echo "\n";
             
             if ($mxgradient->rooted_summed_squares() == 0) {
@@ -95,8 +96,7 @@ class mathcat {
                 // Note: We hit the maximum.
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
-                $directionlength.") :"; print_r($mxdirection->multiply($steplength /
-                $directionlength)); 
+            
             $mxparametertest = $mxparameter->add($mxdirection->multiply($steplength /
                 $directionlength));
             
@@ -150,6 +150,7 @@ class mathcat {
             if ((abs($valfunctionnew - $valfunction)) < (10 ** (-$precission))) {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
+            $valfunction = $valfunctionnew;
 
             echo 'Summary:
             Position: '.print_r($parameter, true).'
