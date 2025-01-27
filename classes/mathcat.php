@@ -139,7 +139,7 @@ class mathcat {
                 $part2 = $mxidentity->subtract($mxgradxparam->multiply((1.0 / $rho)));
                 $part3 = $mxparamxparam->multiply(1.0 / $rho);
 
-                $mxinvhessian = (($part1->multiply($mxinvhessian))->multiply($part2))->subtract($part3);
+                $mxinvhessian = (($part1->multiply($mxinvhessian))->multiply($part2))->subtract($part3); // Note: As we search for maximum, last term becomes negative.
             } else {
                 // Note: There is no progress in parameter, no further gradient or gradient is transverse to progrssion.
                 return self::vector_to_array(((array) $mxparameternew)[0], $parameterstructure);
