@@ -71,7 +71,7 @@ class mathcat {
         // Note: Takte the identity matrx as first approximation of the inverse Hessian.
 
         $mxidentity = (new matrix (count($parameter), count($parameter)))->identity();
-        echo "Identity-Matrix: "; print_r($mxidentity); echo "\n";
+        // echo "Identity-Matrix: "; print_r($mxidentity); echo "\n";
         $mxinvhessian = $mxidentity;
         
         $valjacobian = $fnderivative(self::vector_to_array($parameter, $parameterstructure));
@@ -79,9 +79,9 @@ class mathcat {
 
         // Begin with numerical iteration.
         for ($i = 0; $i < $maxiterations; $i++) {
-            echo "--- Iteration $i ---\n";
-            echo "Parameter: "; print_r($mxparameter); echo "\n";
-            echo "Inverse Hesse-Matrix: "; print_r($mxinvhessian); echo "\n";
+            // echo "--- Iteration $i ---\n";
+            // echo "Parameter: "; print_r($mxparameter); echo "\n";
+            // echo "Inverse Hesse-Matrix: "; print_r($mxinvhessian); echo "\n";
             
             if ($mxgradient->rooted_summed_squares() == 0) {
                 // Note: There is nothing to be climed on, we are already at a local extrema.
@@ -97,20 +97,20 @@ class mathcat {
                 // Note: We hit the maximum.
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
-            echo "Parameter: "; print_r($mxparameter);
-            echo "Direction: "; print_r($mxdirection);
-            echo "Direction (scaled by ".$steplength /
+            // echo "Parameter: "; print_r($mxparameter);
+            // echo "Direction: "; print_r($mxdirection);
+            // echo "Direction (scaled by ".$steplength /
                 $directionlength.") :"; print_r($mxdirection->multiply($steplength /
                 $directionlength)); 
             $mxparametertest = $mxparameter->add($mxdirection->multiply($steplength /
                 $directionlength));
-            echo "Test-Parameter: "; print_r($mxgradient->transpose()); echo "<br><br>";
+            // echo "Test-Parameter: "; print_r($mxgradient->transpose()); echo "<br><br>";
             
             $valfunctiontest = $fnfunction(self::vector_to_array(((array) $mxparametertest)[0], $parameterstructure));
-            echo "Test-Parameter (Array): "; print_r(self::vector_to_array(((array) $mxparametertest)[0], $parameterstructure));
+            // echo "Test-Parameter (Array): "; print_r(self::vector_to_array(((array) $mxparametertest)[0], $parameterstructure));
             
             $stepdirection = ($valfunctiontest - $valfunction) <=> 0;
-            echo "Step Direction: "; print_r($stepdirection);
+            // echo "Step Direction: "; print_r($stepdirection);
             
             do {
                 $mxparameternew = $mxparametertest;
@@ -141,12 +141,12 @@ class mathcat {
             // Note: Update inverse hessian matrix.
             if ($rho <> 0.0) {
                 $mxparamxgrad = ($mxparameterdiff->transpose())->multiply($mxgradientdiff);
-                echo "Param x Grad: "; print_r($mxparamxgrad);
+                // echo "Param x Grad: "; print_r($mxparamxgrad);
                 $mxgradxparam = ($mxgradientdiff->transpose())->multiply($mxparameterdiff);
                 $mxparamxparam = ($mxparameterdiff->transpose())->multiply($mxparameterdiff);
 
                 $part1 = $mxidentity->subtract($mxparamxgrad->multiply((1.0 / $rho)));
-                echo "Part1: "; print_r($part1);
+                // echo "Part1: "; print_r($part1);
                 $part2 = $mxidentity->subtract($mxgradxparam->multiply((1.0 / $rho)));
                 $part3 = $mxparamxparam->multiply(1.0 / $rho);
 
@@ -162,12 +162,12 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }
 
-            debugging ('Iteration i: '.$i.'
+            echo 'Iteration i: '.$i.'
             Position: '.print_r($parameter, true).'
             Gradient: '.print_r($mxgradient, true).'
             Direction: '.print_r($mxdirection, true).'
             Length: '.$directionlength.'
-            Step Length: '.$steplength, DEBUG_DEVELOPER);
+            Step Length: '.$steplength;
         }
 
         // Return the concurrent solution even the precission criteria hasn't been met.
