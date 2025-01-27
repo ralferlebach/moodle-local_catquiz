@@ -137,8 +137,9 @@ class mathcat {
             // Note: Calculate scaling factor.
             $rho = $mxparameterdiff->multiply($mxgradientdiff->transpose());
 
+            echo "Rho: "; print_r($rho);
             // Note: Update inverse hessian matrix.
-            if ($rho <> 0) {
+            if ((float) $rho[0][0] <> 0.0) {
                 $mxparamxgrad = ($mxparameterdiff->transpose())->multiply($mxgradientdiff);
                 echo "Param x Grad: "; print_r($mxparamxgrad);
                 $mxgradxparam = ($mxgradientdiff->transpose())->multiply($mxparameterdiff);
