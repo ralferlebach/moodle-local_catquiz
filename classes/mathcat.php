@@ -145,22 +145,28 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameternew)[0], $parameterstructure);
             }
 
-            $mxparameter = $mxparameternew;
-            $mxgradient = $mxgradientnew;
+
             /*
             if ((abs($valfunctionnew - $valfunction)) < (10 ** (-$precission))) {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }*/
+
             $valfunction = $valfunctionnew;
 
             echo 'Summary:
-            Function: '.print_r($valfunction, true).'
-            Position: '; $mxparameter->print_m(); echo'
+            Position (old): '; $mxparameter->print_m(); echo'
             Gradient: '; $mxgradient->print_m(); echo '
             Direction: '; $mxdirection->print_m(); echo '
             Length: '.$directionlength.'
             Step Length: '.$steplength.'
+            Position: '; $mxparameternew->print_m(); echo'
+            Function: '.print_r($valfunction, true).'
+
 ';
+
+            $mxparameter = $mxparameternew;
+            $mxgradient = $mxgradientnew;
+            
         }
 
         // Return the concurrent solution even the precission criteria hasn't been met.
