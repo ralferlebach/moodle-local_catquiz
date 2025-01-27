@@ -139,7 +139,7 @@ class mathcat {
                 $part2 = $mxidentity->subtract($mxgradxparam->multiply((1.0 / $rho)));
                 $part3 = $mxparamxparam->multiply(1.0 / $rho);
 
-                $mxinvhessian = (($part1->multiply($mxinvhessian))->multiply($part2))->add($part3);
+                $mxinvhessian = (($part1->multiply($mxinvhessian))->multiply($part2))->subtract($part3);
             } else {
                 // Note: There is no progress in parameter, no further gradient or gradient is transverse to progrssion.
                 return self::vector_to_array(((array) $mxparameternew)[0], $parameterstructure);
@@ -151,8 +151,6 @@ class mathcat {
                 return self::vector_to_array(((array) $mxparameter)[0], $parameterstructure);
             }*/
 
-            $valfunction = $valfunctionnew;
-
             echo 'Summary:
             Position (old): '; $mxparameter->print_m(); echo'
             Gradient: '; $mxgradient->print_m(); echo '
@@ -160,13 +158,11 @@ class mathcat {
             Length: '.$directionlength.'
             Step Length: '.$steplength.'
             Position: '; $mxparameternew->print_m(); echo'
-            Function: '.print_r($valfunction, true).'
-
+            Function: '.print_r($valfunction, true).' -> '.print_r($valfunctionnew, true).'
 ';
-
             $mxparameter = $mxparameternew;
-            $mxgradient = $mxgradientnew;
-            
+            $mxgradient = $mxgradientnew;       
+            $valfunction = $valfunctionnew;            
         }
 
         // Return the concurrent solution even the precission criteria hasn't been met.
