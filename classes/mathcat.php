@@ -154,7 +154,8 @@ class mathcat {
             $valfunction = $valfunctionnew;
 
             echo 'Summary:
-            Position: '.print_r($parameter, true).'
+            Function: '.print_r($valfunction, true).'
+            Position: '.print_r($mxparameter, true).'
             Gradient: '.print_r($mxgradient, true).'
             Direction: '.print_r($mxdirection, true).'
             Length: '.$directionlength.'
