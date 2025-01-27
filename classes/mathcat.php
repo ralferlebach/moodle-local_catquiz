@@ -327,7 +327,7 @@ class mathcat {
 
         // Begin with numerical iteration.
         for ($i = 0; $i < $maxiterations; $i++) {
-            echo "--- Iteration $i ---".'
+            echo "\n--- Iteration $i ---".'
             ';
             
             $mxparameter = new matrix($parameter);

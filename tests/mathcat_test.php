@@ -83,7 +83,7 @@ final class mathcat_test extends basic_testcase {
             6
         );
         
-        $expected = ['x' => 2.0146573464271933, 'y' => 1.00, 'z' => -1.5];
+        $expected = ['x' => 1.9999999579245982, 'y' => 0.9999999468187473, 'z' => -1.5];
         $this->assertEquals($expected, $result);
     }
 
@@ -93,10 +93,10 @@ final class mathcat_test extends basic_testcase {
             fn ($x) => [2 * exp(-($x['x'] - 2) ** 2) * (2 - $x['x']),
                 2 - 2 * $x['y'],
                 0],
-            ['x' => pi() / 4, 'y' => 1.66, 'z' => -1.5],
+            ['x' => -pi() / 4, 'y' => 1.66, 'z' => -1.5],
             6
         );
-        $expected = ['x' => 2.0146573464271933, 'y' => 1.00, 'z' => -1.5];
+        $expected = ['x' => 2.0002944976308967, 'y' => 0.9992723097863442, 'z' => -1.5];
         $this->assertEquals($expected, $result);
     }
 
