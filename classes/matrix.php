@@ -130,7 +130,6 @@ class matrix extends ArrayObject {
         }
     }
 
-
     /**
      * Add another matrix or a scalar to this matrix, return a new matrix instance.
      *
@@ -173,7 +172,7 @@ class matrix extends ArrayObject {
      *
      * @throws MatrixException If matrices do not have the same size
      */
-    public function subtract(matrix $value):matrix {
+    public function subtract ($value) {
         if ($value instanceof self) {
             $matrix = $value;
             if ($this->_rows == $matrix->_rows && $this->_cols == $matrix->_cols) {
@@ -206,7 +205,7 @@ class matrix extends ArrayObject {
      *
      * @throws MatrixException If matrices are incompatible
      */
-    public function multiply(float|matrix $value):matrix {
+    public function multiply($value) {
         if ($value instanceof self) {
             $matrix = $value;
             if ($this->_cols != $matrix->_rows) {
@@ -413,7 +412,7 @@ class matrix extends ArrayObject {
      *
      * return float
      */
-    public function rooted_summed_squares(): float {
+    public function rooted_summed_squares() {
         $result = 0;
         for ($r = 0; $r < $this->_rows; $r++) {
             for ($c = 0; $c < $this->_cols; $c++) {
@@ -429,7 +428,7 @@ class matrix extends ArrayObject {
      *
      * return float
      */
-    public function max_absolute_element(): float {
+    public function max_absolute_element() {
         $result = 0;
         for ($r = 0; $r < $this->_rows; $r++) {
             for ($c = 0; $c < $this->_cols; $c++) {
@@ -461,7 +460,7 @@ class matrix extends ArrayObject {
      * @param Matrix $matrix The second matrix
      * @return boolean
      */
-    public function equals(Matrix $matrix) {
+    public function equals($matrix) {
         if ($this->_rows != $matrix->_rows || $this->_cols != $matrix->_cols) {
             return false;
         }
