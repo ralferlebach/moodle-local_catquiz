@@ -173,7 +173,7 @@ class matrix extends ArrayObject {
      *
      * @throws MatrixException If matrices do not have the same size
      */
-    public function subtract($value) {
+    public function subtract(matrix $value):matrix {
         if ($value instanceof self) {
             $matrix = $value;
             if ($this->_rows == $matrix->_rows && $this->_cols == $matrix->_cols) {
@@ -200,13 +200,13 @@ class matrix extends ArrayObject {
     /**
      * Multiply another matrix or a scalar to this matrix, return a new matrix instance.
      *
-     * @param mixed $value matrix or scalar to multiply to this matrix
+     * @param float|matrix $value matrix or scalar to multiply to this matrix
      *
      * @return Matrix New result matrix
      *
      * @throws MatrixException If matrices are incompatible
      */
-    public function multiply(mixed $value) {
+    public function multiply(float|matrix $value):matrix {
         if ($value instanceof self) {
             $matrix = $value;
             if ($this->_cols != $matrix->_rows) {
