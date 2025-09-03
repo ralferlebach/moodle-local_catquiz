@@ -914,9 +914,9 @@ class catquiz_handler {
      */
     public static function attempt_finished(
         stdClass $adaptivequiz,
-        cm_info $cm,
+        mixed $cm,
         stdClass $attemptrecord
-        ): string {
+    ): string {
         // Update the endtime and number of testitems used in the attempts table.
         global $DB, $COURSE;
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');

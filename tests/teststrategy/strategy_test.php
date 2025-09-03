@@ -30,18 +30,13 @@ use context_course;
 use context_module;
 use core_question\local\bank\question_edit_contexts;
 use local_catquiz\importer\testitemimporter;
-use local_catquiz\local\model\model_item_param;
-use local_catquiz\local\model\model_model;
 use local_catquiz\local\model\model_person_param_list;
-use local_catquiz\teststrategy\strategy;
 use local_catquiz\local\model\model_strategy;
 use mod_adaptivequiz\local\attempt\attempt;
 use mod_adaptivequiz\local\question\question_answer_evaluation;
-use PHPUnit\Framework\ExpectationFailedException;
 use question_bank;
 use question_engine;
 use question_usage_by_activity;
-use SebastianBergmann\RecursionContext\InvalidArgumentException;
 
 defined('MOODLE_INTERNAL') || die();
 global $CFG;
