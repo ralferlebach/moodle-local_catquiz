@@ -269,7 +269,11 @@ class comparetotestaverage extends feedbackgenerator {
         $quantile = count($personparams) <= 1
             ? 0
             : (count($worseabilities) / (count($personparams) - 1)) * 100;
-        $testaverage = array_sum(array_map(fn ($pp) => $pp->ability, $personparams)) / count($personparams);
+
+        $testaverage = 0;
+        if (!empty($personparams)) {
+            $testaverage = array_sum(array_map(fn ($pp) => $pp->ability, $personparams)) / count($personparams);
+        }
 
         $catscaleclass = new catscale($catscaleid);
         $abilityrange = $catscaleclass->get_ability_range();

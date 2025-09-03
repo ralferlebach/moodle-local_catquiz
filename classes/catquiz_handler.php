@@ -78,7 +78,8 @@ class catquiz_handler {
         $testtemplates = testenvironment::get_environments_as_array(
             'mod_adaptivequiz',
             0,
-            LOCAL_CATQUIZ_TESTENVIRONMENT_ONLYACTIVETEMPLATES);
+            LOCAL_CATQUIZ_TESTENVIRONMENT_ONLYACTIVETEMPLATES
+        );
 
         // We introduce the option of a custom test environment.
         $testtemplates[0] = get_string('newcustomtest', 'local_catquiz');
@@ -115,9 +116,6 @@ class catquiz_handler {
 
         // We have require JS to click no submit button on change of test environment.
         $PAGE->requires->js_call_amd('local_catquiz/catquizTestChooser', 'init');
-
-        // We want to make sure the cat model section is always expanded.
-        $mform->setExpanded('catmodelheading');
 
         // Button to attach JavaScript to reload the form.
         $mform->registerNoSubmitButton('submitcattestoption');
@@ -1050,7 +1048,7 @@ class catquiz_handler {
             'maximumquestions' => $maxquestions,
             'minimumquestions' => $quizsettings->maxquestionsgroup->catquiz_minquestions,
             'penalty_threshold' => 60 * 60 * 24 * intval(get_config('local_catquiz', 'time_penalty_threshold')),
-            'initial_standarderror' => 1.0, // TODO: make configurable.
+            'initial_standarderror' => 1.0,
             'pilot_ratio' => $pilotratio ?? 0,
             'pilot_attempts_threshold' => LOCAL_CATQUIZ_THRESHOLD_DEFAULT,
             'questionsattempted' => intval($attemptdata->questionsattempted),

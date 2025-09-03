@@ -633,7 +633,10 @@ class feedbackclass {
      *
      */
     public static function validation_range_limits_nogaps(array &$errors, array $data) {
-        if (!empty((int) $data["catquiz_catscales"])) {
+        if (
+            isset($data["catquiz_catscales"]) &&
+            !empty((int) $data["catquiz_catscales"])
+        ) {
             $scales = dataapi::get_catscale_and_children((int) $data["catquiz_catscales"], true);
             $nfeedbpersubscale = ((int) $data['numberoffeedbackoptionsselect']) ?? 1;
             foreach ($scales as $scale) {
