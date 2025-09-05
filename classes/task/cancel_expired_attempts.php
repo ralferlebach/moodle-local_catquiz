@@ -30,7 +30,7 @@ use context_module;
 use dml_exception;
 use local_catquiz\catquiz;
 use local_catquiz\local\status;
-use mod_adaptivequiz\local\attempt\attempt;
+use mod_adaptivequiz\local\attempt;
 use mod_adaptivequiz\local\attempt\attempt_state;
 use stdClass;
 
