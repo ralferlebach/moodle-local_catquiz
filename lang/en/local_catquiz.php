@@ -487,6 +487,7 @@ $string['name'] = 'Name';
 $string['nameexists'] = 'The name of the CAT scale already exists';
 $string['newcustomtest'] = 'Custom test';
 $string['noaccessyet'] = 'No access yet';
+$string['nocatscaleid'] = 'No Cat-Scale ID.';
 $string['nocentralconfig'] = 'Central instance configuration missing. Please configure host and token in plugin settings.';
 $string['noedit'] = 'End Editing';
 $string['nofeedback'] = 'No feedback defined.';
