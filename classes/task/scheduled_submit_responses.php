@@ -50,7 +50,8 @@ class scheduled_submit_responses extends scheduled_task {
     public function execute() {
         $config = get_config('local_catquiz');
         if (empty($config->central_host) || empty($config->central_token)) {
-            throw new moodle_exception('nocentralconfig', 'local_catquiz');
+            mtrace(get_string('nocentralconfig', 'local_catquiz'));
+            return;
         }
 
         if (!$labels = array_filter(explode("\n", $config->node_scale_labels ?? ''))) {
