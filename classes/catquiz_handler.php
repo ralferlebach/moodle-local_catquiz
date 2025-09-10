@@ -73,7 +73,13 @@ class catquiz_handler {
 
         global $DB, $PAGE;
 
+
         $elements = [];
+
+        $advendesettingheading = $mform->getElement('advancedheading');
+        $advendesettingheading->setText(
+            get_string('catmodelsettings', 'local_catquiz')
+        );
 
         $testtemplates = testenvironment::get_environments_as_array(
             'mod_adaptivequiz',
@@ -89,10 +95,10 @@ class catquiz_handler {
         $elements[] = $mform->addElement(
             'select',
             'choosetemplate',
-            get_string('choosetemplate',
-            'local_catquiz'),
+            get_string('choosetemplate', 'local_catquiz'),
             $testtemplates,
-            ['data-on-change-action' => 'reloadTestForm']);
+            ['data-on-change-action' => 'reloadTestForm']
+        );
 
         $mform->setType('choosetemplate', PARAM_INT);
 
@@ -204,7 +210,6 @@ class catquiz_handler {
 
         return $elements;
     }
-
     /**
      *  Generate recursive checkboxes for sub(-sub)scales.
      * @param array $subscales
@@ -346,28 +351,29 @@ class catquiz_handler {
             'maxfiles' => EDITOR_UNLIMITED_FILES,
             'noclean' => true,
         ];
-
-        foreach ($data as $property) {
-            if (is_array($property) || !preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)_editor/', $property, $matches)) {
-                continue;
+        if (!empty($data)) {
+            foreach ($data as $property) {
+                if (is_array($property) || !preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)_editor/', $property, $matches)) {
+                    continue;
+                }
+                $scaleid = intval($matches[1]);
+                $rangeid = intval($matches[2]);
+                $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+                $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
+                $data = (object) file_prepare_standard_editor(
+                    $data,
+                    sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid),
+                    $options,
+                    $context,
+                    'local_catquiz',
+                    $filearea,
+                    intval($test->id)
+                );
             }
-            $scaleid = intval($matches[1]);
-            $rangeid = intval($matches[2]);
-            $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
-            $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
-            $data = (object) file_prepare_standard_editor(
-                $data,
-                sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid),
-                $options,
-                $context,
-                'local_catquiz',
-                $filearea,
-                intval($test->id)
-            );
-        }
 
-        $formdefaultvalues['choosetemplate'] = 0;
-        $formdefaultvalues['testenvironment_addoredittemplate'] = 0;
+            $formdefaultvalues['choosetemplate'] = 0;
+            $formdefaultvalues['testenvironment_addoredittemplate'] = 0;
+        }
     }
 
     /**

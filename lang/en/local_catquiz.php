@@ -109,6 +109,7 @@ $string['catcontext'] = 'CAT context';
 $string['catmanager'] = 'CAT-Manager';
 $string['catmanagernumberofquestions'] = 'Number of questions';
 $string['catmanagernumberofsubscales'] = 'Number of subscales';
+$string['catmodelsettings'] = 'CAT-Model';
 $string['catquiz'] = 'Catquiz';
 $string['catquiz:canmanage'] = 'Is allowed to manage Catquiz plugin';
 $string['catquiz:manage_catcontexts'] = 'Manage Cat contexts';
