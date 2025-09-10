@@ -200,6 +200,9 @@ class graphicalsummary extends feedbackgenerator {
             return null;
         }
         $lastquestion = $progress->get_playedquestions()[$lastresponse['qid']];
+        if (empty($lastquestion)) {
+            return null;
+        }
 
         $abilitieslist = $this->select_scales_for_report($newdata, $this->feedbacksettings, $existingdata['teststrategy']);
         $primaryscale = array_filter($abilitieslist, fn ($a) => array_key_exists('primary', $a) && $a['primary'] === true);
