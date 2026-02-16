@@ -85,12 +85,14 @@ class graphicalsummary extends feedbackgenerator {
         );
         // If this is a deficit strategy, display more info.
         $additionalinfo = false;
-        if (array_key_exists('graphicalsummary_primaryscale', $feedbackdata)
+        if (
+            array_key_exists('graphicalsummary_primaryscale', $feedbackdata)
             && isset($feedbackdata['primaryscale']->name)
         ) {
-            $primaryscale = reset ($feedbackdata['graphicalsummary_primaryscale']);
+            $primaryscale = reset($feedbackdata['graphicalsummary_primaryscale']);
             $quoteddeficitscale = feedback_helper::add_quotes($feedbackdata['primaryscale']->name);
-            if ($primaryscale
+            if (
+                $primaryscale
                 && array_key_exists('primarybecause', $primaryscale)
                 && $primaryscale['primarybecause'] == 'lowestskill'
             ) {
@@ -221,7 +223,8 @@ class graphicalsummary extends feedbackgenerator {
         $new['questionscale_name'] = catscale::return_catscale_object(
             $lastquestion->catscaleid
         )->name;
-        if (property_exists($lastquestion, 'fisherinformation')
+        if (
+            property_exists($lastquestion, 'fisherinformation')
             && is_float($lastquestion->fisherinformation)
         ) {
             $new['fisherinformation'] = sprintf('%.2f', $lastquestion->fisherinformation);
@@ -242,7 +245,8 @@ class graphicalsummary extends feedbackgenerator {
             'teststrategy',
             'local_catquiz',
             info::get_teststrategy($existingdata['teststrategy'])
-        ->get_description());
+            ->get_description()
+        );
 
         $progress = $this->get_progress();
         return [
@@ -329,7 +333,6 @@ class graphicalsummary extends feedbackgenerator {
 
         if ($viewquestion) {
             $table->head[] = get_string('showquestion', 'local_catquiz');
-
         }
 
         $tabledata = [];
