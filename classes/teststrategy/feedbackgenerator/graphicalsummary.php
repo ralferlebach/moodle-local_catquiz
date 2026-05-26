@@ -41,7 +41,6 @@ use local_catquiz\teststrategy\info;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class graphicalsummary extends feedbackgenerator {
-
     /**
      * Get student feedback.
      *
@@ -198,13 +197,17 @@ class graphicalsummary extends feedbackgenerator {
             return $existingdata;
         }
 
-        if (
-            !$lastresponse = $progress->get_last_response() ||
-            !isset($lastresponse['qid'])
-        ) {
+        $lastresponse = $progress->get_last_response();
+        if (!is_array($lastresponse) || !isset($lastresponse['qid'])) {
             return null;
         }
-        $lastquestion = $progress->get_playedquestions()[$lastresponse['qid']];
+
+        $playedquestions = $progress->get_playedquestions();
+        if (!array_key_exists($lastresponse['qid'], $playedquestions)) {
+            return null;
+        }
+
+        $lastquestion = $playedquestions[$lastresponse['qid']];
         if (empty($lastquestion)) {
             return null;
         }
