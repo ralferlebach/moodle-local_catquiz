@@ -1143,5 +1143,55 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2025012702, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026052700) {
+        // Defensive repair: some systems miss legacy columns expected by mod_adaptivequiz.
+        $table = new xmldb_table('adaptivequiz_attempt');
+
+        $field = new xmldb_field(
+            'difficultysum',
+            XMLDB_TYPE_NUMBER,
+            '10, 7',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0.0',
+            'questionsattempted'
+        );
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $field = new xmldb_field(
+            'standarderror',
+            XMLDB_TYPE_NUMBER,
+            '10, 5',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0.0',
+            'difficultysum'
+        );
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $field = new xmldb_field(
+            'measure',
+            XMLDB_TYPE_NUMBER,
+            '10, 5',
+            null,
+            XMLDB_NOTNULL,
+            null,
+            '0.0',
+            'standarderror'
+        );
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Catquiz savepoint reached.
+        upgrade_plugin_savepoint(true, 2026052700, 'local', 'catquiz');
+    }
+
     return true;
 }
