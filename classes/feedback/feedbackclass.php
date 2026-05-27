@@ -24,6 +24,7 @@
 
 namespace local_catquiz\feedback;
 
+use local_catquiz\catscale;
 use local_catquiz\data\dataapi;
 use local_catquiz\testenvironment;
 use MoodleQuickForm;
@@ -431,15 +432,23 @@ class feedbackclass {
                 $headersuffix = ' : ' . get_string('feedbackcompletedpartially', 'local_catquiz', $statusofcompletion);
             }
 
-            $mform->registerNoSubmitButton('copysettingsforallsubscales_' . $scale->id);
-            $subelements[] = $mform->addElement(
-                'submit',
-                'copysettingsforallsubscales_' . $scale->id,
-                get_string('copysettingsforallsubscales', 'local_catquiz'),
-                [
-                    'data-action' => 'submitFeedbackValues',
-                ]
-            );
+            $subscaleids = catscale::get_subscale_ids($scale->id);
+            if (!empty($subscaleids)) {
+                $mform->registerNoSubmitButton('copysettingsforallsubscales_' . $scale->id);
+                $subelements[] = $mform->addElement(
+                    'submit',
+                    'copysettingsforallsubscales_' . $scale->id,
+                    get_string('copysettingsforallsubscales', 'local_catquiz'),
+                    [
+                        'data-action' => 'submitFeedbackValues',
+                        'data-source-scale-id' => $scale->id,
+                        'data-subscale-ids' => implode(',', $subscaleids),
+                        'data-copying-text' => get_string('copyingsubscalesettings', 'local_catquiz'),
+                        'data-copied-text' => get_string('copiedsubscalesettings', 'local_catquiz'),
+                        'data-nothing-copied-text' => get_string('nosubscalechosenforcopy', 'local_catquiz'),
+                    ]
+                );
+            }
 
             // Make the different feedback options nested.
             $numberofclosinghtmls = 0;
