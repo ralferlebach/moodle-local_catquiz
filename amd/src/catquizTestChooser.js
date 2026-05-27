@@ -89,6 +89,13 @@ export const init = () => {
     var checkboxelements = new Set([
         ...reportscalecheckboxes
     ]);
+    feedbacksubmitbuttons.forEach(button => {
+        button.addEventListener('click', e => {
+            e.preventDefault();
+            copySettingsToSubscales(button);
+        });
+    });
+
     if (!checkboxelements || checkboxelements.length == 0) {
         return;
     }
@@ -98,13 +105,6 @@ export const init = () => {
     checkboxelements.forEach(selector => {
         setCardDisabledStatus(selector);
         selector.addEventListener('change', e => setCardDisabledStatus(e.target));
-    });
-
-    feedbacksubmitbuttons.forEach(button => {
-        button.addEventListener('click', e => {
-            e.preventDefault();
-            copySettingsToSubscales(button);
-        });
     });
 };
 
