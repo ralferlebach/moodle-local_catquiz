@@ -51,6 +51,7 @@ const normalizeLabelNotFound = (message) => {
     const patterns = [
         /^Question label ["“](.+?)["”] was not found in the question bank\.$/i,
         /^Fragen-Label ["„](.+?)["“] wurde in der Fragenbank nicht gefunden\.$/i,
+        /^Wert von Label\s+(.+?)\s+nicht gefunden\.$/i,
         /^Label ["“](.+?)["”] not found\.$/i,
     ];
 
@@ -148,11 +149,6 @@ const renderGroupedFeedback = (container, title, type, messages, strings) => {
         details.className = 'mt-2';
 
         const summary = document.createElement('summary');
-        const arrow = document.createElement('span');
-        arrow.className = 'lcq-import-arrow';
-        arrow.textContent = '▸ ';
-        summary.appendChild(arrow);
-
         const summaryLabel = document.createElement('span');
         summaryLabel.textContent = group.count > 1 ? `${group.summary} (${group.count})` : group.summary;
         summary.appendChild(summaryLabel);

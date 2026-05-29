@@ -394,12 +394,15 @@ class fileparser {
      */
     protected function cast_string_to_float($value) {
 
+        $floatstring = trim((string)$value);
+        // Spreadsheet exports may wrap numbers or prefix them with apostrophes.
+        $floatstring = trim($floatstring, "\"'");
+        $floatstring = preg_replace("/^'+/", '', $floatstring);
+
         // Check if separated by comma.
-        $commacount = substr_count($value, ',');
+        $commacount = substr_count($floatstring, ',');
         if ($commacount == 1) {
-            $floatstring = str_replace(',', '.', $value);
-        } else {
-            $floatstring = $value;
+            $floatstring = str_replace(',', '.', $floatstring);
         }
         $validation = filter_var($floatstring, FILTER_VALIDATE_FLOAT);
         if ($validation !== false) {
