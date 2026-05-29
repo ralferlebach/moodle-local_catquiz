@@ -439,7 +439,14 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
                     foreach ($records as $r) {
                         catscale::remove_testitem_from_scale($catscale->id, $r->questionid);
                     }
-                    $newrecord['warning'] = 'Removed older question versions from scale';
+                    $newrecord['warning'] = get_string(
+                        'removedolderquestionversionsfromscale',
+                        'local_catquiz',
+                        [
+                            'label' => $label,
+                            'scale' => $newrecord['catscalename'],
+                        ]
+                    );
                 }
 
                 // 2. Continue with the most recent version of the question:

@@ -14,6 +14,30 @@
     margin-top: 50px;
 }
 
+#page-local-catquiz-manage_catscales .lcq-import-feedback summary {
+    list-style: none;
+    cursor: pointer;
+    display: block;
+}
+
+#page-local-catquiz-manage_catscales .lcq-import-feedback summary::marker {
+    content: "" !important;
+}
+
+#page-local-catquiz-manage_catscales .lcq-import-feedback summary::-webkit-details-marker {
+    display: none !important;
+}
+
+#page-local-catquiz-manage_catscales .lcq-import-feedback .lcq-import-arrow {
+    display: inline-block;
+    width: 1em;
+    transition: transform 0.15s ease;
+}
+
+#page-local-catquiz-manage_catscales .lcq-import-feedback details[open] .lcq-import-arrow {
+    transform: rotate(90deg);
+}
+
 #page-local-catquiz-manage_catscales .last-edits {
     margin-top: 50px;
 }
