@@ -134,11 +134,4 @@ if ($hassiteconfig) {
         PARAM_INT // Expect integer type.
     ));
 
-    $subplugindir = __DIR__ . '/connectivity';
-
-    if (is_dir($subplugindir)) {
-        foreach (glob($subplugindir . '/*/settings.php') as $settingsfile) {
-            require_once($settingsfile);
-        }
-    }
 }
