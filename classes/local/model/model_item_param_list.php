@@ -38,7 +38,7 @@ use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\data\dataapi;
 use local_catquiz\event\testiteminscale_added;
-use local_catquiz\remote\hash\question_hasher;
+use local_catquiz\hash\question_hasher;
 use moodle_exception;
 use stdClass;
 use Traversable;

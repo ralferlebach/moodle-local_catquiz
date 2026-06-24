@@ -790,3 +790,4 @@ $string['versioning'] = 'Versioning';
 $string['warnings'] = 'Warnings';
 $string['wronglabels'] = 'Imported CSV not containing the right labels. Column {$a} can not be imported.';
 $string['yourscorein'] = 'Your average scores in “{$a}”';
+$string['questionnotfound'] = 'Question was not found';

@@ -25,5 +25,5 @@
 defined('MOODLE_INTERNAL') || die();
 
 $subplugins = [
-    'connectivity' => 'connectivity',
+    'catquizcentralhub' => 'catquizcentralhub',
 ];

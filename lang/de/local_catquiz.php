@@ -805,4 +805,5 @@ $string['versionchosen'] = 'ausgewählte Versionierung:';
 $string['versioning'] = 'Versionierung';
 $string['warnings'] = 'Warnungen';
 $string['wronglabels'] = 'Die importierten Spaltennamen entsprechen nicht der Vorgabe. {$a} kann nicht importiert werden.';
-$string['yourscorein'] = 'Ihre durchschnittlichen „{$a}“-Ergebnisse';
+$string['yourscorein'] = 'Ihre durchschnittlichen „{$a}”-Ergebnisse';
+$string['questionnotfound'] = 'Frage wurde nicht gefunden';
