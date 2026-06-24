@@ -55,13 +55,13 @@ class catquizcentralhub extends base {
      * @return null|string
      */
     public function get_settings_section_name() {
-        return 'catquizcentralhub' . $this->name . 'settings';
+        return $this->component . 'settings';
     }
 
     /**
      * Loads plugin settings to the settings tree.
      *
-     * @param \part_of_admin_tree $adminroot
+     * @param part_of_admin_tree $adminroot
      * @param string $parentnodename
      * @param bool $hassiteconfig whether the current user has moodle/site:config capability
      */
@@ -76,18 +76,12 @@ class catquizcentralhub extends base {
         }
 
         $section = $this->get_settings_section_name();
-        $page = new admin_settingpage($section, $this->displayname, 'moodle/site:config', $this->is_enabled() === false);
+        $settings = new admin_settingpage($section, $this->displayname, 'moodle/site:config', $this->is_enabled() === false);
         include($this->full_path('settings.php'));
 
-        if ($page) {
-            $ADMIN->add($parentnodename, $page);
+        if ($settings) {
+            $ADMIN->add($parentnodename, $settings);
         }
     }
 
-    /**
-     * Pre-uninstall hook.
-     */
-    public function uninstall_cleanup() {
-        parent::uninstall_cleanup();
-    }
 }
