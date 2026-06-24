@@ -285,7 +285,7 @@ class catscaledashboard {
             'remotecalcbutton' => $this->render_remotecalc_button(),
             'submitresponsesbutton' => $this->render_submitresponses_button(),
             'is_root' => $this->is_root_scale(),
-            'centralhost' => get_config('local_catquiz', 'central_host'),
+            'centralhost' => get_config('catquizcentralhub_client', 'central_host'),
             'sync_as_node_enabled' => get_config('catquizcentralhub_client', 'enable_sync_as_node') ?? false,
             'sync_as_hub_enabled' => get_config('catquizcentralhub_host', 'enable_sync_as_hub') ?? false,
         ];
