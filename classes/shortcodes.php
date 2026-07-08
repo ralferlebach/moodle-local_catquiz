@@ -26,15 +26,12 @@
 
 namespace local_catquiz;
 
-use local_catquiz\data\dataapi;
-use local_catquiz\output\attemptfeedback;
-use local_catquiz\output\catscalemanager\quizattempts\quizattemptsdisplay;
-use local_catquiz\teststrategy\feedbacksettings;
-use context_course;
-use core\uuid;
-use dml_missing_record_exception;
 use Exception;
+use context_course;
+use dml_missing_record_exception;
+use local_catquiz\data\dataapi;
 use local_catquiz\output\catquizstatistics;
+use local_catquiz\output\catscalemanager\quizattempts\quizattemptsdisplay;
 use local_catquiz\teststrategy\feedback_helper;
 use moodle_url;
 
@@ -75,79 +72,13 @@ class shortcodes {
     public static function catquizfeedback($shortcode, $args, $content, $env, $next) {
         global $OUTPUT, $COURSE, $USER, $DB, $CFG;
 
-        // Students get to see only feedback for their own attempts, teacher see all attempts of this course.
         $context = context_course::instance($COURSE->id);
-        $capability = has_capability('local/catquiz:view_users_feedback', $context);
+        $output = feedback_helper::get_feedback_data($args, $context, $USER, $COURSE, $DB, $CFG);
 
-        if (!$capability) {
-            $userid = $USER->id;
+        if (isset($output['error'])) {
+            return $output['error'];
         }
 
-        $courseid = optional_param('id', 0, PARAM_INT);
-        $records = catquiz::return_data_from_attemptstable(
-            intval($args['numberofattempts'] ?? 1),
-            intval($args['instanceid'] ?? 0),
-            intval($args['courseid'] ?? $courseid),
-            intval($userid ?? -1)
-            );
-        if (!$records) {
-            return get_string('attemptfeedbacknotyetavailable', 'local_catquiz');
-        }
-        $output = [
-            'attempt' => [],
-        ];
-
-        foreach ($records as $record) {
-            if (!$attemptdata = json_decode($record->json)) {
-                if ($CFG->debug > 0) {
-                    throw new \moodle_exception(sprintf('Can not read attempt data of attempt %d', $record->attemptid));
-                } else {
-                    continue;
-                }
-            }
-            $strategyid = $attemptdata->teststrategy;
-            $feedbacksettings = new feedbacksettings($strategyid);
-
-            $attemptfeedback = new attemptfeedback($record->attemptid, $record->contextid, $feedbacksettings);
-            try {
-                $feedback = $attemptfeedback->get_feedback_for_attempt($record->json, $record->debug_info) ?? "";
-            } catch (\Throwable $t) {
-                $feedback = get_string('attemptfeedbacknotavailable', 'local_catquiz');
-            }
-
-            $timestamp = !empty($record->endtime) ? intval($record->endtime) : intval($record->timemodified);
-            $timeofattempt = userdate($timestamp, get_string('strftimedatetime', 'core_langconfig'));
-            if ($record->userid == $USER->id) {
-                $headerstring = get_string(
-                    'ownfeedbacksheader',
-                    'local_catquiz',
-                    $timeofattempt);
-            } else if (isset($record->userid)) {
-                $userrecord = $DB->get_record('user', ['id' => $record->userid], 'firstname, lastname', IGNORE_MISSING);
-
-                $headerstring = get_string(
-                    'userfeedbacksheader',
-                    'local_catquiz',
-                    [
-                        'attemptid' => $record->attemptid,
-                        'time' => $timeofattempt,
-                        'firstname' => $userrecord->firstname,
-                        'lastname' => $userrecord->lastname,
-                        'userid' => $record->userid,
-
-                    ]);
-            } else {
-                $headerstring = "";
-            }
-
-            $data = [
-                'feedback' => $feedback,
-                'header' => $headerstring,
-                'attemptid' => $record->attemptid,
-                'active' => empty($output['attempt']) ? true : false,
-            ];
-            $output['attempt'][] = $data;
-        }
         return $OUTPUT->render_from_template('local_catquiz/feedback/collapsablefeedback', $output);
     }
 
@@ -205,7 +136,14 @@ class shortcodes {
         $endtime = $args['endtime'] ?? null;
         $starttime = $args['starttime'] ?? null;
 
-        $heading = self::get_heading($courseid, $globalscale, $testid, $starttime, $endtime);
+        try {
+            $heading = self::get_heading($courseid, $globalscale, $testid, $starttime, $endtime);
+        } catch (\Exception $e) {
+            return $OUTPUT->render_from_template(
+                'local_catquiz/catscaleshortcodes/catscalestatistics',
+                ['error' => $e->getMessage()]
+            );
+        }
 
         try {
             $catquizstatistics = new catquizstatistics($courseid, $testid, $globalscale, $endtime, $starttime);
@@ -259,6 +197,7 @@ class shortcodes {
      * @throws Exception
      */
     private static function populate_arguments(array $args): array {
+        global $COURSE;
         if ($args['testid'] ?? null) {
             $cmid = $args['testid'];
             // The 'testid' is actually the cmid. But we want the id of our test instance.
@@ -276,7 +215,11 @@ class shortcodes {
         }
 
         $globalscale = $args['globalscale'] ?? null;
-        $courseid = optional_param('id', $args['courseid'] ?? 0, PARAM_INT);
+        $currentcourseid = 0;
+        if (isset($COURSE) && !empty($COURSE->id) && $COURSE->id > 1) {
+            $currentcourseid = $COURSE->id;
+        }
+        $courseid = $args['courseid'] ?? $currentcourseid;
         if (!$globalscale) {
             if ($courseid == 0) {
                 throw new Exception(get_string('catquizstatistics_askforparams', 'local_catquiz'));
@@ -421,7 +364,7 @@ class shortcodes {
                     '/mod/adaptivequiz/view.php',
                     ['id' => $cm->id]
                 );
-                $link = sprintf('<a href="%s">%s</a>', $testurl->out(), feedback_helper::add_quotes($testname));
+                $link = feedback_helper::add_quotes(sprintf('<a href="%s">%s</a>', $testurl->out(), $testname));
                 return $link;
             }, $tests);
             $h1 = get_string('catquizstatistics_h1_scale', 'local_catquiz', (object) [
@@ -440,11 +383,10 @@ class shortcodes {
                     'link' => $link,
                     'scale' => $scale->name,
                 ]);
-                $h2 .= ' ' . $timerangeaddition;
             }
             return [
                 'title' => $h1,
-                'description' => $h2,
+                'description' => sprintf('%s %s', $h2, $timerangeaddition),
             ];
         }
 

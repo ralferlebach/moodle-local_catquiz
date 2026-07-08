@@ -28,18 +28,14 @@ use dml_exception;
 use coding_exception;
 use Exception;
 use local_catquiz\catcalc;
-use local_catquiz\catcontext;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
-use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_responses;
-use local_catquiz\local\model\model_strategy;
 use local_catquiz\local\result;
 use local_catquiz\local\status;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\progress;
-use local_catquiz\wb_middleware;
 use moodle_exception;
 
 /**
@@ -49,8 +45,7 @@ use moodle_exception;
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class updatepersonability extends preselect_task implements wb_middleware {
-
+class updatepersonability extends preselect_task {
     /**
      * Threshold for calculating a mean ability
      *
@@ -131,6 +126,20 @@ class updatepersonability extends preselect_task implements wb_middleware {
     private ?float $meanability = null;
 
     /**
+     * Stores the standard deviation of ability in case it is calculated
+     *
+     * @var ?float
+     */
+    private ?float $sdability = null;
+
+    /**
+     * Stores the responses array with the last response flipped.
+     *
+     * @var array
+     */
+    private array $flippedresponses;
+
+    /**
      * Helper function to set the context.
      *
      * Used for setting the context in tests.
@@ -147,13 +156,13 @@ class updatepersonability extends preselect_task implements wb_middleware {
      * Run preselect task.
      *
      * @param array $context
-     * @param callable $next
      *
      * @return result
      *
      */
-    public function run(array &$context, callable $next): result {
+    public function run(array &$context): result {
         $this->progress = $context['progress'];
+        $this->context = $context;
 
         // If we do not know the answer to the last question, we do not have to
         // update the person ability. Also, pilot questions should not be used
@@ -165,21 +174,20 @@ class updatepersonability extends preselect_task implements wb_middleware {
             )
         ) {
             $context['skip_reason'] = 'lastquestionnull';
-            return $next($context);
+            return result::ok($context);
         }
 
-        $this->userresponses = (new model_responses())->setdata(
-            [$context['userid'] => ['component' => $this->progress->get_user_responses()]],
-            false
+        $this->userresponses = model_responses::create_from_array(
+            [$context['attemptid'] => ['component' => $this->progress->get_user_responses()]]
         );
-        $context['lastresponse'] = $this->userresponses->get_last_response($context['userid']);
+        $context['lastresponse'] = $this->userresponses->get_last_response($context['attemptid']);
 
         if (!empty($this->progress->get_last_question()->is_pilot)) {
             $context['skip_reason'] = 'pilotquestion';
-            return $next($context);
+            return result::ok($context);
         }
 
-        $this->arrayresponses = reset(($this->userresponses->as_array())[$context['userid']]);
+        $this->arrayresponses = $this->userresponses->get_for_user($context['attemptid']);
 
         $this->parentability = $this->get_initial_ability();
         $this->initialse = $this->set_initial_standarderror();
@@ -205,7 +213,7 @@ class updatepersonability extends preselect_task implements wb_middleware {
             }
         }
 
-        return $next($context);
+        return result::ok($context);
     }
 
     /**
@@ -236,7 +244,14 @@ class updatepersonability extends preselect_task implements wb_middleware {
                 $this->parentse,
                 $this->get_min_ability_for_scale($catscaleid),
                 $this->get_max_ability_for_scale($catscaleid),
-                $this->ability_was_calculated($this->context['catscaleid'], false)
+                $this->use_tr_factor()
+            );
+
+            $updatedability = $this->maybe_change_to_alternative_ability(
+                $catscaleid,
+                $this->arrayresponses,
+                $updatedability,
+                $startvalue
             );
         } catch (moodle_exception $e) {
             // If we get an excpetion, re-throw it with more information.
@@ -270,7 +285,6 @@ class updatepersonability extends preselect_task implements wb_middleware {
             $this->parentability = $updatedability;
             $this->parentse = catscale::get_standarderror($updatedability, $this->get_item_param_list($catscaleid));
         }
-
         $this->update_person_param($catscaleid, $updatedability);
 
         $context['prev_ability'][$catscaleid] = $context['person_ability'][$catscaleid];
@@ -287,19 +301,20 @@ class updatepersonability extends preselect_task implements wb_middleware {
             $scales = array_filter($scales, fn ($s) => !in_array($s, $this->scalestoupdate));
             foreach ($scales as $scale) {
                 // Exclude scales that have wrong and right answers.
-                $itemparamlist = $this->userresponses->get_items_for_scale(
-                    $scale,
-                    $context['contextid']
-                );
+                $itemparamlist = model_item_param_list::get(
+                    $context['contextid'],
+                    null,
+                    [$scale, ...catscale::get_subscale_ids($scale)]
+                )->filter_for_responses($this->userresponses); // Filter the list to the items for a response that was given.
                 if (count($itemparamlist) === 0) {
                     continue;
                 }
 
                 // Remove all responses that are not in the item param list and check again.
-                $arrayresponsesforscale = [];
-                foreach ($itemparamlist as $item) {
-                    $arrayresponsesforscale[$item->get_id()] = $this->arrayresponses[$item->get_id()];
-                }
+                $arrayresponsesforscale = array_filter(
+                    $this->arrayresponses,
+                    fn($k) => $itemparamlist->offsetExists($k->get_id())
+                );
                 $this->diverseanswers[$scale] = $this->has_sufficient_responses($arrayresponsesforscale);
                 if ($this->diverseanswers[$scale]) {
                     continue;
@@ -313,7 +328,14 @@ class updatepersonability extends preselect_task implements wb_middleware {
                     $this->parentse,
                     $this->get_min_ability_for_scale($catscaleid),
                     $this->get_max_ability_for_scale($catscaleid),
-                    $this->ability_was_calculated($this->context['catscaleid'])
+                    $this->use_tr_factor()
+                );
+
+                $ability = $this->maybe_change_to_alternative_ability(
+                    $scale,
+                    $arrayresponsesforscale,
+                    $ability,
+                    $startvalue
                 );
 
                 $this->progress->set_ability($ability, $scale);
@@ -325,20 +347,8 @@ class updatepersonability extends preselect_task implements wb_middleware {
     }
 
     /**
-     * Get required context keys.
+     * TODO: move this to model_response
      *
-     * @return array
-     *
-     */
-    public function get_required_context_keys(): array {
-        return [
-            'contextid',
-            'catscaleid',
-            'progress',
-        ];
-    }
-
-    /**
      * Test if we can calculate an ability with the given responses.
      * At least two answers with different outcome are needed.
      *
@@ -354,7 +364,7 @@ class updatepersonability extends preselect_task implements wb_middleware {
         }
         $first = $arrayresponses[array_key_first($arrayresponses)];
         foreach ($arrayresponses as $ur) {
-            if ($ur['fraction'] !== $first['fraction']) {
+            if ($ur->get_response() !== $first->get_response()) {
                 return true;
             }
         }
@@ -365,7 +375,6 @@ class updatepersonability extends preselect_task implements wb_middleware {
      * Get item param list.
      *
      * @param mixed $catscaleid
-     *
      * @return model_item_param_list
      *
      */
@@ -374,23 +383,14 @@ class updatepersonability extends preselect_task implements wb_middleware {
             return $this->itemparamlists[$catscaleid];
         }
 
-        // We will update the person ability. Select the correct model for each item.
-        $modelstrategy = new model_strategy($this->userresponses);
         $catscalecontext = catscale::get_context_id($catscaleid);
         $catscaleids = [
             $catscaleid,
             ...catscale::get_subscale_ids($catscaleid),
         ];
-        $itemparamlists = [];
-        $personparams = model_person_param_list::load_from_db($catscalecontext, $catscaleids);
-        foreach (array_keys($modelstrategy->get_installed_models()) as $model) {
-            $itemparamlists[$model] = model_item_param_list::load_from_db(
-                $catscalecontext,
-                $model,
-                $catscaleids
-            );
-        }
-        $this->itemparamlists[$catscaleid] = $modelstrategy->select_item_model($itemparamlists, $personparams);
+        $itemparamlist = model_item_param_list::get($catscalecontext, null, $catscaleids)
+            ->filter_for_responses($this->userresponses);
+        $this->itemparamlists[$catscaleid] = $itemparamlist;
         return $this->itemparamlists[$catscaleid];
     }
 
@@ -427,7 +427,7 @@ class updatepersonability extends preselect_task implements wb_middleware {
      *
      */
     public function fallback_ability_update($catscaleid) {
-        $fraction = $this->userresponses->get_last_response($this->context['userid'])['fraction'];
+        $fraction = $this->userresponses->get_last_response($this->context['attemptid'])->get_response();
         $max = ($fraction < 0.5)
             ? -5 * (1 - $fraction)
             : 5 * $fraction;
@@ -462,8 +462,8 @@ class updatepersonability extends preselect_task implements wb_middleware {
     protected function set_initial_standarderror() {
         $abilitywascalculated = $this->ability_was_calculated($this->context['catscaleid'], false);
         // If we can not calculate or estimate the standard error, return a default value.
-        if (!$abilitywascalculated && !$this->meanability) {
-            return 1.0;
+        if (!$abilitywascalculated) {
+            return $this->calculate_sd_from_past_attempts();
         }
 
         // If possible, use the calculated ability. Otherwise, use the estimated one.
@@ -471,9 +471,9 @@ class updatepersonability extends preselect_task implements wb_middleware {
             ? $this->context['person_ability'][$this->context['catscaleid']]
             : $this->meanability;
 
-        $lastquestionid = $this->userresponses->get_last_response($this->context['userid'])['questionid'];
+        $lastquestion = $this->userresponses->get_last_response($this->context['attemptid']);
         $items = clone ($this->get_item_param_list($this->context['catscaleid']));
-        $items->offsetUnset($lastquestionid);
+        $items->offsetUnset($lastquestion->get_id());
 
         return catscale::get_standarderror(
             $ability,
@@ -493,12 +493,12 @@ class updatepersonability extends preselect_task implements wb_middleware {
      */
     protected function ability_was_calculated(int $catscaleid, bool $includelastresponse = true) {
         // If we have not at least one previous response, the ability was not calculated.
-        if (!$lastresponse = $this->userresponses->get_last_response($this->context['userid'])) {
+        if (!$lastresponse = $this->userresponses->get_last_response($this->context['attemptid'])) {
             return false;
         }
         $items = $this->get_item_param_list($catscaleid)->as_array();
         if (!$includelastresponse) {
-            unset($items[$lastresponse['questionid']]);
+            unset($items[$lastresponse->get_id()]);
         }
 
         // Only keep responses for the current scale.
@@ -528,6 +528,28 @@ class updatepersonability extends preselect_task implements wb_middleware {
         $mean = $sum / count($existingabilities);
         $this->meanability = $mean;
         return $mean;
+    }
+
+    /**
+     * Calculates Standard Deviation from past attempts.
+     * @return ?float
+     */
+    private function calculate_sd_from_past_attempts() {
+        $existingabilities = $this->get_existing_personparams();
+
+        if (count($existingabilities) < self::NUM_ESTIMATION_THRESHOLD) {
+            return 1.0;
+        }
+
+        $mean = $this->meanability ?? calculate_mean_from_past_attempts() ?? 0.0;
+
+        $sum = 0.0;
+        foreach ($existingabilities as $pp) {
+            $sum += floatval(($pp->ability - $mean) ** 2);
+        }
+        $sd = sqrt($sum / count($existingabilities));
+        $this->sdability = $sd;
+        return $sd;
     }
 
     /**
@@ -571,5 +593,94 @@ class updatepersonability extends preselect_task implements wb_middleware {
         $catscaleclass = new catscale($catscaleid);
         $this->scaleabilityrange[$catscaleid] = $catscaleclass->get_ability_range();
         return $this->scaleabilityrange[$catscaleid]['maxscalevalue'];
+    }
+
+    /**
+     * Use the trusted region factor
+     *
+     * @return bool
+     */
+    protected function use_tr_factor(): bool {
+        return $this->ability_was_calculated($this->context['catscaleid'], false);
+    }
+
+    /**
+     * Calculates the ability again with the last response flipped and returns
+     * either the original value or the one calcualted with the flipped
+     * response, whichever is "better".
+     *
+     * Better is defined here as more far from the parent's ability value.
+     *
+     * @param int $scaleid
+     * @param array $responses
+     * @param mixed $originalability
+     * @param mixed $startvalue
+     * @return mixed
+     */
+    private function maybe_change_to_alternative_ability(int $scaleid, array $responses, $originalability, $startvalue): ?float {
+        if (!$this->should_calculate_alternative($scaleid)) {
+            return $originalability;
+        }
+
+        $flippedresponses = $this->get_flipped_last_response();
+        $alternativeability = catcalc::estimate_person_ability(
+            $flippedresponses,
+            $this->get_item_param_list($scaleid),
+            $startvalue,
+            $this->parentability,
+            $this->parentse,
+            $this->get_min_ability_for_scale($scaleid),
+            $this->get_max_ability_for_scale($scaleid),
+            $this->use_tr_factor()
+        );
+        // If both the real updated ability and the ability calculated
+        // with the flipped last response differ from the parent ability
+        // in the same direction, then take the value calculated by the
+        // flipped response as this should be closer to the parent.
+        if (($alternativeability <=> $originalability) == ($originalability <=> $this->parentability)) {
+            return $alternativeability;
+        }
+
+        return $originalability;
+    }
+
+    /**
+     * Returns the responses array with the last response flipped.
+     *
+     * @return array
+     */
+    private function get_flipped_last_response(): array {
+        if (isset($this->flippedresponses)) {
+            return $this->flippedresponses;
+        }
+        $lastquestion = $this->progress->get_last_question();
+        $this->flippedresponses = $this->arrayresponses;
+        $frac = floatval($this->flippedresponses[$lastquestion->id]->get_response());
+        $flipped = abs(1 - $frac);
+        $flippedlastquestion = clone $this->flippedresponses[$lastquestion->id];
+        $flippedlastquestion->set_response($flipped);
+        $this->flippedresponses[$lastquestion->id] = $flippedlastquestion;
+        return $this->flippedresponses;
+    }
+
+    /**
+     * Indicates if we should also calculate with the last response flipped.
+     *
+     * @param int $scaleid
+     * @return bool
+     */
+    private function should_calculate_alternative(int $scaleid): bool {
+        $questions = $this->progress->get_playedquestions(true, $scaleid);
+        if (!$questions || count($questions) < 3) {
+            return false;
+        }
+        $fraction = array_sum(
+            array_map(fn ($q) => floatval($this->arrayresponses[$q->id]->get_response()), $questions)
+        ) / count($questions);
+        if (round($fraction, 0) != round($fraction, 6)) {
+            return false;
+        }
+
+        return true;
     }
 }

@@ -27,6 +27,8 @@ namespace local_catquiz;
 
 use cache;
 use cache_helper;
+use context_module;
+use context_system;
 use moodle_exception;
 use stdClass;
 
@@ -144,6 +146,13 @@ class testenvironment {
     private int $courseid;
 
     /**
+     * The context ID that was assigned to the scale when the test was created.
+     *
+     * @var ?int $contextid
+     */
+    private ?int $contextid;
+
+    /**
      * Testenvironment constructor.
      * @param stdClass $newrecord
      */
@@ -180,6 +189,7 @@ class testenvironment {
         $this->status = $record->status ?? LOCAL_CATQUIZ_STATUS_TEST_ACTIVE;
         $this->parentid = $record->parentid ?? 0;
         $this->courseid = $record->courseid ?? 0;
+        $this->contextid = $record->contextid ?? null;
     }
 
     /**
@@ -257,10 +267,36 @@ class testenvironment {
             return;
         }
 
+        $options = [];
+        if ($cm = get_coursemodule_from_instance('adaptivequiz', $this->componentid)) {
+            $context = context_module::instance($cm->id);
+            $options = [
+                'trusttext' => true,
+                'subdirs' => true,
+                'context' => $context,
+                'maxfiles' => EDITOR_UNLIMITED_FILES,
+                'noclean' => true,
+            ];
+        }
+
+        if (($formdefaultvalues['triggered_button'] ?? null) === "reloadTestForm") {
+            $clearfields = [
+                'catquiz_subscalecheckbox_',
+            ];
+            foreach ($formdefaultvalues as $key => $val) {
+                foreach ($clearfields as $field) {
+                    if (preg_match("/^$field/", $key)) {
+                        unset($formdefaultvalues[$key]);
+                    }
+                }
+            }
+        }
+
         foreach ($jsonobject as $key => $value) {
 
             // Never overwrite a few values.
-            if (in_array($key, [
+            if (
+                in_array($key, [
                 'id',
                 'instance',
                 'name',
@@ -286,9 +322,49 @@ class testenvironment {
                 'conditionfieldgroup',
                 'downloadcontent',
                 'timemodified',
-
-                ])) {
+                ])
+            ) {
                 continue;
+            }
+            if (preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)$/', $key, $matches)) {
+                // If the form is reloaded from a template, set the text from the json.
+                if (!$cm && is_string($value) && is_array($formdefaultvalues[$key])) {
+                    $formdefaultvalues[$key]['text'] = $value;
+                    continue;
+                }
+                // Fallback for old fields stored as array.
+                if (is_array($value) && array_key_exists('text', $value)) {
+                    $jsonobject[$key] = $value['text'];
+                }
+
+                $scaleid = intval($matches[1]);
+                $rangeid = intval($matches[2]);
+                $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
+                $jsonobject[$key . 'format'] = 1;
+                $field = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+                if ($options) {
+                    $data = (object) file_prepare_standard_editor(
+                        (object) $jsonobject,
+                        $field,
+                        $options,
+                        $context,
+                        'local_catquiz',
+                        $filearea,
+                        intval($this->componentid)
+                    );
+                    $formdefaultvalues[$key] = $data->$key;
+                    $formdefaultvalues[$key . '_editor'] = $data->{$key . '_editor'};
+                    $formdefaultvalues[$key . 'format'] = $data->{$key . 'format'};
+                    $draftitemid = file_get_submitted_draft_itemid($field);
+                    file_prepare_draft_area(
+                        $draftitemid,
+                        $context->id,
+                        'local_catquiz',
+                        $filearea,
+                        intval($this->componentid)
+                    );
+                    continue;
+                }
             }
 
             $formdefaultvalues[$key] = $value;
@@ -319,6 +395,7 @@ class testenvironment {
      *
      */
     private function update_object(stdClass &$record) {
+        global $DB;
 
         // If we have the record, we update everything, if there are new values. if not, we leave the old ones.
         $record->componentid = $this->componentid ?? $record->componentid;
@@ -334,6 +411,16 @@ class testenvironment {
         $record->status = $this->status ?? $record->status;
         $record->parentid = $this->parentid ?? $record->parentid ?? 0;
         $record->courseid = $this->courseid ?? $record->courseid;
+
+        // Set the contextid only if this is a new test OR the scale was changed.
+        // New test: $record->contextid is empty. Scale changed: $record->contextid != $this->contextid.
+        if (
+            !property_exists($record, 'contextid')
+            || !$record->contextid
+            || ($this->catscaleid && $record->catscaleid && $this->catscaleid != $record->catscaleid)
+        ) {
+            $record->contextid = $DB->get_field('local_catquiz_catscales', 'contextid', ['id' => $record->catscaleid]);
+        }
 
         $now = time();
 
@@ -563,5 +650,14 @@ class testenvironment {
         $numquestions = $DB->count_records_select('local_catquiz_items', "catscaleid $insql", $inparams);
         $cache->set($hashedkey, $numquestions);
         return $numquestions;
+    }
+
+    /**
+     * Retrieves the context ID.
+     *
+     * @return int|null The context ID or null if not set.
+     */
+    public function get_contextid() {
+        return $this->contextid;
     }
 }

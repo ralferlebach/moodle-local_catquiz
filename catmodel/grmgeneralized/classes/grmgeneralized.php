@@ -25,9 +25,13 @@
 namespace catmodel_grmgeneralized;
 
 use local_catquiz\catcalc;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_multiparam;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_raschmodel;
+use MoodleQuickForm;
+use stdClass;
 
 /**
  * Class grmgeneralized of catmodels.
@@ -36,7 +40,25 @@ use local_catquiz\local\model\model_raschmodel;
  * @copyright  2023 Wunderbyte GmbH <georg.maisser@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class grmgeneralized extends model_raschmodel {
+class grmgeneralized extends model_multiparam {
+
+    /**
+     * {@inheritDoc}
+     *
+     * @param stdClass $record
+     * @return array
+     */
+    public static function get_parameters_from_record(stdClass $record): array {
+
+        $difficulties = json_decode($record->json, true)['difficulties'];
+        $discrimination = round($record->discrimination, self::PRECISION);
+
+        return [
+            'difficulty' => self::calculate_mean_difficulty(['difficulties' => $difficulties]),
+            'discrimination' => $discrimination,
+            'difficulties' => $difficulties,
+        ];
+    }
 
     /**
      * Returns the name of this model.
@@ -50,38 +72,6 @@ class grmgeneralized extends model_raschmodel {
     // Definitions and Dimensions.
 
     /**
-     * Defines names if item parameter list
-     *
-     * @param array $ip
-     * @return array of string
-     */
-    public static function get_fractions(array $ip): array {
-        $frac = [];
-
-        foreach ($ip['difficulty'] as $fraction => $val) {
-            if ($fraction > 0 && $fraction <= 1) {
-                $frac[] = $fraction;
-            }
-        }
-        usort ($fraction);
-        return $frac;
-    }
-
-    /**
-     * Defines names if item parameter list
-     *
-     * @param float $frac
-     * @param array $fractions
-     *
-     * @return array of string
-     */
-    public static function get_category(float $frac, array $fractions): int {
-        // TODO: Auf die systemweit eingestellte Precission abrunden, mit Nullen auffüllen, auf nächst-klieinere fraction abrunden.
-
-        return $k = array_search($frac, $fractions);
-    }
-
-    /**
      * Goes modified to mathcat.php.
      *
      * @param array $ip
@@ -91,7 +81,7 @@ class grmgeneralized extends model_raschmodel {
     public static function convert_ip_to_vector(array $ip): array {
 
         // TODO: This is very dirty and needs more attention on length / dimensionality.
-        return array_merge($ip['difficulty'], [$ip['discrimination']]);
+        return array_merge($ip['difficulties'], [$ip['discrimination']]);
     }
 
     /**
@@ -105,9 +95,10 @@ class grmgeneralized extends model_raschmodel {
     public static function convert_vector_to_ip(array $vector, $fractions): array {
 
         // TODO: This is very dirty and needs more attention on length / dimensionality.
+        $discrimination = array_pop($vector);
         return [
-            'difficulty' => array_combine($fractions, array_splice($vector, count($vector) - 1)),
-            'discrimination' => $vector[count($vector) - 1],
+            'difficulties' => array_combine($fractions, $vector),
+            'discrimination' => $discrimination,
         ];
     }
 
@@ -116,7 +107,7 @@ class grmgeneralized extends model_raschmodel {
      *
      * The parameters have the following structure.
      * [
-     *   'difficultiy': [fraction1: difficulty1, fraction2: difficulty2, ..., fractionk: difficultyk],
+     *   'difficulties': [fraction1: difficulty1, fraction2: difficulty2, ..., fractionk: difficultyk],
      *   'discrimination': discrimination
      * ]
      * @return array of string
@@ -134,8 +125,51 @@ class grmgeneralized extends model_raschmodel {
      * @return array
      */
     public static function get_parameter_names(): array {
-        return ['difficulty', 'discrimination'];
+        return ['discrimination', 'difficulties', 'difficulty'];
+    }
 
+    /**
+     * {@inheritDoc}
+     *
+     * This sets the difficulty as an aggregate value
+     *
+     * @param stdClass $record
+     * @param array $parameters
+     * @return stdClass
+     */
+    public static function add_parameters_to_record(stdClass $record, array $parameters): stdClass {
+        $record->json = json_encode(['difficulties' => $parameters['difficulties']]);
+        $record->difficulty = $record->difficulty ?? self::calculate_mean_difficulty($parameters);
+        return $record;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @param array $parameters
+     * @return float
+     */
+    public static function get_difficulty(array $parameters): float {
+        return self::calculate_mean_difficulty($parameters);
+    }
+
+    /**
+     * Checks if the paramters can be saved
+     *
+     * @param model_item_param $itemparam
+     * @return bool
+     */
+    public static function is_valid(model_item_param $itemparam): bool {
+        $params = $itemparam->get_params_array();
+        if (is_nan($params['discrimination'])) {
+            return true;
+        }
+        foreach ($params['difficulty'] as $d) {
+            if (is_nan($d)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -172,12 +206,49 @@ class grmgeneralized extends model_raschmodel {
      * Estimate item parameters
      *
      * @param mixed $itemresponse
+     * @param ?model_item_param $startvalue
      *
      * @return array
      *
      */
-    public function calculate_params($itemresponse): array {
+    public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array {
         return catcalc::estimate_item_params($itemresponse, $this);
+    }
+
+    /**
+     * Calculate the mean difficulty
+     *
+     * @param array $ip
+     *
+     * @return float
+     *
+     */
+    public static function calculate_mean_difficulty(array $ip): float {
+        $ip['difficulties'] = self::sanitize_fractions($ip['difficulties']);
+        $fractions = self::get_fractions($ip['difficulties']);
+        $kmax = max(array_keys($fractions));
+
+        return ($ip['difficulties'][$fractions[1]] + $ip['difficulties'][$fractions[$kmax]]) / 2;
+    }
+
+    /**
+     * Get all fractions out of parts of ip array
+     *
+     * @param array $array
+     * @return array of fractions as strings
+     */
+    protected static function get_fractions(array $array): array {
+        $frac = [];
+        $frac[0] = 0;
+
+        $a = self::sort_fractions($array);
+
+        foreach ($a as $fraction => $val) {
+            if ((float) $fraction > 0 && (float) $fraction <= 1) {
+                $frac[] = $fraction;
+            }
+        }
+        return $frac;
     }
 
     // Calculate the Likelihood.
@@ -193,27 +264,80 @@ class grmgeneralized extends model_raschmodel {
     public static function likelihood(array $pp, array $ip, float $frac): float {
         $ability = $pp['ability'];
 
-        $a = $ip['difficulty'];
+        $a = self::sort_fractions($ip['difficulties']);
         $b = $ip['discrimination'];
 
         // Make sure $frac is between 0.0 and 1.0.
         $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($ip);
+        $fractions = self::get_fractions($a);
         $kmax = max(array_keys($fractions));
 
-        switch ($frac) {
-            case 0.0:
-                return 1 - 1 / (1 + exp($b * ($a[0] - $ability)));
-                break;
-            case $fractions[$kmax]:
-                return 1 / (1 + exp($b * ($a[$kmax] - $ability)));
-                break;
-            default:
-                // Get corresponding category.
-                $k = array_search($frac, $ip['difficulty']);
-                return 1 / (1 + exp($b * ($a[$k] - $ability))) - 1 / (1 + exp($b * ($a[$k + 1] - $ability)));
-                break;
-        }
+        $k = self::get_key_by_fractions($frac, $a);
+
+        $result = ($k == 0) ? (1) : (1 / (1 + exp($b * ($a[$fractions[$k]] - $ability))));
+        $result -= ($k == $kmax) ? (0) : (1 / (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))));
+
+        return $result;
+    }
+
+    /**
+     * Calculates the 1st derivate of the Likelihood
+     *
+     * @param array $pp - person ability parameter
+     * @param array $ip - item parameters ('difficulty', 'discrimination')
+     * @param float $frac - answer fraction (0 ... 1.0)
+     * @return float
+     */
+    protected static function likelihood_p(array $pp, array $ip, float $frac): float {
+        $ability = $pp['ability'];
+
+        $a = self::sort_fractions($ip['difficulties']);
+        $b = $ip['discrimination'];
+
+        // Make sure $frac is between 0.0 and 1.0.
+        $frac = min(1.0, max(0.0, $frac));
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+
+        $k = self::get_key_by_fractions($frac, $a);
+
+        $result = ($k == 0) ? (0) : ($b * exp($b * ($a[$fractions[$k]] - $ability)) /
+            (1 + exp($b * ($a[$fractions[$k]] - $ability))) ** 2);
+        $result -= ($k == $kmax) ? (0) : ($b * exp($b * ($a[$fractions[$k + 1]] - $ability)) /
+            (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))) ** 2);
+
+        return $result;
+    }
+
+    /**
+     * Calculates the 2nd derivate of the Likelihood
+     *
+     * @param array $pp - person ability parameter
+     * @param array $ip - item parameters ('difficulty', 'discrimination')
+     * @param float $frac - answer fraction (0 ... 1.0)
+     * @return float
+     */
+    protected static function likelihood_p_p(array $pp, array $ip, float $frac): float {
+        $ability = $pp['ability'];
+
+        $a = self::sort_fractions($ip['difficulties']);
+        $b = $ip['discrimination'];
+
+        // Make sure $frac is between 0.0 and 1.0.
+        $frac = min(1.0, max(0.0, $frac));
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+
+        $k = self::get_key_by_fractions($frac, $a);
+
+        $result = ($k == 0) ? 0 : ($b ** 2 * exp($b * ($a[$fractions[$k]] - $ability)) *
+            (exp($b * ($a[$fractions[$k]] - $ability)) - 1) /
+            (1 + exp($b * ($a[$fractions[$k]] - $ability))) ** 3);
+        $result -= ($k == $kmax) ? (0) : ($b ** 2 * exp($b * ($a[$fractions[$k + 1]] - $ability)) *
+            (exp($b * ($a[$fractions[$k + 1]] - $ability)) - 1) /
+            (1 + exp($b * ($a[$fractions[$k + 1]] - $ability))) ** 3);
+
+        return $result;
     }
 
     // Calculate the LOG Likelihood and its derivatives.
@@ -239,27 +363,8 @@ class grmgeneralized extends model_raschmodel {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
-        $ability = $pp['ability'];
-
-        $a = $ip['difficulty'];
-        $b = $ip['discrimination'];
-
-        // Make sure $frac is between 0.0 and 1.0.
-        $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($ip);
-        $kmax = max(array_keys($fractions));
-
-        switch ($frac) {
-            case 0.0:
-                return -$b / (exp($b * ($a[0] - $ability)) + 1);
-            case $fractions[$kmax]:
-                return ($b * exp($a[$kmax] * $b)) / (exp($a[$kmax] * $b) + exp($b * $ability));
-            default:
-                // Get corresponding category.
-                $k = array_search($frac, $ip['difficulty']);
-                return ($b * (exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)) - 1))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) * (exp($b * ($a[$k + 1] - $ability)) + 1));
-        }
+        // We do it the easy way by using the log'f(x) = f'(x)/f(x) method.
+        return self::likelihood_p($pp, $ip, $frac) / self::likelihood($pp, $ip, $frac);
     }
 
     /**
@@ -271,34 +376,9 @@ class grmgeneralized extends model_raschmodel {
      * @return float - 2nd derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
-        $ability = $pp['ability'];
-
-        $a = $ip['difficulty'];
-        $b = $ip['discrimination'];
-
-        // Make sure $frac is between 0.0 and 1.0.
-        $frac = min(1.0, max(0.0, $frac));
-        $fractions = self::get_fractions($ip);
-        $kmax = max(array_keys($fractions));
-
-        switch ($frac) {
-            case 0.0:
-                return -($b ** 2 * exp($b * ($a[0] - $ability))) / (exp($b * ($a[0] - $ability)) + 1) ** 2;
-                break;
-            case $fractions[$kmax]:
-                return -($b ** 2 * exp($a[$kmax] * $b + $b * $ability)) / (exp($a[$kmax] * $b) + exp($b * $ability)) ** 2;
-                break;
-            default:
-                // Get corresponding category.
-                $k = array_search($frac, $ip['difficulty']);
-                return -(2 * $b ** 2 * exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) * (exp($b * ($a[$k + 1] - $ability)) + 1))
-                    + ($b ** 2 * exp($b * ($a[$k] - $ability)) * (exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)) - 1))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) ** 2 * (exp($b * ($a[$k + 1] - $ability)) + 1))
-                    + ($b ** 2 * exp($b * ($a[$k + 1] - $ability)) * (exp($b * ($a[$k] + $a[$k + 1] - 2 * $ability)) - 1))
-                    / ((exp($b * ($a[$k] - $ability)) + 1) * (exp($b * ($a[$k + 1] - $ability)) + 1) ** 2);
-                break;
-        }
+        // We do it the easy way by using the log''f(x) = (f(x)*f''(x)-f'(x)^2)/f(x)^2 method.
+        return (self::likelihood($pp, $ip, $frac) * self::likelihood_p_p($pp, $ip, $frac) -
+            self::likelihood_p($pp, $ip, $frac) ** 2) / self::likelihood($pp, $ip, $frac) ** 2;
     }
 
     /**
@@ -372,7 +452,7 @@ class grmgeneralized extends model_raschmodel {
      */
     public static function item_information(array $pp, array $ip): float {
         $iif = self::category_information($pp, $ip, 0.0) * self::likelihood($pp, $ip, 0.0);
-        foreach ($ip['difficuölty'] as $f => $val) {
+        foreach ($ip['difficulties'] as $f => $val) {
             $iif += self::category_information($pp, $ip, $f) * self::likelihood($pp, $ip, $f);
         }
         return $iif;
@@ -488,5 +568,88 @@ class grmgeneralized extends model_raschmodel {
                     (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculates d²/db².
             ],
         ];
+    }
+
+    /**
+     * Get parameter fields
+     *
+     * @param model_item_param $param
+     * @return array
+     */
+    public function get_parameter_fields(model_item_param $param): array {
+        if (!$param->get_params_array()) {
+            return $this->get_default_params();
+        }
+        $parameters = ['discrimination' => $param->get_params_array()['discrimination']];
+        $counter = 0;
+        foreach ($param->get_params_array()['difficulties'] as $frac => $val) {
+            $parameters['fraction_' . ++$counter] = $frac;
+            $parameters['difficulty_' . $counter] = $val;
+        }
+        return $parameters;
+    }
+
+    /**
+     * Get default params
+     *
+     * @return array
+     */
+    public function get_default_params(): array {
+        return [
+            'discrimination' => 1.0,
+            'difficulties' => [
+                '0.00' => 0.00,
+                '0.50' => 0.50,
+                '1.00' => 1.00,
+            ],
+        ];
+    }
+
+    /**
+     * Get multi param name
+     *
+     * @return string
+     */
+    protected function get_multi_param_name(): string {
+        return 'difficulties';
+    }
+
+    /**
+     * Adds a new combination of itemparams
+     *
+     * @param array $existingparams
+     * @param \stdClass $new
+     * @return array
+     */
+    public function add_new_param(array $existingparams, stdClass $new): array {
+        $num = count($existingparams['difficulties']) + 1;
+        $difficultyprop = sprintf('difficulty_%d', $num);
+        $fractionprop = sprintf('fraction_%d', $num);
+        $newdifficulties = $existingparams['difficulties'] + [$new->$fractionprop => $new->$difficultyprop];
+        $newparams['difficulties'] = $newdifficulties;
+        $newparams['difficulty'] = self::calculate_mean_difficulty($newparams);
+        return $newparams;
+    }
+
+    /**
+     * Drops the itemparams at the given index
+     *
+     * @param array $existingparams
+     * @param int $index
+     * @return array
+     */
+    public function drop_param_at(array $existingparams, int $index): array {
+        $counter = 0;
+        $newdifficulties = array_filter(
+            $existingparams['difficulties'],
+            function ($v) use (&$counter, $index) {
+                $match = $counter == $index;
+                $counter++;
+                return !$match;
+            }
+        );
+        $newparams['difficulties'] = $newdifficulties;
+        $newparams['difficulty'] = self::calculate_mean_difficulty($newparams);
+        return $newparams;
     }
 }

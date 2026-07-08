@@ -26,6 +26,7 @@
 namespace local_catquiz;
 
 use Closure;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_item_response;
 use local_catquiz\local\model\model_model;
@@ -125,8 +126,8 @@ class catcalc {
                 throw new \Exception(sprintf("The given model %s can not be used with the catcalc class", $item->get_model_name()));
             }
 
-            $jfuns[] = fn ($pp) => $model::log_likelihood_p($pp, $itemparams, $qresponse['fraction']);
-            $hfuns[] = fn($pp) => $model::log_likelihood_p_p($pp, $itemparams, $qresponse['fraction']);
+            $jfuns[] = fn ($pp) => $model::log_likelihood_p($pp, $itemparams, $qresponse->get_response());
+            $hfuns[] = fn($pp) => $model::log_likelihood_p_p($pp, $itemparams, $qresponse->get_response());
         }
 
         if ($jfuns === [] || $hfuns === []) {
@@ -154,7 +155,7 @@ class catcalc {
             $jacobian,
             $hessian,
             ['ability' => $startvalue],
-            3,
+            6,
             500,
             $trustedregionfilter,
             $trfunction,
@@ -171,11 +172,12 @@ class catcalc {
      *
      * @param array $itemresponse
      * @param model_model $model
+     * @param ?model_item_param $startvalue
      *
      * @return mixed
      *
      */
-    public static function estimate_item_params(array $itemresponse, model_model $model) {
+    public static function estimate_item_params(array $itemresponse, model_model $model, ?model_item_param $startvalue = null) {
         if (! $model instanceof catcalc_item_estimator) {
             throw new \InvalidArgumentException("Model does not implement the catcalc_item_estimator interface");
         }
@@ -183,14 +185,15 @@ class catcalc {
         $modeldim = $model::get_model_dim();
 
         // Defines the starting point.
-        $startarr = ['difficulty' => 0.50, 'discrimination' => 1.0, 'guessing' => 0.25];
-        $z0 = array_slice($startarr, 0, $modeldim - 1);
+        $defaultstart = ['difficulty' => 0.50, 'discrimination' => 1.0, 'guessing' => 0.25];
+        $startvalue = $startvalue ? $startvalue->get_params_array() : [];
+        $z0 = array_slice(array_merge($defaultstart, $startvalue), 0, $modeldim - 1);
 
         $jacobian = self::build_itemparam_jacobian($itemresponse, $model);
         $hessian = self::build_itemparam_hessian($itemresponse, $model);
 
         // Estimate item parameters via Newton-Raphson algorithm.
-        return mathcat::newton_raphson_multi_stable(
+        $result = mathcat::newton_raphson_multi_stable(
             $jacobian,
             $hessian,
             $z0,
@@ -198,6 +201,7 @@ class catcalc {
             50,
             fn ($ip) => $model::restrict_to_trusted_region($ip)
         );
+        return $result;
     }
 
     /**
@@ -206,10 +210,10 @@ class catcalc {
      * @param array $itemresponse
      * @param catcalc_item_estimator $model
      *
-     * @return mixed
+     * @return Closure
      *
      */
-    public static function build_itemparam_jacobian(array $itemresponse, catcalc_item_estimator $model) {
+    public static function build_itemparam_jacobian(array $itemresponse, catcalc_item_estimator $model): Closure {
         // Define Jacobi vector (1st derivative) of the Log Likelihood.
         $funs = [];
 

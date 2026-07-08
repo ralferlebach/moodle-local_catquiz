@@ -44,8 +44,7 @@ use UnexpectedValueException;
  *
  * @covers \local_catquiz\teststrategy\preselect_task\customscalefeedback
  */
-class customscalefeedback_test extends basic_testcase {
-
+final class customscalefeedback_test extends basic_testcase {
     /**
      * Test that questions of subscales are removed as needed.
      *
@@ -57,7 +56,7 @@ class customscalefeedback_test extends basic_testcase {
      * @throws ExpectationFailedException
      * @dataProvider get_studentfeedback_provider
      */
-    public function test_get_studentfeedback(array $feedbackdata, array $expected) {
+    public function test_get_studentfeedback(array $feedbackdata, array $expected): void {
 
         $feedbacksettings = new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB);
 
@@ -96,6 +95,8 @@ class customscalefeedback_test extends basic_testcase {
         return [
                 'lowestskillgap' => [
                     'feedbackdata' => [
+                        'testid' => 1,
+                        'catscaleid' => 1,
                         'progress' => 'empty',
                         'attemptid' => '1',
                         'contextid' => '2',
@@ -130,11 +131,12 @@ class customscalefeedback_test extends basic_testcase {
                     'expected' => [
                         'heading' => 'Feedback',
                         'content' => '<p dir="ltr" style="text-align: left;">adsfafs<\/p><br/>',
-                        'comment' => '',
                     ],
                 ],
                 'noscalestoreport' => [
                     'feedbackdata' => [
+                        'testid' => 1,
+                        'catscaleid' => 1,
                         'progress' => 'empty',
                         'attemptid' => '1',
                         'contextid' => '2',
@@ -169,10 +171,8 @@ class customscalefeedback_test extends basic_testcase {
                     'expected' => [
                         'heading' => 'Feedback',
                         'content' => 'No valid feedback could be generated.',
-                        'comment' => '',
                     ],
                 ],
             ];
     }
-
 }

@@ -63,15 +63,16 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
      *
      * @param int $contextid
      * @param array $catscaleids
+     * @param array $userids
      * @return self
      * @throws dml_exception
      */
-    public static function load_from_db(int $contextid, array $catscaleids): self {
-        $personrows = catquiz::get_person_abilities($contextid, $catscaleids);
+    public static function load_from_db(int $contextid, array $catscaleids, array $userids = []): self {
+        $personrows = catquiz::get_person_abilities($contextid, $catscaleids, $userids);
 
         $personabilities = new model_person_param_list();
         foreach ($personrows as $r) {
-            $p = new model_person_param($r->userid);
+            $p = new model_person_param($r->userid, $r->catscaleid);
             $p->set_ability($r->ability);
             $personabilities->add($p);
         }
@@ -108,7 +109,7 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
      *
      */
     public function add(model_person_param $personparam) {
-        $this->personparams[$personparam->get_id()] = $personparam;
+        $this->personparams[] = $personparam;
         return $this;
     }
 
@@ -184,6 +185,15 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
     }
 
     /**
+     * Returns the user IDs.
+     *
+     * @return array
+     */
+    public function get_user_ids(): array {
+        return array_map(fn ($pp) => $pp->get_userid(), $this->personparams);
+    }
+
+    /**
      * Returns the person abilities as a float array.
      *
      * @param bool $sorted
@@ -245,7 +255,7 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
                     $param->set_ability($updatedability);
                 }
                 return [
-                    'userid' => $param->get_id(),
+                    'userid' => $param->get_userid(),
                     'ability' => $param->get_ability(),
                     'contextid' => $contextid,
                     'catscaleid' => $catscaleid,
@@ -278,5 +288,61 @@ class model_person_param_list implements ArrayAccess, IteratorAggregate, Countab
         foreach ($updatedrecords as $r) {
             $DB->update_record('local_catquiz_personparams', $r, true);
         }
+    }
+
+    /**
+     * If any of the given userids are missing, default parameters are added
+     *
+     * @param array $userids
+     * @param int $catscaleid
+     * @return void
+     */
+    public function add_missing_users(array $userids, int $catscaleid) {
+        $existingusers = $this->get_user_ids();
+        $newusers = array_diff(
+            $userids,
+            $existingusers
+        );
+        foreach ($newusers as $userid) {
+            $this->add(new model_person_param($userid, $catscaleid));
+        }
+    }
+
+    /**
+     * Returns the list filtered to the given user ID.
+     *
+     * @param string $userid
+     * @return self
+     */
+    public function get_for_user(string $userid): self {
+        return $this->filter(fn ($pp) => $pp->get_userid() === $userid);
+    }
+
+    /**
+     * Filter the person params with the given function
+     *
+     * The function is called with each person param. If it returns true, the value is kept.
+     *
+     * @param callable $fun
+     * @return self
+     */
+    public function filter(callable $fun) {
+        $filtered = new self();
+        foreach ($this->personparams as $pp) {
+            if (!$fun($pp)) {
+                continue;
+            }
+            $filtered->add($pp);
+        }
+        return $filtered;
+    }
+
+    /**
+     * Returns the first element in the list of personparams.
+     *
+     * @return model_person_param
+     */
+    public function first(): model_person_param {
+        return reset($this->personparams);
     }
 }

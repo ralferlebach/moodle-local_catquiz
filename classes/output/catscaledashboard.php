@@ -38,6 +38,11 @@ use renderable;
  */
 class catscaledashboard {
 
+    /**
+     * Sets the maximum number of values used for the chart.
+     * @var int
+     */
+    public const CHART_MAX_NUM = 100;
 
     /** @var int of catscaleid */
     public int $catscaleid = 0;
@@ -96,6 +101,9 @@ class catscaledashboard {
                 continue;
             }
 
+            // To keep the time required to render the chart reasonable, do not
+            // display more values than required.
+            $data = $this->filter_values($data);
             $chart = new \core\chart_line();
             $series = new \core\chart_series('Series 1 (Line)', array_values($data));
             $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
@@ -118,10 +126,18 @@ class catscaledashboard {
     private function render_personabilities(model_person_param_list $personparams) {
         global $OUTPUT;
 
-        $data = $personparams->get_values(true);
+        $data = array_map(
+            fn ($pp) => $pp['ability'],
+            $personparams->get_values(true)
+        );
         if (empty($data)) {
             return "";
         }
+
+        // To keep the time required to render the chart reasonable, do not
+        // display more values than required.
+        $data = $this->filter_values($data);
+
         $chart = new \core\chart_line();
         $series = new \core\chart_series('Series 1 (Line)', array_values($data));
         $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
@@ -180,6 +196,60 @@ class catscaledashboard {
     }
 
     /**
+     * Renders sync button
+     *
+     * @return string
+     */
+    private function render_syncbutton() {
+        // Only render the button for root scales that have no parent scale.
+        if (!$this->is_root_scale()) {
+            return '';
+        }
+
+        $buttontitle = get_string('syncbutton', 'local_catquiz');
+        return sprintf('<button class="btn btn-primary" type="button" id="sync_button">%s</button>', $buttontitle);
+    }
+
+    /**
+     * Renders button to trigger calculation via submitted responses
+     *
+     * @return string
+     */
+    private function render_remotecalc_button() {
+        // Only render the button for root scales that have no parent scale.
+        if (!$this->is_root_scale()) {
+            return '';
+        }
+
+        $buttontitle = get_string('remotecalcbutton', 'local_catquiz');
+        return sprintf('<button class="btn btn-primary" type="button" id="recalculate_remote">%s</button>', $buttontitle);
+    }
+
+    /**
+     * Renders button to share responses with central instance
+     *
+     * @return string
+     */
+    private function render_submitresponses_button() {
+        // Only render the button for root scales that have no parent scale.
+        if (!$this->is_root_scale()) {
+            return '';
+        }
+
+        $buttontitle = get_string('remotesubmitbutton', 'local_catquiz');
+        return sprintf('<button class="btn btn-primary" type="button" id="submit_responses_remote">%s</button>', $buttontitle);
+    }
+
+    /**
+     * Shows if the current scale is a root scale
+     *
+     * @return bool
+     */
+    private function is_root_scale() {
+        return ($this->catscale->parentid ?? null) === "0";
+    }
+
+    /**
      * Exports for template.
      *
      * @param \renderer_base $output
@@ -190,7 +260,7 @@ class catscaledashboard {
     public function export_scaledetails(\renderer_base $output): array {
 
         $cm = new catmodel_info;
-        list($itemdifficulties, $personabilities) = $cm->get_context_parameters(
+        [$itemdifficulties, $personabilities] = $cm->get_context_parameters(
             $this->catcontextid,
             $this->catscaleid,
             $this->triggercalculation
@@ -209,6 +279,39 @@ class catscaledashboard {
             'itemdifficulties' => $this->render_itemdifficulties($itemdifficulties),
             'personabilities' => $this->render_personabilities($personabilities),
             'modelbutton' => $this->render_modelbutton($this->catcontextid),
+            'syncbutton' => $this->render_syncbutton(),
+            'remotecalcbutton' => $this->render_remotecalc_button(),
+            'submitresponsesbutton' => $this->render_submitresponses_button(),
+            'is_root' => $this->is_root_scale(),
+            'centralhost' => get_config('local_catquiz', 'central_host'),
+            'sync_as_node_enabled' => get_config('local_catquiz', 'enable_sync_as_node'),
+            'sync_as_hub_enabled' => get_config('local_catquiz', 'enable_sync_as_hub'),
         ];
+    }
+
+    /**
+     * If the given array contains more values than allowed, values are removed.
+     *
+     * This is used to remove values from the arrays of the ability and item difficulty charts if they contain too many.
+     *
+     * @param array $values
+     * @param int $max
+     * @return array
+     */
+    private function filter_values(array $values, int $max = self::CHART_MAX_NUM): array {
+        if (count($values) <= $max) {
+            return $values;
+        }
+
+        // Show every Nth value.
+        $showeveryn = round(count($values) / $max);
+        $i = 0;
+        foreach (array_keys($values) as $key) {
+            if ($i % $showeveryn != 0) {
+                unset($values[$key]);
+            }
+            $i++;
+        }
+        return $values;
     }
 }

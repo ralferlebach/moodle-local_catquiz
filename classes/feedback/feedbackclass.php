@@ -25,6 +25,7 @@
 namespace local_catquiz\feedback;
 
 use local_catquiz\data\dataapi;
+use local_catquiz\testenvironment;
 use MoodleQuickForm;
 use stdClass;
 
@@ -41,16 +42,23 @@ class feedbackclass {
      * Add Form elements to form.
      * @param MoodleQuickForm $mform
      * @param array $elements
+     * @param ?testenvironment $template
+     *
      * @return void
      */
-    public static function instance_form_definition(MoodleQuickForm &$mform, array &$elements) {
+    public static function instance_form_definition(MoodleQuickForm &$mform, array &$elements, ?testenvironment $template) {
 
         global $CFG, $PAGE, $OUTPUT;
 
         require_once($CFG->libdir .'/datalib.php');
 
-        // Get all Values from the form.
-        $data = $mform->getSubmitValues();
+        // If the user just selected a template, get the values from there.
+        if ($template) {
+            $data = (array) $template->return_settings();
+        } else {
+            // Otherwise: Get all values from the existing form.
+            $data = $mform->getSubmitValues();
+        }
         $defaultvalues = $mform->_defaultValues;
 
         // phpcs:ignore
@@ -65,6 +73,9 @@ class feedbackclass {
         ];
 
         $selectedparentscale = optional_param('catquiz_catscales', 0, PARAM_INT);
+        if ($template) {
+            $selectedparentscale = $template->return_as_array()['catscaleid'];
+        }
 
         if (!empty($selectedparentscale)) {
             $scales = dataapi::get_catscale_and_children($selectedparentscale, true);
@@ -103,6 +114,18 @@ class feedbackclass {
         $mform->addHelpButton('numberoffeedbackoptionsselect', 'numberoffeedbackoptionpersubscale', 'local_catquiz');
         $elements[] = $element;
 
+        $instance = $data['instance'] ?? $defaultvalues['instance'] ?? "";
+        if (!$instance) {
+            $picturewarning = get_string('picturesavewarning', 'local_catquiz');
+            $element = $mform->createElement(
+                'html',
+                '<div class="alert alert-warning" role="alert">'.$picturewarning.'</div>'
+            );
+            $element->setName('picturesavewarning');
+            $mform->addElement($element);
+            $elements[] = $element;
+        }
+
         // Button to attach JavaScript to reload the form.
         $mform->registerNoSubmitButton('submitnumberoffeedbackoptions');
         $elements[] = $mform->addElement('submit', 'submitnumberoffeedbackoptions', 'numberoffeedbackoptionssubmit',
@@ -110,6 +133,7 @@ class feedbackclass {
             'class' => 'd-none',
             'data-action' => 'submitNumberOfFeedbackOptions',
         ]);
+
         // Generate the options for the colors. Same values are applied to all subscales and subfeedbacks.
         $coloroptions = self::get_array_of_colors($nfeedbpersubscale);
         // We need this to close the collapsable header elements.
@@ -159,20 +183,27 @@ class feedbackclass {
                 // This is the preparation for the header element (to be appended in the end) where we apply the distinction.
 
                 // If reload was triggered (ie via nosubmitbutton), data is set in submitvalues.
-                if (isset($data['feedbackeditor_scaleid_'  . $scale->id . '_' . $j])) {
-                    $feedback = $data['feedbackeditor_scaleid_'  . $scale->id . '_' . $j];
-                } else if (isset($defaultvalues['feedbackeditor_scaleid_'  . $scale->id . '_' . $j])) {
+                $editorfieldname = sprintf('feedbackeditor_scaleid_%s_%s', $scale->id, $j);
+                if (isset($data[$editorfieldname])) {
+                    $feedback = $data[$editorfieldname];
+                } else if (isset($defaultvalues[$editorfieldname])) {
                     // If values of form where saved before, and form is loaded, data is in defaultvalues.
-                    $feedback = $defaultvalues['feedbackeditor_scaleid_'  . $scale->id . '_' . $j];
+                    $feedback = $defaultvalues[$editorfieldname];
                 }
                 // Check type and value.
                 if (!empty($feedback)) {
-                    $feedbacktext = $feedback['text'];
+                    $feedbacktext = $feedback;
+                    if (is_array($feedback)) {
+                        $feedbacktext = $feedback['text'];
+                    }
+                    if (is_object($feedback)) {
+                        $feedbacktext = $feedback->text;
+                    }
                     $feedbacktext = strip_tags($feedbacktext ?? '');
                 }
 
                 if (isset($feedbacktext) && strlen($feedbacktext) > 0) {
-                    $nfeedbacksgiven ++;
+                    $nfeedbacksgiven++;
                 }
 
                 // Header for Subfeedback.
@@ -183,16 +214,19 @@ class feedbackclass {
                 // For the lowest range (first range, min) value should be set statically to min of scale ability.
                 // Max (last range, max) is set to max of scale.
                 if ($j === 1) {
-                    $element = $mform->addElement(
+                    $static = $mform->addElement(
                         'static',
                         'lowest_limit',
                         get_string('lowerlimit', 'local_catquiz'),
                         $lowestability
-                        );
-                    $subelements[] = $mform->addElement(
+                    );
+                    $subelements[] = $static;
+                    $element = $mform->addElement(
                         'hidden',
-                        'feedback_scaleid_limit_lower_'. $scale->id . '_' . $j,
-                        $lowestability);
+                        'feedback_scaleid_limit_lower_' . $scale->id . '_' . $j,
+                        $lowestability
+                    );
+                    $element->setValue($lowestability);
                 } else {
                     $element = $mform->addElement(
                         'float',
@@ -219,16 +253,19 @@ class feedbackclass {
                 // If we get a value here, the overriding value is set in the set_data_after_definition function.
                 $subelements[] = $element;
                 if ($j === $nfeedbpersubscale) {
-                    $element = $mform->addElement(
+                    $static = $mform->addElement(
                         'static',
                         'highestvalue',
                         get_string('upperlimit', 'local_catquiz'),
                         $highestability
-                        );
-                    $subelements[] = $mform->addElement(
+                    );
+                    $subelements[] = $static;
+                    $element = $mform->addElement(
                         'hidden',
-                        'feedback_scaleid_limit_upper_'. $scale->id . '_' . $j,
-                        $highestability);
+                        'feedback_scaleid_limit_upper_' . $scale->id . '_' . $j,
+                        $highestability
+                    );
+                    $element->setValue($highestability);
                 } else {
                     $element = $mform->addElement(
                         'float',
@@ -258,7 +295,7 @@ class feedbackclass {
                 $subelements[] = $element;
 
                 // Rich text field for subfeedback.
-                $subelements[] = $mform->addElement(
+                $element = $mform->addElement(
                     'editor',
                     'feedbackeditor_scaleid_' . $scale->id . '_' . $j,
                     get_string('feedback', 'core'),
@@ -269,6 +306,12 @@ class feedbackclass {
                         'subdirs' => true,
                     ]);
                 $mform->setType('feedbackeditor_scaleid_' . $scale->id . '_' . $j, PARAM_RAW);
+                $editorcontentfieldname = $editorfieldname . '_editor';
+                $element->setValue($data[$editorfieldname]
+                    ?? $data[$editorcontentfieldname]
+                    ?? $defaultvalues[$editorcontentfieldname]
+                    ?? ['text' => '', 'format' => 1]);
+                $subelements[] = $element;
 
                 // Text field for feedback legend. Displayed only for parentscale.
                 $subelements[] = $mform->addElement(
@@ -414,7 +457,6 @@ class feedbackclass {
 
             $prevparentscaleid = $scale->parentid;
             $previousdepth = $scale->depth;
-
             $headername = get_string('catquizfeedbackheader', 'local_catquiz', $scale->name) . $headersuffix;
             $headerid = 'catquiz_feedback_header_' . $scale->id;
             $collapseid = 'catquiz_feedback_collapse_' . $scale->id;

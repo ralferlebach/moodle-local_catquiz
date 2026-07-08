@@ -471,4 +471,109 @@ class mathcat {
         };
         return $returnfn;
     }
+
+    /**
+     * Converts item parameters from an array to a vector
+     *
+     * @param array|float $data - array or float to be transformed into a serialized vevtor
+     * @param int $n - just ignore that, it's for the recursion
+     *
+     * @return array - structure of the given array, needed for restoring by vector_to_array
+     */
+    public static function array_to_vector(&$data, int &$n = 0): array {
+        // NOTE: The operation will be done directly on $data, so work with a copy!
+
+        if (is_array($data) && count($data) > 0) {
+
+            // Handle all arrays given.
+            $datatmp = [];
+            $structure = [];
+            foreach ($data as $key => $val) {
+
+                if (is_array($val) && count($val) > 0) {
+
+                    // Analyse further recursively.
+                    $structuretmp = self::array_to_vector($val, $n);
+
+                    // Test if result is legid.
+                    if (is_null($structuretmp)) {
+                        // TODO: Here should be some error/warning handling be done.
+                        return [];
+                    }
+
+                    // Perpare results.
+                    $structure[$key] = $structuretmp;
+                    $datatmp = array_merge($datatmp, $val);
+                } else if (is_numeric($val)) {
+
+                    // Give back part of the array and structure, also increment $n.
+                    $datatmp[$n] = floatval($val);
+                    $structure[$key] = $n;
+                    $n += 1;
+                } else {
+
+                    // Handle any other cases, like strings or objects.
+                    // TODO: Throw error warning and exit with null.
+                    return [];
+                }
+            }
+
+            // Overwrite $data and return $structure.
+            $data = $datatmp;
+            return $structure;
+        } else if (is_numeric($data)) {
+
+            // Handle the case that something like a float is given instead.
+            $structure = $n;
+            $data = [$n => $data];
+            $n += 1;
+            return $structure;
+        }
+
+        debugging('not float or array given in method array_to_vector', DEBUG_DEVELOPER);
+        return [];
+    }
+
+    /**
+     * Converts item parameters from a vector to an array or float
+     *
+     * @param array $data - the vector to be restored
+     * @param mixed $structure - the array structure given by array_to_vector
+     *
+     * @return array - the restored array or float
+     */
+    public static function vector_to_array(array $data, $structure): array {
+
+        if (is_array($structure)) {
+
+            // Handle arrays.
+            $datatmp = [];
+            foreach ($structure as $key => $val) {
+
+                if (is_array($val)) {
+
+                    $datatmp[$key] = self::vector_to_array($data, $val);
+                } else if (is_int($val)) {
+
+                    $datatmp[$key] = $data[$val];
+                }
+            }
+            return $datatmp;
+        } else if (is_int($structure)) {
+
+            // Handle floats or anything like it.
+            if (array_key_exists($structure, $data)) {
+
+                // Give back just the value.
+                return $data[$structure];
+            } else {
+
+                debugging('given structure array does not match vector in vector_to_array', DEBUG_DEVELOPER);
+                return [];
+            }
+        }
+
+        debugging('corrupted structure array given in vector_to_array', DEBUG_DEVELOPER);
+        return [];
+    }
 }

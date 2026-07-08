@@ -35,9 +35,28 @@ $services = [
                 ],
                 'restrictedusers' => 0,
                 'shortname' => 'local_catquiz_external',
-                'downloadfiles' => 1,    // Allow file downloads.
-                'uploadfiles'  => 1,      // Allow file uploads.
+                'downloadfiles' => 1, // Allow file downloads.
+                'uploadfiles'  => 1, // Allow file uploads.
                 'enabled' => 1,
+        ],
+        'CatQuiz Hub Service' => [
+                'functions' => [
+                        // Endpoint on hub if node submits responses.
+                        'local_catquiz_hub_collect_responses',
+                        // Endpoint on hub if node wants to fetch.
+                        'local_catquiz_hub_distribute_parameters',
+                        // Endpoint on hub to enqueue param calculation.
+                        'local_catquiz_hub_enqueue_parameter_recalculation',
+                        // Endpoint on node to fetch parameters from hub.
+                        'local_catquiz_node_fetch_parameters',
+                        // Endpoint on node to submit parameters to hub.
+                        'local_catquiz_node_submit_responses',
+                ],
+                'restrictedusers' => 0, // Allow all users.
+                'enabled' => 1,
+                'shortname' => 'local_catquiz_hub_service',
+                'downloadfiles' => 0,
+                'uploadfiles' => 0,
         ],
 ];
 
@@ -118,5 +137,51 @@ $functions = [
                 'description' => 'Sends an event about a clicked feedback tab',
                 'type' => 'write',
                 'ajax' => 1,
+        ],
+        'local_catquiz_render_question_with_response' => [
+                'classname' => 'local_catquiz\external\render_question_with_response',
+                'description' => 'Renders a question with a response',
+                'type' => 'read',
+                'ajax' => 1,
+        ],
+        'local_catquiz_hub_collect_responses' => [
+            'classname' => 'local_catquiz\\external\\hub\\collect_responses',
+            'methodname' => 'execute',
+            'description' => 'Collects new responses from a node',
+            'type' => 'write',
+            'capabilities' => 'moodle/site:config',
+            'ajax' => true,
+        ],
+        'local_catquiz_hub_distribute_parameters' => [
+            'classname' => 'local_catquiz\\external\\hub\\distribute_parameters',
+            'methodname' => 'execute',
+            'description' => 'Allows nodes to fetch item parameters',
+            'type' => 'write',
+            'capabilities' => 'moodle/site:config',
+            'ajax' => true,
+        ],
+        'local_catquiz_hub_enqueue_parameter_recalculation' => [
+                'classname' => 'local_catquiz\\external\\hub\\enqueue_parameter_recalculation',
+                'methodname' => 'execute',
+                'description' => 'Enqueue an adhoc task to recalculate the parameters based on submitted responses',
+                'type' => 'write',
+                'capabilities' => 'moodle/site:config',
+                'ajax' => true,
+        ],
+        'local_catquiz_node_submit_responses' => [
+            'classname' => 'local_catquiz\\external\\node\\submit_responses',
+            'methodname' => 'execute',
+            'description' => 'Submit responses for a given scale ID from a node.',
+            'type' => 'write',
+            'capabilities' => 'moodle/site:config',
+            'ajax' => true,
+        ],
+        'local_catquiz_node_fetch_parameters' => [
+                'classname' => 'local_catquiz\\external\\node\\fetch_parameters',
+                'methodname' => 'execute',
+                'description' => 'Fetch item parameters from central instance',
+                'type' => 'write',
+                'capabilities' => 'moodle/site:config',
+                'ajax' => true,
         ],
 ];

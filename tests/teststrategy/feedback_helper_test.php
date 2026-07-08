@@ -36,12 +36,11 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @package    local_catquiz
  * @author     Magdalena Holczik
  * @copyright  2024 Wunderbyte GmbH <info@wunderbyte.at>
- * @license    http =>//www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  *
  * @covers \local_catquiz\teststrategy\feedback_helper
  */
-class feedback_helper_test extends advanced_testcase {
-
+final class feedback_helper_test extends advanced_testcase {
     /**
      * Test if correct string (label for chart) is returned correctly according to defined timerange and timestamp.
      *
@@ -58,7 +57,7 @@ class feedback_helper_test extends advanced_testcase {
         int $timerange,
         int $timestamp,
         string $expected
-    ) {
+    ): void {
         $datestringlabel = feedback_helper::return_datestring_label($timerange, $timestamp);
         $this->assertEquals($expected, $datestringlabel);
     }
@@ -88,7 +87,7 @@ class feedback_helper_test extends advanced_testcase {
             'month' => [
                 'timerange' => LOCAL_CATQUIZ_TIMERANGE_MONTH,
                 'timestamp' => 1714030970,
-                'expected' => "April",
+                'expected' => "April 24",
                 ],
             'quarter1' => [
                 'timerange' => LOCAL_CATQUIZ_TIMERANGE_QUARTEROFYEAR,
@@ -119,7 +118,7 @@ class feedback_helper_test extends advanced_testcase {
         float $value,
         int $classwidth,
         int $expected
-    ) {
+    ): void {
         $this->assertEquals($expected, feedback_helper::get_histogram_bin($value, $classwidth));
     }
 

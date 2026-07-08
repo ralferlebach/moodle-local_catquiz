@@ -31,13 +31,15 @@ use local_catquiz\catcontext;
 function xmldb_local_catquiz_install() {
     global $DB;
 
+    $dbman = $DB->get_manager();
+
     $role = $DB->get_record('role', ['shortname' => 'catquizmanager']);
     if (empty($role->id)) {
         $sql = "SELECT MAX(sortorder)+1 AS id FROM {role}";
         $max = $DB->get_record_sql($sql, []);
 
         $role = (object) [
-            'name' => 'catquiz Manager',
+            'name' => 'CAT Manager',
             'shortname' => 'catquizmanager',
             'description' => get_string('catquizroledescription', 'local_catquiz'),
             'sortorder' => $max->id,
@@ -75,6 +77,19 @@ function xmldb_local_catquiz_install() {
                 'timemodified' => time(),
                 'modifierid' => 2,
             ]);
+        }
+    }
+
+    // Also add 'component' and 'eventname' as index to the log table for improving performance.
+    $table = new xmldb_table('logstore_standard_log');
+    $indexes = [];
+    $indexes[] = new xmldb_index('component', XMLDB_INDEX_NOTUNIQUE, ['component']);
+    $indexes[] = new xmldb_index('eventname', XMLDB_INDEX_NOTUNIQUE, ['eventname']);
+
+    // Conditionally launch add fields, keys and indexes.
+    foreach ($indexes as $index) {
+        if ($dbman->table_exists($table) && !$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
         }
     }
 

@@ -68,6 +68,9 @@ class catscale_structure {
     /** @var ?int $depth */
     public ?int $depth = null;
 
+    /** @var string $label Internal identifier that is also used for syncing */
+    public string $label;
+
     /**
      * Constructor for a single catscale data object.
      *
@@ -81,18 +84,19 @@ class catscale_structure {
             if (!empty($data['id'])) {
                 $this->id = $data['id'];
             }
-            $this->parentid = $data['parentid'];
+            $this->parentid = $data['parentid'] ?? -1;
             $this->contextid = $data['contextid'] ?? null;
-            $this->timemodified = $data['timemodified'];
-            $this->timecreated = $data['timecreated'];
+            $this->timemodified = $data['timemodified'] ?? 0;
+            $this->timecreated = $data['timecreated'] ?? 0;
             $this->name = $data['name'];
+            $this->label = $data['label'] ?? strtolower($data['name']);
             $this->description = $data['description'] ?? '';
 
-            if ($data['parentid'] == 0) {
+            if (array_key_exists('parentid', $data) && $data['parentid'] == 0) {
                 $this->minscalevalue = isset($data["minscalevalue"]) ?
                     $data["minscalevalue"] : LOCAL_CATQUIZ_PERSONABILITY_LOWER_LIMIT;
             }
-            if ($data['parentid'] == 0) {
+            if (array_key_exists('parentid', $data) && $data['parentid'] == 0) {
                 $this->maxscalevalue = isset($data["maxscalevalue"]) ?
                     $data["maxscalevalue"] : LOCAL_CATQUIZ_PERSONABILITY_UPPER_LIMIT;
             }

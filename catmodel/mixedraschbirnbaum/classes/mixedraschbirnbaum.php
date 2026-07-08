@@ -24,10 +24,13 @@
 
 namespace catmodel_mixedraschbirnbaum;
 
+use coding_exception;
 use local_catquiz\catcalc;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_raschmodel;
+use stdClass;
 
 /**
  * Class mixedraschbirnbaum of catmodels.
@@ -36,6 +39,34 @@ use local_catquiz\local\model\model_raschmodel;
  * @license  http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class mixedraschbirnbaum extends model_raschmodel {
+
+    /**
+     * {@inheritDoc}
+     *
+     * @param stdClass $record
+     * @return array
+     */
+    public static function get_parameters_from_record(stdClass $record): array {
+        return [
+            'difficulty' => $record->difficulty,
+            'discrimination' => $record->discrimination,
+            'guessing' => $record->guessing,
+        ];
+    }
+
+    /**
+     * Allows subclasses to overwrite the parameters.
+     *
+     * @param stdClass $record
+     * @param array $parameters
+     * @return stdClass
+     */
+    public static function add_parameters_to_record(stdClass $record, array $parameters): stdClass {
+        $record->difficulty = $parameters['difficulty'];
+        $record->discrimination = $parameters['discrimination'];
+        $record->guessing = $parameters['guessing'];
+        return $record;
+    }
 
     /**
      * Returns the name of this model.
@@ -71,12 +102,13 @@ class mixedraschbirnbaum extends model_raschmodel {
      * Estimate item parameters
      *
      * @param mixed $itemresponse
+     * @param ?model_item_param $startvalue
      *
      * @return array
      *
      */
-    public function calculate_params($itemresponse): array {
-        return catcalc::estimate_item_params($itemresponse, $this);
+    public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array {
+        return catcalc::estimate_item_params($itemresponse, $this, $startvalue);
     }
 
     // Calculate the Likelihood.
@@ -557,6 +589,37 @@ class mixedraschbirnbaum extends model_raschmodel {
                 0, // Calculate d/db d/dc.
                 0, // Calculate d²/dc².
             ],
+        ];
+    }
+
+    /**
+     * Get default params
+     *
+     * @return array
+     */
+    public function get_default_params(): array {
+        return [
+            'difficulty' => 0.0,
+            'discrimination' => 1.0,
+            'guessing' => 0.5,
+        ];
+    }
+
+    /**
+     * Get static param array
+     *
+     * @param model_item_param $param
+     * @return array
+     * @throws coding_exception
+     */
+    public function get_static_param_array(model_item_param $param): array {
+        $difflabel = get_string('difficulty', 'local_catquiz');
+        $disclabel = get_string('discrimination', 'local_catquiz');
+        $guessinglabel = get_string('guessing', 'local_catquiz');
+        return [
+            $difflabel => $param->get_difficulty(),
+            $disclabel => $param->get_params_array()['discrimination'],
+            $guessinglabel => $param->get_params_array()['guessing'],
         ];
     }
 }

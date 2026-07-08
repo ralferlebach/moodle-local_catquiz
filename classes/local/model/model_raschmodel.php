@@ -23,8 +23,13 @@
 
 namespace local_catquiz\local\model;
 
+use coding_exception;
+use Exception;
 use local_catquiz\catcalc_ability_estimator;
 use local_catquiz\catcalc_item_estimator;
+use moodle_exception;
+use MoodleQuickForm;
+use stdClass;
 
 /**
  * This class implements model raschmodel.
@@ -33,6 +38,13 @@ use local_catquiz\catcalc_item_estimator;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class model_raschmodel extends model_model implements catcalc_item_estimator, catcalc_ability_estimator {
+
+    /**
+     * @var int PRECISION
+     *
+     * The precision used for the item parameters.
+     */
+    public const PRECISION = 3;
 
     /**
      * Likelihood 1pl.
@@ -47,6 +59,95 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
 
         $discrimination = 1; // Hardcode override because of 1pl.
         return (1 / (1 + exp($discrimination * ($itemdifficulty - $personability))));
+    }
+
+    /**
+     * Helper class that gets the key of an ip-array by given fraction
+     *
+     * @param float $frac
+     * @param array $array (e.g. $ip['difficulties'])
+     *
+     * @return int
+     *
+     */
+    protected static function get_key_by_fractions(float $frac, array $array): int {
+        $n = 0;
+        foreach ($array as $key => $val) {
+            if ((float) $key < $frac) {
+                $n++;
+            } else {
+                return $n;
+            }
+        }
+        return $n;
+    }
+
+    /**
+     * Helper class that sort array with fractions as key
+     *
+     * @param array $array (e.g. $ip['difficulties'])
+     * @param int $precission
+     *
+     * @return array
+     *
+     */
+    protected static function sort_fractions(array $array, int $precission = self::PRECISION): array {
+        // Make sure the array is sanitized first.
+        $array = self::sanitize_fractions($array, $precission);
+
+        $tmpkey = [];
+        $tmpval = [];
+
+        foreach ($array as $key => $val) {
+            $tmpkey[] = (float) $key;
+            $tmpval[] = (float) $val;
+        }
+
+        asort($tmpkey);
+
+        $tmp = [];
+        foreach ($tmpkey as $arraykey => $frac) {
+            $key = (string) sprintf("%1.". $precission . "f", (float) $frac);
+            $tmp[$key] = $tmpval[$arraykey];
+        }
+
+        return $tmp;
+    }
+
+    /**
+     * Helper class that sanitizes an array with fractions as key
+     *
+     * @param array $array (e.g. $ip['difficulties'])
+     * @param int $precission
+     *
+     * @return array
+     *
+     */
+    protected static function sanitize_fractions(array $array, int $precission = self::PRECISION): array {
+        $tmp = [];
+
+        foreach ($array as $key => $val) {
+            $key = (string) sprintf("%1.". $precission . "f", (float) $key);
+            $tmp[$key] = (float) $val;
+        }
+
+        return $tmp;
+    }
+
+    /**
+     * Get all fractions out of parts of ip array
+     *
+     * @param array $array
+     * @return array of fractions as strings
+     */
+    protected static function get_fractions(array $array): array {
+        $a = self::sanitize_fractions($array);
+        $frac = [];
+
+        foreach ($a as $fraction => $val) {
+            $frac[] = $fraction;
+        }
+        return $frac;
     }
 
     /**
@@ -88,7 +189,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     public function calc_dic_item(model_person_param_list $personabilities, model_item_param $item, model_responses $k) {
         $result = 0;
         foreach ($personabilities->only_valid() as $pp) {
-            $userresponse = $k->get_item_response_for_person($item->get_id(), $pp->get_id());
+            $userresponse = $k->get_item_response_for_person($item->get_componentid(), $pp->get_userid());
             if (is_null($userresponse)) {
                 continue;
             }
@@ -193,7 +294,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      *
      * @param model_responses $responses
      * @param model_person_param_list $personparams
-     * @param model_item_param_list|null $olditemparams
+     * @param model_item_param_list|null $startvalues
      *
      * @return model_item_param_list
      *
@@ -201,25 +302,18 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     public function estimate_item_params(
         model_responses $responses,
         model_person_param_list $personparams,
-        ?model_item_param_list $olditemparams = null): model_item_param_list {
+        ?model_item_param_list $startvalues = null): model_item_param_list {
         $estimateditemparams = new model_item_param_list();
-        foreach ($responses->get_item_response($personparams) as $itemid => $itemresponse) {
-            $oldparam = $olditemparams[$itemid] ?? null;
-            if ($oldparam && $oldparam->get_status() >= LOCAL_CATQUIZ_STATUS_CALCULATED) {
-                $estimateditemparams->add($oldparam);
-                continue;
-            }
-            $parameters = $this->calculate_params($itemresponse);
+        $filteredresponses = $responses->prune()->get_item_response();
+        if (!$filteredresponses) {
+            throw new moodle_exception('noresponsestoestimate', 'local_catquiz');
+        }
+        foreach ($filteredresponses as $itemid => $itemresponse) {
+            $parameters = $this->calculate_params($itemresponse, $startvalues[$itemid] ?? null);
             // Now create a new item difficulty object (param).
-            $param = $this
-                ->create_item_param($itemid)
-                ->set_parameters($parameters)
+            $param = $starvalues[$itemid] ?? $this->create_item_param($itemid);
+            $param->set_parameters($parameters)
                 ->set_status(LOCAL_CATQUIZ_STATUS_CALCULATED);
-
-            if ($oldparam) {
-                $param->set_status($olditemparams[$itemid]->get_status());
-            }
-            // ... and append it to the list of calculated item difficulties
             $estimateditemparams->add($param);
         }
         return $estimateditemparams;
@@ -229,9 +323,10 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      * Returns the item parameters as associative array, with the parameter name as key.
      *
      * @param mixed $itemresponse
+     * @param ?model_item_param $startvalue
      * @return array
      */
-    abstract protected function calculate_params($itemresponse): array;
+    abstract public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array;
 
     /**
      * Likelihood.
@@ -337,5 +432,134 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
         }
 
         return $pp;
+    }
+
+    /**
+     * Definition after data callback
+     *
+     * @param MoodleQuickForm $mform
+     * @param model_item_param $param
+     * @param string $groupid
+     * @return void
+     * @throws coding_exception
+     */
+    public function definition_after_data_callback(MoodleQuickForm &$mform, model_item_param $param, string $groupid): void {
+        $group = [];
+        $fields = $this->get_parameter_fields($param);
+        $newfields = ['fraction', 'difficulty'];
+        $newfielddata = implode(
+            ';',
+            array_map(
+                fn ($fieldname) => sprintf(
+                    '%s:%s',
+                    $fieldname,
+                    get_string($fieldname, 'local_catquiz')
+                ),
+                $newfields
+            )
+        );
+        foreach ($fields as $label => $val) {
+            $this->add_element_to_group($label, $groupid, $group, $mform);
+        }
+        if ($this->supports_parameter_edits()) {
+            $addparamsbutton = $mform->createElement(
+                'submit',
+                'additemparams',
+                get_string('add'),
+                [
+                    'name' => 'additemparam',
+                    'value' => $param->get_model_name(),
+                    'data-action' => 'additemparams',
+                    'data-model' => $param->get_model_name(),
+                    'data-fields' => $newfielddata,
+                ]
+            );
+            $group[] = $addparamsbutton;
+        }
+        $mform->addGroup($group, $groupid, '', '<span class="break"></span>', true, ['class' => 'param-group']);
+    }
+
+    /**
+     * Add element to group
+     *
+     * @param string $name
+     * @param string $id
+     * @param array $group
+     * @param mixed $mform
+     * @return void
+     * @throws coding_exception
+     */
+    protected function add_element_to_group(string $name, string $id, array &$group, &$mform) {
+        if (preg_match('/(.*)_(\d+)$/', $name, $matches)) {
+            $label = get_string($matches[1], 'local_catquiz') . ' ' . $matches[2];
+        } else {
+            $label = get_string($name, 'local_catquiz');
+        }
+        $value = $mform->createElement('text', $name, $label, ["class" => 'form-control param-input']);
+        $value->setType($name, PARAM_FLOAT);
+        $group[] = $value;
+    }
+
+    /**
+     * Get parameter fields
+     *
+     * @param model_item_param $param
+     * @return array
+     */
+    public function get_parameter_fields(model_item_param $param): array {
+        if (!$params = $param->get_params_array()) {
+            return $this->get_default_params();
+        }
+        return $params;
+    }
+
+    /**
+     * Get default params
+     * @return array
+     */
+    public function get_default_params(): array {
+        return ['difficulty' => 0.0, 'discrimination' => 0.0];
+    }
+
+    /**
+     * Convert form array to record
+     *
+     * @param array $formarray
+     * @return stdClass
+     */
+    public function form_array_to_record(array $formarray): stdClass {
+        return (object) $formarray;
+    }
+
+    /**
+     * Allows extending the itemparam with new fields.
+     *
+     * This is used for multiparameter models and allows to add a new
+     * [fraction:difficulty] or [intercept:difficulty] entry.
+     *
+     * @param array $existingparams
+     * @param stdClass $newparam
+     * @return array
+     * @throws Exception
+     */
+    public function add_new_param(array $existingparams, stdClass $newparam): array {
+        throw new Exception("Not implemented for this class");
+    }
+
+    /**
+     * Allows removal of a parameter value.
+     *
+     * This is used for multiparameter models and allows removing a
+     * [fraction:difficulty] or [intercept:difficulty] pair of the entry.
+     * The value to be removed is identified by a 0-based index of the
+     * respective multiparam array.
+     *
+     * @param array $existingparams
+     * @param int $index
+     * @throws \Exception
+     * @return array
+     */
+    public function drop_param_at(array $existingparams, int $index): array {
+        throw new Exception("Not implemented for this class");
     }
 }

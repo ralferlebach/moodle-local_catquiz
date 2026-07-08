@@ -38,9 +38,7 @@ use local_catquiz\teststrategy\preselect_task\strategyfastestscore;
  *
  * @covers \local_catquiz\teststrategy\preselect_task\strategyfastestscore
  */
-class strategyfastestscore_test extends basic_testcase {
-
-
+final class strategyfastestscore_test extends basic_testcase {
     /**
      * Test the strategyfastestscore class
      *
@@ -50,14 +48,13 @@ class strategyfastestscore_test extends basic_testcase {
      * @param mixed $expected
      *
      * @return void
+     * @return void
      */
     public function test_returns_expected_question_from_expected_catscale(
-        array $context, $expected
-    ) {
-        $next = fn () => 'nevercalled';
-        $result = (new strategyfastestscore())->run(
-            $context,
-            $next);
+        array $context,
+        $expected
+    ): void {
+        $result = (new strategyfastestscore())->run($context);
         $this->assertEquals($expected['id'], $result->unwrap()->id);
     }
 

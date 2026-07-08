@@ -22,6 +22,7 @@
  * @license     https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use local_catquiz\task\cancel_expired_attempts;
 use local_catquiz\task\recalculate_cat_model_params;
 
 defined('MOODLE_INTERNAL') || die();
@@ -35,5 +36,33 @@ $tasks = [
         'day' => '*',
         'dayofweek' => '*',
         'month' => '*',
+    ],
+    [
+        'classname' => cancel_expired_attempts::class,
+        'blocking' => 0,
+        'minute' => '*/5', // Runs every 5 minutes.
+        'hour' => '*',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*',
+    ],
+    [
+        'classname' => 'local_catquiz\task\recalculate_remote_item_parameters',
+        'blocking' => 0,
+        'minute' => '0',
+        'hour' => '3',
+        'day' => '1',
+        'month' => '*',
+        'dayofweek' => '*',
+        'disabled' => 0,
+    ],
+    [
+        'classname' => 'local_catquiz\task\scheduled_submit_responses',
+        'blocking' => 0,
+        'minute' => '0',    // At the top of the hour.
+        'hour' => '3',      // Run daily at 3 AM.
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
     ],
 ];

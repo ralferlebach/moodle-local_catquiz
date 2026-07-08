@@ -29,7 +29,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
   Scenario: CATquiz settings: teacher setup basic settings and student should access attempt
     Given I log in as "teacher1"
     And I am on "Course 1" course homepage with editing mode on
-    And I add a "Adaptive Quiz" to section "1"
+    And I add a "Adaptive Quiz" to section "1" using the activity chooser
     And I set the following fields to these values:
       | catmodel                                              | empty |
     And I wait until the page is ready
@@ -125,7 +125,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | startwitheasiestquestion    | 7                    | 0.4                       | 0.6                       | 3                       |
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
-    And I click on "Feedback for \"Simulation\"" "text"
+    And I click on "Feedback for “Simulation”" "text"
     Then I should see "-6" in the "//div[@data-name='feedback_scale_Simulation_range_1']//div[@id='fitem_id_lowest_limit']" "xpath_element"
     And the field "Upper limit" in the "//div[@data-name='feedback_scale_Simulation_range_1']" "xpath_element" matches value "-2"
     And the field "Lower limit" in the "//div[@data-name='feedback_scale_Simulation_range_2']" "xpath_element" matches value "-2"
@@ -146,7 +146,6 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I set the following fields to these values:
       | catmodel                                   | Catquiz CAT model                |
       | Select CAT scale                           | Simulation                       |
-      | Passing level in %                         | 500                              |
       | Purpose of test                            | Infer lowest skill gap           |
       | Activate pilot mode                        | 1                                |
       | Proportion of questions to be piloted in % | 20                               |
@@ -165,15 +164,12 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
       | catquiz_standarderrorgroup[catquiz_standarderror_max] | 2    |
     When I click on "Save and display" "button"
     ## Errors validation 1: invalid numbers or min > max or no values
-    Then I should see "Input a number from 0 to 100" in the "#fitem_id_catquiz_passinglevel" "css_element"
-    And I should see "Minimum must be less than maximum" in the "#fgroup_id_maxquestionsgroup" "css_element"
+    Then I should see "Minimum must be less than maximum" in the "#fgroup_id_maxquestionsgroup" "css_element"
     And I should see "Minimum must be less than maximum" in the "#fgroup_id_maxquestionsscalegroup" "css_element"
     And I should see "Input at least one value of time limit" in the "#fgroup_id_catquiz_timelimitgroup" "css_element"
     ## Errors validation 1: SE min must be positive
     And I should see "Input a positive number" in the "#fgroup_id_catquiz_standarderrorgroup" "css_element"
     And I set the following fields to these values:
-      ## Fix errors
-      | Passing level in %                                      | 50 |
       ## Intentional error - empty catquiz_standarderror_min
       | catquiz_standarderrorgroup[catquiz_standarderror_min] |  |
       ## Intentional error catquiz_minquestionspersubscale > catquiz_maxquestions
@@ -220,7 +216,6 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And the following fields match these values:
       | catmodel                                   | Catquiz CAT model         |
       | Select CAT scale                           | Simulation                |
-      | Passing level in %                         | 50                        |
       | Purpose of test                            | Infer lowest skill gap    |
       | Activate pilot mode                        | 1                         |
       | Proportion of questions to be piloted in % | 20                        |
@@ -283,9 +278,9 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And the field "Lower limit" in the "//div[@data-name='feedback_scale_Simulation_range_2']" "xpath_element" matches value "1"
     And I should not see "Feedback for range 3" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
     ## Check visibility of feedback form links for other catscales
-    And I should see "Feedback for \"SimA\"" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
-    And I should see "Feedback for \"SimB\"" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
-    And I should see "Feedback for \"SimC\"" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
+    And I should see "Feedback for “SimA”" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
+    And I should see "Feedback for “SimB”" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
+    And I should see "Feedback for “SimC”" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
     ## Save and verify feedback configuration
     And I click on "Save and display" "button"
     And I wait until the page is ready
@@ -295,7 +290,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I click on "Save and display" "button"
     And I follow "Settings"
     And I wait until the page is ready
-    Then I click on "Feedback for \"Simulation\"" "text"
+    Then I click on "Feedback for “Simulation”" "text"
     And I wait until the page is ready
     ## Range 2 - wb_colourpicker:
     ## -direct xpath access

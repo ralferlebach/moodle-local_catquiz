@@ -40,8 +40,7 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  *
  * @covers \local_catquiz\teststrategy\strategy\personability_loader
  */
-class personability_loader_test extends TestCase {
-
+final class personability_loader_test extends TestCase {
     /**
      * Tests that the ability is not updated in cases where it should not be updated.
      *
@@ -49,7 +48,7 @@ class personability_loader_test extends TestCase {
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      */
-    public function test_personability_loader_works_as_expected() {
+    public function test_personability_loader_works_as_expected(): void {
         // This is almost the same class as the real personability_loader. It
         // just changes the part that retrieves the person abilities from the
         // database.

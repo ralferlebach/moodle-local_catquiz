@@ -25,10 +25,11 @@
  namespace catmodel_mixedraschbirnbaum;
 
 use local_catquiz\local\model\model_model;
+use local_catquiz\local\model\model_item_response;
+use local_catquiz\local\model\model_person_param;
 use PHPUnit\Framework\ExpectationFailedException;
 use PHPUnit\Framework\TestCase;
 use SebastianBergmann\RecursionContext\InvalidArgumentException;
-use local_catquiz\local\model\model_responses;
 
 /**
  * Tests for core_message_inbound to test Variable Envelope Return Path functionality.
@@ -38,7 +39,38 @@ use local_catquiz\local\model\model_responses;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \catmodel_mixedraschbirnbaum\mixedraschbirnbaum
  */
-class mixedraschbirnbaum_test extends TestCase {
+final class mixedraschbirnbaum_test extends TestCase {
+    /**
+     * Tests that the model calculates the item parameters correctly.
+     *
+     * @dataProvider calculate_params_returns_expected_values_provider
+     *
+     * @param array $itemresponse
+     * @param array $expected
+     *
+     * @return void
+     */
+    public function test_calculate_params_returns_expected_values($itemresponse, array $expected): void {
+        $raschbirnbaum = $this->getmodel();
+        $result = $raschbirnbaum->calculate_params($itemresponse);
+        $this->assertEqualsWithDelta($expected['difficulty'], $result['difficulty'], 0.0001);
+        $this->assertEqualsWithDelta($expected['discrimination'], $result['discrimination'], 0.0001);
+        $this->assertEqualsWithDelta($expected['guessing'], $result['guessing'], 0.0001);
+    }
+
+    /**
+     * Provider for test_calculate_params_returns_expected_values
+     *
+     * @return array
+     */
+    public static function calculate_params_returns_expected_values_provider(): array {
+        return [
+                [
+                    'itemresponse' => [new model_item_response('Item1', 0.3, (new model_person_param('1', 1))->set_ability(0.2))],
+                    'expected' => ['difficulty' => 0.2017, 'discrimination' => 0.0057, 'guessing' => 0.0],
+                ],
+        ];
+    }
 
     /**
      * This test calls the get_log_jacobain function with the model and test its output with verified data.
@@ -50,12 +82,12 @@ class mixedraschbirnbaum_test extends TestCase {
      * @param array $ip
      * @param array $expected
      *
-     * @return mixed
+     * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      *
      */
-    public function test_get_log_jacobian(array $pp, float $k, array $ip, array $expected) {
+    public function test_get_log_jacobian(array $pp, float $k, array $ip, array $expected): void {
         $result = mixedraschbirnbaum::get_log_jacobian($pp, $ip, $k);
         for ($i = 0; $i < count($result); $i++) {
             $this->assertEqualsWithDelta($expected[$i], $result[$i], 0.0001);
@@ -72,12 +104,12 @@ class mixedraschbirnbaum_test extends TestCase {
      * @param array $ip
      * @param array $expected
      *
-     * @return mixed
+     * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      *
      */
-    public function test_get_log_hessian(array $pp, float $k, array $ip, array $expected) {
+    public function test_get_log_hessian(array $pp, float $k, array $ip, array $expected): void {
         $resultsmatrix = mixedraschbirnbaum::get_log_hessian($pp, $ip, $k);
         for ($i = 0; $i < count($resultsmatrix); $i++) {
             for ($j = 0; $j < count($resultsmatrix[$i]); $j++) {
@@ -93,9 +125,10 @@ class mixedraschbirnbaum_test extends TestCase {
      * @param float $k
      * @param array $ip
      * @param float $expected
+     *
      * @return void
      */
-    public function test_log_likelihood_p(array $pp, float $k, array $ip, float $expected) {
+    public function test_log_likelihood_p(array $pp, float $k, array $ip, float $expected): void {
         $result = mixedraschbirnbaum::log_likelihood_p($pp, $ip, $k);
 
         // We only verify for four commas after the dot.
@@ -112,9 +145,10 @@ class mixedraschbirnbaum_test extends TestCase {
      * @param float $k
      * @param array $ip
      * @param float $expected
+     *
      * @return void
      */
-    public function test_log_likelihood_p_p(array $pp, float $k, array $ip, float $expected) {
+    public function test_log_likelihood_p_p(array $pp, float $k, array $ip, float $expected): void {
         $result = mixedraschbirnbaum::log_likelihood_p_p($pp, $ip, $k);
 
         $this->assertEqualsWithDelta($expected, $result, 0.001);
@@ -128,9 +162,10 @@ class mixedraschbirnbaum_test extends TestCase {
      * @param float $k
      * @param array $ip
      * @param array $expected
+     *
      * @return void
      */
-    public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected) {
+    public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
         $this->markTestSkipped('The formula returns unexpected results but we do not use it anywhere at the moment');
 
         $result = $this->getmodel()->least_mean_squares_1st_derivative_ip($pp, $ip, $k, $n);
@@ -149,9 +184,10 @@ class mixedraschbirnbaum_test extends TestCase {
      * @param float $k
      * @param array $ip
      * @param array $expected
+     *
      * @return void
      */
-    public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected) {
+    public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
         $this->markTestSkipped('The formula returns unexpected results but we do not use it anywhere at the moment');
 
         $result = $this->getmodel()->least_mean_squares_2nd_derivative_ip($pp, $ip, $k, $n);

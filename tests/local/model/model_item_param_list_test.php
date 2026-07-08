@@ -26,6 +26,8 @@
 namespace local_catquiz\local\model;
 
 use advanced_testcase;
+use SebastianBergmann\RecursionContext\InvalidArgumentException;
+use PHPUnit\Framework\ExpectationFailedException;
 use UnexpectedValueException;
 
 /** model_item_param_list_test
@@ -35,7 +37,7 @@ use UnexpectedValueException;
  *
  * @covers \local_catquiz\local\model\model_item_param_list
  */
-class model_item_param_list_test extends advanced_testcase {
+final class model_item_param_list_test extends advanced_testcase {
     /**
      * Test import of files
      *
@@ -43,10 +45,10 @@ class model_item_param_list_test extends advanced_testcase {
      *
      * @param array $record
      * @param array $expected
-     *
+     * @return void
      * @group large
      */
-    public function test_save_or_update_testitem_in_db(array $record, array $expected) {
+    public function test_save_or_update_testitem_in_db(array $record, array $expected): void {
         $this->resetAfterTest();
         $result = model_item_param_list::save_or_update_testitem_in_db($record);
 
@@ -65,6 +67,7 @@ class model_item_param_list_test extends advanced_testcase {
             'nameandtreeset' => [
                 'record' => [
                         'componentid' => 0,
+                        'itemid' => 0,
                         'status' => 4,
                         'qtype' => "Multiple-Choice",
                         'model' => "raschbirnbaum",
@@ -85,6 +88,37 @@ class model_item_param_list_test extends advanced_testcase {
     }
 
     // TODO: Test for update_in_scale.
+
+    /**
+     * Checks if we get the expected CSV row strings.
+     *
+     * @return void
+     * @throws InvalidArgumentException
+     * @throws ExpectationFailedException
+     */
+    public function test_can_be_printed_as_csv(): void {
+        $ipl = new model_item_param_list();
+        $ipl->add(
+            (new model_item_param('A01', 'mixedraschbirnbaum'))
+                ->set_parameters(
+                    ['difficulty' => 1.2, 'guessing' => 2.3, 'discrimination' => 3.4]
+                )
+        );
+        $rows = $ipl->as_csv(true);
+
+        $this->assertEquals('difficulty;guessing;discrimination;model', $rows[0]);
+        $this->assertEquals('A01;1.2;2.3;3.4;mixedraschbirnbaum', $rows[1]);
+
+        $ipl2 = new model_item_param_list();
+        $ipl2->add(
+            (new model_item_param('A01', 'rasch'))
+                ->set_parameters(
+                    ['difficulty' => 1.8]
+                )
+        );
+        $rows = $ipl2->as_csv(true);
+
+        $this->assertEquals('difficulty;model', $rows[0]);
+        $this->assertEquals('A01;1.8;rasch', $rows[1]);
+    }
 }
-
-

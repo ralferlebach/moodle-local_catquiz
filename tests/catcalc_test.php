@@ -26,10 +26,15 @@
 namespace local_catquiz;
 
 use basic_testcase;
+use catmodel_raschbirnbaum\raschbirnbaum;
 use coding_exception;
 use Exception;
 use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_item_response;
+use local_catquiz\local\model\model_model;
+use local_catquiz\local\model\model_person_param;
+use local_catquiz\local\model\model_responses;
 use moodle_exception;
 use SebastianBergmann\RecursionContext\InvalidArgumentException;
 use PHPUnit\Framework\ExpectationFailedException;
@@ -50,7 +55,7 @@ require_once($CFG->dirroot . '/local/catquiz/tests/lib.php');
  * @covers \local_catquiz\catcalc
  *
  */
-class catcalc_test extends basic_testcase {
+final class catcalc_test extends basic_testcase {
     /**
      * Compares our results with the ones from the SimulatinoSteps radikaler CAT CSV
      *
@@ -79,7 +84,7 @@ class catcalc_test extends basic_testcase {
         float $mean,
         float $sd,
         string $personid
-    ) {
+    ): void {
         $ability = catcalc::estimate_person_ability($responses, $items, $startvalue, $mean, $sd);
         if (abs($ability) > 10.0) {
             $this->markTestSkipped('The ability is outside the trusted region.');
@@ -143,6 +148,114 @@ class catcalc_test extends basic_testcase {
     }
 
     /**
+     * Test the function to build item params
+     *
+     * @return void
+     * @throws InvalidArgumentException
+     * @throws ExpectationFailedException
+     */
+    public function test_build_item_param_jacobian(): void {
+        $itemresponse = [];
+        $model = model_model::get_instance('raschbirnbaum');
+        $this->assertEquals(fn () => 'b', catcalc::build_itemparam_jacobian($itemresponse, $model));
+    }
+
+    /**
+     * This test checks that there are no errors when updating the ability with different models.
+     *
+     * @param model_item_param_list $items
+     * @param array $responses
+     * @return void
+     *
+     * @dataProvider ability_can_be_calculated_with_all_models_provider
+     */
+    public function test_ability_can_be_calculated_with_all_models(model_item_param_list $items, array $responses): void {
+        $this->doesNotPerformAssertions();
+        $ability = catcalc::estimate_person_ability($responses, $items);
+    }
+
+    /**
+     * Provider for test_ability_can_be_calculated_with_all_models
+     *
+     * @return array
+     */
+    public static function ability_can_be_calculated_with_all_models_provider(): array {
+        $grmgeneralizedjson = json_encode([
+            'difficulties' => [
+                '0.000' => 0.12,
+                '0.333' => 0.35,
+                '0.666' => 0.68,
+                '1.000' => 0.83,
+            ],
+        ]);
+        $grmjson = json_encode([
+            'difficulties' => [
+                '0.000' => 0.12,
+                '0.333' => 0.35,
+                '0.666' => 0.68,
+                '1.000' => 0.83,
+            ],
+        ]);
+        $pcmgeneralizedjson = json_encode([
+            'intercepts' => [
+                '0.000' => 0.00,
+                '0.333' => 0.42,
+                '0.666' => 0.57,
+                '1.000' => 0.98,
+            ],
+        ]);
+        $pcmjson = json_encode([
+            'intercepts' => [
+                '0.000' => 0.10,
+                '0.333' => 0.48,
+                '0.666' => 0.53,
+                '1.000' => 0.88,
+            ],
+        ]);
+        $defaultrecord = [
+            'discrimination' => '1.2',
+            'contextid' => 1,
+            'timecreated' => time(),
+            'timemodified' => time(),
+        ];
+        $itemid = 'TEST01-01';
+        $grmgeneralizedrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $grmgeneralizedjson]);
+        $grmrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $grmjson]);
+        $pcmgeneralizedrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $pcmgeneralizedjson]);
+        $pcmrecord = (object) array_merge($defaultrecord, ['itemid' => 1, 'json' => $pcmjson]);
+
+        $grmgeneralizedparam = new model_item_param($itemid, 'grmgeneralized', [], 4, $grmgeneralizedrecord);
+        $grmparam = new model_item_param($itemid, 'grm', [], 4, $grmrecord);
+        $pcmgeneralizedparam = new model_item_param($itemid, 'pcmgeneralized', [], 4, $pcmgeneralizedrecord);
+        $pcmparam = new model_item_param($itemid, 'pcm', [], 4, $pcmrecord);
+
+        $pp = new model_person_param('1', 1);
+        $resp = new model_item_response($itemid, 1.0, $pp);
+        $responses = [
+            $itemid => $resp,
+        ];
+
+        return [
+            'grmgeneralized' => [
+                'itemparams' => (new model_item_param_list())->add($grmgeneralizedparam),
+                'responses' => $responses,
+            ],
+            'grm' => [
+                'itemparams' => (new model_item_param_list())->add($grmparam),
+                'responses' => $responses,
+            ],
+            'pcmgeneralized' => [
+                'itemparams' => (new model_item_param_list())->add($pcmgeneralizedparam),
+                'responses' => $responses,
+            ],
+            'pcm' => [
+                'itemparams' => (new model_item_param_list())->add($pcmparam),
+                'responses' => $responses,
+            ],
+        ];
+    }
+
+    /**
      * Internal function to filter responses to questions with a certain label.
      *
      * @param string $label     The label to filter for.
@@ -198,9 +311,10 @@ class catcalc_test extends basic_testcase {
             }
 
             if ($inpersonrange) {
-                if ($data[0] === '' && $data[1] === ''
-                || $data[0] === $person && $data[1] !== '' && $data[2] === ''
-                || $data[0] === $person && ! is_numeric($data[1])
+                if (
+                    $data[0] === '' && $data[1] === ''
+                    || $data[0] === $person && $data[1] !== '' && $data[2] === ''
+                    || $data[0] === $person && ! is_numeric($data[1])
                 ) {
                     $inpersonrange = false;
                     $person = '';
@@ -222,11 +336,15 @@ class catcalc_test extends basic_testcase {
                     $items = clone($steps[$person][$step - 1]['items']);
                     $items->add($item);
                     $responses = $steps[$person][$step - 1]['responses'];
-                    $responses[$itemid] = ['fraction' => floatval($fraction)];
+                    $pp = new model_person_param($person, 1);
+                    $responses[$itemid] = new model_item_response($itemid, floatval($fraction), $pp);
                     $startvalue = $steps[$person][$step - 1]['expected_ability'];
                 } else {
                     $items = (new model_item_param_list())->add($item);
-                    $responses = [$itemid => ['fraction' => floatval($fraction)]];
+                    $pp = new model_person_param($person, 1);
+                    $responses = [
+                        $itemid => new model_item_response($itemid, floatval($fraction), $pp),
+                    ];
                     $startvalue = $mean;
                 }
                 $steps[$person][$step]['items'] = $items;

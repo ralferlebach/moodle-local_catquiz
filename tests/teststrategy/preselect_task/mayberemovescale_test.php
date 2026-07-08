@@ -42,8 +42,7 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  *
  * @covers \local_catquiz\teststrategy\preselect_task\mayberemovescale
  */
-class mayberemovescale_test extends basic_testcase {
-
+final class mayberemovescale_test extends basic_testcase {
     /**
      * Test that questions of subscales are removed as needed.
      *
@@ -53,7 +52,7 @@ class mayberemovescale_test extends basic_testcase {
      * @param mixed $attemptcontext
      * @param mixed $played
      *
-     * @return mixed
+     * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      *
@@ -62,7 +61,7 @@ class mayberemovescale_test extends basic_testcase {
         $expected,
         $attemptcontext,
         $played
-    ) {
+    ): void {
         $progressstub = $this->createStub(progress::class);
         $progressstub->method('get_playedquestions')
             ->willReturn(

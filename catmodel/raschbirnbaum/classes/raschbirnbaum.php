@@ -24,8 +24,12 @@
 
 namespace catmodel_raschbirnbaum;
 
+use coding_exception;
 use local_catquiz\catcalc;
+use local_catquiz\local\model\model_item_param;
+use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_raschmodel;
+use stdClass;
 
 /**
  * Class rasch of catmodels.
@@ -35,6 +39,19 @@ use local_catquiz\local\model\model_raschmodel;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class raschbirnbaum extends model_raschmodel {
+
+    /**
+     * {@inheritDoc}
+     *
+     * @param stdClass $record
+     * @return array
+     */
+    public static function get_parameters_from_record(stdClass $record): array {
+        return [
+            'difficulty' => $record->difficulty,
+            'discrimination' => $record->discrimination,
+        ];
+    }
 
     // Definitions and Dimensions.
 
@@ -70,12 +87,13 @@ class raschbirnbaum extends model_raschmodel {
      * Estimate item parameters
      *
      * @param mixed $itemresponse
+     * @param ?model_item_param $startvalue
      *
      * @return array
      *
      */
-    public function calculate_params($itemresponse): array {
-        return catcalc::estimate_item_params($itemresponse, $this);
+    public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array {
+        return catcalc::estimate_item_params($itemresponse, $this, $startvalue);
     }
 
     // Calculate the Likelihood.
@@ -481,6 +499,22 @@ class raschbirnbaum extends model_raschmodel {
                 -($bs ** 2 * exp($bs * ($bp + $ip['discrimination']))) /
                     (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculates d²/db².
             ],
+        ];
+    }
+
+    /**
+     * Get static param array
+     *
+     * @param model_item_param $param
+     * @return array
+     * @throws coding_exception
+     */
+    public function get_static_param_array(model_item_param $param): array {
+        $difflabel = get_string('difficulty', 'local_catquiz');
+        $disclabel = get_string('discrimination', 'local_catquiz');
+        return [
+            $difflabel => $param->get_difficulty(),
+            $disclabel => $param->get_params_array()['discrimination'],
         ];
     }
 }

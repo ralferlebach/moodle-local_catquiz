@@ -38,15 +38,13 @@ use basic_testcase;
  * @covers \local_catquiz\catcontext
  *
  */
-class catcontext_test extends basic_testcase {
-
-
+final class catcontext_test extends basic_testcase {
     /**
      * Test if there is a default CAT context.
      *
      * @return void
      */
-    public function test_default_context_is_installed() {
+    public function test_default_context_is_installed(): void {
         global $DB;
         $contexts = $DB->get_records('local_catquiz_catcontext');
         $this->assertGreaterThan(0, count($contexts));

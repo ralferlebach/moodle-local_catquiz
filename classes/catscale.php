@@ -37,9 +37,11 @@ use local_catquiz\local\result;
 use local_catquiz\local\status;
 use context_system;
 use Exception;
+use local_catquiz\data\dataapi;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_model;
 use local_catquiz\local\model\model_strategy;
+use local_catquiz\output\catscales;
 use moodle_exception;
 use moodle_url;
 use stdClass;
@@ -500,10 +502,7 @@ class catscale {
      *
      */
     public static function get_subscale_ids(?int $catscaleid = null): array {
-        global $DB;
-
-        $all = $DB->get_records("local_catquiz_catscales", null, "", "id, parentid");
-
+        $all = dataapi::get_all_catscales();
         return self::add_subscales($catscaleid, $all);
     }
 
@@ -567,8 +566,7 @@ class catscale {
      *
      */
     public static function get_ancestors(int $catscaleid, int $returnnames = 1) {
-        global $DB;
-        $all = $DB->get_records("local_catquiz_catscales", null, "", "id, parentid, name");
+        $all = dataapi::get_all_catscales();
         $ancestorsintarray = self::add_parentscales($catscaleid, $all);
         switch ($returnnames) {
             case 1:
@@ -667,6 +665,14 @@ class catscale {
 
     /**
      * This function duplicates all the records from the old context for the new context.
+     *
+     * Following steps are performed for each existing local_catquiz_itemparams item parameter:
+     * 1. Duplicate the item parameter
+     * 2. Duplicate the local_catquiz_items item that pointed to the previous
+     *    item parameter and make it point to the new item parameter via its
+     *    `activeparamid` field.
+     * 3. Update the duplicated item parameter so that its `itemid` field points to the duplicated item.
+     *
      * @param mixed $scaleid
      * @param mixed $oldcontextid
      * @param mixed $contextid
@@ -689,18 +695,96 @@ class catscale {
         $sql = "SELECT lcip.*
                 FROM {local_catquiz_items} lci
                 JOIN {local_catquiz_itemparams} lcip
-                ON (lci.componentid=lcip.componentid AND lci.componentname=lcip.componentname)
+                ON (lci.id = lcip.itemid AND lci.contextid = lcip.contextid)
                 WHERE lci.catscaleid $inorequal
                 AND lcip.contextid=:contextid";
         $params['catscaleid'] = $scaleid;
         $params['contextid'] = $oldcontextid;
+
+        $itemparams = $DB->get_records_sql($sql, $params);
+
+        // This holds a mapping of old itemparam to new itemparam, where the key is the old ID and the value the new ID.
+        $mapping = [];
+        $saved = [];
+        foreach ($itemparams as $record) {
+            $record->contextid = $contextid;
+            $oldid = $record->id;
+            unset($record->id);
+            $newid = $DB->insert_record('local_catquiz_itemparams', $record);
+            $record->id = $newid;
+            $saved[$newid] = $record;
+            $mapping[$oldid] = $newid;
+        }
+
+        if (!$mapping) {
+            return;
+        }
+
+        // For each new record that was pointed to as active param by a local_catquiz_items item, we duplicate that item
+        // for the new context and update the active param to point to the duplicated item param.
+        [$insql, $inparams] = $DB->get_in_or_equal(
+            array_keys($mapping),
+            SQL_PARAMS_NAMED,
+            'inoldparams'
+        );
+        $sql = <<<SQL
+            SELECT *
+            FROM {local_catquiz_items} lci
+            WHERE lci.contextid = :contextid
+            AND lci.activeparamid $insql
+        SQL;
+
+        $newitems = [];
+        $originalitems = $DB->get_records_sql(
+            $sql,
+            array_merge(['contextid' => $oldcontextid], $inparams)
+        );
+        foreach ($originalitems as $i) {
+            $i->contextid = $contextid;
+            $i->activeparamid = $mapping[$i->activeparamid];
+            unset($i->id);
+            $newitemid = $DB->insert_record('local_catquiz_items', $i);
+            $newitems[$i->activeparamid] = $newitemid;
+        }
+
+        // Now update the item params to point to the duplicated items.
+        foreach ($newitems as $ipid => $itemid) {
+            $itemparam = $saved[$ipid];
+            $itemparam->itemid = $itemid;
+            $DB->update_record('local_catquiz_itemparams', $itemparam, true);
+        }
+    }
+
+    /**
+     * This function duplicates all the records from the old context for the new context.
+     *
+     * @param int $scaleid
+     * @param int $oldcontextid
+     * @param int $contextid
+     * @return void
+     * @throws dml_exception
+     */
+    public static function duplicate_items_for_scale_with_new_contextid(int $scaleid, int $oldcontextid, int $contextid) {
+        global $DB;
+
+        // Make sure we don't do unnecessary work.
+        if ($oldcontextid == $contextid) {
+            return;
+        }
+
+        $sql = "SELECT lci.*
+                FROM {local_catquiz_items} lci
+                WHERE lci.catscaleid = :scaleid
+                AND lci.contextid = :contextid";
+        $params['contextid'] = $oldcontextid;
+        $params['scaleid'] = $scaleid;
 
         $records = $DB->get_records_sql($sql, $params);
 
         foreach ($records as $record) {
             $record->contextid = $contextid;
             unset($record->id);
-            $DB->insert_record('local_catquiz_itemparams', $record);
+            $DB->insert_record('local_catquiz_items', $record);
         }
     }
 

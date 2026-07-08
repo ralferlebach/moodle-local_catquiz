@@ -42,8 +42,7 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  *
  * @covers \local_catquiz\teststrategy\preselect_task\updatepersonability
  */
-class updatepersonability_test extends TestCase {
-
+final class updatepersonability_test extends TestCase {
     /**
      * Tests that the ability is not updated in cases where it should not be updated.
      *
@@ -54,12 +53,12 @@ class updatepersonability_test extends TestCase {
      * @param mixed $context
      * @param array $progressfakes
      *
-     * @return mixed
+     * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      *
      */
-    public function test_ability_calculation_is_skipped_correctly($expected, $lastquestion, $context, $progressfakes) {
+    public function test_ability_calculation_is_skipped_correctly($expected, $lastquestion, $context, $progressfakes): void {
         // We can not add a stub in the provider, so we do it here.
         $progressstub = $this->createStub(progress::class);
         $progressstub->method('get_last_question')
@@ -75,12 +74,11 @@ class updatepersonability_test extends TestCase {
 
         $context['progress'] = $progressstub;
 
-        $returncontext = fn($context) => result::ok($context);
         // The updatepersonaiblitytesting class is a slightly modified version
         // of the updatepersonability class that just overrides parts that load
         // data from the DB or cache.
         $updatepersonability = new updatepersonability_testing();
-        $result = $updatepersonability->process($context, $returncontext);
+        $result = $updatepersonability->run($context);
         $this->assertEquals($expected, $result->unwrap()['skip_reason']);
     }
 
@@ -111,6 +109,7 @@ class updatepersonability_test extends TestCase {
                     'contextid' => 1,
                     'catscaleid' => 1,
                     'userid' => $USER->id,
+                    'attemptid' => 123,
                     // Can be null here, because for pilot questions the ability will not be updated.
                     'fake_response_data' => [$USER->id => []],
                 ],
@@ -126,6 +125,7 @@ class updatepersonability_test extends TestCase {
                         2 => 0.77,
                     ],
                     'contextid' => 1,
+                    'attemptid' => 123,
                     'catscaleid' => 1,
                     'userid' => $USER->id,
                     'questions' => [
@@ -157,7 +157,7 @@ class updatepersonability_test extends TestCase {
      * @param bool $wascalculated
      * @param array $fakeabilities
      * @param ?float $abilitymainscale
-     *
+     * @return void
      * @dataProvider we_use_the_correct_initial_ability_provider
      */
     public function test_we_use_the_correct_initial_ability(
@@ -165,7 +165,7 @@ class updatepersonability_test extends TestCase {
         bool $wascalculated,
         array $fakeabilities,
         ?float $abilitymainscale = null
-    ) {
+    ): void {
         /*
          * The updatepersonaiblity_testing class is a slightly modified version
          * of the updatepersonability class that makes testing easier.
@@ -223,5 +223,4 @@ class updatepersonability_test extends TestCase {
             ],
         ];
     }
-
 }

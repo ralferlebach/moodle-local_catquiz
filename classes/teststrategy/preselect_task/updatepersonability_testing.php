@@ -39,7 +39,6 @@ use local_catquiz\teststrategy\preselect_task\updatepersonability;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class updatepersonability_testing extends updatepersonability {
-
     /**
      * Update person param.
      *
@@ -141,5 +140,14 @@ class updatepersonability_testing extends updatepersonability {
      */
     protected function ability_was_calculated(int $catscaleid, bool $includelastresponse = true) {
         return $this->context['fake_ability_was_calculated'] ?? parent::ability_was_calculated($catscaleid, $includelastresponse);
+    }
+
+    /**
+     * Use the trusted region factor
+     *
+     * @return bool
+     */
+    protected function use_tr_factor(): bool {
+        return $this->context['fake_use_tr_factor'] ?? parent::use_tr_factor();
     }
 }

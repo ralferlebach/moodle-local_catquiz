@@ -30,6 +30,7 @@ use cache_exception;
 use cache_helper;
 use cm_info;
 use coding_exception;
+use context_module;
 use context_system;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\model\model_strategy;
@@ -70,7 +71,7 @@ class catquiz_handler {
      */
     public static function instance_form_definition(MoodleQuickForm &$mform) {
 
-        global $PAGE;
+        global $DB, $PAGE;
 
         $elements = [];
 
@@ -93,6 +94,10 @@ class catquiz_handler {
             ['data-on-change-action' => 'reloadTestForm']);
 
         $mform->setType('choosetemplate', PARAM_INT);
+
+        // Add a hidden element to store which button was clicked.
+        $elements[] = $mform->addElement('hidden', 'triggered_button', '');
+        $mform->setType('triggered_button', PARAM_ALPHANUMEXT);
 
         $context = context_system::instance();
 
@@ -127,6 +132,17 @@ class catquiz_handler {
                 get_string('catquizsettings', 'local_catquiz'));
         $mform->setExpanded('catquiz_header');
 
+        $selectedcontext = optional_param('contextid', 0, PARAM_INT);
+        $name = $DB->get_field('local_catquiz_catcontext', 'name', ['id' => $selectedcontext]);
+        if ($name) {
+            $elements[] = $mform->addElement(
+                'static',
+                'selectedcontext',
+                get_string('testcontext', 'local_catquiz'),
+                $name
+            );
+        }
+
         // Question categories or tags to use for this quiz.
 
         // Parent Catscales have parentscaleid 0.
@@ -152,21 +168,31 @@ class catquiz_handler {
         // ... after this function has finished execution. submitted form.
         // But the submitted via post, so we can access the variable via the superglobal $POST.
 
-        $selectedparentscale = optional_param('catquiz_catscales', 0, PARAM_INT);
+        $reloadtemplate = ($mform->getSubmitValues()['triggered_button'] ?? null) === "reloadTestForm";
+        $template = null;
+        if ($reloadtemplate && $chosentemplate = optional_param('choosetemplate', 0, PARAM_INT)) {
+            // Get parent scale ID from template.
+            $cattest = (object)[
+                'id' => $chosentemplate,
+                'component' => 'mod_adaptivequiz',
+            ];
+
+            // Pass on the values as stdClass.
+            $template = new testenvironment($cattest);
+            $selectedparentscale = $template->return_as_array()['catscaleid'];
+        } else {
+            $selectedparentscale = optional_param('catquiz_catscales', 0, PARAM_INT);
+        }
 
         if (!empty($selectedparentscale)) {
             $element = $mform->getElement('catquiz_catscales');
             $element->setValue($selectedparentscale);
-            $subscales = \local_catquiz\data\dataapi::get_catscale_and_children($selectedparentscale, true);
-
-            self::generate_subscale_checkboxes($subscales, $elements, $mform);
         } else {
             $selectedparentscale = reset($parentcatscales)->id ?? 0;
             $_POST['catquiz_catscales'] = $selectedparentscale;
-            $subscales = \local_catquiz\data\dataapi::get_catscale_and_children($selectedparentscale, true);
-
-            self::generate_subscale_checkboxes($subscales, $elements, $mform);
         }
+        $subscales = \local_catquiz\data\dataapi::get_catscale_and_children($selectedparentscale, true);
+        self::generate_subscale_checkboxes($subscales, $elements, $mform);
 
         // Button to attach JavaScript to reload the form.
         $mform->registerNoSubmitButton('submitcatscaleoption');
@@ -176,11 +202,7 @@ class catquiz_handler {
             'data-action' => 'submitCatScale',
         ]);
 
-        $elements[] = $mform->addElement('text', 'catquiz_passinglevel', get_string('passinglevel', 'local_catquiz'));
-        $mform->addHelpButton('catquiz_passinglevel', 'passinglevel', 'local_catquiz');
-        $mform->setType('catquiz_passinglevel', PARAM_INT);
-
-        info::instance_form_definition($mform, $elements);
+        info::instance_form_definition($mform, $elements, $template);
 
         return $elements;
     }
@@ -294,6 +316,7 @@ class catquiz_handler {
             // Pass on the values as stdClass.
             $test = new testenvironment($cattest);
             $test->apply_jsonsaved_values($formdefaultvalues);
+            $_POST['contextid'] = $test->get_contextid() ?? 0;
 
             self::write_variables_to_post($formdefaultvalues);
 
@@ -314,6 +337,35 @@ class catquiz_handler {
             $test->apply_jsonsaved_values($formdefaultvalues);
 
             self::write_variables_to_post($formdefaultvalues);
+        }
+
+        $context = context_system::instance();
+
+        $options = [
+            'trusttext' => true,
+            'subdirs' => true,
+            'context' => $context,
+            'maxfiles' => EDITOR_UNLIMITED_FILES,
+            'noclean' => true,
+        ];
+
+        foreach ($data as $property) {
+            if (is_array($property) || !preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)_editor/', $property, $matches)) {
+                continue;
+            }
+            $scaleid = intval($matches[1]);
+            $rangeid = intval($matches[2]);
+            $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+            $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
+            $data = (object) file_prepare_standard_editor(
+                $data,
+                sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid),
+                $options,
+                $context,
+                'local_catquiz',
+                $filearea,
+                intval($test->id)
+            );
         }
 
         $formdefaultvalues['choosetemplate'] = 0;
@@ -382,11 +434,6 @@ class catquiz_handler {
 
         self::check_if_positive_int($errors, $data, "catquiz_maxtimeperattempt", 'catquiz_timelimitgroup');
         self::check_if_positive_int($errors, $data, "catquiz_maxtimeperitem", 'catquiz_timelimitgroup');
-
-        // Validate higher and lower values.
-        if (0 > (int) $data['catquiz_passinglevel'] || 100 < (int) $data['catquiz_passinglevel']) {
-            $errors['catquiz_passinglevel'] = get_string('formelementwrongpercent', 'local_catquiz');
-        }
 
         if (isset($data['catquiz_pilotratio'])) {
             if (0 > (int) $data['catquiz_pilotratio'] || 100 < (int) $data['catquiz_pilotratio']) {
@@ -565,6 +612,8 @@ class catquiz_handler {
 
         $clone = clone($quizdata);
 
+        $clone = self::prepare_editor_fields($quizdata->id, $clone);
+
         // We unset id & instance. We don't want to introduce confusion because of it.
         unset($clone->id);
         unset($clone->instance);
@@ -573,6 +622,7 @@ class catquiz_handler {
 
         // If there is a new template name.
         if (!empty($quizdata->testenvironment_addoredittemplate) && !empty($quizdata->testenvironment_name)) {
+            $clone = self::prepare_editor_fields($quizdata->choosetemplate, $clone);
 
             // If we have a template name, we first check if we come from an existing template.
             // Create stdClass with all the values.
@@ -786,6 +836,18 @@ class catquiz_handler {
                 if ($test->status_force() && $k !== 'choosetemplate') {
                     $element->freeze();
                 }
+            } else {
+                if (preg_match("/^catquiz_subscalecheckbox_/", $k)) {
+                    $mform->addElement(
+                        'advcheckbox',
+                        $k,
+                        $k,
+                        null,
+                        [],
+                        [0, 1]
+                    );
+                    $mform->setDefault($k, $v);
+                }
             }
         }
     }
@@ -809,7 +871,7 @@ class catquiz_handler {
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
         $cache->set('quizsettings', $quizsettings);
 
-        $catcontext = catscale::get_context_id($quizsettings->catquiz_catscales);
+        $catcontext = $testenvironment->get_contextid();
         $tsinfo = new info();
         $teststrategy = $tsinfo
             ->return_active_strategy($quizsettings->catquiz_selectteststrategy)
@@ -948,6 +1010,10 @@ class catquiz_handler {
             $maxquestionsperscale = -1;
         }
 
+        $minquestionsperscale = $hasmaxqpscale
+                ? intval($quizsettings->maxquestionsscalegroup->catquiz_minquestionspersubscale)
+                : 0;
+
         $maxquestions = $quizsettings->maxquestionsgroup->catquiz_maxquestions;
         if (!$maxquestions) {
             $maxquestions = -1;
@@ -993,7 +1059,7 @@ class catquiz_handler {
             'skip_reason' => null,
             'userid' => $USER->id,
             'max_attempts_per_scale' => $maxquestionsperscale,
-            'min_attempts_per_scale' => $quizsettings->maxquestionsscalegroup->catquiz_minquestionspersubscale ?? 0,
+            'min_attempts_per_scale' => $minquestionsperscale,
             'teststrategy' => $quizsettings->catquiz_selectteststrategy,
             'timestamp' => time(),
             'attemptid' => intval($attemptdata->id),
@@ -1006,6 +1072,11 @@ class catquiz_handler {
             'se_min' => $quizsettings->catquiz_standarderrorgroup->catquiz_standarderror_min,
             'pp_min_inc' => $quizsettings->catquiz_pp_min_inc ?? 0.01,
         ];
+
+        if (property_exists($quizsettings, 'fake_use_tr_factor')) {
+            $initialcontext['fake_use_tr_factor'] = $quizsettings->fake_use_tr_factor;
+        }
+
         return $contextcreator->load(
             [
                 'progress',
@@ -1014,6 +1085,7 @@ class catquiz_handler {
                 'questions',
                 'pilot_questions',
                 'se',
+                'initial_scales',
             ],
             $initialcontext
         );
@@ -1037,5 +1109,57 @@ class catquiz_handler {
             default:
                 return $time;
         }
+    }
+
+    /**
+     * Prepares editor fields.
+     *
+     * @param int $componentid The ID of the quiz component being processed
+     * @param stdClass $clone The object containing the form data to be processed
+     * @return stdClass The processed object with updated editor fields
+     */
+    private static function prepare_editor_fields(int $componentid, stdClass $clone): stdClass {
+        if (!$cm = get_coursemodule_from_instance('adaptivequiz', intval($componentid))) {
+            return $clone;
+        }
+        $context = context_module::instance($cm->id);
+        $textfieldoptions = [
+            'trusttext' => true,
+            'subdirs' => true,
+            'maxfiles' => EDITOR_UNLIMITED_FILES,
+            'context' => $context,
+        ];
+
+        foreach ($clone as $property => $value) {
+            if (!preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)$/', $property, $matches)) {
+                continue;
+            }
+            if (!property_exists($clone, $property . '_editor')) {
+                $clone->{$property . '_editor'} = $clone->$property;
+            }
+            $scaleid = intval($matches[1]);
+            $rangeid = intval($matches[2]);
+            $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+            $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
+            $clone = file_postupdate_standard_editor(
+                $clone,
+                $fieldname,
+                $textfieldoptions,
+                $context,
+                'local_catquiz',
+                $filearea,
+                $clone->id
+            );
+            unset($clone->{$property . '_editor'});
+            file_save_draft_area_files(
+                $value['itemid'],
+                $context->id,
+                'local_catquiz',
+                $filearea,
+                $clone->id
+            );
+        }
+
+        return $clone;
     }
 }

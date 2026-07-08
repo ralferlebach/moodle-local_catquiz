@@ -24,6 +24,9 @@
 
 namespace local_catquiz\local\model;
 
+use MoodleQuickForm;
+use stdClass;
+
 /**
  * Abstract class for model classes.
  *
@@ -62,6 +65,29 @@ abstract class model_model {
     }
 
     /**
+     * Allows subclasses to overwrite the parameters.
+     *
+     * @param stdClass $record
+     * @param array $parameters
+     * @return stdClass
+     */
+    public static function add_parameters_to_record(stdClass $record, array $parameters): stdClass {
+        return $record;
+    }
+
+    /**
+     * Indicates if the itemparam is valid for the given model.
+     *
+     * Defaults to true but can be overwritten by subclasses.
+     *
+     * @param model_item_param $itemparam
+     * @return bool
+     */
+    public static function is_valid(model_item_param $itemparam): bool {
+        return true;
+    }
+
+    /**
      * Return the name of the current model
      *
      * @return string
@@ -71,12 +97,12 @@ abstract class model_model {
     /**
      * Helper to create a new item param
      *
-     * @param int   $itemid
+     * @param string   $itemid
      * @param array $metadata Optional metadata
      * @return model_item_param
      */
-    protected function create_item_param(int $itemid, array $metadata = []): model_item_param {
-        return new model_item_param($itemid, $this->modelname, $metadata);
+    protected function create_item_param(string $itemid, array $metadata = []): model_item_param {
+        return new model_item_param($itemid, $this->get_model_name(), $metadata);
     }
 
     /**
@@ -99,6 +125,14 @@ abstract class model_model {
      * @return string[]
      */
     abstract protected static function get_parameter_names(): array;
+
+    /**
+     * Returns the parameters as associative array, where the key is the parameter name.
+     *
+     * @param \stdClass $record
+     * @return array
+     */
+    abstract public static function get_parameters_from_record(stdClass $record): array;
 
     /**
      * Fisher info.
@@ -127,4 +161,97 @@ abstract class model_model {
         model_person_param_list $personabilities,
         model_item_param $itemparams,
         model_responses $k): float;
+
+    /**
+     * Return the difficulty as a single float.
+     *
+     * Can be overwritten by models that need to convert an array of difficulties into a single value.
+     * @param array $parameters
+     * @return float
+     */
+    public static function get_difficulty(array $parameters): float {
+        return $parameters['difficulty'] ?? 0.0;
+    }
+
+    /**
+     * Add model specific fields to override model parameters.
+     *
+     * @param MoodleQuickForm $mform
+     * @param model_item_param $param
+     * @param string $groupid
+     * @return void
+     */
+    abstract public function definition_after_data_callback(
+        MoodleQuickForm &$mform,
+        model_item_param $param,
+        string $groupid
+    ): void;
+
+    /**
+     * Get parameter fields
+     *
+     * @param model_item_param $param
+     * @return array
+     */
+    abstract public function get_parameter_fields(model_item_param $param): array;
+
+    /**
+     * Convert arry to record
+     *
+     * @param array $formarray
+     * @return stdClass
+     */
+    abstract public function form_array_to_record(array $formarray): stdClass;
+
+    /**
+     * Get default params
+     *
+     * @return array
+     */
+    abstract public function get_default_params(): array;
+
+    /**
+     * Returns the parameters as flat array with the key being a translated label.
+     * @param \local_catquiz\local\model\model_item_param $param
+     * @return array
+     */
+    abstract public function get_static_param_array(model_item_param $param): array;
+
+    /**
+     * Allows extending the itemparam with new fields.
+     *
+     * This is used for multiparameter models and allows to add a new
+     * [fraction:difficulty] or [intercept:difficulty] entry.
+     *
+     * @param array $existingparams
+     * @param stdClass $newparam
+     * @return array
+     * @throws Exception
+     */
+    abstract public function add_new_param(array $existingparams, stdClass $newparam): array;
+
+    /**
+     * Allows removal of a parameter value.
+     *
+     * This is used for multiparameter models and allows removing a
+     * [fraction:difficulty] or [intercept:difficulty] pair of the entry.
+     * The value to be removed is identified by a 0-based index of the
+     * respective multiparam array.
+     *
+     * @param array $existingparams
+     * @param int $index
+     * @throws \Exception
+     * @return array
+     */
+    abstract public function drop_param_at(array $existingparams, int $index): array;
+
+    /**
+     * Indicates if this model can add or remove parameters.
+     *
+     * For example, GRM can add a new (fraction, difficulty) pair.
+     * @return bool
+     */
+    public function supports_parameter_edits(): bool {
+        return false;
+    }
 }

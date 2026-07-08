@@ -20,12 +20,13 @@
  * @package    local_catquiz
  * @author     Magdalena Holczik
  * @copyright  2023 onwards Georg Maißer <info@wunderbyte.at>
- * @license    http =>//www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 namespace local_catquiz;
 
 use advanced_testcase;
+use local_catquiz\data\catscale_structure;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbackgenerator\personabilities;
 use local_catquiz\teststrategy\feedbacksettings;
@@ -43,8 +44,7 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  *
  * @covers \local_catquiz\teststrategy\feedbackgenerator\personabilities
  */
-class personabilities_test extends advanced_testcase {
-
+final class personabilities_test extends advanced_testcase {
     /**
      * Test that questions of subscales are removed as needed.
      *
@@ -64,7 +64,8 @@ class personabilities_test extends advanced_testcase {
         array $expected,
         array $abilityrange,
         array $testitemsforcatscale,
-        array $fisherinfo) {
+        array $fisherinfo
+    ): void {
 
         $progressmock = $this->getMockBUilder(progress::class)
             ->onlyMethods([
@@ -78,7 +79,7 @@ class personabilities_test extends advanced_testcase {
             ->method('get_quiz_settings')
             ->willReturn((object) $feedbackdata['quizsettings']);
 
-        $primaryscaleid = $feedbackdata['primaryscale']['id'];
+        $primaryscaleid = $feedbackdata['primaryscale']->id;
         $primaryscalevalue = $feedbackdata['personabilities_abilities'][$primaryscaleid]['value'];
         $progressmock
             ->method('get_abilities')
@@ -162,11 +163,11 @@ class personabilities_test extends advanced_testcase {
                             'name' => "Skala1",
                         ],
                     ],
-                    'primaryscale' => [
+                    'primaryscale' => new catscale_structure([
                         'id' => '271',
                         'name' => 'Simulation',
                         'parentid' => '0',
-                    ],
+                    ]),
                     'quizsettings' => self::return_quizsettings(),
                     'abilitieslist' => [
                         [
@@ -904,7 +905,6 @@ class personabilities_test extends advanced_testcase {
                 "status" => "4",
             ],
         ];
-
     }
 
     /**
@@ -950,7 +950,6 @@ class personabilities_test extends advanced_testcase {
             "catquiz_subscalecheckbox_293" => "1",
             "catquiz_subscalecheckbox_294" => "1",
             "catquiz_subscalecheckbox_295" => "1",
-            "catquiz_passinglevel" => "",
             "catquiz_selectteststrategy" => "4",
             "catquiz_includepilotquestions" => "0",
             "catquiz_selectfirstquestion" => "startwitheasiestquestion",
@@ -1638,5 +1637,4 @@ class personabilities_test extends advanced_testcase {
             "showabilitymeasure" => 0,
         ];
     }
-
 }

@@ -25,7 +25,11 @@
 namespace local_catquiz\data;
 
 use cache;
+use coding_exception;
 use context_system;
+use InvalidArgumentException;
+use dml_exception;
+use ddl_exception;
 use local_catquiz\catcontext;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
@@ -100,10 +104,19 @@ class dataapi {
      *
      * @param int $scaleid
      * @param string $scalename
+     * @param string $source Optional: provide details about the source
+     * @param bool $duplicate Optional: Duplicate an existing old context if it exists
+     * @param bool $setdefault Optional: Set the new context as the default for the given scale
      *
      * @return catcontext
      */
-    public static function create_new_context_for_scale(int $scaleid, string $scalename = "") {
+    public static function create_new_context_for_scale(
+        int $scaleid,
+        string $scalename = "",
+        $source = "",
+        $duplicate = true,
+        $setdefault = true
+    ) {
         global $DB;
 
         $defaultcontext = catquiz::get_default_context_object();
@@ -118,14 +131,22 @@ class dataapi {
         $data->starttimestamp = $defaultcontext->starttimestamp;
         $data->endtimestamp = $defaultcontext->endtimestamp;
         $data->description = get_string('autocontextdescription', 'local_catquiz', $scalename);
+        if ($source) {
+            $data->description .= sprintf(' [%s]', $source);
+        }
 
         $context = new catcontext($data);
         $context->save_or_update($data);
         catcontext::store_context_as_singleton($context, $scaleid);
 
         // If there is already an old context, we duplicate all the items.
-        if ($oldcontextid = $DB->get_field('local_catquiz_catscales', 'contextid', ['id' => $scaleid])) {
+        if ($duplicate && $oldcontextid = $DB->get_field('local_catquiz_catscales', 'contextid', ['id' => $scaleid])) {
             catscale::duplicate_testitemparams_for_scale_with_new_contextid($scaleid, $oldcontextid, $context->id);
+        }
+
+        // If we should not modify the scale, we can return.
+        if (!$setdefault) {
+            return $context;
         }
 
         // We set the new context as a default context in the catscale.
@@ -134,6 +155,47 @@ class dataapi {
         $catscale->contextid = $context->id;
         $catscale->timemodified = time();
         self::update_catscale($catscale);
+
+        return $context;
+    }
+
+    /**
+     * Creates a new "updatedparams" context for the given scale
+     *
+     * @param stdClass $catscale
+     * @return catcontext
+     * @throws InvalidArgumentException
+     * @throws dml_exception
+     * @throws coding_exception
+     * @throws ddl_exception
+     */
+    public static function create_new_context_for_updated_parameters(stdClass $catscale): catcontext {
+        global $DB;
+        $defaultcontext = catquiz::get_default_context_object();
+        $timestring = userdate(time(), get_string('strftimedatetimeshort', 'core_langconfig'));
+        $usertime = str_replace(' ', '', $timestring);
+
+        $data = new stdClass();
+        $data->name = get_string('updatedparamscontext', 'local_catquiz', [
+            'scalename' => $catscale->name,
+            'usertime' => $usertime,
+            ]);
+        $data->starttimestamp = $defaultcontext->starttimestamp;
+        $data->endtimestamp = $defaultcontext->endtimestamp;
+        $data->description = get_string(
+            'updatedparamscontextdesc',
+            'local_catquiz',
+            $catscale->name
+        );
+
+        $context = new catcontext($data);
+        $context->save_or_update($data);
+        catcontext::store_context_as_singleton($context, $catscale->id);
+
+        // Duplicate all the items from the previous context, so that we do not lose items that
+        // can not be calculated due to missing responses.
+        $oldcontextid = $DB->get_field('local_catquiz_catscales', 'contextid', ['id' => $catscale->id]);
+        catscale::duplicate_testitemparams_for_scale_with_new_contextid($catscale->id, $oldcontextid, $context->id);
 
         return $context;
     }
@@ -306,6 +368,13 @@ class dataapi {
             throw new moodle_exception('noidset', 'local_catquiz');
         }
 
+        $oldrecord = $DB->get_record('local_catquiz_catscales', ['id' => $catscale->id]);
+        // If the context of the scale was changed, we have to update the active item params.
+        if ($oldrecord->contextid != $catscale->contextid) {
+            $repo = new catquiz();
+            $repo->create_items_in_new_context($catscale->contextid, $oldrecord->contextid);
+        }
+
         $result = $DB->update_record('local_catquiz_catscales', $catscale);
 
         $context = context_system::instance();
@@ -339,6 +408,18 @@ class dataapi {
         } else {
             return false;
         }
+    }
+
+    /**
+     * Check if label of catscale already exsists - must be unique
+     *
+     * @param string $label catscale label
+     *
+     * @return bool true if label already exists, false if not
+     */
+    public static function label_exists(string $label): bool {
+        global $DB;
+        return $DB->record_exists('local_catquiz_catscales', ['label' => $label]);
     }
 
     /**

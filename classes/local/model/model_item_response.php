@@ -34,6 +34,11 @@ namespace local_catquiz\local\model;
 class model_item_response {
 
     /**
+     * @var string
+     */
+    private string $itemid;
+
+    /**
      * @var float response
      */
     private float $response;
@@ -46,13 +51,24 @@ class model_item_response {
     /**
      * Set parameters for class instance.
      *
+     * @param string $itemid
      * @param float $response
      * @param model_person_param $personparams
      *
      */
-    public function __construct(float $response, model_person_param $personparams) {
+    public function __construct(string $itemid, float $response, model_person_param &$personparams) {
+        $this->itemid = $itemid;
         $this->response = $response;
         $this->personparams = $personparams;
+    }
+
+    /**
+     * Returns the item ID.
+     *
+     * @return string
+     */
+    public function get_id(): string {
+        return $this->itemid;
     }
 
     /**
@@ -66,12 +82,33 @@ class model_item_response {
     }
 
     /**
+     * Sets the response value
+     *
+     * @param float $val
+     * @return model_item_response
+     */
+    public function set_response(float $val): self {
+        $this->response = $val;
+        return $this;
+    }
+
+    /**
      * Return ability.
      *
-     * @return float
-     *
+     * @return model_person_param
      */
-    public function get_personparams(): model_person_param {
+    public function get_personparams(): ?model_person_param {
         return $this->personparams;
+    }
+
+    /**
+     * Sets the personparam to the given one.
+     *
+     * @param \local_catquiz\local\model\model_person_param $pp
+     * @return \local_catquiz\local\model\model_item_response
+     */
+    public function set_personparams(model_person_param $pp): self {
+        $this->personparams = $pp;
+        return $this;
     }
 }

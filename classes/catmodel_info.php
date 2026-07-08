@@ -27,12 +27,15 @@ namespace local_catquiz;
 
 use core\task\manager;
 use local_catquiz\catcontext;
+use local_catquiz\data\dataapi;
 use local_catquiz\event\calculation_executed;
-use local_catquiz\task\adhoc_recalculate_cat_model_params;
-use local_catquiz\task\recalculate_cat_model_params;
+use local_catquiz\event\calculation_skipped;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_person_param_list;
+use local_catquiz\local\model\model_strategy;
+use local_catquiz\local\model\model_strategy_factory;
+use local_catquiz\task\adhoc_recalculate_cat_model_params;
 use moodle_exception;
-use moodle_url;
 
 /**
  * Entities Class to display list of entity records.
@@ -62,10 +65,7 @@ class catmodel_info {
             $this->trigger_parameter_calculation($contextid, $catscaleid);
         }
 
-        // Return the data that are currently saved in the DB.
-        $context = catcontext::load_from_db($contextid);
-        $strategy = $context->get_strategy($catscaleid);
-        return $strategy->get_params_from_db($contextid, $catscaleid);
+        return model_strategy::get_params_from_db($contextid, $catscaleid);
     }
 
     /**
@@ -99,19 +99,46 @@ class catmodel_info {
      *
      */
     public function update_params($contextid, $catscaleid, $userid = 0) {
-        $context = catcontext::load_from_db($contextid);
-        if (! $this->needs_update($context, $catscaleid)) {
+        global $USER;
+        if (!$userid) {
+            $userid = $USER->id;
+        }
+
+        $catscale = catscale::return_catscale_object($catscaleid);
+        $strategy = model_strategy_factory::create_for_scale($catscaleid, $contextid);
+        $initialabilities = model_person_param_list::load_from_db($contextid, [$catscaleid]);
+        $strategy->get_responses()->set_person_abilities($initialabilities);
+        try {
+            [$itemdifficulties, $personabilities] = $strategy->run_estimation();
+        } catch (moodle_exception $e) {
+            $errorcode = 'noresponsestoestimate';
+            // Only handle our own exception.
+            if (!($e->errorcode == $errorcode)) {
+                throw $e;
+            }
+
+            // Trigger event.
+            $event = calculation_skipped::create([
+                'context' => \context_system::instance(),
+                'userid' => $userid,
+                'other' => [
+                    'catscaleid' => $catscaleid,
+                    'contextid' => $contextid,
+                    'reason' => get_string($errorcode, 'local_catquiz'),
+                ],
+            ]);
+            $event->trigger();
             return;
         }
-        $strategy = $context->get_strategy($catscaleid);
-        list($itemdifficulties, $personabilities) = $strategy->run_estimation($catscaleid);
+        $newcontext = dataapi::create_new_context_for_updated_parameters($catscale);
         $updatedmodels = [];
         foreach ($itemdifficulties as $modelname => $itemparamlist) {
             $itemcounter = 0;
             /** @var model_item_param_list $itemparamlist */
-            $itemparamlist->save_to_db($contextid);
+            $itemparamlist->save_to_db($newcontext->id);
+            $personabilities->save_to_db($newcontext->id, $catscaleid);
             $itemcounter += count($itemparamlist->itemparams);
-            $model = get_string('pluginname', 'catmodel_'.$modelname);
+            $model = get_string('pluginname', 'catmodel_' . $modelname);
             $updatedmodels[$model] = $itemcounter;
         }
 
@@ -129,8 +156,8 @@ class catmodel_info {
         ]);
         $event->trigger();
 
-        $personabilities->save_to_db($contextid, $catscaleid);
-        $context->save_or_update((object)['timecalculated' => time()]);
+        catcontext::load_from_db($contextid)
+            ->save_or_update((object)['timecalculated' => time()]);
     }
 
     /**

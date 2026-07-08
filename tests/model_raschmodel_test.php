@@ -47,8 +47,7 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  *
  * @covers \local_catquiz\local\model\model_raschmodel
  */
-class model_raschmodel_test extends basic_testcase {
-
+final class model_raschmodel_test extends basic_testcase {
     /**
      * Test if the information criteria functions return the expected values.
      *
@@ -60,7 +59,7 @@ class model_raschmodel_test extends basic_testcase {
      * @param model_responses $responses
      * @param callable $function
      *
-     * @return mixed
+     * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      *
@@ -71,7 +70,7 @@ class model_raschmodel_test extends basic_testcase {
         model_item_param $item,
         model_responses $responses,
         callable $function
-    ) {
+    ): void {
         $result = $function($personabilities, $item, $responses);
         $this->assertEquals($expected, sprintf("%.4f", $result));
     }
@@ -85,8 +84,8 @@ class model_raschmodel_test extends basic_testcase {
     public static function can_calculate_information_criteria_provider(): array {
         $personabilities = self::create_person_param_list([1 => 1, 2 => 0, 3 => -1]);
         $item = new model_item_param(1, 'XXX');
-        $responses = (new model_responses())
-            ->setdata([
+        $responses = model_responses::create_from_array(
+            [
                 '1' => [ // The personid is 1.
                     'component' => [
                         '1' => [ // The question is 1.
@@ -108,7 +107,8 @@ class model_raschmodel_test extends basic_testcase {
                         ],
                     ],
                 ],
-            ]);
+            ]
+        );
             $rasch = model_model::get_instance('rasch');
             $raschbirnbaum = model_model::get_instance('raschbirnbaum');
 
@@ -221,7 +221,7 @@ class model_raschmodel_test extends basic_testcase {
     private static function create_person_param_list(array $abilities): model_person_param_list {
         $personabilities = new model_person_param_list();
         foreach ($abilities as $id => $ability) {
-            $pp = (new model_person_param($id))
+            $pp = (new model_person_param($id, '1'))
                 ->set_ability($ability);
             $personabilities->add($pp);
         }

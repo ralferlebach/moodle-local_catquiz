@@ -40,18 +40,22 @@ use local_catquiz\local\model\model_item_param_list;
  * @covers \local_catquiz\catscale
  *
  */
-class catscale_test extends basic_testcase {
-
+final class catscale_test extends basic_testcase {
     /**
      * Tests if the standarderror is calculated correctly
      *
      * @param model_item_param_list $items
      * @param float $ability
      * @param float $expected
+     * @return void
      *
      * @dataProvider standarderror_is_calculated_correctly_provider
      */
-    public function test_standarderror_is_calculated_correctly(model_item_param_list $items, float $ability, float $expected) {
+    public function test_standarderror_is_calculated_correctly(
+        model_item_param_list $items,
+        float $ability,
+        float $expected
+    ): void {
         $standarderror = catscale::get_standarderror($ability, $items);
         $this->assertEqualsWithDelta($expected, $standarderror, 0.01);
     }
@@ -157,6 +161,7 @@ class catscale_test extends basic_testcase {
      * @param model_item_param_list $remainingitems
      * @param int $remaining
      * @param float $expected
+     * @return void
      * @dataProvider testpotential_returns_expected_value_provider
      */
     public function test_testpotential_returns_expected_value(
@@ -164,7 +169,7 @@ class catscale_test extends basic_testcase {
         model_item_param_list $remainingitems,
         int $remaining,
         float $expected
-    ) {
+    ): void {
         $tp = catscale::get_testpotential($ability, $remainingitems, $remaining);
         $this->assertEqualsWithDelta($expected, $tp, 0.01);
     }
@@ -190,7 +195,9 @@ class catscale_test extends basic_testcase {
             }
             $tmp = array_filter(
                 $scale,
-                fn($label) => ! in_array($label, ['A06-15']), ARRAY_FILTER_USE_KEY);
+                fn($label) => ! in_array($label, ['A06-15']),
+                ARRAY_FILTER_USE_KEY
+            );
             foreach ($tmp as $key => $value) {
                 $remaining2[$key] = $value;
             }
@@ -203,7 +210,9 @@ class catscale_test extends basic_testcase {
             }
             $tmp = array_filter(
                 $scale,
-                fn($label) => ! in_array($label, ['B01-18', 'B02-02', 'B01-17', 'B01-12', 'B02-02']), ARRAY_FILTER_USE_KEY);
+                fn($label) => ! in_array($label, ['B01-18', 'B02-02', 'B01-17', 'B01-12', 'B02-02']),
+                ARRAY_FILTER_USE_KEY
+            );
             foreach ($tmp as $key => $value) {
                 $remaining4[$key] = $value;
             }
@@ -245,10 +254,15 @@ class catscale_test extends basic_testcase {
      * @param float $ability
      * @param model_item_param_list $items
      * @param float $expected
+     * @return void
      *
      * @dataProvider testinformation_returns_expected_value_provider
      */
-    public function test_testinformation_returns_expected_value(float $ability, model_item_param_list $items, float $expected) {
+    public function test_testinformation_returns_expected_value(
+        float $ability,
+        model_item_param_list $items,
+        float $expected
+    ): void {
         $ti = catscale::get_testinformation($ability, $items);
         $this->assertEqualsWithDelta($expected, $ti, 0.01);
     }
@@ -319,7 +333,7 @@ class catscale_test extends basic_testcase {
                             'difficulty' => $params['a'],
                             'discrimination' => $params['b'],
                         ])
-            );
+                );
         }
         return $items;
     }

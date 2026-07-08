@@ -46,8 +46,7 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  *
  * @covers \local_catquiz\catquiz
  */
-class catquiz_test extends advanced_testcase {
-
+final class catquiz_test extends advanced_testcase {
     /**
      * Tests the return value supposed to be a human readable information about course & group enrolment.
      *
@@ -55,12 +54,12 @@ class catquiz_test extends advanced_testcase {
      *
      * @param array $enrolementarray
      * @param array $expected
-     *
+     * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      *
      */
-    public function test_create_strings_for_enrolement_notification(array $enrolementarray, array $expected) {
+    public function test_create_strings_for_enrolement_notification(array $enrolementarray, array $expected): void {
 
         $result = [];
         $result = catquiz::create_strings_for_enrolement_notification($enrolementarray);
@@ -134,21 +133,23 @@ class catquiz_test extends advanced_testcase {
                     . " - <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a>
                     </div><div> - <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a>
                     </div><div> - <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 3</a>
-                    </div><br>member of the following group(s):<br>"
-                    . "<div> - Gruppe 1 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a></div>"
-                    . "<div> - Gruppe 2 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a></div>"
-                    . "<div> - Gruppe 3 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a></div>"
-                    . "Good luck with your studies!",
+                    " .
+                    '</div><br>member of the following group(s):<br>' .
+                    '<div> - “Gruppe 1” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”</div>' .
+                    '<div> - “Gruppe 2” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 2</a>”</div>' .
+                    '<div> - “Gruppe 3” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 2</a>”</div>' .
+                    'Good luck with your studies!',
                     'messageforfeedback' => "Based on your results you are now...<br><br>"
                     . "subscribed in the following course(s):<br>"
                     . "<div> - <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a>
                     </div><div> - <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a>
                     </div><div> - <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 3</a>
-                    </div><br>member of the following group(s):<br>"
-                    . "<div> - Gruppe 1 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a></div>"
-                    . "<div> - Gruppe 2 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a></div>"
-                    . "<div> - Gruppe 3 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a></div>"
-                    . "Good luck with your studies!",
+                    " .
+                    '</div><br>member of the following group(s):<br>' .
+                    '<div> - “Gruppe 1” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”</div>' .
+                    '<div> - “Gruppe 2” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 2</a>”</div>' .
+                    '<div> - “Gruppe 3” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 2</a>”</div>' .
+                    'Good luck with your studies!',
                 ],
             ],
             'singlecourse' => [
@@ -165,12 +166,10 @@ class catquiz_test extends advanced_testcase {
                 ],
                 'expected' => [
                     'messagetitle' => "Notification about new course / group enrolments",
-                    'messagebody' => 'Because of your test results in "Skala 1", '
-                    . 'you are now enrolled in course '
-                    . '<a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a>.',
-                    'messageforfeedback' => 'Because of your test results in "Skala 1", '
-                    . 'you are now enrolled in course '
-                    . '<a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a>.',
+                    'messagebody' => 'Because of your test results in “Skala 1”, ' .
+                    'you are now enrolled in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”.',
+                    'messageforfeedback' => 'Because of your test results in “Skala 1”, ' .
+                    'you are now enrolled in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”.',
                 ],
             ],
             'singlegroup' => [
@@ -188,11 +187,12 @@ class catquiz_test extends advanced_testcase {
                 ],
                 'expected' => [
                     'messagetitle' => "Notification about new course / group enrolments",
-                    'messagebody' => 'Because of your test results in "Skala 1", you are now enrolled in group "Gruppe 1" in course'
-                    . ' <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a>.',
-                    'messageforfeedback' => 'Because of your test results in "Skala 1", '
-                    . 'you are now enrolled in group "Gruppe 1" in course '
-                    . '<a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a>.',
+                    'messagebody' => 'Because of your test results in “Skala 1”, ' .
+                    'you are now enrolled in group “Gruppe 1” ' .
+                    'in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”.',
+                    'messageforfeedback' => 'Because of your test results in “Skala 1”, ' .
+                    'you are now enrolled in group “Gruppe 1” ' .
+                    'in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”.',
                 ],
             ],
             'onlycourses' => [
@@ -268,18 +268,18 @@ class catquiz_test extends advanced_testcase {
                 ],
                 'expected' => [
                     'messagetitle' => "Notification about new course / group enrolments",
-                    'messagebody' => "Based on your results in test Testname in course Kurs 1 you are now...<br>"
-                        . "<br>member of the following group(s):<br>"
-                        . "<div> - Gruppe 1 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a></div>"
-                        . "<div> - Gruppe 2 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a></div>"
-                        . "<div> - Gruppe 3 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 3</a></div>"
-                        . "Good luck with your studies!",
-                    'messageforfeedback' => "Based on your results you are now...<br><br>"
-                        . "member of the following group(s):<br>"
-                        . "<div> - Gruppe 1 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 1</a></div>"
-                        . "<div> - Gruppe 2 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 2</a></div>"
-                        . "<div> - Gruppe 3 in course <a href=http://10.111.0.2:8000/course/view.php?id=17>Kurs 3</a></div>"
-                        . "Good luck with your studies!",
+                    'messagebody' => 'Based on your results in test Testname in course Kurs 1 you are now...<br><br>' .
+                    'member of the following group(s):<br>' .
+                    '<div> - “Gruppe 1” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”</div>' .
+                    '<div> - “Gruppe 2” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 2</a>”</div>' .
+                    '<div> - “Gruppe 3” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 3</a>”</div>' .
+                    'Good luck with your studies!',
+                    'messageforfeedback' => 'Based on your results you are now...<br><br>' .
+                    'member of the following group(s):<br>' .
+                    '<div> - “Gruppe 1” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 1</a>”</div>' .
+                    '<div> - “Gruppe 2” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 2</a>”</div>' .
+                    '<div> - “Gruppe 3” in course “<a href="http://10.111.0.2:8000/course/view.php?id=17">Kurs 3</a>”</div>' .
+                    'Good luck with your studies!',
                 ],
             ],
         ];
@@ -293,6 +293,7 @@ class catquiz_test extends advanced_testcase {
      * @param int $catscaleid
      * @param bool $isenrolled
      *
+     * @return void
      * @dataProvider user_is_enrolled_according_to_ability_and_scale_setting_provider
      */
     public function test_user_is_enrolled_according_to_ability_and_scale_settings(
@@ -300,7 +301,7 @@ class catquiz_test extends advanced_testcase {
         array $personabilities,
         int $catscaleid,
         bool $isenrolled
-    ) {
+    ): void {
         global $USER;
         // This is necessary so that phpunit does not throw an error if the database is changed.
         $this->resetAfterTest();
@@ -324,7 +325,7 @@ class catquiz_test extends advanced_testcase {
         $groupstoenrol = [];
         if ($isenrolled) {
             $coursestoenrol = [$catscaleid => ['show_message' => true, 'range' => 1, 'course_ids' => [$course->id]]];
-            $groupstoenrol = [$catscaleid => [$group->id]];
+            $groupstoenrol = [$catscaleid => [$group->name]];
         }
         // This is the function we want to test. After this call, the user should be added to the given group and enrolled to the
         // given course depending on the person ability of the user.
@@ -409,8 +410,7 @@ class catquiz_test extends advanced_testcase {
             'id' => $id,
             'timecreated' => time(),
             'timemodified' => time(),
-            ]
-        );
+            ]);
         $catscaleid = dataapi::create_catscale($catscalestructure);
         return $catscaleid;
     }
