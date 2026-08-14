@@ -35,8 +35,8 @@ $services = [
                 ],
                 'restrictedusers' => 0,
                 'shortname' => 'local_catquiz_external',
-                'downloadfiles' => 1,    // Allow file downloads.
-                'uploadfiles'  => 1,      // Allow file uploads.
+                'downloadfiles' => 1, // Allow file downloads.
+                'uploadfiles'  => 1, // Allow file uploads.
                 'enabled' => 1,
         ],
 ];

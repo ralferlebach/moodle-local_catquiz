@@ -40,7 +40,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class checkitemparams extends preselect_task implements wb_middleware {
-
     /**
      * Run.
      *

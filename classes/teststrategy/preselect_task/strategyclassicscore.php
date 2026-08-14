@@ -36,7 +36,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class strategyclassicscore extends preselect_task implements wb_middleware {
-
     /**
      * Run preselect task.
      *
@@ -47,7 +46,7 @@ final class strategyclassicscore extends preselect_task implements wb_middleware
      *
      */
     public function run(array &$context, callable $next): result {
-        uasort($context['questions'], function($q1, $q2) {
+        uasort($context['questions'], function ($q1, $q2) {
             return $q1->itemid <=> $q2->itemid;
         });
 

@@ -65,7 +65,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class inferlowestskillgap extends strategy {
-
     /**
      *
      * @var int $id // strategy id defined in lib.
@@ -157,7 +156,7 @@ class inferlowestskillgap extends strategy {
         array $feedbackdata,
         int $catscaleid = 0,
         bool $feedbackonlyfordefinedscaleid = false
-        ): array {
+    ): array {
 
         // Fraction can not be 1 (all answers correct).
         if ($feedbacksettings->fraction >= 1) {

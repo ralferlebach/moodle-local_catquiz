@@ -43,7 +43,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class filterbytestinfo extends preselect_task implements wb_middleware {
-
     /**
      * @var progress
      */
@@ -61,12 +60,14 @@ class filterbytestinfo extends preselect_task implements wb_middleware {
     public function run(array &$context, callable $next): result {
         $this->progress = $context['progress'];
 
-        if (!in_array($context['teststrategy'], [ // TODO: use something like strategy::supports_dynamic_scales()!
+        if (
+            !in_array($context['teststrategy'], [ // TODO: use something like strategy::supports_dynamic_scales()!
             LOCAL_CATQUIZ_STRATEGY_LOWESTSUB,
             LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB,
             LOCAL_CATQUIZ_STRATEGY_RELSUBS,
             LOCAL_CATQUIZ_STRATEGY_ALLSUBS,
-            ])) {
+            ])
+        ) {
             return $next($context);
         }
 

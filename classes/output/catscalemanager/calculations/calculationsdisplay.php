@@ -32,13 +32,11 @@ use moodle_url;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class calculationsdisplay {
-
     /**
      * Constructor.
      *
      */
     public function __construct() {
-
     }
 
     /**
@@ -49,7 +47,7 @@ class calculationsdisplay {
 
         $table = new event_log_table('eventlogtable_calculations');
 
-        list($select, $from, $where, $filter, $params) = catquiz::return_sql_for_event_logs();
+        [$select, $from, $where, $filter, $params] = catquiz::return_sql_for_event_logs();
 
         $where .= " AND eventname LIKE :eventname ";
         $params['eventname'] = '%calculation_executed';
@@ -95,7 +93,7 @@ class calculationsdisplay {
 
         $table->define_baseurl(new moodle_url('/local/catquiz/downloads/download.php'));
 
-        list(, , $html) = $table->lazyouthtml(10, true);
+        [, , $html] = $table->lazyouthtml(10, true);
         return $html;
     }
 

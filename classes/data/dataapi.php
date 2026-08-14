@@ -46,7 +46,6 @@ use stdClass;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class dataapi {
-
     /**
      * Get all catscales either from cache or db
      *
@@ -114,7 +113,7 @@ class dataapi {
         $timestring = userdate(time(), get_string('strftimedatetimeshort', 'core_langconfig'));
         $usertime = str_replace(' ', '', $timestring);
 
-        $data = new stdClass;
+        $data = new stdClass();
         $data->name = get_string('uploadcontext', 'local_catquiz', [
             'scalename' => $scalename,
             'usertime' => $usertime,
@@ -198,14 +197,15 @@ class dataapi {
         bool $getsubchildren = false,
         $catscales = [],
         $returnasarray = false,
-        $catcontext = null) {
+        $catcontext = null
+    ) {
 
         $catscales = empty($catscales) ? self::get_all_catscales() : $catscales;
         $returnarray = [];
 
         $parentscales = array_filter($catscales, fn($a) => $a->id == $parentid);
         if (empty($parentscales)) {
-            $parentscale = new stdClass;
+            $parentscale = new stdClass();
             $parentcontextid = $catcontext ?? catquiz::get_default_context_id();
             $parentscale->depth = 0;
         } else {
@@ -220,7 +220,6 @@ class dataapi {
         }
 
         foreach ($catscales as $catscale) {
-
             $catscales[$catscale->id]->contextid = $parentcontextid ?? $catscales[$parentid]->contextid;
             // First check is, if the scale is already in our return array.
             // This can happen when we return children, run the function again and return ourselves.
@@ -274,8 +273,10 @@ class dataapi {
         $id = $DB->insert_record('local_catquiz_catscales', $catscale, true);
 
         // For a new parent catscale, create new auto-context.
-        if (intval($catscale->parentid) === 0
-            && $catscale->contextid == 0) {
+        if (
+            intval($catscale->parentid) === 0
+            && $catscale->contextid == 0
+        ) {
             $catcontext = self::create_new_context_for_scale($id, $catscale->name);
         }
 
@@ -456,12 +457,12 @@ class dataapi {
                         if (!$tag) {
                             throw new moodle_exception('tagnotfoundindb', 'local_catquiz');
                         }
-                        $params['tag'. $indexparam] = $tag->id;
+                        $params['tag' . $indexparam] = $tag->id;
                         $where .= "t.tagid";
                         $where .= $operator == 'OR' ? ' = ' : ' != ';
                         $where .= ":tag" . $indexparam;
                         if ($index + 1 < $tagscount) {
-                            $where .= ' ' . $operator .' ';
+                            $where .= ' ' . $operator . ' ';
                         } else {
                             $where .= ")";
                         };
@@ -473,7 +474,6 @@ class dataapi {
         }
 
         return self::get_course_records($where, $params);
-
     }
 
     /**
@@ -485,15 +485,16 @@ class dataapi {
     protected static function get_course_records($whereclause, $params) {
         global $DB;
         $fields = ['c.id', 'c.fullname', 'c.shortname'];
-        $sql = "SELECT ". join(',', $fields).
+        $sql = "SELECT " . join(',', $fields) .
                 " FROM {course} c
                 JOIN {context} ctx ON c.id = ctx.instanceid
                 AND ctx.contextlevel = :contextcourse
                 WHERE " .
-                $whereclause."ORDER BY c.sortorder";
-        $list = $DB->get_records_sql($sql,
-            ['contextcourse' => CONTEXT_COURSE] + $params);
+                $whereclause . "ORDER BY c.sortorder";
+        $list = $DB->get_records_sql(
+            $sql,
+            ['contextcourse' => CONTEXT_COURSE] + $params
+        );
         return $list;
     }
-
 }

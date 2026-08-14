@@ -34,7 +34,6 @@ use local_catquiz\local\result;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 interface wb_middleware {
-
     /**
      * Process action.
      *

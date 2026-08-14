@@ -47,7 +47,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class start_new_attempt extends external_api {
-
     /**
      * Describes the parameters for start_new_attempt webservice.
      *
@@ -57,8 +56,7 @@ class start_new_attempt extends external_api {
         return new external_function_parameters([
             'userid'  => new external_value(PARAM_INT, 'userid', VALUE_REQUIRED),
             'categoryid'  => new external_value(PARAM_INT, 'categorid', VALUE_REQUIRED),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -94,7 +92,6 @@ class start_new_attempt extends external_api {
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
             'attemptid' => new external_value(PARAM_INT, 'Attempt id', VALUE_REQUIRED),
-            ]
-        );
+            ]);
     }
 }

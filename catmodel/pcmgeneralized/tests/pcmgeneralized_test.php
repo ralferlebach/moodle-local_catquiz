@@ -43,6 +43,78 @@ final class pcmgeneralized_test extends TestCase {
     use \local_catquiz\derivative_fd_trait;
 
     /**
+     * Verifies least_mean_squares_1st_derivative_ip() against the numeric gradient.
+     *
+     * @dataProvider lms_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_1st_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $fractions = array_keys($ip['intercepts']);
+        $x = pcmgeneralized::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac, $n) {
+            return pcmgeneralized::least_mean_squares($pp, pcmgeneralized::convert_vector_to_ip($v, $fractions), $frac, $n);
+        };
+        $analytic = pcmgeneralized::least_mean_squares_1st_derivative_ip($pp, $ip, $frac, $n);
+        $this->assert_gradient_close($this->fd_gradient($f, $x), $analytic);
+    }
+
+    /**
+     * Verifies least_mean_squares_2nd_derivative_ip() against the numeric Hessian.
+     *
+     * @dataProvider lms_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_2nd_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $fractions = array_keys($ip['intercepts']);
+        $x = pcmgeneralized::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac, $n) {
+            return pcmgeneralized::least_mean_squares($pp, pcmgeneralized::convert_vector_to_ip($v, $fractions), $frac, $n);
+        };
+        $analytic = pcmgeneralized::least_mean_squares_2nd_derivative_ip($pp, $ip, $frac, $n);
+        $this->assert_hessian_close($this->fd_hessian($f, $x), $analytic);
+    }
+
+    /**
+     * Deterministic grid for the LMS FD checks.
+     *
+     * @return array
+     */
+    public static function lms_fd_cases_provider(): array {
+        $items = [
+            'a' => ['intercepts' => ['0.0' => 0.0, '0.5' => -0.7, '1.0' => 0.9], 'discrimination' => 1.2],
+            'b' => [
+                'intercepts' => ['0.0' => 0.0, '0.25' => -1.2, '0.5' => -0.2, '0.75' => 0.5, '1.0' => 1.4],
+                'discrimination' => 0.8,
+            ],
+        ];
+        $abilities = [-1.0, 0.3, 1.2];
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach (array_keys($ip['intercepts']) as $frac) {
+                    $cases[sprintf('%s-a%d-f%s', $label, $ai, $frac)] = [
+                        'pp' => ['ability' => $ability], 'ip' => $ip, 'frac' => (float) $frac, 'n' => 3.0,
+                    ];
+                }
+            }
+        }
+        return $cases;
+    }
+
+
+    /**
      * Verifies lors_1st_derivative_ip() against the numeric gradient of lors_residuals().
      *
      * @dataProvider lors_fd_cases_provider
@@ -92,7 +164,10 @@ final class pcmgeneralized_test extends TestCase {
     public static function lors_fd_cases_provider(): array {
         $items = [
             'a' => ['intercepts' => ['0.0' => 0.0, '0.5' => -0.7, '1.0' => 0.9], 'discrimination' => 1.3],
-            'b' => ['intercepts' => ['0.0' => 0.0, '0.25' => -1.2, '0.5' => -0.2, '0.75' => 0.5, '1.0' => 1.4], 'discrimination' => 0.8],
+            'b' => [
+                'intercepts' => ['0.0' => 0.0, '0.25' => -1.2, '0.5' => -0.2, '0.75' => 0.5, '1.0' => 1.4],
+                'discrimination' => 0.8,
+            ],
         ];
         $orsets = [
             'a' => ['0.5' => 1.5, '1.0' => 0.6],
@@ -162,7 +237,10 @@ final class pcmgeneralized_test extends TestCase {
     public static function fd_cases_provider(): array {
         $items = [
             'a' => ['intercepts' => ['0.0' => 0.0, '0.5' => -1.0, '1.0' => 1.5], 'discrimination' => 1.2],
-            'b' => ['intercepts' => ['0.0' => 0.0, '0.25' => -0.8, '0.5' => 0.2, '0.75' => 0.6, '1.0' => 1.1], 'discrimination' => 0.8],
+            'b' => [
+                'intercepts' => ['0.0' => 0.0, '0.25' => -0.8, '0.5' => 0.2, '0.75' => 0.6, '1.0' => 1.1],
+                'discrimination' => 0.8,
+            ],
         ];
         $abilities = [-1.5, 0.0, 1.2];
         $cases = [];

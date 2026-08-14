@@ -34,7 +34,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class maybe_return_pilot_testing extends maybe_return_pilot implements wb_middleware {
-
     /**
      * This value is used to return a pilot question.
      */

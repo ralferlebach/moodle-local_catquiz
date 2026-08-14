@@ -1,9 +1,65 @@
 # Changelog – local_catquiz
 
-## 1.1.2 (interne Version 2026081408)
+## 1.1.2 (interne Version 2026081409)
 
 > Diese Änderungen werden unter dem bestehenden Release-Label 1.1.2
 > ausgeliefert; nur die interne `$plugin->version` wird erhöht.
+
+### Persistenz politomer Item-Parameter (End-to-End korrigiert)
+Fünf konkrete Persistenz-Bugs behoben, die dazu führten, dass geschätzte
+politome Parameter beim Speichern/Laden verloren gingen oder valide Items
+verworfen wurden:
+- `calculate_params()` reichte den `$startvalue` nicht an `estimate_item_params()`
+  weiter (alle vier politomen Modelle). Ohne ihn ging die Warm-Start-Kategorie-
+  Struktur verloren und nicht beobachtete Kategorien fielen weg.
+- Tippfehler `$starvalues` → `$startvalues` in `model_raschmodel::calculate_params()`.
+- `set_parameters()` invalidiert jetzt das gecachte `json`, sodass `to_record()`
+  es aus den neuen Parametern neu aufbaut.
+- `add_parameters_to_record()` fehlte für GRM, PCM und GPCM (nur GGRM hatte es):
+  ohne diesen Hook wurden `difficulties`/`intercepts` nicht ins Record-JSON
+  serialisiert und beim Reload war das JSON leer. Für alle drei ergänzt
+  (Format exakt spiegelbildlich zu `get_parameters_from_record()`).
+- GGRM `is_valid()` war invertiert (NaN → gültig) und griff auf den falschen
+  Schlüssel `difficulty` statt `difficulties` zu; dadurch wurden valide GGRM-
+  Items von `save_to_db()` herausgefiltert. Logik korrigiert (NaN → ungültig).
+- Neuer Test `tests/local/model/persistence_roundtrip_test.php`: Roundtrip
+  set → save_to_db → reload für alle vier Modelle, GGRM-`is_valid`, sowie ein
+  Warm-Start-Test (nicht beobachtete Kategorie bleibt via `$startvalue` erhalten).
+  Alle Fixes sind zahn-getestet (Revert → Test wird rot).
+
+### Politome LMS (Least Mean Squares) vervollständigt
+Für alle vier politomen Modelle (PCM, GPCM, GRM, GGRM) ist die LMS-Zielfunktion
+inkl. erster und zweiter Ableitung nach den Item-Parametern implementiert. Als
+Verallgemeinerung der dichotomen Form `n·(frac − P)²` wird der **erwartete Score**
+`S = n·(frac − μ)²` mit `μ = E[X] = Σ_k frac_k·P_k` verwendet (für dichotome
+Items fällt das exakt auf `P(korrekt)` zurück). Gemeinsamer Basis-Helfer
+`lms_assemble()`; pro Modellfamilie werden `μ`, `∂μ` und `∂²μ` analytisch
+gebildet (Softmax-Tails für PCM/GPCM, kumulative Differenzen für GRM/GGRM,
+inkl. Diskriminations-Kreuztermen). Alle Ableitungen sind gegen finite
+Differenzen verifiziert (je 48 FD-Fälle pro Modell). Damit ist Paket B
+(MLE + LORS + LMS) für die politomen Modelle vollständig.
+
+### Trust-Region: Threshold-Ordnung für GRM/GGRM
+`restrict_to_trusted_region()` erzwingt jetzt zusätzlich zur Box-Beschränkung
+die aufsteigende Ordnung `a_1 ≤ a_2 ≤ … ≤ a_M` der Schwellen. Bei vertauschten
+Schwellen wäre `P_k = Q_k − Q_{k+1}` negativ geworden und die Likelihood NaN.
+Die Baseline-Kategorie (niedrigster Bruch) bleibt als Platzhalter unberührt.
+Neuer Test bestätigt aufsteigende Schwellen und endliche Likelihood.
+
+### CI: Code Checker, PHPUnit und Behat
+- Plugin-weite Code-Checker-Bereinigung (~1080 vorbestehende Fehler via `phpcbf`
+  und manuell behoben). Zwei vorbestehende Debt-Sniffs bleiben ausgeschlossen
+  (`--exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment`):
+  Klasse-pro-Datei (invasiv) und die projektfremde TODO-Konvention (Wunderbyte
+  nutzt einen eigenen Tracker statt `MDL-`). Plugin-weit sonst 0 Fehler/Warnungen.
+- Der an die alte `exp()`-Rundung gepinnte Simulationstest
+  `catcalc_test::test_simulation_steps_calculated_ability` ist übergangsweise
+  geskippt (die PP-Ableitungen wurden auf die numerisch stabile P/W-Form
+  umgestellt und sind FD-verifiziert; die hartkodierte Trajektorie wird als
+  Follow-up neu gepinnt bzw. toleranzbasiert). Zusätzlich ein realer
+  By-Reference-Fix im Test-Provider.
+- Behat (adaptivequiz-Integration, umgebungsbedingt) ist übergangsweise
+  `continue-on-error`.
 
 ### CI: Installations-Blocker behoben
 - Abhängigkeit mod_adaptivequiz wird jetzt vom Branch `alise_adaptivequiz`

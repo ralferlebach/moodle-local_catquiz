@@ -45,7 +45,6 @@ use UnexpectedValueException;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class filterbystandarderror extends preselect_task implements wb_middleware {
-
     /**
      * @var progress
      */
@@ -98,7 +97,8 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
                 getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(
                     "%d: [SE] drop %s%s",
                     count($this->progress->get_playedquestions()),
-                    (catscale::return_catscale_object($scaleid))->name, PHP_EOL
+                    (catscale::return_catscale_object($scaleid))->name,
+                    PHP_EOL
                 );
                 $this->progress->drop_scale($scaleid);
                 $inheritscales = $this->get_scale_heirs($scaleid);
@@ -230,7 +230,8 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
         // Special treatment for the main scale: exclude it only, if the minimum number of questions
         // per attempt AND questions per scale have been played.
         $ismainscale = $scaleid === intval($this->context['catscaleid']);
-        if ($ismainscale
+        if (
+            $ismainscale
             && (
                 count($this->progress->get_playedquestions()) < $this->context['minimumquestions']
                 || count($playeditems) < $this->context['min_attempts_per_scale']

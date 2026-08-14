@@ -48,7 +48,6 @@ use stdClass;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class strategy {
-
     /**
      * This can be overwritten by strategies to make them unavailable.
      */
@@ -231,7 +230,6 @@ abstract class strategy {
         $catscale = new catscale($catscaleid);
 
         return $catscale->get_testitems($this->catcontextid, $includesubscales);
-
     }
 
     /**

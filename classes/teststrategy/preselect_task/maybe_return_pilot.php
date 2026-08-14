@@ -37,7 +37,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class maybe_return_pilot extends preselect_task implements wb_middleware {
-
     /**
      * Run preselect task.
      *
@@ -75,9 +74,11 @@ class maybe_return_pilot extends preselect_task implements wb_middleware {
             $lasttimeplayedpenaltytask = new lasttimeplayedpenalty();
             $scoretask = new strategybalancedscore();
             return $addattemptstask->run(
-                $context, fn($context) => $lasttimeplayedpenaltytask->run(
-                    $context, fn($context) => $scoretask->run($context, fn () => 'nevercalled')
-                    )
+                $context,
+                fn($context) => $lasttimeplayedpenaltytask->run(
+                    $context,
+                    fn($context) => $scoretask->run($context, fn () => 'nevercalled')
+                )
             );
         } else {
             $context['questions'] = $nonpilotquestions;

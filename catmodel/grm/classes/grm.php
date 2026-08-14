@@ -57,6 +57,24 @@ class grm extends model_multiparam {
     }
 
     /**
+     * Serialise the polytomous parameters into the record so they survive persistence.
+     *
+     * The reverse of get_parameters_from_record(): the 'difficulties' map is stored in the
+     * record JSON, and the scalar difficulty column receives the mean difficulty.
+     *
+     * @param stdClass $record the record to enrich
+     * @param array $parameters the item parameters
+     *
+     * @return stdClass
+     *
+     */
+    public static function add_parameters_to_record(stdClass $record, array $parameters): stdClass {
+        $record->json = json_encode(['difficulties' => $parameters['difficulties']]);
+        $record->difficulty = $record->difficulty ?? self::calculate_mean_difficulty($parameters);
+        return $record;
+    }
+
+    /**
      * Returns the name of this model.
      *
      * @return string
@@ -187,6 +205,104 @@ class grm extends model_multiparam {
     }
 
     /**
+     * LMS objective: n (frac - mu)^2 with the expected score mu = sum_k frac_k P_k.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return float
+     *
+     */
+    public static function least_mean_squares(array $pp, array $ip, float $frac, float $n): float {
+        return self::grm_lms($pp, $ip, $frac, $n)['residuals'];
+    }
+
+    /**
+     * First derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_1st_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        return self::grm_lms($pp, $ip, $frac, $n)['jacobian'];
+    }
+
+    /**
+     * Second derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_2nd_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        return self::grm_lms($pp, $ip, $frac, $n)['hessian'];
+    }
+
+    /**
+     * Expected-score moments and LMS assembly for GRM (discrimination fixed at 1).
+     *
+     * mu = sum_k frac_k P_k with P_k = Q_k - Q_{k+1}, Q_m = sigma(theta - a_m).
+     * Only the boundary a_j enters P_{j-1} and P_j, giving
+     * dmu/da_j = W_j (frac_{j-1} - frac_j) and a diagonal d2mu/da_j^2 = -V_j (...).
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    private static function grm_lms(array $pp, array $ip, float $frac, float $n): array {
+        $ability = $pp['ability'];
+        $a = self::sort_fractions($ip['difficulties']);
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+
+        // Fraction (score) values per category and cumulative/category probabilities.
+        $fr = [];
+        $q = [1.0];
+        for ($m = 1; $m <= $kmax; $m++) {
+            $q[$m] = self::logistic($ability - $a[$fractions[$m]]);
+        }
+        $q[$kmax + 1] = 0.0;
+        for ($k = 0; $k <= $kmax; $k++) {
+            $fr[$k] = (float) $fractions[$k];
+        }
+        $mu = 0.0;
+        for ($k = 0; $k <= $kmax; $k++) {
+            $mu += $fr[$k] * ($q[$k] - $q[$k + 1]);
+        }
+
+        // Gradient / diagonal Hessian of mu w.r.t. the free thresholds a_1..a_kmax.
+        $dmu = [];
+        $ddmu = [];
+        for ($i = 0; $i < $kmax; $i++) {
+            $ddmu[$i] = array_fill(0, $kmax, 0.0);
+        }
+        for ($j = 1; $j <= $kmax; $j++) {
+            $w = self::logistic_w($q[$j]);
+            $v = $w * (1.0 - 2.0 * $q[$j]);
+            $weight = $fr[$j - 1] - $fr[$j];
+            $dmu[$j - 1] = $w * $weight;
+            $ddmu[$j - 1][$j - 1] = -$v * $weight;
+        }
+
+        return self::lms_assemble($frac, $n, $mu, $dmu, $ddmu);
+    }
+
+    /**
      * A fixed model dimension is undefined for polytomous models; use the
      * data-driven get_model_dim_from_ip($ip) instead.
      *
@@ -232,7 +348,7 @@ class grm extends model_multiparam {
      *
      */
     public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array {
-        return catcalc::estimate_item_params($itemresponse, $this);
+        return catcalc::estimate_item_params($itemresponse, $this, $startvalue);
     }
 
     /**
@@ -421,7 +537,7 @@ class grm extends model_multiparam {
         // adjacent cumulative logistics P_r = Q_r - Q_{r+1}, Q_k = sigma(theta - a_k).
         // Only the two boundaries of the observed category r contribute:
         // d/da_r   log L = -W_r / P_r      (r > 0)
-        // d/da_{r+1} log L =  W_{r+1} / P_r  (r < kmax)
+        // d/da_{r+1} log L =  W_{r+1} / P_r  (r < kmax).
         $ability = $pp['ability'];
         $a = self::sort_fractions($ip['difficulties']);
         $frac = min(1.0, max(0.0, $frac));
@@ -462,7 +578,7 @@ class grm extends model_multiparam {
         // W_k = Q_k(1-Q_k), V_k = W_k(1-2 Q_k) and P_r = Q_r - Q_{r+1}:
         // H_{r,r}     =  V_r / P_r     - (W_r / P_r)^2
         // H_{r+1,r+1} = -V_{r+1} / P_r - (W_{r+1} / P_r)^2
-        // H_{r,r+1}   =  W_r W_{r+1} / P_r^2
+        // H_{r,r+1}   =  W_r W_{r+1} / P_r^2.
         $ability = $pp['ability'];
         $a = self::sort_fractions($ip['difficulties']);
         $frac = min(1.0, max(0.0, $frac));
@@ -565,13 +681,30 @@ class grm extends model_multiparam {
      * @return array - chunked item parameter
      */
     public static function restrict_to_trusted_region(array $ip): array {
-        // Clamp each free threshold to a sensible range; keep discrimination
-        // positive. The baseline entry stays 0 (re-inserted by the codec).
+        // Clamp each free threshold to a sensible range and enforce the ascending
+        // ordering a_1 <= a_2 <= ... <= a_M that the graded model requires: with
+        // P_k = Q_k - Q_{k+1} and Q_m = sigma(b (theta - a_m)), an out-of-order
+        // threshold would yield a negative category probability and hence NaN in the
+        // likelihood. The baseline entry (lowest fraction) is a placeholder and stays 0.
         $min = -5.0;
         $max = 5.0;
-        foreach ($ip['difficulties'] as $fraction => $value) {
-            $ip['difficulties'][$fraction] = max($min, min($max, $value));
+        $gap = 1e-3;
+        $sorted = self::sort_fractions($ip['difficulties']);
+        $fractions = array_keys($sorted);
+        $prev = null;
+        foreach ($fractions as $index => $fraction) {
+            if ($index === 0) {
+                // Baseline category placeholder: not a real threshold.
+                continue;
+            }
+            $value = max($min, min($max, $sorted[$fraction]));
+            if ($prev !== null && $value < $prev + $gap) {
+                $value = $prev + $gap;
+            }
+            $sorted[$fraction] = $value;
+            $prev = $value;
         }
+        $ip['difficulties'] = $sorted;
         return $ip;
     }
 

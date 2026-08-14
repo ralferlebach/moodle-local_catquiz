@@ -48,7 +48,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class execute_action extends external_api {
-
     /**
      * Describes the parameters this webservice.
      *
@@ -58,8 +57,7 @@ class execute_action extends external_api {
         return new external_function_parameters([
             'methodname'  => new external_value(PARAM_TEXT, 'Methodname to be executed.', VALUE_REQUIRED),
             'data'  => new external_value(PARAM_RAW, 'Data package as json', VALUE_DEFAULT, '{}'),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -73,7 +71,8 @@ class execute_action extends external_api {
      */
     public static function execute(
         string $methodname,
-        string $data) {
+        string $data
+    ) {
 
         global $PAGE;
 
@@ -91,7 +90,7 @@ class execute_action extends external_api {
         if ($resultsuccess) {
             $result = [
                 'success' => 1,
-                'message' => get_string($methodname."_message", 'local_catquiz'),
+                'message' => get_string($methodname . "_message", 'local_catquiz'),
             ];
         } else {
             $result = [
@@ -112,7 +111,6 @@ class execute_action extends external_api {
         return new external_single_structure([
             'success' => new external_value(PARAM_INT, '1 is success, 0 isn\'t'),
             'message' => new external_value(PARAM_RAW, 'Message to be displayed', VALUE_OPTIONAL, ''),
-            ]
-        );
+            ]);
     }
 }

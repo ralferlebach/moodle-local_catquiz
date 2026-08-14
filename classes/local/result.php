@@ -35,7 +35,6 @@ use local_catquiz\local\status;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class result {
-
     /**
      * @var string status
      */

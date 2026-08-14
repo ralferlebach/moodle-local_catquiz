@@ -36,7 +36,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class strategyfastestscore extends preselect_task implements wb_middleware {
-
     /**
      * Run preselect task.
      *
@@ -54,7 +53,7 @@ final class strategyfastestscore extends preselect_task implements wb_middleware
 
         // In order to have predictable results, in case the values of two
         // elements are exactly the same, sort by question ID.
-        uasort($context['questions'], function($q1, $q2) {
+        uasort($context['questions'], function ($q1, $q2) {
             if (! ($q2->score === $q1->score)) {
                 return $q2->score <=> $q1->score;
             }

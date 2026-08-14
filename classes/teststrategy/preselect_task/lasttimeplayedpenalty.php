@@ -37,7 +37,6 @@ use stdClass;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class lasttimeplayedpenalty extends preselect_task implements wb_middleware {
-
     /**
      * This is used as factor in the exp function
      *
@@ -64,7 +63,7 @@ final class lasttimeplayedpenalty extends preselect_task implements wb_middlewar
      */
     public function run(array &$context, callable $next): result {
         $now = time();
-        $context['questions'] = array_map(function($q) use ($now, $context) {
+        $context['questions'] = array_map(function ($q) use ($now, $context) {
             $q->lasttimeplayedpenaltyfactor = $this->get_penalty_factor($q, $now, $context['penalty_threshold']);
             return $q;
         }, $context['questions']);

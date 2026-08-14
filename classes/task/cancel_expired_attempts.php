@@ -48,7 +48,6 @@ require_once("$CFG->dirroot/mod/adaptivequiz/locallib.php");
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cancel_expired_attempts extends \core\task\scheduled_task {
-
     /**
      * Allow some extra time before closing an expired attempt.
      * @var float

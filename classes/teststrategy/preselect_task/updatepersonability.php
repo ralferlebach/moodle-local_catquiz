@@ -49,7 +49,6 @@ use moodle_exception;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class updatepersonability extends preselect_task implements wb_middleware {
-
     /**
      * Threshold for calculating a mean ability
      *

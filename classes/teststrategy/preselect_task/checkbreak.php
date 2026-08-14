@@ -42,7 +42,6 @@ use moodle_url;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class checkbreak extends preselect_task implements wb_middleware {
-
     /**
      * @var progress $progress
      */

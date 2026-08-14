@@ -117,6 +117,12 @@ class mixedraschbirnbaum extends model_raschmodel {
         return ['difficulty' => $vector[0], 'discrimination' => $vector[1], 'guessing' => $vector[2]];
     }
 
+    /**
+     * The fixed model dimension (person ability plus item parameters).
+     *
+     * @return int
+     *
+     */
     public static function get_model_dim(): int {
         // Adds +1 for the person ability.
         return count(self::get_parameter_names()) + 1;

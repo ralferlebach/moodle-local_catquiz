@@ -55,7 +55,7 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @copyright 2024 Wunderbyte GmbH <info@wunderbyte.at>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable {
+class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate {
     /**
      * @var array<model_item_param>
      */
@@ -367,7 +367,6 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
 
         if (!empty($newrecords)) {
             $DB->insert_records('local_catquiz_itemparams', $newrecords);
-
         }
 
         foreach ($updatedrecords as $r) {
@@ -513,7 +512,6 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
                 'message' => get_string('success', 'core'),
                 'recordid' => $itemparam->get_id(),
              ];
-
         }
     }
 
@@ -779,7 +777,8 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
                     throw new \Exception("Multiple matching parent scales found.");
                 }
                 $record = end($record);
-                if ($record
+                if (
+                    $record
                     && $matching
                     && !in_array($record, $records)
                 ) {
@@ -793,9 +792,11 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
             }
 
             // For new rootscales, add min & max scalevalue.
-            if ($catscaleid == 0
+            if (
+                $catscaleid == 0
                 && (isset($newrecord['minability'])
-                    || isset($newrecord['maxability']))) {
+                    || isset($newrecord['maxability']))
+            ) {
                 if (isset($newrecord['minability']) && (float) $newrecord['minability'] <= 0) {
                     $minscalevalue = $newrecord['minability'];
                 }
@@ -826,7 +827,6 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
             if ($parent == $newrecord['catscalename'] || !$parentsgiven) {
                 $newrecord['catscaleid'] = $catscaleid;
             }
-
         }
     }
     /**

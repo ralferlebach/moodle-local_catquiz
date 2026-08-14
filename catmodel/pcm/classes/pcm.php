@@ -68,6 +68,24 @@ class pcm extends model_multiparam {
     }
 
     /**
+     * Serialise the polytomous parameters into the record so they survive persistence.
+     *
+     * The reverse of get_parameters_from_record(): the 'intercepts' map is stored in the
+     * record JSON, and the scalar difficulty column receives the mean difficulty.
+     *
+     * @param stdClass $record the record to enrich
+     * @param array $parameters the item parameters
+     *
+     * @return stdClass
+     *
+     */
+    public static function add_parameters_to_record(stdClass $record, array $parameters): stdClass {
+        $record->json = json_encode(['intercepts' => $parameters['intercepts']]);
+        $record->difficulty = $record->difficulty ?? self::calculate_mean_difficulty($parameters);
+        return $record;
+    }
+
+    /**
      * Returns the name of this model.
      *
      * @return string
@@ -210,6 +228,168 @@ class pcm extends model_multiparam {
     }
 
     /**
+     * LMS objective: n (frac - mu)^2 with the expected score mu = sum_k frac_k P_k.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return float
+     *
+     */
+    public static function least_mean_squares(array $pp, array $ip, float $frac, float $n): float {
+        $m = self::pcm_prob_moments($pp, $ip);
+        return $n * ($frac - $m['mu']) ** 2;
+    }
+
+    /**
+     * First derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_1st_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        $m = self::pcm_prob_moments($pp, $ip);
+        $kmax = $m['kmax'];
+        $dmu = self::pcm_mu_gradient($m);
+
+        $result = [];
+        for ($j = 1; $j <= $kmax; $j++) {
+            $result[] = 2 * $n * ($m['mu'] - $frac) * $dmu[$j];
+        }
+        return $result;
+    }
+
+    /**
+     * Second derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_2nd_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        $m = self::pcm_prob_moments($pp, $ip);
+        $kmax = $m['kmax'];
+        $dmu = self::pcm_mu_gradient($m);
+        $ddmu = self::pcm_mu_hessian($m);
+
+        $result = [];
+        for ($j = 1; $j <= $kmax; $j++) {
+            $row = [];
+            for ($l = 1; $l <= $kmax; $l++) {
+                $row[] = 2 * $n * ($dmu[$j] * $dmu[$l] + ($m['mu'] - $frac) * $ddmu[$j][$l]);
+            }
+            $result[] = $row;
+        }
+        return $result;
+    }
+
+    /**
+     * Category probabilities, tails, fraction values and expected score for PCM.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     *
+     * @return array
+     *
+     */
+    private static function pcm_prob_moments(array $pp, array $ip): array {
+        $ability = $pp['ability'];
+        $a = self::sanitize_fractions($ip['intercepts']);
+        $fractions = self::get_fractions($a);
+        $kmax = count($fractions) - 1;
+
+        $cumulative = 0.0;
+        $weights = [];
+        $fr = [];
+        for ($k = 0; $k <= $kmax; $k++) {
+            if ($k > 0) {
+                $cumulative += $a[$fractions[$k]];
+            }
+            $weights[$k] = exp($k * $ability - $cumulative);
+            $fr[$k] = (float) $fractions[$k];
+        }
+        $z = array_sum($weights);
+
+        $p = [];
+        $mu = 0.0;
+        for ($k = 0; $k <= $kmax; $k++) {
+            $p[$k] = $weights[$k] / $z;
+            $mu += $fr[$k] * $p[$k];
+        }
+
+        $t = [];
+        for ($j = 0; $j <= $kmax; $j++) {
+            $sum = 0.0;
+            for ($k = $j; $k <= $kmax; $k++) {
+                $sum += $p[$k];
+            }
+            $t[$j] = $sum;
+        }
+
+        return ['p' => $p, 'fr' => $fr, 't' => $t, 'mu' => $mu, 'kmax' => $kmax];
+    }
+
+    /**
+     * Gradient of the expected score mu w.r.t. the free intercepts.
+     *
+     * @param array $m output of pcm_prob_moments
+     *
+     * @return array indexed by boundary j = 1..kmax
+     *
+     */
+    private static function pcm_mu_gradient(array $m): array {
+        $dmu = [];
+        for ($j = 1; $j <= $m['kmax']; $j++) {
+            $sum = 0.0;
+            for ($k = 0; $k <= $m['kmax']; $k++) {
+                $sum += $m['fr'][$k] * $m['p'][$k] * ($m['t'][$j] - (($k >= $j) ? 1.0 : 0.0));
+            }
+            $dmu[$j] = $sum;
+        }
+        return $dmu;
+    }
+
+    /**
+     * Hessian of the expected score mu w.r.t. the free intercepts.
+     *
+     * @param array $m output of pcm_prob_moments
+     *
+     * @return array indexed by boundaries j, l = 1..kmax
+     *
+     */
+    private static function pcm_mu_hessian(array $m): array {
+        $ddmu = [];
+        for ($j = 1; $j <= $m['kmax']; $j++) {
+            $ddmu[$j] = [];
+            for ($l = 1; $l <= $m['kmax']; $l++) {
+                $sum = 0.0;
+                for ($k = 0; $k <= $m['kmax']; $k++) {
+                    $ij = ($k >= $j) ? 1.0 : 0.0;
+                    $il = ($k >= $l) ? 1.0 : 0.0;
+                    $ddpk = $m['p'][$k] * (
+                        ($m['t'][$l] - $il) * ($m['t'][$j] - $ij)
+                        + ($m['t'][$j] * $m['t'][$l] - $m['t'][max($j, $l)])
+                    );
+                    $sum += $m['fr'][$k] * $ddpk;
+                }
+                $ddmu[$j][$l] = $sum;
+            }
+        }
+        return $ddmu;
+    }
+
+    /**
      * A fixed model dimension is undefined for polytomous models; use the
      * data-driven get_model_dim_from_ip($ip) instead.
      *
@@ -255,7 +435,7 @@ class pcm extends model_multiparam {
      *
      */
     public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array {
-        return catcalc::estimate_item_params($itemresponse, $this);
+        return catcalc::estimate_item_params($itemresponse, $this, $startvalue);
     }
 
     /**

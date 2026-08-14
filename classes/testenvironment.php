@@ -48,7 +48,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class testenvironment {
-
     /**
      * $id
      *
@@ -153,11 +152,13 @@ class testenvironment {
 
         // If we have just the id, but not the component..
         // We probably just want to fetch the right information.
-        if (!$record = $this->get_record(
-            $newrecord->id ?? 0,
-            $newrecord->componentid ?? 0,
-            $newrecord->component ?? '')) {
-
+        if (
+            !$record = $this->get_record(
+                $newrecord->id ?? 0,
+                $newrecord->componentid ?? 0,
+                $newrecord->component ?? ''
+            )
+        ) {
             // If we don't get a record, we just pass on the new record as record.
             $record = $newrecord;
         } else {
@@ -199,7 +200,6 @@ class testenvironment {
 
         // And set it back as json.
         $this->json = json_encode($object);
-
     }
 
     /**
@@ -213,7 +213,6 @@ class testenvironment {
 
         // If we find the exact record, it might still be the case that we want to save a copy of a template.
         if ($record = $this->get_record($this->id, $this->componentid, $this->component)) {
-
             if (empty($templatename) || ($record->name == $templatename)) {
                 $this->update_object($record);
                 $DB->update_record('local_catquiz_tests', $record);
@@ -223,7 +222,6 @@ class testenvironment {
             }
             // If the name of the record is different, we want to insert a new record.
             unset($record->id);
-
         } else {
             // Create a new entry in DB.
             $record = new stdClass();
@@ -243,7 +241,6 @@ class testenvironment {
         }
 
         return $this->id;
-
     }
 
     /**
@@ -285,7 +282,6 @@ class testenvironment {
         }
 
         foreach ($jsonobject as $key => $value) {
-
             // Never overwrite a few values.
             if (
                 in_array($key, [
@@ -427,7 +423,6 @@ class testenvironment {
             $params = [
                 'id' => $id,
             ];
-
         } else if (!empty($componentid) && !empty($component)) {
             $params = [
                 'componentid' => $componentid,
@@ -473,10 +468,10 @@ class testenvironment {
      *
      */
     public static function get_environments_as_array(
-            string $component = 'mod_adaptivequiz',
-            int $componentid = 0,
-            int $onlytemplates = LOCAL_CATQUIZ_TESTENVIRONMENT_ONLYTEMPLATES
-            ) {
+        string $component = 'mod_adaptivequiz',
+        int $componentid = 0,
+        int $onlytemplates = LOCAL_CATQUIZ_TESTENVIRONMENT_ONLYTEMPLATES
+    ) {
         global $DB;
 
         $returnarray = [];
@@ -506,7 +501,8 @@ class testenvironment {
         string $component = 'mod_adaptivequiz',
         int $componentid = 0,
         int $onlytemplates = LOCAL_CATQUIZ_TESTENVIRONMENT_ONLYTEMPLATES,
-        bool $includecoursenames = false) {
+        bool $includecoursenames = false
+    ) {
         global $DB;
 
         $returnarray = [];

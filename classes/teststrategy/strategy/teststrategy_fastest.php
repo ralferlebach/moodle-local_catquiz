@@ -59,7 +59,6 @@ use local_catquiz\teststrategy\strategy;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class teststrategy_fastest extends strategy {
-
     /**
      *
      * @var int $id // strategy id defined in lib.
@@ -148,7 +147,7 @@ class teststrategy_fastest extends strategy {
         array $feedbackdata,
         int $catscaleid = 0,
         bool $feedbackonlyfordefinedscaleid = false
-        ): array {
+    ): array {
 
         $newabilities = [];
         $rootscaleid = (int) $feedbackdata['catscaleid'];

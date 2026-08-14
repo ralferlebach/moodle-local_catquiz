@@ -159,15 +159,15 @@ class grmgeneralized extends model_multiparam {
      */
     public static function is_valid(model_item_param $itemparam): bool {
         $params = $itemparam->get_params_array();
-        if (is_nan($params['discrimination'])) {
-            return true;
+        if (isset($params['discrimination']) && is_nan((float) $params['discrimination'])) {
+            return false;
         }
-        foreach ($params['difficulty'] as $d) {
-            if (is_nan($d)) {
-                return true;
+        foreach ($params['difficulties'] as $d) {
+            if (is_nan((float) $d)) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     /**
@@ -246,6 +246,120 @@ class grmgeneralized extends model_multiparam {
     }
 
     /**
+     * LMS objective: n (frac - mu)^2 with the expected score mu = sum_k frac_k P_k.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return float
+     *
+     */
+    public static function least_mean_squares(array $pp, array $ip, float $frac, float $n): float {
+        return self::ggrm_lms($pp, $ip, $frac, $n)['residuals'];
+    }
+
+    /**
+     * First derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_1st_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        return self::ggrm_lms($pp, $ip, $frac, $n)['jacobian'];
+    }
+
+    /**
+     * Second derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_2nd_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        return self::ggrm_lms($pp, $ip, $frac, $n)['hessian'];
+    }
+
+    /**
+     * Expected-score moments and LMS assembly for GGRM (graded with discrimination).
+     *
+     * mu = sum_k frac_k (Q_k - Q_{k+1}), Q_m = sigma(b (theta - a_m)). The threshold
+     * block of d2mu is diagonal; the discrimination couples across the thresholds.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    private static function ggrm_lms(array $pp, array $ip, float $frac, float $n): array {
+        $ability = $pp['ability'];
+        $a = self::sort_fractions($ip['difficulties']);
+        $b = $ip['discrimination'];
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+        $bidx = $kmax;
+
+        $fr = [];
+        for ($k = 0; $k <= $kmax; $k++) {
+            $fr[$k] = (float) $fractions[$k];
+        }
+        $x = [];
+        $q = [1.0];
+        for ($m = 1; $m <= $kmax; $m++) {
+            $x[$m] = $ability - $a[$fractions[$m]];
+            $q[$m] = self::logistic($b * $x[$m]);
+        }
+        $q[$kmax + 1] = 0.0;
+        $mu = 0.0;
+        for ($k = 0; $k <= $kmax; $k++) {
+            $mu += $fr[$k] * ($q[$k] - $q[$k + 1]);
+        }
+
+        $dim = $kmax + 1;
+        $dmu = array_fill(0, $dim, 0.0);
+        $ddmu = [];
+        for ($i = 0; $i < $dim; $i++) {
+            $ddmu[$i] = array_fill(0, $dim, 0.0);
+        }
+
+        $db = 0.0;
+        $dbb = 0.0;
+        for ($j = 1; $j <= $kmax; $j++) {
+            $w = self::logistic_w($q[$j]);
+            $v = $w * (1.0 - 2.0 * $q[$j]);
+            $delta = $fr[$j - 1] - $fr[$j];
+
+            $dmu[$j - 1] = $b * $w * $delta;
+            $ddmu[$j - 1][$j - 1] = -($b ** 2) * $v * $delta;
+
+            // Threshold-discrimination cross term.
+            $cross = $delta * ($w + $b * $x[$j] * $v);
+            $ddmu[$j - 1][$bidx] = $cross;
+            $ddmu[$bidx][$j - 1] = $cross;
+
+            $db += $x[$j] * $w * $delta;
+            $dbb += $x[$j] ** 2 * $v * $delta;
+        }
+        $dmu[$bidx] = -$db;
+        $ddmu[$bidx][$bidx] = -$dbb;
+
+        return self::lms_assemble($frac, $n, $mu, $dmu, $ddmu);
+    }
+
+    /**
      * A fixed model dimension is undefined for polytomous models; use the
      * data-driven get_model_dim_from_ip($ip) instead.
      *
@@ -291,7 +405,7 @@ class grmgeneralized extends model_multiparam {
      *
      */
     public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array {
-        return catcalc::estimate_item_params($itemresponse, $this);
+        return catcalc::estimate_item_params($itemresponse, $this, $startvalue);
     }
 
     /**
@@ -645,13 +759,30 @@ class grmgeneralized extends model_multiparam {
      * @return array - chunked item parameter
      */
     public static function restrict_to_trusted_region(array $ip): array {
-        // Clamp each free threshold to a sensible range; keep discrimination
-        // positive. The baseline entry stays 0 (re-inserted by the codec).
+        // Clamp each free threshold to a sensible range and enforce the ascending
+        // ordering a_1 <= a_2 <= ... <= a_M that the graded model requires: with
+        // P_k = Q_k - Q_{k+1} and Q_m = sigma(b (theta - a_m)), an out-of-order
+        // threshold would yield a negative category probability and hence NaN in the
+        // likelihood. The baseline entry (lowest fraction) is a placeholder and stays 0.
         $min = -5.0;
         $max = 5.0;
-        foreach ($ip['difficulties'] as $fraction => $value) {
-            $ip['difficulties'][$fraction] = max($min, min($max, $value));
+        $gap = 1e-3;
+        $sorted = self::sort_fractions($ip['difficulties']);
+        $fractions = array_keys($sorted);
+        $prev = null;
+        foreach ($fractions as $index => $fraction) {
+            if ($index === 0) {
+                // Baseline category placeholder: not a real threshold.
+                continue;
+            }
+            $value = max($min, min($max, $sorted[$fraction]));
+            if ($prev !== null && $value < $prev + $gap) {
+                $value = $prev + $gap;
+            }
+            $sorted[$fraction] = $value;
+            $prev = $value;
         }
+        $ip['difficulties'] = $sorted;
         if (isset($ip['discrimination'])) {
             $ip['discrimination'] = max(0.1, min(5.0, $ip['discrimination']));
         }

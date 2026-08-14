@@ -37,7 +37,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class noremainingquestions extends preselect_task implements wb_middleware {
-
     /**
      * Run preselect task.
      *
@@ -51,7 +50,7 @@ final class noremainingquestions extends preselect_task implements wb_middleware
         if (
             count($context['questions']) === 0
             && empty($context['pilot_questions'])
-            ) {
+        ) {
                 return result::err(status::ERROR_NO_REMAINING_QUESTIONS);
         }
 

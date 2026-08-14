@@ -43,7 +43,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * This is one of the return values from a model param estimation.
  */
 class model_item_param {
-
     // For some items, the model returns -INF or INF as difficulty.
     // However, we expect it to be numeric, so we encode those values as -1000 and 1000.
     /**
@@ -161,7 +160,8 @@ class model_item_param {
         string $modelname,
         array $metadata = [],
         int $status = LOCAL_CATQUIZ_STATUS_NOT_CALCULATED,
-        ?stdClass $record = null) {
+        ?stdClass $record = null
+    ) {
         $this->componentid = $componentid;
         $this->modelname = $modelname;
         $this->status = $status;
@@ -303,6 +303,9 @@ class model_item_param {
     public function set_parameters(array $parameters): self {
         $this->update_history('set_parameters');
         $this->parameters = $parameters;
+        // Invalidate any cached JSON so that to_record() rebuilds it from the new
+        // parameters via the model's add_parameters_to_record() hook.
+        $this->json = null;
         return $this;
     }
 

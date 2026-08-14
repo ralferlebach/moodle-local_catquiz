@@ -93,6 +93,12 @@ class rasch extends model_raschmodel {
         return ['difficulty' => $vector[0]];
     }
 
+    /**
+     * The fixed model dimension (person ability plus item parameters).
+     *
+     * @return int
+     *
+     */
     public static function get_model_dim(): int {
         return 2;  // 2 parameters: person ability, difficulty
     }

@@ -32,7 +32,6 @@ namespace local_catquiz\teststrategy\preselect_task;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class addscalestandarderror_testing extends addscalestandarderror {
-
     /**
      * Returns array of required context keys.
      *

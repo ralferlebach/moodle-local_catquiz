@@ -38,7 +38,6 @@ use local_catquiz\wb_middleware;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class mayberemovescale extends preselect_task implements wb_middleware {
-
     /**
      * @var progress
      */

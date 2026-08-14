@@ -46,7 +46,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class update_parameters extends external_api {
-
     /**
      * Describes the parameters for update_parameters webservice.
      *
@@ -56,8 +55,7 @@ class update_parameters extends external_api {
         return new external_function_parameters([
             'contextid'  => new external_value(PARAM_INT, 'context ID'),
             'catscaleid' => new external_value(PARAM_INT, 'CAT scale ID'),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -98,7 +96,6 @@ class update_parameters extends external_api {
         return new external_single_structure([
             'success' => new external_value(PARAM_BOOL, 'Successful calculation', VALUE_REQUIRED),
             'message' => new external_value(PARAM_RAW, 'message if necessary', VALUE_OPTIONAL, ''),
-            ]
-        );
+            ]);
     }
 }

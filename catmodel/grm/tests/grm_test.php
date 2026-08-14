@@ -43,6 +43,95 @@ final class grm_test extends TestCase {
     use \local_catquiz\derivative_fd_trait;
 
     /**
+     * restrict_to_trusted_region() must return ascending thresholds and a finite likelihood.
+     *
+     * @return void
+     */
+    public function test_restrict_to_trusted_region_orders_thresholds(): void {
+        // Deliberately out of order: a_2 (0.5) > a_3 (1.0) would make P_middle negative.
+        $ip = ['difficulties' => ['0.0' => 0.0, '0.5' => 1.5, '1.0' => -1.5]];
+        $restricted = grm::restrict_to_trusted_region($ip);
+
+        $values = array_values($restricted['difficulties']);
+        // Skip the baseline placeholder (index 0); the real thresholds must be ascending.
+        for ($i = 2; $i < count($values); $i++) {
+            $this->assertGreaterThan($values[$i - 1], $values[$i], 'Thresholds must be strictly ascending.');
+        }
+
+        $ll = grm::log_likelihood(['ability' => 0.0], $restricted, 0.5);
+        $this->assertIsFloat($ll);
+        $this->assertFalse(is_nan($ll), 'Ordered thresholds must yield a finite log-likelihood.');
+    }
+
+
+    /**
+     * Verifies least_mean_squares_1st_derivative_ip() against the numeric gradient.
+     *
+     * @dataProvider lms_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_1st_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $fractions = array_keys($ip['difficulties']);
+        $x = grm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac, $n) {
+            return grm::least_mean_squares($pp, grm::convert_vector_to_ip($v, $fractions), $frac, $n);
+        };
+        $this->assert_gradient_close($this->fd_gradient($f, $x), grm::least_mean_squares_1st_derivative_ip($pp, $ip, $frac, $n));
+    }
+
+    /**
+     * Verifies least_mean_squares_2nd_derivative_ip() against the numeric Hessian.
+     *
+     * @dataProvider lms_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_2nd_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $fractions = array_keys($ip['difficulties']);
+        $x = grm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac, $n) {
+            return grm::least_mean_squares($pp, grm::convert_vector_to_ip($v, $fractions), $frac, $n);
+        };
+        $this->assert_hessian_close($this->fd_hessian($f, $x), grm::least_mean_squares_2nd_derivative_ip($pp, $ip, $frac, $n));
+    }
+
+    /**
+     * Deterministic grid for the LMS FD checks.
+     *
+     * @return array
+     */
+    public static function lms_fd_cases_provider(): array {
+        $items = [
+            'a' => ['difficulties' => ['0.0' => 0.0, '0.5' => -0.7, '1.0' => 0.9]],
+            'b' => ['difficulties' => ['0.0' => 0.0, '0.25' => -1.2, '0.5' => -0.2, '0.75' => 0.5, '1.0' => 1.4]],
+        ];
+        $abilities = [-1.0, 0.3, 1.2];
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach (array_keys($ip['difficulties']) as $frac) {
+                    $cases[sprintf('%s-a%d-f%s', $label, $ai, $frac)] = [
+                        'pp' => ['ability' => $ability], 'ip' => $ip, 'frac' => (float) $frac, 'n' => 3.0,
+                    ];
+                }
+            }
+        }
+        return $cases;
+    }
+
+
+    /**
      * Verifies lors_1st_derivative_ip() against the numeric gradient of lors_residuals().
      *
      * @dataProvider lors_fd_cases_provider

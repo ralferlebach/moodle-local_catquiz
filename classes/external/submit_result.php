@@ -47,7 +47,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class submit_result extends external_api {
-
     /**
      * Describes the parameters for submit_result webservice.
      *
@@ -58,8 +57,7 @@ class submit_result extends external_api {
             'attemptid'  => new external_value(PARAM_TEXT, 'userid', VALUE_REQUIRED),
             'questionid'  => new external_value(PARAM_INT, 'userid', VALUE_REQUIRED),
             'score'  => new external_value(PARAM_INT, 'categorid', VALUE_REQUIRED),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -97,7 +95,6 @@ class submit_result extends external_api {
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
             'success' => new external_value(PARAM_INT, '1 for success', VALUE_REQUIRED),
-            ]
-        );
+            ]);
     }
 }

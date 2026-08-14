@@ -25,6 +25,7 @@
 namespace catmodel_pcm;
 
 use catmodel_rasch\rasch;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
 use PHPUnit\Framework\ExpectationFailedException;
 use local_catquiz\local\model\model_person_param;
@@ -43,6 +44,73 @@ use local_catquiz\local\model\model_responses;
  */
 final class pcm_test extends TestCase {
     use \local_catquiz\derivative_fd_trait;
+
+    /**
+     * Verifies least_mean_squares_1st_derivative_ip() against the numeric gradient.
+     *
+     * @dataProvider lms_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_1st_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $fractions = array_keys($ip['intercepts']);
+        $x = pcm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac, $n) {
+            return pcm::least_mean_squares($pp, pcm::convert_vector_to_ip($v, $fractions), $frac, $n);
+        };
+        $this->assert_gradient_close($this->fd_gradient($f, $x), pcm::least_mean_squares_1st_derivative_ip($pp, $ip, $frac, $n));
+    }
+
+    /**
+     * Verifies least_mean_squares_2nd_derivative_ip() against the numeric Hessian.
+     *
+     * @dataProvider lms_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_2nd_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $fractions = array_keys($ip['intercepts']);
+        $x = pcm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac, $n) {
+            return pcm::least_mean_squares($pp, pcm::convert_vector_to_ip($v, $fractions), $frac, $n);
+        };
+        $this->assert_hessian_close($this->fd_hessian($f, $x), pcm::least_mean_squares_2nd_derivative_ip($pp, $ip, $frac, $n));
+    }
+
+    /**
+     * Deterministic grid for the LMS FD checks.
+     *
+     * @return array
+     */
+    public static function lms_fd_cases_provider(): array {
+        $items = [
+            'a' => ['intercepts' => ['0.0' => 0.0, '0.5' => -1.0, '1.0' => 1.5]],
+            'b' => ['intercepts' => ['0.0' => 0.0, '0.25' => -0.8, '0.5' => 0.2, '0.75' => 0.6, '1.0' => 1.1]],
+        ];
+        $abilities = [-1.2, 0.0, 1.1];
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach (array_keys($ip['intercepts']) as $frac) {
+                    $cases[sprintf('%s-a%d-f%s', $label, $ai, $frac)] = [
+                        'pp' => ['ability' => $ability], 'ip' => $ip, 'frac' => (float) $frac, 'n' => 3.0,
+                    ];
+                }
+            }
+        }
+        return $cases;
+    }
+
 
     /**
      * Verifies lors_1st_derivative_ip() against the numeric gradient of lors_residuals().
@@ -163,6 +231,38 @@ final class pcm_test extends TestCase {
     }
 
     /**
+     * Warm start: a category present in the start value but absent from the observed
+     * responses must be preserved (verifies that calculate_params forwards $startvalue).
+     *
+     * @return void
+     */
+    public function test_calculate_params_warm_start_preserves_category(): void {
+        $trueip = ['intercepts' => ['0.0' => 0.0, '0.333' => -0.6, '0.666' => 0.2, '1.0' => 0.9]];
+
+        // Observe only three of the four categories: 0.333 is never seen.
+        $observed = ['0.0', '0.666', '1.0'];
+        $responses = [];
+        $uid = 0;
+        for ($theta = -2.0; $theta <= 2.0; $theta += 0.5) {
+            foreach ($observed as $frac) {
+                $person = (new model_person_param((string) $uid++, 1))->set_ability($theta);
+                $responses[] = new model_item_response('Item1', (float) $frac, $person);
+            }
+        }
+
+        $startvalue = (new model_item_param('Item1', 'pcm'))->set_parameters($trueip);
+        $result = model_model::get_instance('pcm')->calculate_params($responses, $startvalue);
+
+        // The unobserved category must survive because the start value carried it.
+        $this->assertArrayHasKey(
+            '0.333',
+            $result['intercepts'],
+            'Warm start must preserve categories from the start value.'
+        );
+    }
+
+
+    /**
      * End-to-end: recover known PCM step intercepts from a synthetic data set.
      *
      * @return void
@@ -182,7 +282,7 @@ final class pcm_test extends TestCase {
             }
         }
         $result = model_model::get_instance('pcm')->calculate_params($responses);
-        // get_start_ip derives fraction keys from (string) get_response(), so
+        // Note: get_start_ip derives fraction keys from (string) get_response(), so
         // '0.5' stays '0.5' but '1.0' normalises to '1'.
         $this->assertEqualsWithDelta(-0.6, $result['intercepts']['0.5'], 0.15);
         $this->assertEqualsWithDelta(0.8, $result['intercepts']['1'], 0.15);

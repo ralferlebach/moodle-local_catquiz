@@ -80,6 +80,25 @@ class pcmgeneralized extends model_multiparam {
     }
 
     /**
+     * Serialise the polytomous parameters into the record so they survive persistence.
+     *
+     * The reverse of get_parameters_from_record(): the 'intercepts' map is stored in the
+     * record JSON, and the scalar difficulty column receives the mean difficulty.
+     *
+     * @param stdClass $record the record to enrich
+     * @param array $parameters the item parameters
+     *
+     * @return stdClass
+     *
+     */
+    public static function add_parameters_to_record(stdClass $record, array $parameters): stdClass {
+        $record->json = json_encode(['intercepts' => $parameters['intercepts']]);
+        $record->difficulty = $record->difficulty ?? self::calculate_mean_difficulty($parameters);
+        $record->discrimination = $parameters['discrimination'] ?? $record->discrimination;
+        return $record;
+    }
+
+    /**
      * Returns the name of this model.
      *
      * @return string
@@ -222,6 +241,157 @@ class pcmgeneralized extends model_multiparam {
     }
 
     /**
+     * LMS objective: n (frac - mu)^2 with the expected score mu = sum_k frac_k P_k.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return float
+     *
+     */
+    public static function least_mean_squares(array $pp, array $ip, float $frac, float $n): float {
+        return self::gpcm_lms($pp, $ip, $frac, $n)['residuals'];
+    }
+
+    /**
+     * First derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_1st_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        return self::gpcm_lms($pp, $ip, $frac, $n)['jacobian'];
+    }
+
+    /**
+     * Second derivative of the LMS objective w.r.t. the item parameters.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    public static function least_mean_squares_2nd_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
+        return self::gpcm_lms($pp, $ip, $frac, $n)['hessian'];
+    }
+
+    /**
+     * Expected-score moments and LMS assembly for GPCM (partial credit with discrimination).
+     *
+     * With P_k = softmax(b s_k)_k, s_k = k theta - D_k and mu = sum_k frac_k P_k, the
+     * expected-score derivatives use the tail sums T_j, the frac-weighted tails FF_j and
+     * FMS_j, and the (frac-weighted) score moments. Codec order: the free intercepts
+     * delta_1..delta_M followed by the discrimination b.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     *
+     * @return array
+     *
+     */
+    private static function gpcm_lms(array $pp, array $ip, float $frac, float $n): array {
+        $ability = $pp['ability'];
+        $a = self::sanitize_fractions($ip['intercepts']);
+        $b = $ip['discrimination'];
+        $fractions = self::get_fractions($a);
+        $kmax = count($fractions) - 1;
+        $bidx = $kmax;
+
+        $cumulative = 0.0;
+        $sc = [];
+        $weights = [];
+        $fr = [];
+        for ($k = 0; $k <= $kmax; $k++) {
+            if ($k > 0) {
+                $cumulative += $a[$fractions[$k]];
+            }
+            $sc[$k] = $k * $ability - $cumulative;
+            $weights[$k] = exp($b * $sc[$k]);
+            $fr[$k] = (float) $fractions[$k];
+        }
+        $z = array_sum($weights);
+
+        $p = [];
+        $mu = 0.0;
+        $es = 0.0;
+        $es2 = 0.0;
+        $fs = 0.0;
+        $fss = 0.0;
+        for ($k = 0; $k <= $kmax; $k++) {
+            $p[$k] = $weights[$k] / $z;
+            $mu += $fr[$k] * $p[$k];
+            $es += $p[$k] * $sc[$k];
+            $es2 += $p[$k] * $sc[$k] ** 2;
+            $fs += $fr[$k] * $p[$k] * $sc[$k];
+            $fss += $fr[$k] * $p[$k] * $sc[$k] ** 2;
+        }
+        $var = $es2 - $es ** 2;
+
+        // Tail sums and frac-weighted tail sums.
+        $t = [];
+        $ff = [];
+        $ms = [];
+        $fms = [];
+        for ($j = 0; $j <= $kmax; $j++) {
+            $tp = 0.0;
+            $ffj = 0.0;
+            $msj = 0.0;
+            $fmsj = 0.0;
+            for ($k = $j; $k <= $kmax; $k++) {
+                $tp += $p[$k];
+                $ffj += $fr[$k] * $p[$k];
+                $msj += $p[$k] * $sc[$k];
+                $fmsj += $fr[$k] * $p[$k] * $sc[$k];
+            }
+            $t[$j] = $tp;
+            $ff[$j] = $ffj;
+            $ms[$j] = $msj;
+            $fms[$j] = $fmsj;
+        }
+
+        $dim = $kmax + 1;
+        $dmu = array_fill(0, $dim, 0.0);
+        $ddmu = [];
+        for ($i = 0; $i < $dim; $i++) {
+            $ddmu[$i] = array_fill(0, $dim, 0.0);
+        }
+
+        for ($j = 1; $j <= $kmax; $j++) {
+            $dmu[$j - 1] = $b * ($t[$j] * $mu - $ff[$j]);
+        }
+        $dmu[$bidx] = $fs - $es * $mu;
+
+        for ($j = 1; $j <= $kmax; $j++) {
+            for ($l = 1; $l <= $kmax; $l++) {
+                $mx = max($j, $l);
+                $ddmu[$j - 1][$l - 1] = $b ** 2 * (
+                    2 * $t[$j] * $t[$l] * $mu - $t[$mx] * $mu
+                    - $t[$j] * $ff[$l] - $t[$l] * $ff[$j] + $ff[$mx]
+                );
+            }
+            $cross = ($t[$j] * $mu - $ff[$j])
+                + $b * ($ms[$j] * $mu + $t[$j] * $fs - 2 * $t[$j] * $es * $mu - $fms[$j] + $es * $ff[$j]);
+            $ddmu[$j - 1][$bidx] = $cross;
+            $ddmu[$bidx][$j - 1] = $cross;
+        }
+        $ddmu[$bidx][$bidx] = $fss - 2 * $es * $fs - $var * $mu + $es ** 2 * $mu;
+
+        return self::lms_assemble($frac, $n, $mu, $dmu, $ddmu);
+    }
+
+    /**
      * A fixed model dimension is undefined for polytomous models; use the
      * data-driven get_model_dim_from_ip($ip) instead.
      *
@@ -266,7 +436,7 @@ class pcmgeneralized extends model_multiparam {
      * @return array
      */
     public function calculate_params($itemresponse, ?model_item_param $startvalue = null): array {
-        return catcalc::estimate_item_params($itemresponse, $this);
+        return catcalc::estimate_item_params($itemresponse, $this, $startvalue);
     }
 
     /**
@@ -441,7 +611,7 @@ class pcmgeneralized extends model_multiparam {
         $fractions = self::get_fractions($a);
         $kmax = count($fractions) - 1;
 
-        // s_cat = cat*theta - D_cat with cumulative intercepts D_cat.
+        // Score term s_cat = cat*theta - D_cat with cumulative intercepts D_cat.
         $cumulative = 0.0;
         $s = [];
         $weights = [];

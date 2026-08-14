@@ -45,7 +45,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class feedback_tab_clicked extends external_api {
-
     /**
      * Describes the parameters for update_parameters webservice.
      *
@@ -56,8 +55,7 @@ class feedback_tab_clicked extends external_api {
             'attemptid'  => new external_value(PARAM_INT, 'attemptid'),
             'feedback' => new external_value(PARAM_TEXT, 'feedback'),
             'feedbacktranslated' => new external_value(PARAM_TEXT, 'feedbacktranslated'),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -109,7 +107,6 @@ class feedback_tab_clicked extends external_api {
         return new external_single_structure([
             'success' => new external_value(PARAM_BOOL, 'Successful calculation', VALUE_REQUIRED),
             'message' => new external_value(PARAM_RAW, 'message if necessary', VALUE_OPTIONAL, ''),
-            ]
-        );
+            ]);
     }
 }

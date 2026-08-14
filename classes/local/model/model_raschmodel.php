@@ -111,6 +111,50 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
     }
 
     /**
+     * Shared LMS (least mean squares) assembly from the expected-score moments.
+     *
+     * The LMS objective is S = n (frac - mu)^2 with the expected score
+     * mu = sum_k frac_k P_k. Given mu and its gradient/Hessian w.r.t. the free
+     * item parameters (0-indexed, aligned with the codec), this returns the
+     * objective value together with its gradient and Hessian:
+     *   dS/dp_j      = 2n (mu - frac) dmu/dp_j
+     *   d2S/dp_i dp_j = 2n (dmu/dp_i dmu/dp_j + (mu - frac) d2mu/dp_i dp_j)
+     *
+     * @param float $frac observed response fraction
+     * @param float $n number of observations
+     * @param float $mu expected score
+     * @param array $dmu gradient of mu (0-indexed vector)
+     * @param array $ddmu Hessian of mu (0-indexed matrix)
+     *
+     * @return array ['residuals' => float, 'jacobian' => array, 'hessian' => array]
+     *
+     */
+    protected static function lms_assemble(float $frac, float $n, float $mu, array $dmu, array $ddmu): array {
+        $diff = $mu - $frac;
+        $dim = count($dmu);
+
+        $jacobian = [];
+        for ($j = 0; $j < $dim; $j++) {
+            $jacobian[] = 2 * $n * $diff * $dmu[$j];
+        }
+
+        $hessian = [];
+        for ($i = 0; $i < $dim; $i++) {
+            $row = [];
+            for ($j = 0; $j < $dim; $j++) {
+                $row[] = 2 * $n * ($dmu[$i] * $dmu[$j] + $diff * $ddmu[$i][$j]);
+            }
+            $hessian[] = $row;
+        }
+
+        return [
+            'residuals' => $n * $diff ** 2,
+            'jacobian' => $jacobian,
+            'hessian' => $hessian,
+        ];
+    }
+
+    /**
      * Shared LORS (Log'ed Odds-Ratio Squared) computation for polytomous models.
      *
      * Both polytomous families are log-linear in a per-boundary odds ratio:
@@ -548,7 +592,7 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
         foreach ($filteredresponses as $itemid => $itemresponse) {
             $parameters = $this->calculate_params($itemresponse, $startvalues[$itemid] ?? null);
             // Now create a new item difficulty object (param).
-            $param = $starvalues[$itemid] ?? $this->create_item_param($itemid);
+            $param = $startvalues[$itemid] ?? $this->create_item_param($itemid);
             $param->set_parameters($parameters)
                 ->set_status(LOCAL_CATQUIZ_STATUS_CALCULATED);
             $estimateditemparams->add($param);
