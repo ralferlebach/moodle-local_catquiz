@@ -453,6 +453,13 @@ class mixedraschbirnbaum extends model_raschmodel {
     /**
      * Calculate Fisher-Information.
      *
+     * For the 3PL model with P = P(Y = 1) = c + (1 - c) * sigma(b * (theta - a))
+     * the item information is
+     *   I(theta) = b^2 * (1 - P) / P * ((P - c) / (1 - c))^2 .
+     * For c = 0 this correctly reduces to the 2PL form b^2 * P * (1 - P).
+     * The information depends quadratically on the discrimination b, not on the
+     * difficulty a (the previous implementation used a^2 and was incorrect).
+     *
      * @param array $pp
      * @param array $ip
      *
@@ -460,7 +467,11 @@ class mixedraschbirnbaum extends model_raschmodel {
      *
      */
     public function fisher_info(array $pp, array $ip): float {
-        return $ip['difficulty'] ** 2 * (1 - $ip['guessing']) * self::likelihood($pp, $ip, 1.0) * (self::likelihood($pp, $ip, 0.0));
+        $b = $ip['discrimination'];
+        $c = $ip['guessing'];
+        $p = self::likelihood($pp, $ip, 1.0); // P(Y = 1).
+        $q = self::likelihood($pp, $ip, 0.0); // P(Y = 0) = 1 - P.
+        return $b ** 2 * ($q / $p) * (($p - $c) / (1 - $c)) ** 2;
     }
 
     /**

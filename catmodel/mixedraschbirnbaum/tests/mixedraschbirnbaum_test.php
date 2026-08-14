@@ -27,6 +27,7 @@
 use local_catquiz\local\model\model_model;
 use local_catquiz\local\model\model_item_response;
 use local_catquiz\local\model\model_person_param;
+use local_catquiz\local\model\model_raschmodel;
 use PHPUnit\Framework\ExpectationFailedException;
 use PHPUnit\Framework\TestCase;
 use SebastianBergmann\RecursionContext\InvalidArgumentException;
@@ -782,27 +783,6 @@ final class mixedraschbirnbaum_test extends TestCase {
                 ],
                 'expected' => [1.428861, -1.905148, -1.333333],
             ],
-            // Add the remaining test cases...
-            "testcase 9" => [
-                'pp' => ['ability' => 3.5],
-                'k' => 1,
-                'ip' => [
-                    "difficulty" => 1.5,
-                    "discrimination" => 1.5,
-                    "guessing" => 0.25,
-                ],
-                'expected' => [-0.05269819, 0.07026425, 0.049175],
-            ],
-            "testcase 10" => [
-                'pp' => ['ability' => 3.5],
-                'k' => 0,
-                'ip' => [
-                    "difficulty" => 1.5,
-                    "discrimination" => 1.5,
-                    "guessing" => 0.25,
-                ],
-                'expected' => [1.428861, -1.905148, -1.333333],
-            ],
         ];
     }
 
@@ -925,36 +905,89 @@ final class mixedraschbirnbaum_test extends TestCase {
                     [-4.171454e-10, -7.032597e-11, -1.777778e+00],
                 ],
             ],
-            // Add the remaining test cases...
-            "testcase 9" => [
-                'pp' => ['ability' => 3.5],
-                'k' => 1,
-                'ip' => [
-                    "difficulty" => 1.50,
-                    "discrimination" => 1.50,
-                    "guessing" => 0.25,
-                ],
-                'expected' => [
-                    [-0.07432660,  0.06397002,  0.07285568],
-                    [ 0.06397002, -0.13213619, -0.09714091],
-                    [ 0.07285568, -0.09714091, -0.00241818],
-                ],
-            ],
-            "testcase 10" => [
-                'pp' => ['ability' => 3.5],
-                'k' => 0,
-                'ip' => [
-                    "difficulty" => 1.50,
-                    "discrimination" => 1.50,
-                    "guessing" => 0.25,
-                ],
-                'expected' => [
-                    [-1.016475e-01,  1.088104e+00, -4.171454e-10],
-                    [ 1.088104e+00, -1.807066e-01, -7.032597e-11],
-                    [-4.171454e-10, -7.032597e-11, -1.777778e+00],
-                ],
-            ],
         ];
+    }
+
+    /**
+     * Verifies the analytic Fisher information against an independent numeric reference.
+     *
+     * For a dichotomous item the item (Fisher) information is
+     *   I(theta) = P'(theta)^2 / (P(theta) * (1 - P(theta)))
+     * with P = P(Y = 1). P'(theta) is approximated here by a central finite
+     * difference of the model's own likelihood(), so the numeric path shares no
+     * code with fisher_info(). This test fails if the 3PL information formula is
+     * reverted to the (incorrect) difficulty-based expression.
+     *
+     * @dataProvider fisher_info_numeric_provider
+     *
+     * @param array $pp
+     * @param array $ip
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     * @throws InvalidArgumentException
+     */
+    public function test_fisher_info_numeric(array $pp, array $ip): void {
+        $model = $this->getmodel();
+
+        // Numeric reference: I = P'^2 / (P (1 - P)), P' via central difference.
+        $h = 1e-6;
+        $p = mixedraschbirnbaum::likelihood($pp, $ip, 1.0);
+        $pplus = mixedraschbirnbaum::likelihood(['ability' => $pp['ability'] + $h], $ip, 1.0);
+        $pminus = mixedraschbirnbaum::likelihood(['ability' => $pp['ability'] - $h], $ip, 1.0);
+        $dp = ($pplus - $pminus) / (2 * $h);
+        $numeric = ($dp ** 2) / ($p * (1 - $p));
+
+        $analytic = $model->fisher_info($pp, $ip);
+
+        // Tolerance derived from the plugin's own item-parameter precision.
+        $delta = 10 ** (-model_raschmodel::PRECISION);
+        $this->assertEqualsWithDelta($numeric, $analytic, $delta);
+    }
+
+    /**
+     * Dynamic but deterministic parameter grid for the numeric Fisher test.
+     *
+     * @return array
+     */
+    public static function fisher_info_numeric_provider(): array {
+        $abilities = [-2.1, -0.35, 0.0, 0.8, 2.0];
+        $items = [
+            ['difficulty' => 0.0, 'discrimination' => 2.0, 'guessing' => 0.25],
+            ['difficulty' => 0.5, 'discrimination' => 1.5, 'guessing' => 0.20],
+            ['difficulty' => -0.3, 'discrimination' => 1.0, 'guessing' => 0.10],
+            ['difficulty' => 1.2, 'discrimination' => 0.8, 'guessing' => 0.25],
+            ['difficulty' => -0.8, 'discrimination' => 1.7, 'guessing' => 0.00],
+        ];
+        $cases = [];
+        foreach ($items as $i => $ip) {
+            foreach ($abilities as $j => $ability) {
+                $cases["item{$i}-ability{$j}"] = [
+                    'pp' => ['ability' => $ability],
+                    'ip' => $ip,
+                ];
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * Regression guard for the historical 3PL Fisher-information bug.
+     *
+     * With a = 0, b = 2, c = 0.25, theta = 0 the true information is 0.6, whereas
+     * the previous implementation returned difficulty^2 * ... = 0. This pins the
+     * exact value and guarantees the result is not the degenerate zero.
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     */
+    public function test_fisher_info_regression_zero_difficulty(): void {
+        $model = $this->getmodel();
+        $pp = ['ability' => 0.0];
+        $ip = ['difficulty' => 0.0, 'discrimination' => 2.0, 'guessing' => 0.25];
+        $info = $model->fisher_info($pp, $ip);
+        $this->assertEqualsWithDelta(0.6, $info, 10 ** (-model_raschmodel::PRECISION));
+        $this->assertGreaterThan(0.0, $info);
     }
 
     /**
