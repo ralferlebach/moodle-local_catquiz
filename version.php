@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_catquiz';
-$plugin->release = '1.1.3';
-$plugin->version = 2026081400;
+$plugin->release = '1.1.2';
+$plugin->version = 2026081402;
 $plugin->requires = 2024100700; // Moodle 4.5.0 (min PHP 8.1).
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [

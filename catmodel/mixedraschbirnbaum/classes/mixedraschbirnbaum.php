@@ -156,17 +156,18 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $k): float {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
         $c = $ip['guessing'];
 
-        if ($k < 1.0) {
-            return -(($b * exp($b * $pp)) / (exp($a * $b) + exp($b * $pp)));
-        } else {
-            return -(($b * (-1 + $c) * exp($b * ($a + $pp))) /
-                ((exp($a * $b) + exp($b * $pp)) * ($c * exp($a * $b) + exp($b * $pp))));
-        }
+        // P/W form. L logistic core, P = c + (1 - c) L; dP/dtheta = (1 - c) b W_L.
+        $l = self::logistic($b * ($ability - $a));
+        $wl = self::logistic_w($l);
+        $p = $c + (1.0 - $c) * $l;
+
+        // Score d/dtheta log L = (k - P) / (P (1 - P)) * dP/dtheta.
+        return ($k - $p) / ($p * (1.0 - $p)) * (1.0 - $c) * $b * $wl;
     }
 
     /**
@@ -178,17 +179,24 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return float - 2nd derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p_p(array $pp, array $ip, float $k): float {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
         $c = $ip['guessing'];
 
-        if ($k < 1.0) {
-            return -(($b ** 2 * exp($b * ($a + $pp))) / (exp($a * $b) + exp($b * $pp)) ** 2);
-        } else {
-            return ($b ** 2 * ($c - 1) * exp($b * ($pp - $a)) * (exp(2 * $b * ($pp - $a)) - $c)) /
-                ((1 + exp($b * ( $pp - $a))) ** 2 * ($c + exp($b * ($pp - $a))) ** 2);
-        }
+        // P/W form via the chain rule on P = c + (1 - c) L, with
+        // dP/dtheta = (1 - c) b W_L and d^2P/dtheta^2 = (1 - c) b^2 V_L.
+        $l = self::logistic($b * ($ability - $a));
+        $wl = self::logistic_w($l);
+        $vl = $wl * (1.0 - 2.0 * $l);
+        $p = $c + (1.0 - $c) * $l;
+
+        $ptheta = (1.0 - $c) * $b * $wl;
+        $pthetatheta = (1.0 - $c) * $b ** 2 * $vl;
+        $dlp = ($k - $p) / ($p * (1.0 - $p));
+        $d2lp = -$k / ($p ** 2) - (1.0 - $k) / ((1.0 - $p) ** 2);
+
+        return $d2lp * $ptheta ** 2 + $dlp * $pthetatheta;
     }
 
     /**
@@ -303,25 +311,30 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return array - 1st derivative of lms with respect to $ip
      */
     public static function least_mean_squares_1st_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
         $c = $ip['guessing'];
 
-        $derivative = [];
+        // LMS objective S = n (frac - P)^2 with P = c + (1 - c) L, L = sigma(b (theta - a)).
+        // Gradient: dS/dtheta_i = 2 n (P - frac) * dP/dtheta_i.
+        $x = $ability - $a;
+        $l = self::logistic($b * $x);
+        $wl = self::logistic_w($l);
+        $omc = 1.0 - $c;
+        $p = $c + $omc * $l;
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expbap = exp($b * ($a - $pp));
+        $pa = -$b * $omc * $wl;   // DP/da.
+        $pb = $omc * $wl * $x;    // DP/db.
+        $pc = 1.0 - $l;           // DP/dc.
 
-        // Calculate d/da.
-        $derivative[0] = $n * (-(2 * $b * (1 - $c) * $expbap) / (1 + $expbap - $frac) ** 3);
-        // Calculate d/db.
-        $derivative[1] = $n * (-(2 * (1 - $c) * $expbap * ($c + (1 - $c) / (1 + $expbap) - $frac) * ($a - $pp)) /
-            (1 + $expbap) ** 2);
-        // Calculate d/dc.
-        $derivative[2] = $n * 2 * (1 - 1 / (1 + $expbap)) * ($c + (1 - $c) / (1 + $expbap) - $frac);
+        $factor = 2.0 * $n * ($p - $frac);
 
-        return $derivative;
+        return [
+            $factor * $pa, // D/da.
+            $factor * $pb, // D/db.
+            $factor * $pc, // D/dc.
+        ];
     }
 
     /**
@@ -334,43 +347,46 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return array - 2nd derivative of lms with respect to $ip
      */
     public static function least_mean_squares_2nd_derivative_ip(array $pp, array $ip, float $frac, float $n): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
         $c = $ip['guessing'];
 
-        $derivative = [[]];
+        // LMS objective S = n (frac - P)^2. Hessian:
+        // D^2S/dtheta_i dtheta_j = 2 n [ P_i P_j + (P - frac) P_ij ].
+        $x = $ability - $a;
+        $l = self::logistic($b * $x);
+        $wl = self::logistic_w($l);
+        $vl = $wl * (1.0 - 2.0 * $l);
+        $omc = 1.0 - $c;
+        $p = $c + $omc * $l;
+        $r = $p - $frac;
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expbap = exp($b * ($a - $pp));
-        $expab = exp($a * $b);
-        $expbp = exp($b * $pp);
+        // First derivatives of P.
+        $pa = -$b * $omc * $wl;
+        $pb = $omc * $wl * $x;
+        $pc = 1.0 - $l;
+        // Second derivatives of P.
+        $paa = $omc * $vl * $b ** 2;
+        $pbb = $omc * $vl * $x ** 2;
+        $pab = $omc * (-$b * $x * $vl - $wl);
+        $pac = $b * $wl;
+        $pbc = -$x * $wl;
+        // Second derivative d^2P/dc^2 vanishes.
 
-        // Calculate d²/da².
-        $derivative[0][0]  = $n * (-(2 * $b ** 2 * (1 - $c) * $expbap * ((1 - $c) / ($expbap + 1) + $c - $frac)) /
-            ($expbap + 1) ** 2 + (4 * $b ** 2 * (1 - $c) * $expbap ** 2 * ((1 - $c) / ($expbap + 1) + $c - $frac)) /
-            ($expbap + 1) ** 3 + (2 * $b ** 2 * (1 - $c) ** 2 * $expbap ** 2) / ($expbap + 1) ** 4);
-        // Calculate d/da d/db.
-        $derivative[0][1]  = $n * (-(2 * (1 - $c) * $expbap * ((1 - $c) / ($expbap + 1) + $c - $frac)) /
-            ($expbap + 1) ** 2 - (2 * $b * (1 - $c) * ($a - $pp) * $expbap * ((1 - $c) / ($expbap + 1) + $c - $frac)) /
-            ($expbap + 1) ** 2 + (4 * $b * (1 - $c) * ($a - $pp) * $expbap ** 2 * ((1 - $c) / ($expbap + 1) + $c - $frac)) /
-            ($expbap + 1) ** 3 + (2 * $b * (1 - $c) ** 2 * ($a - $pp) * $expbap ** 2) / ($expbap + 1) ** 4);
-        // Calculate d/da d/dc.
-        $derivative[0][2]  = $n * (2 * $b * $expbap * ((2 * $c - $frac - 1) * $expbap - $frac + 1)) / ($expbap + 1) ** 3;
-        // Calculate d²/db².
-        $derivative[1][1]  = $n * (2 * ($a - $pp) * $expbap * ((1 - $c) / ($expbap + 1) + $c - $frac)) /
-            ($expbap + 1) ** 2 - (2 * (1 - $c) * ($a - $pp) * $expbap * (1 - 1 / ($expbap + 1))) / ($expbap + 1) ** 2;
-        // Calculate d/db d/dc.
-        $derivative[1][2]  = $n * (2 * ($a - $pp) * $expbap * ((2 * $c - $frac - 1) * $expbap - $frac + 1)) / ($expbap + 1) ** 3;
-        // Calculate d²/dc².
-        $derivative[2][2]  = $n * (2 * $expab ** 2) / ($expab + $expbp) ** 2;
+        $k = 2.0 * $n;
+        $haa = $k * ($pa * $pa + $r * $paa);
+        $hbb = $k * ($pb * $pb + $r * $pbb);
+        $hcc = $k * ($pc * $pc);
+        $hab = $k * ($pa * $pb + $r * $pab);
+        $hac = $k * ($pa * $pc + $r * $pac);
+        $hbc = $k * ($pb * $pc + $r * $pbc);
 
-        // Note: Partial derivations are exchangeible, cf. Theorem of Schwarz.
-        $derivative[1][0] = $derivative[0][1];
-        $derivative[2][0] = $derivative[0][2];
-        $derivative[2][1] = $derivative[1][2];
-
-        return $derivative;
+        return [
+            [$haa, $hab, $hac],
+            [$hab, $hbb, $hbc],
+            [$hac, $hbc, $hcc],
+        ];
     }
 
 
@@ -404,18 +420,21 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return array - 1st derivative
      */
     public static function lors_1st_derivative_ip(array $pp, array $ip, float $or, float $n = 1): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
 
-        $derivative = [];
+        // LORS residual R = b (a - theta) + log(OR); the objective is n * R^2.
+        // R does not depend on the guessing parameter c, so d/dc is identically
+        // zero and the gradient is [d/da, d/db, d/dc] = [2n b R, 2n (a-theta) R, 0].
+        $x = $a - $ability;
+        $r = $b * $x + log($or);
 
-        // Note (Ralf): 3PL least-mean-squares formulas are implemented in a later work package (Paket B).
-
-        $derivative[0] = $n * 2 * $b * ($b * ($a - $pp) + log($or)); // Calculate d/da.
-        $derivative[1] = $n * 2 * ($a - $pp) * ($b * ($a - $pp) + log($or)); // Calculate d/db.
-
-        return $derivative;
+        return [
+            $n * 2 * $b * $r, // Calculate d/da.
+            $n * 2 * $x * $r, // Calculate d/db.
+            0.0, // Calculate d/dc (LORS is independent of guessing).
+        ];
     }
 
     /**
@@ -428,23 +447,26 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return array - 1st derivative
      */
     public static function lors_2nd_derivative_ip(array $pp, array $ip, float $or, float $n = 1): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
 
-        $derivative = [[]];
+        // LORS residual R = b (a - theta) + log(OR); the objective is n * R^2.
+        // With dR/da = b, dR/db = (a - theta), d^2R/da db = 1 and no dependence
+        // on the guessing parameter c, all second derivatives involving c vanish.
+        $x = $a - $ability;
 
-        // Note (Ralf): 3PL least-mean-squares formulas are implemented in a later work package (Paket B).
+        $haa = $n * 2 * $b ** 2;                   // D^2/da^2.
+        $hbb = $n * 2 * $x ** 2;                   // D^2/db^2.
+        $hab = $n * 2 * (2 * $b * $x + log($or));  // D^2/da db = 2n (2 b (a-theta) + log(OR)).
 
-        $derivative[0][0]  = $n * 2 * $b ** 2; // Calculate d²2/da².
-        // d/da d/db closed form pending: $n * 2 * (2 * $b * ($a - $pp) + log($or)) (Paket B).
-        $derivative[0][1] = 0;
-        $derivative[1][1]  = $n * 2 * ($a - $pp) ** 2; // Calculate d²/db².
-
-        // Note: Partial derivations are exchangeable, cf. Theorem of Schwarz.
-        $derivative[1][0] = $derivative[0][1];
-
-        return $derivative;
+        // Partial derivatives are exchangeable (Schwarz), and the guessing row and
+        // column are zero because the residual is independent of c.
+        return [
+            [$haa, $hab, 0.0],
+            [$hab, $hbb, 0.0],
+            [0.0, 0.0, 0.0],
+        ];
     }
 
     /**

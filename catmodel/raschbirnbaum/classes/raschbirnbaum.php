@@ -140,15 +140,13 @@ class raschbirnbaum extends model_raschmodel {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $k): float {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
 
-        if ($k < 1.0) {
-            return -($b * exp($b * $pp)) / (exp($a * $b) + exp($b * $pp));
-        } else {
-            return ($b * exp($a * $b)) / (exp($a * $b) + exp($b * $pp));
-        }
+        // P/W form: d/dtheta log L = b (k - P), P = sigma(b (theta - a)).
+        $p = self::logistic($b * ($ability - $a));
+        return $b * ($k - $p);
     }
 
     /**
@@ -160,11 +158,13 @@ class raschbirnbaum extends model_raschmodel {
      * @return float - 2nd derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p_p(array $pp, array $ip, float $k): float {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
 
-        return -(($b ** 2 * exp($b * ($a + $pp))) / ((exp($a * $b) + exp($b * $pp)) ** 2));
+        // P/W form: d^2/dtheta^2 log L = -b^2 W, independent of k.
+        $p = self::logistic($b * ($ability - $a));
+        return -($b ** 2) * self::logistic_w($p);
     }
 
     /**
@@ -356,8 +356,8 @@ class raschbirnbaum extends model_raschmodel {
         $derivative = [[]];
 
         $derivative[0][0]  = $n * 2 * $b ** 2; // Calculate d²2/da².
-        // d/da d/db closed form pending: $n * 2 * (2 * $b * ($a - $pp) + log($or)) (Paket B).
-        $derivative[0][1] = 0;
+        // d²/da db = 2n (2 b (a-theta) + log(OR)).
+        $derivative[0][1] = $n * 2 * (2 * $b * ($a - $pp) + log($or));
         $derivative[1][1]  = $n * 2 * ($a - $pp) ** 2; // Calculate d²/db².
 
         // Note: Partial derivations are exchangeable, cf. Theorem of Schwarz.
@@ -376,7 +376,9 @@ class raschbirnbaum extends model_raschmodel {
      *
      */
     public function fisher_info(array $pp, array $ip): float {
-        return ($ip['discrimination'] ** 2 * self::likelihood($pp, $ip, 0) * self::likelihood($pp, $ip, 1.0));
+        // I(theta) = b^2 W = b^2 P (1 - P) with P = sigma(b (theta - a)).
+        $p = self::likelihood($pp, $ip, 1.0);
+        return $ip['discrimination'] ** 2 * self::logistic_w($p);
     }
 
     // Implements handling of the Trusted Regions (TR) approach.

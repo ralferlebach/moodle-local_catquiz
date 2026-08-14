@@ -141,18 +141,11 @@ class rasch extends model_raschmodel {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $k): float {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expa = exp($a);
-        $expp = exp($pp);
-
-        if ($k < 1.0) {
-            return -$expp / ($expa + $expp);
-        } else {
-            return $expa / ($expa + $expp);
-        }
+        // P/W form: d/dtheta log L = k - P, with P = sigma(theta - a).
+        return $k - self::logistic($ability - $a);
     }
 
     /**
@@ -165,14 +158,12 @@ class rasch extends model_raschmodel {
      * @return float - 2nd derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p_p(array $pp, array $ip, float $k): float {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expa = exp($a);
-        $expp = exp($pp);
-
-        return - ($expa * $expp) / (($expa + $expp) ** 2);
+        // P/W form: d^2/dtheta^2 log L = -W = -P(1 - P), independent of k.
+        $p = self::logistic($ability - $a);
+        return -self::logistic_w($p);
     }
 
     /**
@@ -352,7 +343,9 @@ class rasch extends model_raschmodel {
      *
      */
     public function fisher_info(array $pp, array $ip) {
-        return (self::likelihood($pp, $ip, 0) * self::likelihood($pp, $ip, 1.0));
+        // I(theta) = W = P(1 - P) with P = sigma(theta - a).
+        $p = self::likelihood($pp, $ip, 1.0);
+        return self::logistic_w($p);
     }
 
     // Implements handling of the Trusted Regions (TR) approach.

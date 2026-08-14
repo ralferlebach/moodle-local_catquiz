@@ -896,6 +896,214 @@ final class rasch_test extends TestCase {
     }
 
     /**
+     * Verifies least_mean_squares_1st_derivative_ip() against the numeric
+     * gradient of least_mean_squares() with respect to the item parameters.
+     *
+     * @dataProvider lms_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed fraction correct
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_1st_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $keys = ['difficulty'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $keys, $frac, $n) {
+            $ip = array_combine($keys, $v);
+            return rasch::least_mean_squares($pp, $ip, $frac, $n);
+        };
+        $numeric = $this->fd_gradient($f, $x);
+        $analytic = rasch::least_mean_squares_1st_derivative_ip($pp, $ip, $frac, $n);
+        $this->assert_gradient_close($numeric, $analytic);
+    }
+
+    /**
+     * Verifies least_mean_squares_2nd_derivative_ip() against the numeric
+     * Hessian of least_mean_squares() with respect to the item parameters.
+     *
+     * @dataProvider lms_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed fraction correct
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lms_2nd_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
+        $keys = ['difficulty'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $keys, $frac, $n) {
+            $ip = array_combine($keys, $v);
+            return rasch::least_mean_squares($pp, $ip, $frac, $n);
+        };
+        $numeric = $this->fd_hessian($f, $x);
+        $analytic = rasch::least_mean_squares_2nd_derivative_ip($pp, $ip, $frac, $n);
+        $this->assert_hessian_close($numeric, $analytic);
+    }
+
+    /**
+     * Dynamic but deterministic (item parameters x ability x fraction x n) grid for LMS.
+     *
+     * @return array
+     */
+    public static function lms_cases_provider(): array {
+        $abilities = [-1.5, 0.0, 1.2];
+        $fracs = [0.2, 0.5, 0.8];
+        $ns = [1.0, 4.0];
+        $items = self::derivative_item_sets();
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach ($fracs as $fi => $frac) {
+                    foreach ($ns as $ni => $n) {
+                        $name = sprintf('%s-a%d-f%d-n%d', $label, $ai, $fi, $ni);
+                        $cases[$name] = [
+                            'pp' => ['ability' => $ability],
+                            'ip' => $ip,
+                            'frac' => $frac,
+                            'n' => $n,
+                        ];
+                    }
+                }
+            }
+        }
+        return $cases;
+    }
+    /**
+     * Verifies lors_1st_derivative_ip() against the numeric gradient of
+     * lors_residuals() with respect to the item parameters.
+     *
+     * @dataProvider lors_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $or odds ratio
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lors_1st_derivative_numeric(array $pp, array $ip, float $or, float $n): void {
+        $keys = ['difficulty'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $keys, $or, $n) {
+            $ip = array_combine($keys, $v);
+            return rasch::lors_residuals($pp, $ip, $or, $n);
+        };
+        $numeric = $this->fd_gradient($f, $x);
+        $analytic = rasch::lors_1st_derivative_ip($pp, $ip, $or, $n);
+        $this->assert_gradient_close($numeric, $analytic);
+    }
+
+    /**
+     * Verifies lors_2nd_derivative_ip() against the numeric Hessian of
+     * lors_residuals() with respect to the item parameters.
+     *
+     * @dataProvider lors_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $or odds ratio
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lors_2nd_derivative_numeric(array $pp, array $ip, float $or, float $n): void {
+        $keys = ['difficulty'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $keys, $or, $n) {
+            $ip = array_combine($keys, $v);
+            return rasch::lors_residuals($pp, $ip, $or, $n);
+        };
+        $numeric = $this->fd_hessian($f, $x);
+        $analytic = rasch::lors_2nd_derivative_ip($pp, $ip, $or, $n);
+        $this->assert_hessian_close($numeric, $analytic);
+    }
+
+    /**
+     * Dynamic but deterministic (item parameters x ability x odds ratio) grid for LORS.
+     *
+     * @return array
+     */
+    public static function lors_cases_provider(): array {
+        $abilities = [-1.5, 0.0, 1.2];
+        $ors = [0.4, 1.0, 2.5];
+        $items = self::derivative_item_sets();
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach ($ors as $oi => $or) {
+                    $name = sprintf('%s-a%d-or%d', $label, $ai, $oi);
+                    $cases[$name] = [
+                        'pp' => ['ability' => $ability],
+                        'ip' => $ip,
+                        'or' => $or,
+                        'n' => 1.0,
+                    ];
+                }
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * Verifies log_likelihood_p() (person-ability score) against the numeric
+     * gradient of log_likelihood() with respect to theta.
+     *
+     * @dataProvider derivative_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $response observed response
+     *
+     * @return void
+     */
+    public function test_log_likelihood_p_numeric(array $pp, array $ip, float $response): void {
+        $f = function (array $v) use ($ip, $response) {
+            return rasch::log_likelihood(['ability' => $v[0]], $ip, $response);
+        };
+        $numeric = $this->fd_gradient($f, [$pp['ability']]);
+        $analytic = rasch::log_likelihood_p($pp, $ip, $response);
+        $this->assert_close(array_values($numeric)[0], $analytic, $this->fd_atol(), $this->fd_atol());
+    }
+
+    /**
+     * Verifies log_likelihood_p_p() (person-ability curvature) against the
+     * numeric second derivative of log_likelihood() with respect to theta.
+     *
+     * @dataProvider derivative_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $response observed response
+     *
+     * @return void
+     */
+    public function test_log_likelihood_p_p_numeric(array $pp, array $ip, float $response): void {
+        $f = function (array $v) use ($ip, $response) {
+            return rasch::log_likelihood(['ability' => $v[0]], $ip, $response);
+        };
+        $numeric = $this->fd_hessian($f, [$pp['ability']]);
+        $analytic = rasch::log_likelihood_p_p($pp, $ip, $response);
+        $this->assert_close(array_values($numeric)[0][0], $analytic, $this->fd_atol(), 10 * $this->fd_atol());
+    }
+
+    /**
      * Get model.
      *
      * @return rasch

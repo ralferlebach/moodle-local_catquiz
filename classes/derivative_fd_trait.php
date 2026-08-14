@@ -176,8 +176,17 @@ trait derivative_fd_trait {
      * @return void
      */
     protected function assert_hessian_close(array $numeric, array $analytic): void {
-        $numeric = array_values(array_map('array_values', $numeric));
-        $analytic = array_values(array_map('array_values', $analytic));
+        $normalise = function (array $matrix): array {
+            ksort($matrix);
+            $rows = [];
+            foreach ($matrix as $row) {
+                ksort($row);
+                $rows[] = array_values($row);
+            }
+            return $rows;
+        };
+        $numeric = $normalise($numeric);
+        $analytic = $normalise($analytic);
         $n = count($numeric);
         $this->assertCount($n, $analytic, 'hessian dimension mismatch');
         // Hessian finite differences are noisier (cancellation), so allow more relative slack.
