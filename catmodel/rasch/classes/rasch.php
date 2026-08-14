@@ -68,6 +68,31 @@ class rasch extends model_raschmodel {
      *
      * @return int
      */
+    /**
+     * Serialises the item parameters into a flat numeric vector (parameter codec).
+     *
+     * @param array $ip item parameters
+     *
+     * @return array
+     *
+     */
+    public static function convert_ip_to_vector(array $ip): array {
+        return [$ip['difficulty']];
+    }
+
+    /**
+     * Reconstructs the item parameters from a flat numeric vector (parameter codec).
+     *
+     * @param array $vector flat parameter vector
+     * @param mixed $fractions response fractions (unused for dichotomous models)
+     *
+     * @return array
+     *
+     */
+    public static function convert_vector_to_ip(array $vector, $fractions = null): array {
+        return ['difficulty' => $vector[0]];
+    }
+
     public static function get_model_dim(): int {
         return 2;  // 2 parameters: person ability, difficulty
     }

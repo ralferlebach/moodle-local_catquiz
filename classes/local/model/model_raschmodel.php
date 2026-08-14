@@ -95,6 +95,182 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
     }
 
     /**
+     * Data-driven number of estimated parameters (item parameters + ability).
+     *
+     * Derived from the parameter codec rather than a fixed constant, so that
+     * variable-length polytomous models (with a data-dependent number of
+     * thresholds or intercepts) report the correct dimensionality.
+     *
+     * @param array $ip item parameters
+     *
+     * @return int
+     *
+     */
+    public static function get_model_dim_from_ip(array $ip): int {
+        return 1 + count(static::convert_ip_to_vector($ip));
+    }
+
+    /**
+     * Shared LORS (Log'ed Odds-Ratio Squared) computation for polytomous models.
+     *
+     * Both polytomous families are log-linear in a per-boundary odds ratio:
+     *   - graded (GRM/GGRM): the cumulative odds  P(X>=k)/P(X<k),
+     *   - partial credit (PCM/GPCM): the adjacent odds  P_k/P_{k-1},
+     * with the same linear predictor eta_k = b (theta - p_k) for the k-th free
+     * parameter p_k (threshold or step intercept). The residual is therefore
+     * R_k = log(OR_k) + b (p_k - theta) and the objective S = n * sum_k R_k^2 —
+     * one dichotomous LORS problem per boundary. The threshold/intercept block of
+     * the Hessian is diagonal (residuals do not couple across boundaries); only
+     * the discrimination couples across them.
+     *
+     * The returned gradient and Hessian are aligned with the baseline-free codec:
+     * the M free parameters, optionally followed by the discrimination.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param array $ors observed odds ratios, keyed by the free fractions
+     * @param float $n number of observations
+     * @param string $key item-parameter key ('difficulties' or 'intercepts')
+     * @param bool $hasdiscrimination whether the model estimates a discrimination
+     *
+     * @return array ['residuals' => float, 'jacobian' => array, 'hessian' => array]
+     *
+     */
+    protected static function compute_lors(
+        array $pp,
+        array $ip,
+        array $ors,
+        float $n,
+        string $key,
+        bool $hasdiscrimination
+    ): array {
+        $ability = $pp['ability'];
+        $params = self::sort_fractions($ip[$key]);
+        $ors = self::sanitize_fractions($ors);
+        $b = $hasdiscrimination ? $ip['discrimination'] : 1.0;
+        $fractions = self::get_fractions($params);
+        $kmax = max(array_keys($fractions));
+
+        // Free boundaries k = 1..M (baseline fraction excluded).
+        $xs = [];
+        $rs = [];
+        $logors = [];
+        $residualsum = 0.0;
+        for ($k = 1; $k <= $kmax; $k++) {
+            $frac = $fractions[$k];
+            $x = $params[$frac] - $ability;
+            $logor = log($ors[$frac]);
+            $r = $b * $x + $logor;
+            $xs[$k] = $x;
+            $rs[$k] = $r;
+            $logors[$k] = $logor;
+            $residualsum += $r ** 2;
+        }
+
+        // Gradient aligned with the codec: free parameters, then discrimination.
+        $jacobian = [];
+        for ($k = 1; $k <= $kmax; $k++) {
+            $jacobian[] = $n * 2 * $b * $rs[$k];
+        }
+        if ($hasdiscrimination) {
+            $jb = 0.0;
+            for ($k = 1; $k <= $kmax; $k++) {
+                $jb += $rs[$k] * $xs[$k];
+            }
+            $jacobian[] = $n * 2 * $jb;
+        }
+
+        $dim = $kmax + ($hasdiscrimination ? 1 : 0);
+        $hessian = array_fill(0, $dim, array_fill(0, $dim, 0.0));
+        for ($k = 1; $k <= $kmax; $k++) {
+            $hessian[$k - 1][$k - 1] = $n * 2 * $b ** 2;
+        }
+        if ($hasdiscrimination) {
+            $bidx = $kmax;
+            $hbb = 0.0;
+            for ($k = 1; $k <= $kmax; $k++) {
+                $hbb += $xs[$k] ** 2;
+                $cross = $n * 2 * (2 * $b * $xs[$k] + $logors[$k]);
+                $hessian[$k - 1][$bidx] = $cross;
+                $hessian[$bidx][$k - 1] = $cross;
+            }
+            $hessian[$bidx][$bidx] = $n * 2 * $hbb;
+        }
+
+        return [
+            'residuals' => $n * $residualsum,
+            'jacobian' => $jacobian,
+            'hessian' => $hessian,
+        ];
+    }
+
+    /**
+     * Whether the model has a data-dependent number of item parameters.
+     *
+     * @return bool
+     *
+     */
+    public static function is_polytomous(): bool {
+        return false;
+    }
+
+    /**
+     * Data-driven start thresholds for a polytomous item.
+     *
+     * Option 1 (empirical): the distinct observed response fractions define the
+     * categories; the free thresholds are initialised from the empirical
+     * cumulative category proportions as ordered -logit values. Option 2
+     * (fallback): if a category is unobserved (proportion 0 or 1, degenerate
+     * logit), evenly spaced thresholds in [-2, 2] are used instead. The baseline
+     * category (first fraction) is fixed at 0.
+     *
+     * @param array $itemresponse array of model_item_response
+     *
+     * @return array thresholds keyed by fraction (baseline first, value 0)
+     *
+     */
+    protected static function empirical_start_thresholds(array $itemresponse): array {
+        $fractions = [];
+        foreach ($itemresponse as $r) {
+            $fractions[(string) $r->get_response()] = true;
+        }
+        $fractions = array_keys($fractions);
+        usort($fractions, fn($x, $y) => (float) $x <=> (float) $y);
+        $m = count($fractions) - 1;
+
+        $index = array_flip($fractions);
+        $counts = array_fill(0, count($fractions), 0);
+        $n = 0;
+        foreach ($itemresponse as $r) {
+            $counts[$index[(string) $r->get_response()]]++;
+            $n++;
+        }
+
+        $result = [(string) $fractions[0] => 0.0];
+        $usefallback = false;
+        for ($k = 1; $k <= $m; $k++) {
+            $cum = 0;
+            for ($j = $k; $j <= $m; $j++) {
+                $cum += $counts[$j];
+            }
+            $prop = ($n > 0) ? $cum / $n : 0.0;
+            if ($prop <= 0.0 || $prop >= 1.0) {
+                $usefallback = true;
+                break;
+            }
+            $result[(string) $fractions[$k]] = -log($prop / (1.0 - $prop));
+        }
+
+        if ($usefallback) {
+            $result = [(string) $fractions[0] => 0.0];
+            for ($k = 1; $k <= $m; $k++) {
+                $result[(string) $fractions[$k]] = ($m > 1) ? (-2.0 + 4.0 * ($k - 1) / ($m - 1)) : 0.0;
+            }
+        }
+        return $result;
+    }
+
+    /**
      * Helper class that gets the key of an ip-array by given fraction
      *
      * @param float $frac
@@ -247,7 +423,12 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
      * @return float
      */
     public function calc_aic_item($personabilities, $item, model_responses $k) {
-        $numberofparameters = $this->get_model_dim() - 1;
+        // Data-driven parameter count from the estimated item parameters via the
+        // codec; falls back to the fixed dimension only when no parameters exist.
+        $ip = $item->get_params_array();
+        $numberofparameters = ($ip !== null)
+            ? static::get_model_dim_from_ip($ip) - 1
+            : $this->get_model_dim() - 1;
         return 2 * $numberofparameters + $this->calc_dic_item($personabilities, $item, $k);
     }
 
@@ -262,7 +443,12 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
      * @return float
      */
     public function calc_bic_item(model_person_param_list $personabilities, model_item_param $item, model_responses $k) {
-        $numberofparameters = $this->get_model_dim() - 1;
+        // Data-driven parameter count from the estimated item parameters via the
+        // codec; falls back to the fixed dimension only when no parameters exist.
+        $ip = $item->get_params_array();
+        $numberofparameters = ($ip !== null)
+            ? static::get_model_dim_from_ip($ip) - 1
+            : $this->get_model_dim() - 1;
         $numberofcases = count($personabilities->only_valid());
         return $numberofparameters * log($numberofcases) + $this->calc_dic_item($personabilities, $item, $k);
     }
@@ -278,7 +464,12 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
      * @return float
      */
     public function calc_caic_item(model_person_param_list $personabilities, model_item_param $item, model_responses $k) {
-        $numberofparameters = $this->get_model_dim() - 1;
+        // Data-driven parameter count from the estimated item parameters via the
+        // codec; falls back to the fixed dimension only when no parameters exist.
+        $ip = $item->get_params_array();
+        $numberofparameters = ($ip !== null)
+            ? static::get_model_dim_from_ip($ip) - 1
+            : $this->get_model_dim() - 1;
         $numberofcases = count($personabilities->only_valid());
         return $numberofparameters * (log($numberofcases + 1)) + $this->calc_dic_item($personabilities, $item, $k);
     }
@@ -294,7 +485,12 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
      * @return float
      */
     public function calc_aicc_item(model_person_param_list $personabilities, model_item_param $item, model_responses $k) {
-        $numberofparameters = $this->get_model_dim() - 1;
+        // Data-driven parameter count from the estimated item parameters via the
+        // codec; falls back to the fixed dimension only when no parameters exist.
+        $ip = $item->get_params_array();
+        $numberofparameters = ($ip !== null)
+            ? static::get_model_dim_from_ip($ip) - 1
+            : $this->get_model_dim() - 1;
         $numberofcases = count($personabilities->only_valid());
         if ($numberofcases - $numberofparameters - 1 <= 0) {
             return 0;
@@ -315,7 +511,12 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
      * @return float
      */
     public function calc_sabic_item(model_person_param_list $personabilities, model_item_param $item, model_responses $k) {
-        $numberofparameters = $this->get_model_dim() - 1;
+        // Data-driven parameter count from the estimated item parameters via the
+        // codec; falls back to the fixed dimension only when no parameters exist.
+        $ip = $item->get_params_array();
+        $numberofparameters = ($ip !== null)
+            ? static::get_model_dim_from_ip($ip) - 1
+            : $this->get_model_dim() - 1;
         $numberofcases = count($personabilities->only_valid());
         if ($numberofcases - $numberofparameters - 1 <= 0) {
             return 0;

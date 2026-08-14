@@ -40,6 +40,144 @@ use local_catquiz\local\model\model_responses;
  * @covers \catmodel_grm\grm
  */
 final class grm_test extends TestCase {
+    use \local_catquiz\derivative_fd_trait;
+
+    /**
+     * Verifies lors_1st_derivative_ip() against the numeric gradient of lors_residuals().
+     *
+     * @dataProvider lors_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param array $ors observed odds ratios
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lors_1st_derivative_numeric(array $pp, array $ip, array $ors, float $n): void {
+        $fractions = array_keys($ip['difficulties']);
+        $x = grm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $ors, $n) {
+            return grm::lors_residuals($pp, grm::convert_vector_to_ip($v, $fractions), $ors, $n);
+        };
+        $this->assert_gradient_close($this->fd_gradient($f, $x), grm::lors_1st_derivative_ip($pp, $ip, $ors, $n));
+    }
+
+    /**
+     * Verifies lors_2nd_derivative_ip() against the numeric Hessian of lors_residuals().
+     *
+     * @dataProvider lors_fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param array $ors observed odds ratios
+     * @param float $n number of observations
+     *
+     * @return void
+     */
+    public function test_lors_2nd_derivative_numeric(array $pp, array $ip, array $ors, float $n): void {
+        $fractions = array_keys($ip['difficulties']);
+        $x = grm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $ors, $n) {
+            return grm::lors_residuals($pp, grm::convert_vector_to_ip($v, $fractions), $ors, $n);
+        };
+        $this->assert_hessian_close($this->fd_hessian($f, $x), grm::lors_2nd_derivative_ip($pp, $ip, $ors, $n));
+    }
+
+    /**
+     * Deterministic (item x ability x odds ratios) grid for the LORS FD checks.
+     *
+     * @return array
+     */
+    public static function lors_fd_cases_provider(): array {
+        $items = [
+            'a' => ['difficulties' => ['0.0' => 0.0, '0.5' => -0.7, '1.0' => 0.9]],
+            'b' => ['difficulties' => ['0.0' => 0.0, '0.25' => -1.2, '0.5' => -0.2, '0.75' => 0.5, '1.0' => 1.4]],
+        ];
+        $orsets = [
+            'a' => ['0.5' => 1.5, '1.0' => 0.6],
+            'b' => ['0.25' => 2.0, '0.5' => 1.1, '0.75' => 0.7, '1.0' => 0.4],
+        ];
+        $abilities = [-1.0, 0.3, 1.2];
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                $cases[sprintf('%s-a%d', $label, $ai)] = [
+                    'pp' => ['ability' => $ability],
+                    'ip' => $ip,
+                    'ors' => $orsets[$label],
+                    'n' => 1.0,
+                ];
+            }
+        }
+        return $cases;
+    }
+
+
+    /**
+     * Verifies get_log_jacobian() against the numeric gradient of log_likelihood().
+     *
+     * @dataProvider fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     *
+     * @return void
+     */
+    public function test_get_log_jacobian_numeric(array $pp, array $ip, float $frac): void {
+        $fractions = array_keys($ip['difficulties']);
+        $x = grm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac) {
+            return grm::log_likelihood($pp, grm::convert_vector_to_ip($v, $fractions), $frac);
+        };
+        $this->assert_gradient_close($this->fd_gradient($f, $x), grm::get_log_jacobian($pp, $ip, $frac));
+    }
+
+    /**
+     * Verifies get_log_hessian() against the numeric Hessian of log_likelihood().
+     *
+     * @dataProvider fd_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac observed response fraction
+     *
+     * @return void
+     */
+    public function test_get_log_hessian_numeric(array $pp, array $ip, float $frac): void {
+        $fractions = array_keys($ip['difficulties']);
+        $x = grm::convert_ip_to_vector($ip);
+        $f = function (array $v) use ($pp, $fractions, $frac) {
+            return grm::log_likelihood($pp, grm::convert_vector_to_ip($v, $fractions), $frac);
+        };
+        $this->assert_hessian_close($this->fd_hessian($f, $x), grm::get_log_hessian($pp, $ip, $frac));
+    }
+
+    /**
+     * Deterministic grid of (item, ability, response) for the FD checks.
+     *
+     * @return array
+     */
+    public static function fd_cases_provider(): array {
+        $items = [
+            'a' => ['difficulties' => ['0.0' => 0.0, '0.5' => -0.7, '1.0' => 0.9]],
+            'b' => ['difficulties' => ['0.0' => 0.0, '0.25' => -1.2, '0.5' => -0.2, '0.75' => 0.5, '1.0' => 1.4]],
+        ];
+        $abilities = [-1.3, 0.0, 1.1];
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach (array_keys($ip['difficulties']) as $frac) {
+                    $cases[sprintf('%s-a%d-f%s', $label, $ai, $frac)] = [
+                        'pp' => ['ability' => $ability], 'ip' => $ip, 'frac' => (float) $frac,
+                    ];
+                }
+            }
+        }
+        return $cases;
+    }
+
 
     /**
      * This test calls the get_log_jacobain function with the model and test its output with verified data.
@@ -146,7 +284,6 @@ final class grm_test extends TestCase {
      * @return void
      */
     public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $frac, array $ip, array $expected): void {
-
     }
 
     /**
@@ -213,7 +350,7 @@ final class grm_test extends TestCase {
 
         foreach ($labels as $key => $label) {
             foreach ($expected[$key] as $case => $expectedvalue) {
-                $providedarray[$label."-".$case] = ['pp' => ['ability' => $ability[$key]],
+                $providedarray[$label . "-" . $case] = ['pp' => ['ability' => $ability[$key]],
                     'frac' => $frac[$case],
                     'ip' => $parameter[$key],
                     'expected' => $expectedvalue,
@@ -259,7 +396,7 @@ final class grm_test extends TestCase {
 
         foreach ($labels as $key => $label) {
             foreach ($expected[$key] as $case => $expectedvalue) {
-                $providedarray[$label."-".$case] = ['pp' => ['ability' => $ability[$key]],
+                $providedarray[$label . "-" . $case] = ['pp' => ['ability' => $ability[$key]],
                     'frac' => $frac[$case],
                     'ip' => $parameter[$key],
                     'expected' => $expectedvalue,
@@ -305,7 +442,7 @@ final class grm_test extends TestCase {
 
         foreach ($labels as $key => $label) {
             foreach ($expected[$key] as $case => $expectedvalue) {
-                $providedarray[$label."-".$case] = ['pp' => ['ability' => $ability[$key]],
+                $providedarray[$label . "-" . $case] = ['pp' => ['ability' => $ability[$key]],
                     'frac' => $frac[$case],
                     'ip' => $parameter[$key],
                     'expected' => $expectedvalue,

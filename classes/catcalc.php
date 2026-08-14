@@ -44,7 +44,6 @@ use moodle_exception;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catcalc {
-
     /**
      * Estimate initial item difficulties.
      *
@@ -59,7 +58,6 @@ class catcalc {
         $itemids = array_keys($itemlist);
 
         foreach ($itemids as $id) {
-
             $itemfractions = $itemlist[$id];
             $numpassed = 0;
             $numfailed = 0;
@@ -77,7 +75,6 @@ class catcalc {
             // $item_difficulty = -log($num_passed / $num_failed);
             $itemdifficulty = -log($p / (1 - $p + 0.00001)); // TODO: numerical stability check.
             $itemdifficulties[$id] = $itemdifficulty;
-
         }
         return $itemdifficulties;
     }
@@ -182,26 +179,50 @@ class catcalc {
             throw new \InvalidArgumentException("Model does not implement the catcalc_item_estimator interface");
         }
 
-        $modeldim = $model::get_model_dim();
+        // Build the starting item parameters. Polytomous models have a
+        // data-dependent number of thresholds, so their start values are derived
+        // from the observed response categories (get_start_ip); dichotomous models
+        // use the fixed default start sliced to their dimension.
+        if ($model::is_polytomous()) {
+            $startip = $startvalue ? $startvalue->get_params_array() : $model::get_start_ip($itemresponse);
+            $thresholdkey = isset($startip['difficulties']) ? 'difficulties' : 'intercepts';
+            $fractions = array_keys($startip[$thresholdkey]);
+        } else {
+            $modeldim = $model::get_model_dim();
+            $defaultstart = ['difficulty' => 0.50, 'discrimination' => 1.0, 'guessing' => 0.25];
+            $startvalue = $startvalue ? $startvalue->get_params_array() : [];
+            $startip = array_slice(array_merge($defaultstart, $startvalue), 0, $modeldim - 1);
+            $fractions = array_keys($startip);
+        }
 
-        // Defines the starting point.
-        $defaultstart = ['difficulty' => 0.50, 'discrimination' => 1.0, 'guessing' => 0.25];
-        $startvalue = $startvalue ? $startvalue->get_params_array() : [];
-        $z0 = array_slice(array_merge($defaultstart, $startvalue), 0, $modeldim - 1);
+        // Parameter codec: Newton-Raphson operates on a flat numeric vector, so the
+        // (possibly nested) item parameters are serialised via convert_ip_to_vector
+        // and reconstructed via convert_vector_to_ip. The fractions carry the
+        // category keys used for the reconstruction; the dimensionality is therefore
+        // driven by the data rather than a fixed constant.
+        $z0 = $model::convert_ip_to_vector($startip);
 
         $jacobian = self::build_itemparam_jacobian($itemresponse, $model);
         $hessian = self::build_itemparam_hessian($itemresponse, $model);
 
+        // Adapt the closures to accept the flat parameter vector.
+        $jacobianvec = fn ($vector) => $jacobian($model::convert_vector_to_ip($vector, $fractions));
+        $hessianvec = fn ($vector) => $hessian($model::convert_vector_to_ip($vector, $fractions));
+        $trfilter = fn ($vector) => $model::convert_ip_to_vector(
+            $model::restrict_to_trusted_region($model::convert_vector_to_ip($vector, $fractions))
+        );
+
         // Estimate item parameters via Newton-Raphson algorithm.
-        $result = mathcat::newton_raphson_multi_stable(
-            $jacobian,
-            $hessian,
+        $resultvector = mathcat::newton_raphson_multi_stable(
+            $jacobianvec,
+            $hessianvec,
             $z0,
             6,
             50,
-            fn ($ip) => $model::restrict_to_trusted_region($ip)
+            $trfilter
         );
-        return $result;
+
+        return $model::convert_vector_to_ip($resultvector, $fractions);
     }
 
     /**
@@ -257,7 +278,7 @@ class catcalc {
      * @return Closure(mixed $x): array
      */
     public static function build_callable_array($functions) {
-        return function($x) use ($functions) {
+        return function ($x) use ($functions) {
             $new = [];
             foreach ($functions as $key => $f) {
                 $new[$key] = $f($x);
