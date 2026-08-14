@@ -40,35 +40,51 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @covers \catmodel_raschbirnbaum\raschbirnbaum
  */
 final class raschbirnbaum_test extends TestCase {
+    use \local_catquiz\derivative_fd_trait;
 
     /**
-     * Tests that the model calculates the item parameters correctly.
+     * Verifies that calculate_params() recovers known difficulty and
+     * discrimination from a synthetic data set with many ability points.
      *
-     * @dataProvider calculate_params_returns_expected_values_provider
+     * The previous single-observation assertion did not identify the two item
+     * parameters and only recorded where Newton + trusted region stopped for an
+     * under-determined input. This test generates responses from known
+     * generating parameters across a wide ability range and asserts recovery.
      *
-     * @param array $itemresponse
-     * @param array $expected
+     * @dataProvider calculate_params_recovery_provider
+     *
+     * @param float $truedifficulty the generating difficulty
+     * @param float $truediscrimination the generating discrimination
      *
      * @return void
      */
-    public function test_calculate_params_returns_expected_values($itemresponse, array $expected): void {
-        $raschbirnbaum = $this->getmodel();
-        $result = $raschbirnbaum->calculate_params($itemresponse);
-        $this->assertEqualsWithDelta($expected['difficulty'], $result['difficulty'], 0.0001);
-        $this->assertEqualsWithDelta($expected['discrimination'], $result['discrimination'], 0.0001);
+    public function test_calculate_params_recovers_known_parameters(
+        float $truedifficulty,
+        float $truediscrimination
+    ): void {
+        $responses = [];
+        $i = 0;
+        for ($ability = -3.0; $ability <= 3.0; $ability += 0.2) {
+            $frac = raschbirnbaum::logistic($truediscrimination * ($ability - $truedifficulty));
+            $person = (new model_person_param((string) $i, 1))->set_ability($ability);
+            $responses[] = new model_item_response('Item1', $frac, $person);
+            $i++;
+        }
+        $result = $this->getmodel()->calculate_params($responses);
+        $this->assertEqualsWithDelta($truedifficulty, $result['difficulty'], 0.05);
+        $this->assertEqualsWithDelta($truediscrimination, $result['discrimination'], 0.05);
     }
 
     /**
-     * Provder for test_calculate_params_returns_expected_values
+     * Generating parameters for the recovery test.
      *
      * @return array
      */
-    public static function calculate_params_returns_expected_values_provider(): array {
+    public static function calculate_params_recovery_provider(): array {
         return [
-                [
-                    'itemresponse' => [new model_item_response('Item1', 0.3, (new model_person_param('1', 1))->set_ability(0.2))],
-                    'expected' => ['difficulty' => 0.2, 'discrimination' => 0.0],
-                ],
+            'easy' => [-0.5, 1.2],
+            'mid' => [0.3, 1.3],
+            'hard-steep' => [1.0, 1.7],
         ];
     }
 
@@ -200,7 +216,6 @@ final class raschbirnbaum_test extends TestCase {
         $expected = array_map(fn ($a) => (float)sprintf("%.6f", $a), $expected);
 
         $this->assertEquals($expected, $result);
-
     }
 
     /**
@@ -236,7 +251,6 @@ final class raschbirnbaum_test extends TestCase {
         }
 
         $this->assertEquals($expectedmatrix, $resultmatrix);
-
     }
 
     /**
@@ -980,6 +994,95 @@ final class raschbirnbaum_test extends TestCase {
                     [1.0881041, -0.1807066],
                 ],
             ],
+        ];
+    }
+
+    /**
+     * Verifies get_log_jacobian() against the numeric gradient of log_likelihood().
+     *
+     * @dataProvider derivative_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $response observed response (0.0 or 1.0)
+     *
+     * @return void
+     */
+    public function test_get_log_jacobian_numeric(array $pp, array $ip, float $response): void {
+        $keys = ['difficulty', 'discrimination'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $response, $keys) {
+            $ip = array_combine($keys, $v);
+            return raschbirnbaum::log_likelihood($pp, $ip, $response);
+        };
+        $numeric = $this->fd_gradient($f, $x);
+        $analytic = raschbirnbaum::get_log_jacobian($pp, $ip, $response);
+        $this->assert_gradient_close($numeric, $analytic);
+    }
+
+    /**
+     * Verifies get_log_hessian() against the numeric Hessian of log_likelihood().
+     *
+     * @dataProvider derivative_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $response observed response (0.0 or 1.0)
+     *
+     * @return void
+     */
+    public function test_get_log_hessian_numeric(array $pp, array $ip, float $response): void {
+        $keys = ['difficulty', 'discrimination'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $response, $keys) {
+            $ip = array_combine($keys, $v);
+            return raschbirnbaum::log_likelihood($pp, $ip, $response);
+        };
+        $numeric = $this->fd_hessian($f, $x);
+        $analytic = raschbirnbaum::get_log_hessian($pp, $ip, $response);
+        $this->assert_hessian_close($numeric, $analytic);
+    }
+
+    /**
+     * Dynamic but deterministic (item parameters x ability x response) grid.
+     *
+     * @return array
+     */
+    public static function derivative_cases_provider(): array {
+        $abilities = [-2.1, -0.35, 0.0, 0.8, 2.0];
+        $responses = [0.0, 1.0];
+        $items = self::derivative_item_sets();
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach ($responses as $response) {
+                    $name = sprintf('%s-a%d-y%d', $label, $ai, (int) $response);
+                    $cases[$name] = [
+                        'pp' => ['ability' => $ability],
+                        'ip' => $ip,
+                        'response' => $response,
+                    ];
+                }
+            }
+        }
+        return $cases;
+    }
+    /**
+     * Item parameter sets for the derivative grid.
+     *
+     * @return array
+     */
+    private static function derivative_item_sets(): array {
+        return [
+            'flat' => ['difficulty' => -0.7, 'discrimination' => 0.6],
+            'mid' => ['difficulty' => 0.3, 'discrimination' => 1.2],
+            'steep' => ['difficulty' => 1.1, 'discrimination' => 2.1],
         ];
     }
 

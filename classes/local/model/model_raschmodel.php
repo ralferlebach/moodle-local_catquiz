@@ -12,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Class model_raschmodel.
@@ -37,8 +37,7 @@ use stdClass;
  * @copyright  2023 Wunderbyte GmbH <georg.maisser@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-abstract class model_raschmodel extends model_model implements catcalc_item_estimator, catcalc_ability_estimator {
-
+abstract class model_raschmodel extends model_model implements catcalc_ability_estimator, catcalc_item_estimator {
     /**
      * @var int PRECISION
      *
@@ -55,10 +54,44 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
      * @return float
      *
      */
-    public static function likelihood_1pl($personability, $itemdifficulty ) {
+    public static function likelihood_1pl($personability, $itemdifficulty) {
 
         $discrimination = 1; // Hardcode override because of 1pl.
         return (1 / (1 + exp($discrimination * ($itemdifficulty - $personability))));
+    }
+
+    /**
+     * Numerically stable logistic (sigmoid) function sigma(z) = 1 / (1 + e^{-z}).
+     *
+     * Branches on the sign of $z so that exp() is only ever evaluated for a
+     * non-positive argument. This avoids the overflow that arises when large
+     * exponentials (e.g. exp($a * $b), exp($b * $theta)) are formed separately
+     * and only cancel afterwards. All logistic IRT models should express their
+     * likelihood and derivatives through this primitive.
+     *
+     * @param float $z linear predictor
+     *
+     * @return float sigma(z), saturating to 0.0 or 1.0 for extreme |z|
+     *
+     */
+    public static function logistic(float $z): float {
+        if ($z >= 0.0) {
+            return 1.0 / (1.0 + exp(-$z));
+        }
+        $ez = exp($z);
+        return $ez / (1.0 + $ez);
+    }
+
+    /**
+     * Logistic variance term W = P(1 - P) = sigma'(z), the first derivative of the logistic.
+     *
+     * @param float $p a logistic probability sigma(z)
+     *
+     * @return float
+     *
+     */
+    public static function logistic_w(float $p): float {
+        return $p * (1.0 - $p);
     }
 
     /**
@@ -107,7 +140,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
 
         $tmp = [];
         foreach ($tmpkey as $arraykey => $frac) {
-            $key = (string) sprintf("%1.". $precission . "f", (float) $frac);
+            $key = (string) sprintf("%1." . $precission . "f", (float) $frac);
             $tmp[$key] = $tmpval[$arraykey];
         }
 
@@ -127,7 +160,7 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
         $tmp = [];
 
         foreach ($array as $key => $val) {
-            $key = (string) sprintf("%1.". $precission . "f", (float) $key);
+            $key = (string) sprintf("%1." . $precission . "f", (float) $key);
             $tmp[$key] = (float) $val;
         }
 
@@ -165,7 +198,8 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
         string $criterion,
         model_person_param_list $personabilities,
         model_item_param $itemparams,
-        model_responses $k): float {
+        model_responses $k
+    ): float {
 
         switch ($criterion) {
             case 'aic':
@@ -302,7 +336,8 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     public function estimate_item_params(
         model_responses $responses,
         model_person_param_list $personparams,
-        ?model_item_param_list $startvalues = null): model_item_param_list {
+        ?model_item_param_list $startvalues = null
+    ): model_item_param_list {
         $estimateditemparams = new model_item_param_list();
         $personids = $personparams->get_user_ids();
         $filteredresponses = $responses->limit_to_users($personids, true)->get_item_response();
@@ -376,7 +411,6 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
     public static function get_ability_tr_jacobian(array $pp, float $mean = 0, float $sd = 1): float {
         return
             (($mean - $pp['ability']) / ($sd ** 2)); // The d/dpp .
-
     }
 
     /**
@@ -391,7 +425,6 @@ abstract class model_raschmodel extends model_model implements catcalc_item_esti
 
         return
             (- 1 / ($sd ** 2)); // Calculate d/dpp d/dpp.
-
     }
 
     /**

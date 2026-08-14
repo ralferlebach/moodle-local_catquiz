@@ -41,6 +41,8 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @covers \catmodel_mixedraschbirnbaum\mixedraschbirnbaum
  */
 final class mixedraschbirnbaum_test extends TestCase {
+    use \local_catquiz\derivative_fd_trait;
+
     /**
      * Tests that the model calculates the item parameters correctly.
      *
@@ -174,7 +176,6 @@ final class mixedraschbirnbaum_test extends TestCase {
         for ($i = 0; $i < count($result); $i++) {
             $this->assertEqualsWithDelta($expected[$i], $result[$i], '0.001');
         }
-
     }
 
     /**
@@ -395,9 +396,9 @@ final class mixedraschbirnbaum_test extends TestCase {
                     "guessing" => 0.35,
                 ],
                 'expected' => [
-                    [ 0.9902344, -3.656250e-01,  1.875000e-01],
+                    [ 0.9902344, -3.656250e-01, 1.875000e-01],
                     [-0.3656250, -3.666853e-13, -3.552714e-15],
-                    [ 0.1875000, -3.552714e-15,  1.500000e+00],
+                    [ 0.1875000, -3.552714e-15, 1.500000e+00],
                 ],
             ],
             "testcase6" => [
@@ -410,9 +411,9 @@ final class mixedraschbirnbaum_test extends TestCase {
                     "guessing" => 0.35,
                 ],
                 'expected' => [
-                    [ 0.9902344,  2.681250e-01, -2.250000e+00],
-                    [ 0.2681250, -8.250419e-13,  3.552714e-15],
-                    [-2.2500000,  3.552714e-15,  1.500000e+00],
+                    [ 0.9902344, 2.681250e-01, -2.250000e+00],
+                    [ 0.2681250, -8.250419e-13, 3.552714e-15],
+                    [-2.2500000, 3.552714e-15, 1.500000e+00],
                 ],
             ],
             "testcase7" => [
@@ -425,9 +426,9 @@ final class mixedraschbirnbaum_test extends TestCase {
                     "guessing" => 0.05,
                 ],
                 'expected' => [
-                    [-0.03425819,  0.03406114,  1.827640e-02],
+                    [-0.03425819, 0.03406114, 1.827640e-02],
                     [ 0.03406114, -0.05352842, -2.284550e-02],
-                    [ 0.01827640, -0.02284550,  8.954913e-05],
+                    [ 0.01827640, -0.02284550, 8.954913e-05],
                 ],
             ],
             "testcase8" => [
@@ -440,9 +441,9 @@ final class mixedraschbirnbaum_test extends TestCase {
                     "guessing" => 0.05,
                 ],
                 'expected' => [
-                    [-0.0018563961,  0.001769242,  9.914535e-04],
+                    [-0.0018563961, 0.001769242, 9.914535e-04],
                     [ 0.0017692422, -0.002900619, -1.239317e-03],
-                    [ 0.0009914535, -0.001239317,  8.958843e-05],
+                    [ 0.0009914535, -0.001239317, 8.958843e-05],
                 ],
             ],
             "testcase9" => [
@@ -455,9 +456,9 @@ final class mixedraschbirnbaum_test extends TestCase {
                     "guessing" => 0.25,
                 ],
                 'expected' => [
-                    [-8.653134,   7.034999,   8.5229544],
+                    [-8.653134, 7.034999, 8.5229544],
                     [ 7.034999, -15.383349, -11.3639392],
-                    [ 8.522954, -11.363939,   0.4498426],
+                    [ 8.522954, -11.363939, 0.4498426],
                 ],
             ],
             "testcase10" => [
@@ -471,8 +472,8 @@ final class mixedraschbirnbaum_test extends TestCase {
                 ],
                 'expected' => [
                     [ 0.3174553, -0.5210626, -0.2864942],
-                    [-0.5210626,  0.5643649,  0.3819923],
-                    [-0.2864942,  0.3819923,  0.4498427],
+                    [-0.5210626, 0.5643649, 0.3819923],
+                    [-0.2864942, 0.3819923, 0.4498427],
                 ],
             ],
         ];
@@ -844,9 +845,9 @@ final class mixedraschbirnbaum_test extends TestCase {
                     "guessing" => 0.25,
                 ],
                 'expected' => [
-                    [-7.864477e-01,  9.276705e-01, -1.999467e-11],
-                    [ 9.276705e-01, -4.915298e-02,  3.759126e-11],
-                    [-1.999467e-11,  3.759126e-11, -1.777778e+00],
+                    [-7.864477e-01, 9.276705e-01, -1.999467e-11],
+                    [ 9.276705e-01, -4.915298e-02, 3.759126e-11],
+                    [-1.999467e-11, 3.759126e-11, -1.777778e+00],
                 ],
             ],
             "testcase 5" => [
@@ -988,6 +989,95 @@ final class mixedraschbirnbaum_test extends TestCase {
         $info = $model->fisher_info($pp, $ip);
         $this->assertEqualsWithDelta(0.6, $info, 10 ** (-model_raschmodel::PRECISION));
         $this->assertGreaterThan(0.0, $info);
+    }
+
+    /**
+     * Verifies get_log_jacobian() against the numeric gradient of log_likelihood().
+     *
+     * @dataProvider derivative_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $response observed response (0.0 or 1.0)
+     *
+     * @return void
+     */
+    public function test_get_log_jacobian_numeric(array $pp, array $ip, float $response): void {
+        $keys = ['difficulty', 'discrimination', 'guessing'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $response, $keys) {
+            $ip = array_combine($keys, $v);
+            return mixedraschbirnbaum::log_likelihood($pp, $ip, $response);
+        };
+        $numeric = $this->fd_gradient($f, $x);
+        $analytic = mixedraschbirnbaum::get_log_jacobian($pp, $ip, $response);
+        $this->assert_gradient_close($numeric, $analytic);
+    }
+
+    /**
+     * Verifies get_log_hessian() against the numeric Hessian of log_likelihood().
+     *
+     * @dataProvider derivative_cases_provider
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $response observed response (0.0 or 1.0)
+     *
+     * @return void
+     */
+    public function test_get_log_hessian_numeric(array $pp, array $ip, float $response): void {
+        $keys = ['difficulty', 'discrimination', 'guessing'];
+        $x = [];
+        foreach ($keys as $k) {
+            $x[$k] = $ip[$k];
+        }
+        $f = function (array $v) use ($pp, $response, $keys) {
+            $ip = array_combine($keys, $v);
+            return mixedraschbirnbaum::log_likelihood($pp, $ip, $response);
+        };
+        $numeric = $this->fd_hessian($f, $x);
+        $analytic = mixedraschbirnbaum::get_log_hessian($pp, $ip, $response);
+        $this->assert_hessian_close($numeric, $analytic);
+    }
+
+    /**
+     * Dynamic but deterministic (item parameters x ability x response) grid.
+     *
+     * @return array
+     */
+    public static function derivative_cases_provider(): array {
+        $abilities = [-2.1, -0.35, 0.0, 0.8, 2.0];
+        $responses = [0.0, 1.0];
+        $items = self::derivative_item_sets();
+        $cases = [];
+        foreach ($items as $label => $ip) {
+            foreach ($abilities as $ai => $ability) {
+                foreach ($responses as $response) {
+                    $name = sprintf('%s-a%d-y%d', $label, $ai, (int) $response);
+                    $cases[$name] = [
+                        'pp' => ['ability' => $ability],
+                        'ip' => $ip,
+                        'response' => $response,
+                    ];
+                }
+            }
+        }
+        return $cases;
+    }
+    /**
+     * Item parameter sets for the derivative grid.
+     *
+     * @return array
+     */
+    private static function derivative_item_sets(): array {
+        return [
+            'lowc' => ['difficulty' => -0.4, 'discrimination' => 1.0, 'guessing' => 0.10],
+            'midc' => ['difficulty' => 0.5, 'discrimination' => 1.5, 'guessing' => 0.20],
+            'highc' => ['difficulty' => 1.2, 'discrimination' => 0.8, 'guessing' => 0.25],
+        ];
     }
 
     /**

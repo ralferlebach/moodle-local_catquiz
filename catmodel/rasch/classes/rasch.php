@@ -12,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Class rasch.
@@ -40,7 +40,6 @@ use stdClass;
  * @license  http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class rasch extends model_raschmodel {
-
     /**
      * {@inheritDoc}
      *
@@ -113,7 +112,7 @@ class rasch extends model_raschmodel {
         if ($k < 1.0) {
             return 1 - self::likelihood($pp, $ip, 1.0);
         } else {
-            return 1 / (1 + exp($a - $ability));
+            return self::logistic($ability - $a);
         }
     }
 
@@ -186,21 +185,13 @@ class rasch extends model_raschmodel {
      * @return array - jacobian vector
      */
     public static function get_log_jacobian(array $pp, array $ip, float $k): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
 
-        $jacobian = [];
+        // P/W form: P = sigma(theta - a); d/da log L = P - k.
+        $p = self::logistic($ability - $a);
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expa = exp($a);
-        $expp = exp($pp);
-
-        if ($k >= 1.0) {
-            $jacobian[0] = -($expa * $expp) / (($expa + $expp) * $expp); // The d/da .
-        } else {
-            $jacobian[0] = $expp / ($expa + $expp); // The d/da .
-        }
-        return $jacobian;
+        return [$p - $k];
     }
 
     /**
@@ -213,18 +204,14 @@ class rasch extends model_raschmodel {
      * @return array - hessian matrx
      */
     public static function get_log_hessian(array $pp, $ip, float $k): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
 
-        $hessian = [[]];
+        // P/W form: d^2/da^2 log L = -W = -P(1 - P), identical for k = 0 and k = 1.
+        $p = self::logistic($ability - $a);
+        $w = self::logistic_w($p);
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expa = exp($a);
-        $expp = exp($pp);
-
-        // 2nd derivative is equal for both k = 0 and k = 1
-        $hessian[0][0] = -($expa * $expp) / ($expa + $expp) ** 2; // The d²/ da² .
-        return $hessian;
+        return [[-$w]];
     }
 
     // Calculate the Least-Mean-Squres (LMS) approach.

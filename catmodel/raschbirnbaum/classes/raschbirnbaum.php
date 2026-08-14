@@ -12,7 +12,7 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
  * Class raschbirnbaum.
@@ -39,7 +39,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class raschbirnbaum extends model_raschmodel {
-
     /**
      * {@inheritDoc}
      *
@@ -114,7 +113,7 @@ class raschbirnbaum extends model_raschmodel {
         if ($k < 1.0) {
             return 1 - self::likelihood($pp, $ip, 1.0);
         } else {
-            return 1 / (1 + exp($b * ($a - $ability)));
+            return self::logistic($b * ($ability - $a));
         }
     }
 
@@ -177,24 +176,18 @@ class raschbirnbaum extends model_raschmodel {
      * @return array - jacobian vector
      */
     public static function get_log_jacobian(array $pp, array $ip, float $k): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
 
-        $jacobian = [];
+        // P/W form. x = theta - a; z = b x; P = sigma(z).
+        $x = $ability - $a;
+        $p = self::logistic($b * $x);
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expab = exp($a * $b);
-        $expbp = exp($b * $pp);
-
-        if ($k < 1.0) {
-            $jacobian[0] = ($b * $expbp) / ($expab + $expbp); // Calculates d/da.
-            $jacobian[1] = ($expbp * ( $a - $pp)) / ($expab + $expbp); // Calculates d/db.
-        } else {
-            $jacobian[0] = -$b * $expab / (exp( $a * $b) + $expbp); // Calculates d/da.
-            $jacobian[1] = $expab * ($pp - $a) / ($expab + $expbp); // Calculates d/db.
-        }
-        return $jacobian;
+        return [
+            $b * ($p - $k), // D/da log L = b (P - k).
+            $x * ($k - $p), // D/db log L = x (k - P).
+        ];
     }
 
     /**
@@ -207,31 +200,23 @@ class raschbirnbaum extends model_raschmodel {
      * @return array - hessian matrx
      */
     public static function get_log_hessian(array $pp, array $ip, float $itemresponse): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
 
-        $hessian = [[]];
+        // P/W form. x = theta - a; P = sigma(b x); W = P(1 - P).
+        $x = $ability - $a;
+        $p = self::logistic($b * $x);
+        $w = self::logistic_w($p);
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expab = exp($a * $b);
-        $expbp = exp($b * $pp);
+        $haa = -($b ** 2) * $w;                            // D²/da².
+        $hbb = -($x ** 2) * $w;                            // D²/db².
+        $hab = $p - $itemresponse + $b * $x * $w;          // D²/da db = P - k + b x W.
 
-        if ($itemresponse >= 1.0) {
-            $expbap1 = exp($b * ($a + $pp));
-            $hessian[0][0] = (-($b ** 2 * $expbap1) / (($expab + $expbp) ** 2)); // Calculates d²/da².
-            // Calculates d/a d/db.
-            $hessian[0][1] = (-($expab * ($expab + $expbp * (1 + $b * ($a - $pp)))) / (($expab + $expbp) ** 2));
-            $hessian[1][0] = $hessian[0][1];
-            $hessian[1][1] = (-($expbap1 * ($a - $pp) ** 2) / (($expab + $expbp) ** 2)); // Calculates d²/db².
-        } else {
-            $expbap0 = exp($b * ($a - $pp));
-            $hessian[0][0] = -($b ** 2 * $expbap0) / (1 + $expbap0) ** 2; // Calculates d²/da².
-            $hessian[0][1] = (1 + $expbap0 * (1 + $b * ($pp - $a))) / (1 + $expbap0) ** 2; // Calculates d/da d/db.
-            $hessian[1][0] = $hessian[0][1];
-            $hessian[1][1] = -($expbap0 * ($a - $pp) ** 2) / (1 + $expbap0) ** 2; // Calculates d²/db².
-        }
-        return $hessian;
+        return [
+            [$haa, $hab],
+            [$hab, $hbb],
+        ];
     }
 
     // Calculate the Least-Mean-Squres (LMS) approach.
@@ -371,7 +356,8 @@ class raschbirnbaum extends model_raschmodel {
         $derivative = [[]];
 
         $derivative[0][0]  = $n * 2 * $b ** 2; // Calculate d²2/da².
-        $derivative[0][1]  = 0; // TODO: $n * 2 * (2 * $b * ($a - $pp) + log($or)); // Calculate d/da d/db.
+        // d/da d/db closed form pending: $n * 2 * (2 * $b * ($a - $pp) + log($or)) (Paket B).
+        $derivative[0][1] = 0;
         $derivative[1][1]  = $n * 2 * ($a - $pp) ** 2; // Calculate d²/db².
 
         // Note: Partial derivations are exchangeable, cf. Theorem of Schwarz.
@@ -456,7 +442,7 @@ class raschbirnbaum extends model_raschmodel {
     public static function get_log_tr_jacobian($ip): array {
         // Set values for difficulty parameter.
 
-        // TODO: @DAVID: We should be able to calculate these values dynamically.
+        // Note (David): these values could be derived dynamically once least-mean-squares is implemented (Paket B).
         $am = 0; // Mean of difficulty.
         $as = 2; // Standard derivation of difficulty.
 
@@ -481,7 +467,7 @@ class raschbirnbaum extends model_raschmodel {
     public static function get_log_tr_hessian(array $ip): array {
         // Set values for difficulty parameter.
 
-        // TODO: @DAVID: We should be able to calculate these values dynamically.
+        // Note (David): these values could be derived dynamically once least-mean-squares is implemented (Paket B).
         $as = 2; // Standard derivation of difficulty.
 
         // Placement of the discriminatory parameter.

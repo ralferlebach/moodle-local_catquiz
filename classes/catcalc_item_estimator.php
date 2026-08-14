@@ -33,7 +33,6 @@ namespace local_catquiz;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 interface catcalc_item_estimator {
-
     /**
      * Calculates the 1st derivative of the LOG Likelihood with respect to the item parameters
      *
@@ -85,6 +84,20 @@ interface catcalc_item_estimator {
      *
      */
     public static function get_model_dim(): int;
+
+    /**
+     * Numerically stable logistic (sigmoid) function.
+     *
+     * Shared primitive for all logistic IRT models so the compute-intensive
+     * likelihood and derivative code can be expressed via P and W = P(1 - P)
+     * instead of repeated raw exponentials.
+     *
+     * @param float $z linear predictor
+     *
+     * @return float
+     *
+     */
+    public static function logistic(float $z): float;
 
     /**
      * Update parameters so that they are located in a trusted region

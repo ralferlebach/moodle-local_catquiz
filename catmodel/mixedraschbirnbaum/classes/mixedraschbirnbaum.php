@@ -39,7 +39,6 @@ use stdClass;
  * @license  http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class mixedraschbirnbaum extends model_raschmodel {
-
     /**
      * {@inheritDoc}
      *
@@ -95,7 +94,7 @@ class mixedraschbirnbaum extends model_raschmodel {
      */
     public static function get_model_dim(): int {
         // Adds +1 for the person ability.
-        return count (self::get_parameter_names()) + 1;
+        return count(self::get_parameter_names()) + 1;
     }
 
     /**
@@ -130,7 +129,7 @@ class mixedraschbirnbaum extends model_raschmodel {
         if ($k < 1.0) {
             return 1 - self::likelihood($pp, $ip, 1.0);
         } else {
-            return $c + (1 - $c) / (1 + exp($b * ($a - $ability)));
+            return $c + (1 - $c) * self::logistic($b * ($ability - $a));
         }
     }
 
@@ -187,7 +186,7 @@ class mixedraschbirnbaum extends model_raschmodel {
         if ($k < 1.0) {
             return -(($b ** 2 * exp($b * ($a + $pp))) / (exp($a * $b) + exp($b * $pp)) ** 2);
         } else {
-            return ($b ** 2 * ($c - 1) * exp( $b * ($pp - $a)) * (exp(2 * $b * ($pp - $a)) - $c)) /
+            return ($b ** 2 * ($c - 1) * exp($b * ($pp - $a)) * (exp(2 * $b * ($pp - $a)) - $c)) /
                 ((1 + exp($b * ( $pp - $a))) ** 2 * ($c + exp($b * ($pp - $a))) ** 2);
         }
     }
@@ -201,29 +200,30 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return array - jacobian vector
      */
     public static function get_log_jacobian($pp, $ip, float $k): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
         $c = $ip['guessing'];
 
-        $jacobian = [];
+        // P/W form. L is the logistic core, P the actual 3PL success probability.
+        $x = $ability - $a;               // Theta - a.
+        $l = self::logistic($b * $x);     // L = sigma(b (theta - a)).
+        $wl = self::logistic_w($l);       // Wl = L (1 - L).
+        $omc = 1.0 - $c;
+        $p = $c + $omc * $l;              // P = c + (1 - c) L.
 
-        // Pre-Calculate high frequently used exp-terms.
-        $expab = exp($a * $b);
-        $expbp = exp($b * $pp);
-        $expbap1 = exp($b * ($a + $pp));
-        $expbap0 = exp($b * ($a - $pp));
+        // First derivatives of P.
+        $pa = -$b * $omc * $wl;           // DP/da.
+        $pb = $omc * $wl * $x;            // DP/db.
+        $pc = 1.0 - $l;                   // DP/dc.
 
-        if ($k >= 1.0) {
-            $jacobian[0] = ($b * ($c - 1) * $expbap1) / (($expab + $expbp) * ($c * $expab + $expbp)); // Calculate d/da.
-            $jacobian[1] = (($c - 1) * $expbap1 * ($a - $pp)) / (($expab + $expbp) * ($c * $expab + $expbp)); // Calculate d/db.
-            $jacobian[2] = $expab / ($c * $expab + $expbp); // Calculate d/dc.
-        } else {
-            $jacobian[0] = $b / (1 + $expbap0); // Calculate d/da.
-            $jacobian[1] = ($a - $pp) / (1 + $expbap0); // Calculate d/db.
-            $jacobian[2] = 1 / ($c - 1); // Calculate d/dc.
-        }
-        return $jacobian;
+        $dlp = ($k - $p) / ($p * (1.0 - $p)); // D log L / dP.
+
+        return [
+            $dlp * $pa, // D/da.
+            $dlp * $pb, // D/db.
+            $dlp * $pc, // D/dc.
+        ];
     }
 
     /**
@@ -235,51 +235,47 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @return array - hessian matrx
      */
     public static function get_log_hessian($pp, $ip, float $k): array {
-        $pp = $pp['ability'];
+        $ability = $pp['ability'];
         $a = $ip['difficulty'];
         $b = $ip['discrimination'];
         $c = $ip['guessing'];
 
-        $hessian = [[]];
+        // P/W form via the chain rule on P = c + (1 - c) L, with
+        // H_ij = (d^2 log L / dP^2) P_i P_j + (d log L / dP) P_ij.
+        $x = $ability - $a;               // Theta - a.
+        $l = self::logistic($b * $x);     // L = sigma(b (theta - a)).
+        $wl = self::logistic_w($l);       // Wl = L (1 - L) = L'(z).
+        $vl = $wl * (1.0 - 2.0 * $l);     // Vl = Wl (1 - 2L) = L''(z).
+        $omc = 1.0 - $c;
+        $p = $c + $omc * $l;             // P.
 
-        if ($k >= 1.0) {
-            // Calculate d²/ da².
-            $hessian[0][0] = -($b ** 2 * ($c - 1) * exp($b * ($a + $pp)) * ($c * exp(2 * $a * $b) - exp(2 * $b * $pp))) /
-                ((exp($a * $b) + exp($b * $pp)) ** 2 * ($c * exp($a * $b) + exp($b * $pp)) ** 2);
-            // Calculate d/da d/db.
-            $hessian[0][1] = (($c - 1) * exp($b * ($a + $pp)) * (exp($b * ($a + $pp)) + exp(2 * $b * $pp) *
-                (1 + $a * $b - $b * $pp) + $c * (exp($b * ($a + $pp)) + exp(2 * $a * $b) * (1 - $a * $b + $b * $pp)))) /
-                ((exp($a * $b) + exp($b * $pp)) ** 2 * ($c * exp($a * $b) + exp($b * $pp)) ** 2);
-            // Calculate d/da d/dc.
-            $hessian[0][2] = ($b * exp($b * ($a + $pp))) / ($c * exp($a * $b) + exp($b * $pp)) ** 2;
-            $hessian[1][0] = $hessian[0][1];
-            // Calculate d²/db².
-            $hessian[1][1] = -(($c - 1) * exp($b * ($a - $pp)) * ($c * exp(2 * $b * ($a - $pp)) - 1) * ($a - $pp) ** 2) /
-                (((1 + exp($b * ($a - $pp))) * (1 + $c * exp($b * ($a - $pp)))) ** 2);
-            // Calculate d/db d/dc.
-            $hessian[1][2] = (exp($b * ($a + $pp)) * ($a - $pp)) / ($c * exp($a * $b) + exp($b * $pp)) ** 2;
-            $hessian[2][0] = $hessian[0][2];
-            $hessian[2][1] = $hessian[1][2];
-            // Calculate d²/dc².
-            $hessian[2][2] = -exp(2 * $a * $b) / ($c * exp($a * $b) + exp($b * $pp)) ** 2;
-        } else {
-            // Calculate d²/da².
-            $hessian[0][0] = -($b ** 2 * exp($b * ($a - $pp))) / (1 + exp($b * ($a - $pp))) ** 2;
-            // Calculate d/da d/db.
-            $hessian[0][1] = (exp($b * ($a - $pp)) * ($b * ($pp - $a) + 1) + 1) / (exp($b * ($a - $pp)) + 1) ** 2;
-            // Calculate d/da d/dc.
-            $hessian[0][2] = 0;
-            $hessian[1][0] = $hessian[0][1];
-            // Calculate .d²/db².
-            $hessian[1][1] = -(exp($b * ($a - $pp)) * ($a - $pp) ** 2) / (1 + exp($b * ($a - $pp))) ** 2;
-            // Calculate d/db d/dc.
-            $hessian[1][2] = 0;
-            $hessian[2][0] = $hessian[0][2];
-            $hessian[2][1] = $hessian[1][2];
-            // Calculate d²/dc².
-            $hessian[2][2] = -1 / ($c - 1) ** 2;
-        }
-        return $hessian;
+        // First and second derivatives of P.
+        $pa = -$b * $omc * $wl;
+        $pb = $omc * $wl * $x;
+        $pc = 1.0 - $l;
+        $paa = $omc * $vl * $b ** 2;
+        $pbb = $omc * $vl * $x ** 2;
+        $pab = $omc * (-$b * $x * $vl - $wl);
+        $pac = $b * $wl;
+        $pbc = -$x * $wl;
+        // Second derivative d^2P/dc^2 vanishes.
+
+        // Derivatives of the Bernoulli log likelihood with respect to P.
+        $dlp = ($k - $p) / ($p * (1.0 - $p));                       // D log L / dP.
+        $d2lp = -$k / ($p ** 2) - (1.0 - $k) / ((1.0 - $p) ** 2);   // D^2 log L / dP^2.
+
+        $haa = $d2lp * $pa * $pa + $dlp * $paa;
+        $hbb = $d2lp * $pb * $pb + $dlp * $pbb;
+        $hcc = $d2lp * $pc * $pc;                                   // Plus dlp * (d^2P/dc^2 = 0).
+        $hab = $d2lp * $pa * $pb + $dlp * $pab;
+        $hac = $d2lp * $pa * $pc + $dlp * $pac;
+        $hbc = $d2lp * $pb * $pc + $dlp * $pbc;
+
+        return [
+            [$haa, $hab, $hac],
+            [$hab, $hbb, $hbc],
+            [$hac, $hbc, $hcc],
+        ];
     }
 
     // Calculate the Least-Mean-Squres (LMS) approach.
@@ -414,7 +410,7 @@ class mixedraschbirnbaum extends model_raschmodel {
 
         $derivative = [];
 
-        // TODO: @RALF: Implement formulas for 3PL.
+        // Note (Ralf): 3PL least-mean-squares formulas are implemented in a later work package (Paket B).
 
         $derivative[0] = $n * 2 * $b * ($b * ($a - $pp) + log($or)); // Calculate d/da.
         $derivative[1] = $n * 2 * ($a - $pp) * ($b * ($a - $pp) + log($or)); // Calculate d/db.
@@ -438,10 +434,11 @@ class mixedraschbirnbaum extends model_raschmodel {
 
         $derivative = [[]];
 
-        // TODO: @RALF: Implement formulas for 3PL.
+        // Note (Ralf): 3PL least-mean-squares formulas are implemented in a later work package (Paket B).
 
         $derivative[0][0]  = $n * 2 * $b ** 2; // Calculate d²2/da².
-        $derivative[0][1]  = 0; // TODO: $n * 2 * (2 * $b * ($a - $pp) + log($or)); // Calculate d/da d/db.
+        // d/da d/db closed form pending: $n * 2 * (2 * $b * ($a - $pp) + log($or)) (Paket B).
+        $derivative[0][1] = 0;
         $derivative[1][1]  = $n * 2 * ($a - $pp) ** 2; // Calculate d²/db².
 
         // Note: Partial derivations are exchangeable, cf. Theorem of Schwarz.
