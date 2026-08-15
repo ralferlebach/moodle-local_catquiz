@@ -308,22 +308,38 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
     /**
      * Data-driven start thresholds for a polytomous item.
      *
-     * Option 1 (empirical): the distinct observed response fractions define the
-     * categories; the free thresholds are initialised from the empirical
-     * cumulative category proportions as ordered -logit values. Option 2
-     * (fallback): if a category is unobserved (proportion 0 or 1, degenerate
-     * logit), evenly spaced thresholds in [-2, 2] are used instead. The baseline
-     * category (first fraction) is fixed at 0.
+     * Category structure from the item, frequencies from the responses: when the
+     * item's declared category fractions are passed in via $categoryfractions, that
+     * complete set defines the categories (so a category that happens to be
+     * unobserved in the calibration sample is still modelled); otherwise the
+     * distinct observed response fractions are used as a fallback structure.
+     *
+     * Given the structure, the free thresholds are initialised from the empirical
+     * cumulative category proportions as ordered -logit values. If any category is
+     * unobserved (proportion 0 or 1, degenerate logit), evenly spaced thresholds in
+     * [-2, 2] are used instead. The baseline category (first fraction) is fixed at 0.
      *
      * @param array $itemresponse array of model_item_response
+     * @param array|null $categoryfractions optional declared category fractions of
+     *                                       the item (e.g. [0.0, 0.5, 1.0]); when
+     *                                       null the observed fractions are used
      *
      * @return array thresholds keyed by fraction (baseline first, value 0)
      *
      */
-    protected static function empirical_start_thresholds(array $itemresponse): array {
-        $fractions = [];
-        foreach ($itemresponse as $r) {
-            $fractions[(string) $r->get_response()] = true;
+    protected static function empirical_start_thresholds(array $itemresponse, ?array $categoryfractions = null): array {
+        if ($categoryfractions !== null && count($categoryfractions) > 0) {
+            // Structure from the item: keep every declared category, observed or not.
+            $fractions = [];
+            foreach ($categoryfractions as $value) {
+                $fractions[(string) $value] = true;
+            }
+        } else {
+            // Fallback structure: the distinct observed response fractions.
+            $fractions = [];
+            foreach ($itemresponse as $r) {
+                $fractions[(string) $r->get_response()] = true;
+            }
         }
         $fractions = array_keys($fractions);
         usort($fractions, fn($x, $y) => (float) $x <=> (float) $y);
@@ -333,8 +349,12 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
         $counts = array_fill(0, count($fractions), 0);
         $n = 0;
         foreach ($itemresponse as $r) {
-            $counts[$index[(string) $r->get_response()]]++;
-            $n++;
+            $key = (string) $r->get_response();
+            // A response outside the declared structure is ignored for frequencies.
+            if (array_key_exists($key, $index)) {
+                $counts[$index[$key]]++;
+                $n++;
+            }
         }
 
         $result = [(string) $fractions[0] => 0.0];

@@ -163,6 +163,20 @@ class raschbirnbaum extends model_raschmodel {
     }
 
     /**
+     * Combined person-ability score and hessian sharing one P computation.
+     *
+     * @param array $pp person ability parameter ('ability')
+     * @param array $ip item parameters ('difficulty', 'discrimination')
+     * @param float $frac response fraction
+     * @return array ['jacobian' => b(k - P), 'hessian' => -b^2 W]
+     */
+    public static function get_ability_derivatives(array $pp, array $ip, float $frac): array {
+        $b = $ip['discrimination'];
+        $p = self::logistic($b * ($pp['ability'] - $ip['difficulty']));
+        return ['jacobian' => $b * ($frac - $p), 'hessian' => -($b ** 2) * self::logistic_w($p)];
+    }
+
+    /**
      * Calculates the 1st derivative of the LOG Likelihood with respect to the item parameters
      *
      * @param array $pp - person ability parameter

@@ -1,9 +1,78 @@
 # Changelog – local_catquiz
 
-## 1.1.2 (interne Version 2026081411)
+## 1.1.2 (interne Version 2026081413)
 
 > Diese Änderungen werden unter dem bestehenden Release-Label 1.1.2
 > ausgeliefert; nur die interne `$plugin->version` wird erhöht.
+
+### Robustheit & Testschulden abgearbeitet (P2/P3)
+
+- **Diskriminationsgrenzen (GGRM/GPCM):** Die Diskrimination wird nun in die
+  konfigurierbare, fachlich positive Trusted Region `[trusted_region_min_b,
+  trusted_region_max_b]` geklemmt (gemeinsamer Helfer `restrict_discrimination()`
+  in `model_multiparam`) mit hartem positivem Boden 0.1 statt des früheren
+  hartkodierten `[0.1, 5.0]`. Die Setting-Defaults dieser beiden Modelle wurden von
+  `min_b = -3` / `max_b = 3` auf `min_b = 0.1` / `max_b = 5.0` korrigiert (positiv,
+  erhält das bisherige effektive Verhalten, jetzt admin-steuerbar).
+- **Threshold-Projektion (GRM/GGRM):** Die Ordnungssicherung überschritt bisher
+  ggf. die obere Grenze. Ein Vorwärts- plus Rückwärtspass hält die Thresholds nun
+  innerhalb `[min, max]` (Box-Constraint) und aufsteigend.
+- **Kategorienstruktur bei Erstkalibrierung:** `empirical_start_thresholds()`
+  akzeptiert optional die deklarierte Kategorienstruktur des Items (Struktur vom
+  Item, Häufigkeiten aus den Responses), sodass eine im Kalibrierungssample
+  unbeobachtete Kategorie erhalten bleibt. Aktuelle Aufrufer bleiben unverändert;
+  die vollständige Verdrahtung folgt mit dem NRM/RSM-Umbau.
+- **Initiale Item-Schwierigkeit:** `estimate_initial_item_difficulties()` nutzt den
+  empirischen Logit `p = (r + 0.5) / (n + 1)` – keine Division durch 0 (keine
+  Antworten → neutrale Schwierigkeit 0), kein `log(0)` (alles richtig/falsch), kein
+  asymmetrischer Offset.
+- **FD-Toleranzen** verschärft (Gradient `atol = rtol = 1e-6`, Hessian
+  `atol = 1e-5`, `rtol = 1e-4`; 100–1000× enger) – alle FD-Tests halten das.
+- **Neues Recovery-/Invariant-Oracle:** Für simulierte Antworten mit bekannter
+  Fähigkeit wird geprüft, dass der Schätzer die wahre Fähigkeit wiederfindet und der
+  Standardfehler mit mehr Items monoton fällt – ein robuster Ersatz für das an den
+  Vor-Refactor-Schätzer gepinnte (weiter geskippte) CAT-Trajektorien-Szenario.
+- **Simulationstest gehärtet:** Zusätzlich zur 90-%-Trefferquote muss das mittlere
+  Abweichungsband (0.01, 0.5] ≤ 2 % bleiben. Die Referenzabweichung ist bimodal
+  (gemessen: 512 Treffer, 0 im Mittelband, 32 Branch-Flips von 544), sodass ein
+  systematischer Drift nun auffällt, den die Trefferquote allein maskieren könnte.
+- Veralteter `// Ralf …`-Kommentar entfernt.
+
+### Politome Fisher-/Iteminformation korrigiert (Kategorie-Doppelzählung)
+
+- `item_information()` (GRM/GGRM/PCM/GPCM) zählte die Baseline-Kategorie doppelt:
+  der Baseline-Term wurde separat addiert **und** in der Schleife über das
+  Kategorie-Array (das die Baseline bereits enthält) erneut. Da
+  `category_information = -log_likelihood_p_p = Var(K)` frac-unabhängig ist,
+  ergab sich `Var(K)·(1 + P_baseline)` statt `Var(K)` – im Beispiel ~31 % zu hohe
+  Information. Wirkt direkt auf die Fisher-basierte Itemauswuahl
+  (`teststrategy/preselect_task/fisherinformation`) und den ausgewiesenen
+  Standardfehler. Behoben (Baseline genau einmal), gegen eine unabhängige
+  FD-Referenz verifiziert und mit neuen Fisher-Tests je Modell abgesichert
+  (zahn-getestet).
+
+### PCM/GPCM `likelihood()` sättigungssicher
+
+- Die Kategorie-Wahrscheinlichkeiten nutzen jetzt denselben Max-Shift-Softmax wie
+  die Momente (statt roher `exp()`-Summen). Damit bleibt `likelihood()` bei
+  extremen θ endlich (kein `INF/INF = NaN`); der Sättigungstest prüft nun auch
+  `likelihood()` und `get_ability_derivatives()`.
+
+### Estimator-Interface-Verträge vervollständigt
+
+- `catcalc_item_estimator` deklariert wieder `get_log_jacobian()`/`get_log_hessian()`
+  (von `catcalc::estimate_item_params()` benötigt); `catcalc_ability_estimator`
+  deklariert jetzt `get_ability_derivatives()` (von `estimate_person_ability()`
+  benötigt). Damit ist der Modellvertrag für künftige Modelle wieder vollständig.
+
+### Weitere Robustheit & Tests
+
+- 1PL/2PL erhalten eigene `get_ability_derivatives()`-Overrides (P einmal
+  berechnet); Stufe 2 deckt damit alle 7 Modelle ab.
+- Neue numerische PP-θ-FD-Tests für die 4 politomen Modelle sowie
+  `get_ability_derivatives == Einzelmethoden`-Tests für alle 7 Modelle.
+- TR-Grenzen: nur ein ungesetzter (`false`) oder leerer Config-Wert fällt auf
+  ±5 zurück; ein administrativ gesetztes `0` wird respektiert.
 
 ### Kombinierte Personen-Ableitungen (PP-Refactor Stufe 2)
 

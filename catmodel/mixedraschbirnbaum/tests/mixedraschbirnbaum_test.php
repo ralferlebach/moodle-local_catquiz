@@ -1299,6 +1299,34 @@ final class mixedraschbirnbaum_test extends TestCase {
     }
 
     /**
+     * The combined get_ability_derivatives() must return exactly the same values
+     * as the separate log_likelihood_p()/log_likelihood_p_p() methods (this guards
+     * the memoised PP-Stufe-2 wiring in catcalc::estimate_person_ability()).
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     */
+    public function test_get_ability_derivatives_matches_separate(): void {
+        $ip = ['difficulty' => 0.3, 'discrimination' => 1.2, 'guessing' => 0.15];
+        foreach ([0.0, 1.0] as $frac) {
+            foreach ([-2.5, -0.7, 0.0, 0.8, 2.5, 40.0, -40.0] as $theta) {
+                $pp = ['ability' => $theta];
+                $combined = mixedraschbirnbaum::get_ability_derivatives($pp, $ip, (float) $frac);
+                $this->assertEqualsWithDelta(
+                    mixedraschbirnbaum::log_likelihood_p($pp, $ip, (float) $frac),
+                    $combined['jacobian'],
+                    1e-9
+                );
+                $this->assertEqualsWithDelta(
+                    mixedraschbirnbaum::log_likelihood_p_p($pp, $ip, (float) $frac),
+                    $combined['hessian'],
+                    1e-9
+                );
+            }
+        }
+    }
+
+    /**
      * Get model.
      *
      * @return mixedraschbirnbaum

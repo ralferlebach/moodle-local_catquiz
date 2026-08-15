@@ -558,6 +558,146 @@ final class pcmgeneralized_test extends TestCase {
     }
 
     /**
+     * Verifies the analytic polytomous Fisher information against an independent
+     * numeric reference.
+     *
+     * For a polytomous item the item (Fisher) information is
+     *   I(theta) = sum_k P_k(theta) * (-d^2/dtheta^2 log P_k(theta)),
+     * where the second derivative of each category log-probability is approximated
+     * by a central finite difference of the model's own likelihood(). The numeric
+     * path shares no code with fisher_info()/item_information() (it does not reuse
+     * log_likelihood_p_p()). This test fails if the baseline category is
+     * double-counted, as the historical bug inflated I by a factor 1 + P_baseline.
+     *
+     * @dataProvider fisher_info_numeric_provider
+     *
+     * @param array $pp
+     * @param array $ip
+     * @param array $fractions
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     * @throws InvalidArgumentException
+     */
+    public function test_fisher_info_numeric(array $pp, array $ip, array $fractions): void {
+        $model = $this->getmodel();
+
+        $h = 1e-5;
+        $theta = $pp['ability'];
+        $numeric = 0.0;
+        foreach ($fractions as $fraction) {
+            $logp = function ($t) use ($ip, $fraction) {
+                return log(max(1e-300, pcmgeneralized::likelihood(['ability' => $t], $ip, (float) $fraction)));
+            };
+            $d2 = ($logp($theta + $h) - 2.0 * $logp($theta) + $logp($theta - $h)) / ($h * $h);
+            $pk = pcmgeneralized::likelihood($pp, $ip, (float) $fraction);
+            $numeric += $pk * (-$d2);
+        }
+
+        $analytic = $model->fisher_info($pp, $ip);
+        $this->assertEqualsWithDelta($numeric, $analytic, 1e-3);
+    }
+
+    /**
+     * Deterministic parameter grid for the numeric Fisher test.
+     *
+     * @return array
+     */
+    public static function fisher_info_numeric_provider(): array {
+        $items = [
+            ['intercepts' => ['0.0' => 0.0, '0.5' => -0.4, '1.0' => 0.7], 'discrimination' => 1.3],
+            ['intercepts' => ['0.0' => 0.0, '0.333' => -0.6, '0.666' => 0.1, '1.0' => 0.9], 'discrimination' => 0.8],
+        ];
+        $abilities = [-1.5, -0.4, 0.0, 0.9, 2.0];
+        $cases = [];
+        foreach ($items as $i => $ip) {
+            $fractions = array_keys($ip['intercepts']);
+            foreach ($abilities as $j => $ability) {
+                $cases["item{$i}-ability{$j}"] = [
+                    'pp' => ['ability' => $ability],
+                    'ip' => $ip,
+                    'fractions' => $fractions,
+                ];
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * The combined get_ability_derivatives() must return exactly the same values
+     * as the separate log_likelihood_p()/log_likelihood_p_p() methods (this guards
+     * the memoised PP-Stufe-2 wiring in catcalc::estimate_person_ability()).
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     */
+    public function test_get_ability_derivatives_matches_separate(): void {
+        $ip = ['intercepts' => ['0.0' => 0.0, '0.5' => -0.4, '1.0' => 0.7], 'discrimination' => 0.9];
+        foreach (array_keys($ip['intercepts']) as $frac) {
+            foreach ([-2.5, -0.7, 0.0, 0.8, 2.5, 40.0, -40.0] as $theta) {
+                $pp = ['ability' => $theta];
+                $combined = pcmgeneralized::get_ability_derivatives($pp, $ip, (float) $frac);
+                $this->assertEqualsWithDelta(
+                    pcmgeneralized::log_likelihood_p($pp, $ip, (float) $frac),
+                    $combined['jacobian'],
+                    1e-9
+                );
+                $this->assertEqualsWithDelta(
+                    pcmgeneralized::log_likelihood_p_p($pp, $ip, (float) $frac),
+                    $combined['hessian'],
+                    1e-9
+                );
+            }
+        }
+    }
+
+    /**
+     * Numeric check of the person-ability (theta) derivatives against central
+     * finite differences of the model's own log-likelihood. Independent of the
+     * analytic P/W/moment formulae used by log_likelihood_p()/_p_p().
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     */
+    public function test_ability_derivatives_match_finite_differences(): void {
+        $ip = ['intercepts' => ['0.0' => 0.0, '0.5' => -0.4, '1.0' => 0.7], 'discrimination' => 0.9];
+        $h = 1e-5;
+        foreach (array_keys($ip['intercepts']) as $frac) {
+            foreach ([-1.5, -0.4, 0.0, 0.9, 2.0] as $theta) {
+                $pp = ['ability' => $theta];
+                $logl = function ($t) use ($ip, $frac) {
+                    return log(max(1e-300, pcmgeneralized::likelihood(['ability' => $t], $ip, (float) $frac)));
+                };
+                $fdp = ($logl($theta + $h) - $logl($theta - $h)) / (2.0 * $h);
+                $fdpp = ($logl($theta + $h) - 2.0 * $logl($theta) + $logl($theta - $h)) / ($h * $h);
+                $this->assertEqualsWithDelta($fdp, pcmgeneralized::log_likelihood_p($pp, $ip, (float) $frac), 1e-3);
+                $this->assertEqualsWithDelta($fdpp, pcmgeneralized::log_likelihood_p_p($pp, $ip, (float) $frac), 1e-2);
+            }
+        }
+    }
+
+
+    /**
+     * The discrimination (slope) must be clamped into the configured positive
+     * trusted region: a negative or non-positive slope is floored to a small
+     * positive value, and an oversized slope is capped at the maximum.
+     *
+     * @return void
+     */
+    public function test_restrict_to_trusted_region_keeps_discrimination_positive(): void {
+        $base = ['intercepts' => ['0.0' => 0.0, '0.5' => -0.2, '1.0' => 0.4]];
+
+        $neg = pcmgeneralized::restrict_to_trusted_region($base + ['discrimination' => -2.0]);
+        $this->assertGreaterThan(0.0, $neg['discrimination'], 'Discrimination must stay positive.');
+
+        $big = pcmgeneralized::restrict_to_trusted_region($base + ['discrimination' => 99.0]);
+        $this->assertLessThanOrEqual(5.0 + 1e-9, $big['discrimination'], 'Discrimination must be capped.');
+
+        $ok = pcmgeneralized::restrict_to_trusted_region($base + ['discrimination' => 1.4]);
+        $this->assertEqualsWithDelta(1.4, $ok['discrimination'], 1e-9, 'In-range discrimination is unchanged.');
+    }
+
+    /**
      * Get model.
      *
      * @return pcmgeneralized

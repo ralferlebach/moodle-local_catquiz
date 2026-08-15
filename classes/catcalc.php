@@ -70,10 +70,14 @@ class catcalc {
                 }
             }
 
-            $p = $numpassed / ($numfailed + $numpassed);
-            // phpcs:ignore
-            // $item_difficulty = -log($num_passed / $num_failed);
-            $itemdifficulty = -log($p / (1 - $p + 0.00001)); // TODO: numerical stability check.
+            $n = $numpassed + $numfailed;
+            // Empirical logit keeps the estimate finite in every boundary case
+            // (no responses, all correct, all incorrect) and is symmetric:
+            // p = (r + 0.5) / (n + 1),   difficulty = -log(p / (1 - p)).
+            // With n = 0 this yields p = 0.5 and a neutral difficulty of 0 rather
+            // than a division by zero; r = 0 and r = n no longer hit log(0).
+            $p = ($numpassed + 0.5) / ($n + 1);
+            $itemdifficulty = -log($p / (1 - $p));
             $itemdifficulties[$id] = $itemdifficulty;
         }
         return $itemdifficulties;

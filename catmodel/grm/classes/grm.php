@@ -730,9 +730,14 @@ class grm extends model_multiparam {
      * @return float
      */
     public static function item_information(array $pp, array $ip): float {
-        $iif = self::category_information($pp, $ip, 0.0) * self::likelihood($pp, $ip, 0.0);
+        // Fisher information I(theta) = sum_k P_k * (-d^2/dtheta^2 log P_k).
+        // The category array already contains the baseline category, so it must be
+        // summed exactly once. (The earlier code added the baseline term separately
+        // and then again inside the loop, inflating the information by a factor
+        // (1 + P_baseline).)
+        $iif = 0.0;
         foreach ($ip['difficulties'] as $f => $val) {
-            $iif += self::category_information($pp, $ip, $f) * self::likelihood($pp, $ip, $f);
+            $iif += self::category_information($pp, $ip, (float) $f) * self::likelihood($pp, $ip, (float) $f);
         }
         return $iif;
     }
@@ -752,23 +757,47 @@ class grm extends model_multiparam {
         // threshold would yield a negative category probability and hence NaN in the
         // likelihood. The baseline entry (lowest fraction) is a placeholder and stays 0.
         // Trusted-region bounds from the model's admin settings (fallback to +/-5).
-        $min = (float) (get_config('catmodel_grm', 'trusted_region_min_a') ?: -5.0);
-        $max = (float) (get_config('catmodel_grm', 'trusted_region_max_a') ?: 5.0);
+        // Only an unset (false) or empty config falls back; a configured 0 is honoured.
+        $minconfig = get_config('catmodel_grm', 'trusted_region_min_a');
+        $min = ($minconfig === false || $minconfig === '') ? -5.0 : (float) $minconfig;
+        $maxconfig = get_config('catmodel_grm', 'trusted_region_max_a');
+        $max = ($maxconfig === false || $maxconfig === '') ? 5.0 : (float) $maxconfig;
         $gap = 1e-3;
         $sorted = self::sort_fractions($ip['difficulties']);
         $fractions = array_keys($sorted);
-        $prev = null;
+
+        // Collect the free thresholds (all but the baseline placeholder) and clamp
+        // each into [min, max].
+        $free = [];
         foreach ($fractions as $index => $fraction) {
             if ($index === 0) {
                 // Baseline category placeholder: not a real threshold.
                 continue;
             }
-            $value = max($min, min($max, $sorted[$fraction]));
-            if ($prev !== null && $value < $prev + $gap) {
-                $value = $prev + $gap;
+            $free[] = $fraction;
+            $sorted[$fraction] = max($min, min($max, $sorted[$fraction]));
+        }
+
+        // Forward pass: enforce the ascending minimum gap a_i >= a_{i-1} + gap.
+        $count = count($free);
+        for ($i = 1; $i < $count; $i++) {
+            $lower = $sorted[$free[$i - 1]] + $gap;
+            if ($sorted[$free[$i]] < $lower) {
+                $sorted[$free[$i]] = $lower;
             }
-            $sorted[$fraction] = $value;
-            $prev = $value;
+        }
+
+        // The forward pass can push the top threshold past max. Project the whole
+        // ascending chain back into [min, max] with a backward pass from max, so the
+        // box constraint stays satisfied while the ordering/gap is preserved.
+        if ($count > 0 && $sorted[$free[$count - 1]] > $max) {
+            $sorted[$free[$count - 1]] = $max;
+            for ($i = $count - 2; $i >= 0; $i--) {
+                $upper = $sorted[$free[$i + 1]] - $gap;
+                if ($sorted[$free[$i]] > $upper) {
+                    $sorted[$free[$i]] = $upper;
+                }
+            }
         }
         $ip['difficulties'] = $sorted;
         return $ip;

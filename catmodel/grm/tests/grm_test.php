@@ -24,6 +24,8 @@
 
 namespace catmodel_grm;
 
+use local_catquiz\local\model\model_person_param;
+use local_catquiz\local\model\model_item_response;
 use catmodel_rasch\rasch;
 use local_catquiz\local\model\model_model;
 use PHPUnit\Framework\ExpectationFailedException;
@@ -557,6 +559,190 @@ final class grm_test extends TestCase {
     public static function get_log_hessian_provider(): array {
 
         return [];
+    }
+
+    /**
+     * Verifies the analytic polytomous Fisher information against an independent
+     * numeric reference.
+     *
+     * For a polytomous item the item (Fisher) information is
+     *   I(theta) = sum_k P_k(theta) * (-d^2/dtheta^2 log P_k(theta)),
+     * where the second derivative of each category log-probability is approximated
+     * by a central finite difference of the model's own likelihood(). The numeric
+     * path shares no code with fisher_info()/item_information() (it does not reuse
+     * log_likelihood_p_p()). This test fails if the baseline category is
+     * double-counted, as the historical bug inflated I by a factor 1 + P_baseline.
+     *
+     * @dataProvider fisher_info_numeric_provider
+     *
+     * @param array $pp
+     * @param array $ip
+     * @param array $fractions
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     * @throws InvalidArgumentException
+     */
+    public function test_fisher_info_numeric(array $pp, array $ip, array $fractions): void {
+        $model = $this->getmodel();
+
+        $h = 1e-5;
+        $theta = $pp['ability'];
+        $numeric = 0.0;
+        foreach ($fractions as $fraction) {
+            $logp = function ($t) use ($ip, $fraction) {
+                return log(max(1e-300, grm::likelihood(['ability' => $t], $ip, (float) $fraction)));
+            };
+            $d2 = ($logp($theta + $h) - 2.0 * $logp($theta) + $logp($theta - $h)) / ($h * $h);
+            $pk = grm::likelihood($pp, $ip, (float) $fraction);
+            $numeric += $pk * (-$d2);
+        }
+
+        $analytic = $model->fisher_info($pp, $ip);
+        $this->assertEqualsWithDelta($numeric, $analytic, 1e-3);
+    }
+
+    /**
+     * Deterministic parameter grid for the numeric Fisher test.
+     *
+     * @return array
+     */
+    public static function fisher_info_numeric_provider(): array {
+        $items = [
+            ['difficulties' => ['0.0' => 0.0, '0.5' => -0.4, '1.0' => 0.7]],
+            ['difficulties' => ['0.0' => 0.0, '0.333' => -0.6, '0.666' => 0.1, '1.0' => 0.9]],
+        ];
+        $abilities = [-1.5, -0.4, 0.0, 0.9, 2.0];
+        $cases = [];
+        foreach ($items as $i => $ip) {
+            $fractions = array_keys($ip['difficulties']);
+            foreach ($abilities as $j => $ability) {
+                $cases["item{$i}-ability{$j}"] = [
+                    'pp' => ['ability' => $ability],
+                    'ip' => $ip,
+                    'fractions' => $fractions,
+                ];
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * The combined get_ability_derivatives() must return exactly the same values
+     * as the separate log_likelihood_p()/log_likelihood_p_p() methods (this guards
+     * the memoised PP-Stufe-2 wiring in catcalc::estimate_person_ability()).
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     */
+    public function test_get_ability_derivatives_matches_separate(): void {
+        $ip = ['difficulties' => ['0.0' => 0.0, '0.5' => -0.4, '1.0' => 0.7]];
+        foreach (array_keys($ip['difficulties']) as $frac) {
+            foreach ([-2.5, -0.7, 0.0, 0.8, 2.5, 40.0, -40.0] as $theta) {
+                $pp = ['ability' => $theta];
+                $combined = grm::get_ability_derivatives($pp, $ip, (float) $frac);
+                $this->assertEqualsWithDelta(
+                    grm::log_likelihood_p($pp, $ip, (float) $frac),
+                    $combined['jacobian'],
+                    1e-9
+                );
+                $this->assertEqualsWithDelta(
+                    grm::log_likelihood_p_p($pp, $ip, (float) $frac),
+                    $combined['hessian'],
+                    1e-9
+                );
+            }
+        }
+    }
+
+    /**
+     * Numeric check of the person-ability (theta) derivatives against central
+     * finite differences of the model's own log-likelihood. Independent of the
+     * analytic P/W/moment formulae used by log_likelihood_p()/_p_p().
+     *
+     * @return void
+     * @throws ExpectationFailedException
+     */
+    public function test_ability_derivatives_match_finite_differences(): void {
+        $ip = ['difficulties' => ['0.0' => 0.0, '0.5' => -0.4, '1.0' => 0.7]];
+        $h = 1e-5;
+        foreach (array_keys($ip['difficulties']) as $frac) {
+            foreach ([-1.5, -0.4, 0.0, 0.9, 2.0] as $theta) {
+                $pp = ['ability' => $theta];
+                $logl = function ($t) use ($ip, $frac) {
+                    return log(max(1e-300, grm::likelihood(['ability' => $t], $ip, (float) $frac)));
+                };
+                $fdp = ($logl($theta + $h) - $logl($theta - $h)) / (2.0 * $h);
+                $fdpp = ($logl($theta + $h) - 2.0 * $logl($theta) + $logl($theta - $h)) / ($h * $h);
+                $this->assertEqualsWithDelta($fdp, grm::log_likelihood_p($pp, $ip, (float) $frac), 1e-3);
+                $this->assertEqualsWithDelta($fdpp, grm::log_likelihood_p_p($pp, $ip, (float) $frac), 1e-2);
+            }
+        }
+    }
+
+
+    /**
+     * When thresholds exceed the trusted-region maximum, the projection must keep
+     * them inside [min, max] (box constraint) while preserving the ascending gap.
+     * Previously the ordering step could push the top threshold past max.
+     *
+     * @return void
+     */
+    public function test_restrict_to_trusted_region_keeps_box_constraint(): void {
+        // Several thresholds at/above the ceiling; a middle one below the floor.
+        $ip = ['difficulties' => ['0.0' => 0.0, '0.25' => 12.0, '0.5' => 12.0, '0.75' => -9.0, '1.0' => 20.0]];
+        $restricted = grm::restrict_to_trusted_region($ip);
+
+        // Read the actually configured bounds (the code uses the same fallback).
+        $minconfig = get_config('catmodel_grm', 'trusted_region_min_a');
+        $maxconfig = get_config('catmodel_grm', 'trusted_region_max_a');
+        $min = ($minconfig === false || $minconfig === '') ? -5.0 : (float) $minconfig;
+        $max = ($maxconfig === false || $maxconfig === '') ? 5.0 : (float) $maxconfig;
+
+        $values = array_values($restricted['difficulties']);
+        $prev = null;
+        for ($i = 1; $i < count($values); $i++) {
+            $this->assertLessThanOrEqual($max + 1e-9, $values[$i], 'Threshold must not exceed max.');
+            $this->assertGreaterThanOrEqual($min - 1e-9, $values[$i], 'Threshold must not fall below min.');
+            if ($prev !== null) {
+                $this->assertGreaterThanOrEqual($prev, $values[$i], 'Thresholds must stay ascending.');
+            }
+            $prev = $values[$i];
+        }
+    }
+
+
+    /**
+     * With an explicitly declared category structure, empirical_start_thresholds()
+     * must keep a category that is unobserved in the calibration sample (structure
+     * from the item, frequencies from the responses). Without the declared
+     * structure the unobserved category would be silently dropped.
+     *
+     * @return void
+     */
+    public function test_empirical_start_thresholds_keeps_declared_categories(): void {
+        $person = new model_person_param('u1', 1);
+        $responses = [];
+        // Observed fractions: 0.0 and 1.0 only; the declared 0.5 is never observed.
+        foreach ([0.0, 1.0, 0.0, 1.0, 1.0] as $value) {
+            $responses[] = new model_item_response('i1', $value, $person);
+        }
+
+        $method = new \ReflectionMethod(grm::class, 'empirical_start_thresholds');
+        $method->setAccessible(true);
+
+        // Fallback (structure from responses): the unobserved 0.5 is absent.
+        $observed = $method->invoke(null, $responses, null);
+        $this->assertArrayNotHasKey('0.5', $observed);
+
+        // Declared structure: 0.5 is retained even though it was never observed.
+        $declared = $method->invoke(null, $responses, [0.0, 0.5, 1.0]);
+        $keys = array_map('floatval', array_keys($declared));
+        $this->assertContains(0.5, $keys, 'Declared but unobserved category must be kept.');
+        $this->assertCount(3, $declared);
+        foreach ($declared as $threshold) {
+            $this->assertTrue(is_finite($threshold));
+        }
     }
 
     /**

@@ -52,11 +52,19 @@ final class derivative_saturation_test extends basic_testcase {
             foreach ($fracs as $frac) {
                 $frac = (float) $frac;
 
+                $probability = $class::likelihood($pp, $ip, $frac);
+                $this->assert_finite($probability, "likelihood finite ($modelname, theta=$theta, frac=$frac)");
+
                 $score = $class::log_likelihood_p($pp, $ip, $frac);
                 $this->assert_finite($score, "log_likelihood_p finite ($modelname, theta=$theta, frac=$frac)");
 
                 $hessian = $class::log_likelihood_p_p($pp, $ip, $frac);
                 $this->assert_finite($hessian, "log_likelihood_p_p finite ($modelname, theta=$theta, frac=$frac)");
+
+                $this->assert_all_finite(
+                    $class::get_ability_derivatives($pp, $ip, $frac),
+                    "get_ability_derivatives finite ($modelname, theta=$theta, frac=$frac)"
+                );
 
                 foreach (['get_log_jacobian', 'get_log_hessian'] as $method) {
                     $this->assert_all_finite(

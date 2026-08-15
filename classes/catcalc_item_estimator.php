@@ -62,4 +62,32 @@ interface catcalc_item_estimator {
      * @return array
      */
     public static function restrict_to_trusted_region(array $parameters): array;
+
+    /**
+     * 1st derivative of the log likelihood with respect to the item parameters.
+     *
+     * Required by catcalc::estimate_item_params(), which builds the item-parameter
+     * jacobian from this method.
+     *
+     * @param array $ability person ability parameter ('ability')
+     * @param array $ip item parameters
+     * @param float $itemresponse response fraction
+     *
+     * @return array jacobian vector
+     */
+    public static function get_log_jacobian(array $ability, array $ip, float $itemresponse): array;
+
+    /**
+     * 2nd derivative (hessian) of the log likelihood with respect to the item parameters.
+     *
+     * Required by catcalc::estimate_item_params(), which builds the item-parameter
+     * hessian from this method.
+     *
+     * @param array $ability person ability parameter ('ability')
+     * @param array $ip item parameters
+     * @param float $itemresponse response fraction
+     *
+     * @return array hessian matrix
+     */
+    public static function get_log_hessian(array $ability, array $ip, float $itemresponse): array;
 }

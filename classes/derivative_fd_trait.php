@@ -125,12 +125,18 @@ trait derivative_fd_trait {
     }
 
     /**
-     * Absolute tolerance derived from the plugin's item-parameter precision.
+     * Absolute tolerance for finite-difference comparisons.
+     *
+     * Central differences with the adaptive step used here agree with the analytic
+     * derivatives far more tightly than the item-parameter display precision, so the
+     * FD tolerance is set well below 10^-PRECISION to catch small regressions. The
+     * Hessian path adds relative slack on top (see assert_hessian_close) because the
+     * second difference is noisier.
      *
      * @return float
      */
     protected function fd_atol(): float {
-        return 10 ** (-model_raschmodel::PRECISION);
+        return 1e-6;
     }
 
     /**
@@ -190,8 +196,8 @@ trait derivative_fd_trait {
         $n = count($numeric);
         $this->assertCount($n, $analytic, 'hessian dimension mismatch');
         // Hessian finite differences are noisier (cancellation), so allow more relative slack.
-        $atol = $this->fd_atol();
-        $rtol = 10 * $atol;
+        $atol = $this->fd_atol() * 10.0;
+        $rtol = 100 * $this->fd_atol();
         for ($i = 0; $i < $n; $i++) {
             $this->assertCount($n, $analytic[$i], 'hessian row dimension mismatch');
             for ($j = 0; $j < $n; $j++) {

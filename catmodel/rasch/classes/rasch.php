@@ -163,6 +163,19 @@ class rasch extends model_raschmodel {
     }
 
     /**
+     * Combined person-ability score and hessian sharing one P computation.
+     *
+     * @param array $pp person ability parameter ('ability')
+     * @param array $ip item parameters ('difficulty')
+     * @param float $frac response fraction
+     * @return array ['jacobian' => k - P, 'hessian' => -W]
+     */
+    public static function get_ability_derivatives(array $pp, array $ip, float $frac): array {
+        $p = self::logistic($pp['ability'] - $ip['difficulty']);
+        return ['jacobian' => $frac - $p, 'hessian' => -self::logistic_w($p)];
+    }
+
+    /**
      * Calculates the 1st derivative of the LOG Likelihood with respect to the item parameters
      *
      * @param array $pp - person ability parameter ('ability')

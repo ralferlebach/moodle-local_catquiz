@@ -477,21 +477,23 @@ class pcmgeneralized extends model_multiparam {
         $fractions = self::get_fractions($a);
         $kmax = count($fractions) - 1;
 
-        // Calculation the denominator of the formulae.
-        $denominator = 0;
-        $intercepts = 0;
+        // Category log-weights l_k = b*(k*theta - sum_{j<=k} intercept_j). A
+        // max-shifted softmax keeps exp() finite at extreme abilities/discriminations
+        // where the raw sum would overflow to INF and yield INF/INF = NaN.
+        $logweights = [];
+        $intercepts = 0.0;
         for ($k = 0; $k <= $kmax; $k++) {
-            $intercepts += ($k == 0) ? (0) : $a[$fractions[$k]];
-            $denominator += exp($b * ($k * $ability - $intercepts));
+            $intercepts += ($k == 0) ? 0.0 : $a[$fractions[$k]];
+            $logweights[$k] = $b * ($k * $ability - $intercepts);
+        }
+        $max = max($logweights);
+        $denominator = 0.0;
+        foreach ($logweights as $logweight) {
+            $denominator += exp($logweight - $max);
         }
 
-        // Calculation the probability.
         $kfrac = self::get_key_by_fractions($frac, $a);
-        $intercepts = 0;
-        for ($k = 0; $k <= $kfrac; $k++) {
-            $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
-        }
-        return exp($b * ($kfrac * $ability - $intercepts)) / $denominator;
+        return exp($logweights[$kfrac] - $max) / $denominator;
     }
 
     // Calculate the LOG Likelihood and its derivatives.
@@ -796,9 +798,14 @@ class pcmgeneralized extends model_multiparam {
      * @return float
      */
     public static function item_information(array $pp, array $ip): float {
-        $iif = self::category_information($pp, $ip, 0.0) * self::likelihood($pp, $ip, 0.0);
+        // Fisher information I(theta) = sum_k P_k * (-d^2/dtheta^2 log P_k).
+        // The category array already contains the baseline category, so it must be
+        // summed exactly once. (The earlier code added the baseline term separately
+        // and then again inside the loop, inflating the information by a factor
+        // (1 + P_baseline).)
+        $iif = 0.0;
         foreach ($ip['intercepts'] as $f => $val) {
-            $iif += self::category_information($pp, $ip, $f) * self::likelihood($pp, $ip, $f);
+            $iif += self::category_information($pp, $ip, (float) $f) * self::likelihood($pp, $ip, (float) $f);
         }
         return $iif;
     }
@@ -815,13 +822,16 @@ class pcmgeneralized extends model_multiparam {
         // Clamp each free threshold to a sensible range; keep discrimination
         // positive. The baseline entry stays 0 (re-inserted by the codec).
         // Trusted-region bounds from the model's admin settings (fallback to +/-5).
-        $min = (float) (get_config('catmodel_pcmgeneralized', 'trusted_region_min_a') ?: -5.0);
-        $max = (float) (get_config('catmodel_pcmgeneralized', 'trusted_region_max_a') ?: 5.0);
+        // Only an unset (false) or empty config falls back; a configured 0 is honoured.
+        $minconfig = get_config('catmodel_pcmgeneralized', 'trusted_region_min_a');
+        $min = ($minconfig === false || $minconfig === '') ? -5.0 : (float) $minconfig;
+        $maxconfig = get_config('catmodel_pcmgeneralized', 'trusted_region_max_a');
+        $max = ($maxconfig === false || $maxconfig === '') ? 5.0 : (float) $maxconfig;
         foreach ($ip['intercepts'] as $fraction => $value) {
             $ip['intercepts'][$fraction] = max($min, min($max, $value));
         }
         if (isset($ip['discrimination'])) {
-            $ip['discrimination'] = max(0.1, min(5.0, $ip['discrimination']));
+            $ip['discrimination'] = self::restrict_discrimination('catmodel_pcmgeneralized', $ip['discrimination']);
         }
         return $ip;
     }
