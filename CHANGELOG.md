@@ -1,9 +1,45 @@
 # Changelog – local_catquiz
 
-## 1.1.2 (interne Version 2026081409)
+## 1.1.2 (interne Version 2026081410)
 
 > Diese Änderungen werden unter dem bestehenden Release-Label 1.1.2
 > ausgeliefert; nur die interne `$plugin->version` wird erhöht.
+
+### Sättigungsfestigkeit der Ableitungen (Division-by-Zero / NaN behoben)
+Behebt den CI-Unit-Fehler (33× `DivisionByZeroError` in
+`model_person_ability_estimator_catcalc_test`, Datensatz #2 / 3PL) und härtet
+darüber hinaus **alle** betroffenen Ableitungen systematisch gegen extreme
+Fähigkeiten. Ursache waren zwei Muster: (a) Division durch `P·(1−P)` bzw. die
+Kategoriewahrscheinlichkeit `P_r`, die bei Sättigung auf exakt 0 unterläuft
+(PHP 8 wirft dann), und (b) `exp()`-Summen, die auf `INF` überlaufen
+(`INF/INF = NaN`).
+- **1PL/2PL sind nachweislich unbetroffen**: ihr Score/Hesse *multipliziert*
+  mit `P` bzw. `W = P(1−P)` und geht bei Sättigung sauber gegen 0.
+- **3PL** `log_likelihood_p`/`_p_p` divisionsstabil umgeschrieben: über die
+  Kürzung `(1−c)·W_L/(1−P) = L` wird der Score zu `b·L·(k−P)/P` (nur noch `/P`,
+  `P ≥ c`), plus Grenzwert-Guard für den `c=0`-Unterlauf. Item-Ableitungen
+  zusätzlich über `stabilize_denominator()` abgesichert.
+- **GRM/GGRM**: Person- und Item-Ableitungen dividieren durch `P_r`; Nenner
+  über `stabilize_denominator()` abgesichert.
+- **PCM/GPCM**: `exp()`-Summen (Person- und Item-Ableitungen sowie LMS) auf
+  **max-Shift-Softmax** umgestellt (überlauffrei; Partitionssumme ≥ 1).
+- Neuer Basis-Helfer `model_raschmodel::stabilize_denominator()`: schiebt einen
+  exakt-nullen (bzw. sub-ε) Nenner auf ±ε. Bei realistischen Arbeitspunkten
+  inert (`|Nenner| ≫ ε`), daher FD-verifizierte Werte im Normalbereich unverändert.
+- Neuer Regressionstest `tests/local/model/derivative_saturation_test.php`:
+  alle 7 Modelle × θ bis ±800 × Person-/Item-Ableitungen → alles endlich
+  (7 Tests, 2208 Assertions). Zahn-getestet (Revert → `DivisionByZeroError`).
+
+### PP-Refactor politom (Personfähigkeits-Ableitungen)
+Die politomen `log_likelihood_p`/`_p_p` von der impliziten
+`likelihood_p/likelihood`- bzw. Roh-`exp`-Schleifen-Form auf geschlossene,
+stabile Ausdrücke umgestellt (FD-verifiziert ≤ 2e-10):
+- **PCM**: `Score = r − E[K]`, `Hesse = −Var(K)` über stabiles Softmax.
+- **GPCM**: `Score = b(r − E[K])`, `Hesse = −b²·Var(K)`.
+- **GRM/GGRM**: P/W/V-Form `Score = b(W_r − W_{r+1})/P_r`,
+  `Hesse = (b²·P_r·(V_r − V_{r+1}) − (b(W_r − W_{r+1}))²)/P_r²` mit
+  `Q_j = σ(b(θ − a_j))`, `W = Q(1−Q)`, `V = W(1−2Q)`.
+Nebeneffekt: keine redundanten `sort_fractions`-Aufrufe mehr, weniger `exp()`.
 
 ### Persistenz politomer Item-Parameter (End-to-End korrigiert)
 Fünf konkrete Persistenz-Bugs behoben, die dazu führten, dass geschätzte

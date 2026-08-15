@@ -506,8 +506,59 @@ class grm extends model_multiparam {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
-        // We do it the easy way by using the log'f(x) = f'(x)/f(x) method.
-        return self::likelihood_p($pp, $ip, $frac) / self::likelihood($pp, $ip, $frac);
+        $t = self::grm_ability_terms($pp, $ip, $frac);
+        // Score d/dtheta log L = (W_r - W_{r+1}) / P_r.
+        return ($t['wr'] - $t['wr1']) / self::stabilize_denominator($t['pr']);
+    }
+
+    /**
+     * Calculates the 2nd derivative of the LOG Likelihood with respect to the person ability.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac response fraction
+     * @return float
+     */
+    public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
+        $t = self::grm_ability_terms($pp, $ip, $frac);
+        $pr = self::stabilize_denominator($t['pr']);
+        $dp = $t['wr'] - $t['wr1'];
+        $ddp = $t['vr'] - $t['vr1'];
+        // Hessian d^2/dtheta^2 log L = (P_r P_r'' - (P_r')^2) / P_r^2, with
+        // P_r'  = 1 * (W_r - W_{r+1}) and P_r'' = 1 * (V_r - V_{r+1}).
+        return ($t['pr'] * $ddp - ($dp) ** 2) / ($pr ** 2);
+    }
+
+    /**
+     * Cumulative-logistic terms for the observed category, used by the ability derivatives.
+     *
+     * Q_j = sigma((theta - a_j)) with Q_0 = 1 and Q_{kmax+1} = 0; the observed
+     * category r has P_r = Q_r - Q_{r+1}. Returns the boundary W = Q(1-Q) and
+     * V = W(1-2Q) values (dsigma, d2sigma cores) at r and r+1.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac response fraction
+     * @return array
+     */
+    private static function grm_ability_terms(array $pp, array $ip, float $frac): array {
+        $ability = $pp['ability'];
+        $a = self::sort_fractions($ip['difficulties']);
+        $b = 1.0;
+        $fractions = self::get_fractions($a);
+        $kmax = max(array_keys($fractions));
+        $r = self::get_key_by_fractions(min(1.0, max(0.0, $frac)), $a);
+
+        $qr = ($r == 0) ? 1.0 : self::logistic($b * ($ability - $a[$fractions[$r]]));
+        $qr1 = ($r == $kmax) ? 0.0 : self::logistic($b * ($ability - $a[$fractions[$r + 1]]));
+
+        return [
+            'pr' => $qr - $qr1,
+            'wr' => self::logistic_w($qr),
+            'wr1' => self::logistic_w($qr1),
+            'vr' => self::logistic_w($qr) * (1.0 - 2.0 * $qr),
+            'vr1' => self::logistic_w($qr1) * (1.0 - 2.0 * $qr1),
+        ];
     }
 
     /**
@@ -518,11 +569,6 @@ class grm extends model_multiparam {
      * @param float $frac - answer fraction (0 ... 1.0)
      * @return float - 2nd derivative of log likelihood with respect to $pp
      */
-    public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
-        // We do it the easy way by using the log''f(x) = (f(x)*f''(x)-f'(x)^2)/f(x)^2 method.
-        return (self::likelihood($pp, $ip, $frac) * self::likelihood_p_p($pp, $ip, $frac) -
-            self::likelihood_p($pp, $ip, $frac) ** 2) / self::likelihood($pp, $ip, $frac) ** 2;
-    }
 
     /**
      * Calculates the 1st derivative of the LOG Likelihood with respect to the item parameters
@@ -545,7 +591,7 @@ class grm extends model_multiparam {
         $kmax = max(array_keys($fractions));
         $r = self::get_key_by_fractions($frac, $a);
 
-        $likelihood = self::likelihood($pp, $ip, $frac);
+        $likelihood = self::stabilize_denominator(self::likelihood($pp, $ip, $frac));
 
         // Free thresholds a_1..a_M map to 0-based codec indices (a_j -> j-1).
         $result = [];
@@ -586,7 +632,7 @@ class grm extends model_multiparam {
         $kmax = max(array_keys($fractions));
         $r = self::get_key_by_fractions($frac, $a);
 
-        $likelihood = self::likelihood($pp, $ip, $frac);
+        $likelihood = self::stabilize_denominator(self::likelihood($pp, $ip, $frac));
 
         // Free thresholds a_1..a_M map to 0-based codec indices (a_j -> j-1).
         $result = [];

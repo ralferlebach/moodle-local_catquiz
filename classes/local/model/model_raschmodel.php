@@ -111,6 +111,30 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
     }
 
     /**
+     * Nudge a denominator away from exactly zero to avoid a hard division error.
+     *
+     * At extreme abilities the polytomous category probabilities (and the 3PL
+     * Bernoulli variance P (1 - P)) underflow to exactly 0.0, which makes the
+     * division in the log-likelihood derivatives throw a DivisionByZeroError under
+     * PHP 8. Replacing an exactly-zero (or sub-epsilon) denominator with a signed
+     * epsilon yields a large-but-finite derivative instead of a crash. The guard is
+     * inert at all realistic operating points (|denominator| >> epsilon), so it does
+     * not affect the finite-difference-verified values in the normal range.
+     *
+     * @param float $denominator the denominator to stabilise
+     * @param float $epsilon smallest permitted magnitude
+     *
+     * @return float
+     *
+     */
+    protected static function stabilize_denominator(float $denominator, float $epsilon = 1e-12): float {
+        if (abs($denominator) >= $epsilon) {
+            return $denominator;
+        }
+        return ($denominator < 0.0) ? -$epsilon : $epsilon;
+    }
+
+    /**
      * Shared LMS (least mean squares) assembly from the expected-score moments.
      *
      * The LMS objective is S = n (frac - mu)^2 with the expected score

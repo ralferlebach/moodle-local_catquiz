@@ -311,15 +311,18 @@ class pcmgeneralized extends model_multiparam {
 
         $cumulative = 0.0;
         $sc = [];
-        $weights = [];
         $fr = [];
         for ($k = 0; $k <= $kmax; $k++) {
             if ($k > 0) {
                 $cumulative += $a[$fractions[$k]];
             }
             $sc[$k] = $k * $ability - $cumulative;
-            $weights[$k] = exp($b * $sc[$k]);
             $fr[$k] = (float) $fractions[$k];
+        }
+        $shift = max(array_map(fn($scv) => $b * $scv, $sc));
+        $weights = [];
+        for ($k = 0; $k <= $kmax; $k++) {
+            $weights[$k] = exp($b * $sc[$k] - $shift);
         }
         $z = array_sum($weights);
 
@@ -514,26 +517,67 @@ class pcmgeneralized extends model_multiparam {
      * @return float - 1st derivative of log likelihood with respect to $pp
      */
     public static function log_likelihood_p(array $pp, array $ip, float $frac): float {
-        $ability = $pp['ability'];
+        $m = self::gpcm_ability_moments($pp, $ip);
+        $r = self::get_key_by_fractions($frac, $m['a']);
+        // Score d/dtheta log L = b (r - E[K]).
+        return $m['b'] * ($r - $m['ek']);
+    }
 
+    /**
+     * Calculates the 2nd derivative of the LOG Likelihood with respect to the person ability.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac response fraction
+     * @return float
+     */
+    public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
+        $m = self::gpcm_ability_moments($pp, $ip);
+        // Hessian d^2/dtheta^2 log L = -b^2 Var(K).
+        return -($m['b'] ** 2) * ($m['ek2'] - $m['ek'] ** 2);
+    }
+
+    /**
+     * Stable category moments E[K] and E[K^2] of the GPCM response distribution.
+     *
+     * Uses a max-shifted softmax over b*(k*theta - D_k) to avoid overflow, replacing
+     * the earlier raw exp() sums.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @return array ['a' => sanitized intercepts, 'b' => discrimination, 'ek' => E[K], 'ek2' => E[K^2]]
+     */
+    private static function gpcm_ability_moments(array $pp, array $ip): array {
+        $ability = $pp['ability'];
         $a = self::sanitize_fractions($ip['intercepts']);
         $b = $ip['discrimination'];
-
         $fractions = self::get_fractions($a);
         $kmax = count($fractions) - 1;
 
-        // Calculation the denominator of the formulae.
-        $denominator = 0;
-        $firstderivative = 0;
-        $intercepts = 0;
+        $cumulative = 0.0;
+        $logweights = [];
         for ($k = 0; $k <= $kmax; $k++) {
-            $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
-            $denominator += exp($b * ($k * $ability - $intercepts));
-            $firstderivative += $k * $b * exp($b * ($k * $ability - $intercepts));
+            if ($k > 0) {
+                $cumulative += $a[$fractions[$k]];
+            }
+            $logweights[$k] = $b * ($k * $ability - $cumulative);
         }
+        $shift = max($logweights);
 
-        $k = self::get_key_by_fractions($frac, $a);
-        return $b * $k - $firstderivative / $denominator;
+        $z = 0.0;
+        $weights = [];
+        for ($k = 0; $k <= $kmax; $k++) {
+            $weights[$k] = exp($logweights[$k] - $shift);
+            $z += $weights[$k];
+        }
+        $ek = 0.0;
+        $ek2 = 0.0;
+        for ($k = 0; $k <= $kmax; $k++) {
+            $pk = $weights[$k] / $z;
+            $ek += $k * $pk;
+            $ek2 += $k * $k * $pk;
+        }
+        return ['a' => $a, 'b' => $b, 'ek' => $ek, 'ek2' => $ek2];
     }
 
     /**
@@ -544,29 +588,6 @@ class pcmgeneralized extends model_multiparam {
      * @param float $frac - answer fraction (0 ... 1.0)
      * @return float - 2nd derivative of log likelihood with respect to $pp
      */
-    public static function log_likelihood_p_p(array $pp, array $ip, float $frac): float {
-        $ability = $pp['ability'];
-
-        $a = self::sanitize_fractions($ip['intercepts']);
-        $b = $ip['discrimination'];
-
-        $fractions = self::get_fractions($a);
-        $kmax = count($fractions) - 1;
-
-        // Calculation the denominator of the formulae.
-        $denominator = 0;
-        $firstderivative = 0;
-        $secondderivative = 0;
-        $intercepts = 0;
-        for ($k = 0; $k <= $kmax; $k++) {
-            $intercepts += ($k == 0) ? (0) : ($a[$fractions[$k]]);
-            $denominator += exp($b * ($k * $ability - $intercepts));
-            $firstderivative += $k * $b * exp($b * ($k * $ability - $intercepts));
-            $secondderivative += $k ** 2 * $b ** 2 * exp($b * ($k * $ability - $intercepts));
-        }
-
-        return $firstderivative ** 2 / $denominator ** 2 - $secondderivative / $denominator;
-    }
 
     /**
      * Calculates the 1st derivative of the LOG Likelihood with respect to the item parameters
@@ -612,15 +633,19 @@ class pcmgeneralized extends model_multiparam {
         $kmax = count($fractions) - 1;
 
         // Score term s_cat = cat*theta - D_cat with cumulative intercepts D_cat.
+        // A max-shift on b*s_cat keeps the exponentials finite at extreme abilities.
         $cumulative = 0.0;
         $s = [];
-        $weights = [];
         for ($cat = 0; $cat <= $kmax; $cat++) {
             if ($cat > 0) {
                 $cumulative += $a[$fractions[$cat]];
             }
             $s[$cat] = $cat * $ability - $cumulative;
-            $weights[$cat] = exp($b * $s[$cat]);
+        }
+        $shift = max(array_map(fn($sc) => $b * $sc, $s));
+        $weights = [];
+        for ($cat = 0; $cat <= $kmax; $cat++) {
+            $weights[$cat] = exp($b * $s[$cat] - $shift);
         }
         $z = array_sum($weights);
 

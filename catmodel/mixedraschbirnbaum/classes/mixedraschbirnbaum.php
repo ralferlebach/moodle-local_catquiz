@@ -194,11 +194,18 @@ class mixedraschbirnbaum extends model_raschmodel {
 
         // P/W form. L logistic core, P = c + (1 - c) L; dP/dtheta = (1 - c) b W_L.
         $l = self::logistic($b * ($ability - $a));
-        $wl = self::logistic_w($l);
         $p = $c + (1.0 - $c) * $l;
 
-        // Score d/dtheta log L = (k - P) / (P (1 - P)) * dP/dtheta.
-        return ($k - $p) / ($p * (1.0 - $p)) * (1.0 - $c) * $b * $wl;
+        // The naive score (k - P) / (P (1 - P)) * dP/dtheta divides by P (1 - P),
+        // which underflows to exactly 0 at saturation (L -> 0 or 1). Using
+        // 1 - P = (1 - c)(1 - L) and W_L = L (1 - L), the factor (1 - c) W_L / (1 - P)
+        // cancels to L, so the score simplifies to b L (k - P) / P — dividing only by
+        // P, and P >= c. The remaining P = 0 case (c = 0 with an underflowed L) is the
+        // 2PL limit b (k - L).
+        if ($p <= 0.0) {
+            return $b * ($k - $l);
+        }
+        return $b * $l * ($k - $p) / $p;
     }
 
     /**
@@ -215,19 +222,28 @@ class mixedraschbirnbaum extends model_raschmodel {
         $b = $ip['discrimination'];
         $c = $ip['guessing'];
 
-        // P/W form via the chain rule on P = c + (1 - c) L, with
-        // dP/dtheta = (1 - c) b W_L and d^2P/dtheta^2 = (1 - c) b^2 V_L.
+        // P/W form via the chain rule on P = c + (1 - c) L. The naive expression
+        // divides by P (1 - P), P^2 and (1 - P)^2, all of which underflow to 0 at
+        // saturation. Cancelling 1 - P = (1 - c)(1 - L) and W_L = L (1 - L) leaves a
+        // form that divides only by P (and P^2), with P >= c:
+        // d^2/dtheta^2 log L = b^2 L (1 - 2L)(k - P) / P
+        // - k b^2 L^2 (1 - P)^2 / P^2 - (1 - k) b^2 L^2.
+        // The P = 0 case (c = 0 with an underflowed L) is the 2PL limit -b^2 W_L.
         $l = self::logistic($b * ($ability - $a));
         $wl = self::logistic_w($l);
-        $vl = $wl * (1.0 - 2.0 * $l);
         $p = $c + (1.0 - $c) * $l;
 
-        $ptheta = (1.0 - $c) * $b * $wl;
-        $pthetatheta = (1.0 - $c) * $b ** 2 * $vl;
-        $dlp = ($k - $p) / ($p * (1.0 - $p));
-        $d2lp = -$k / ($p ** 2) - (1.0 - $k) / ((1.0 - $p) ** 2);
+        if ($p <= 0.0) {
+            return -($b ** 2) * $wl;
+        }
 
-        return $d2lp * $ptheta ** 2 + $dlp * $pthetatheta;
+        $b2 = $b ** 2;
+        $onemp = 1.0 - $p;
+        $terma = $b2 * $l * (1.0 - 2.0 * $l) * ($k - $p) / $p;
+        $termmid = -$k * $b2 * $l ** 2 * $onemp ** 2 / self::stabilize_denominator($p ** 2);
+        $termlast = -(1.0 - $k) * $b2 * $l ** 2;
+
+        return $terma + $termmid + $termlast;
     }
 
     /**
@@ -256,7 +272,7 @@ class mixedraschbirnbaum extends model_raschmodel {
         $pb = $omc * $wl * $x;            // DP/db.
         $pc = 1.0 - $l;                   // DP/dc.
 
-        $dlp = ($k - $p) / ($p * (1.0 - $p)); // D log L / dP.
+        $dlp = ($k - $p) / self::stabilize_denominator($p * (1.0 - $p)); // D log L / dP.
 
         return [
             $dlp * $pa, // D/da.
@@ -300,8 +316,10 @@ class mixedraschbirnbaum extends model_raschmodel {
         // Second derivative d^2P/dc^2 vanishes.
 
         // Derivatives of the Bernoulli log likelihood with respect to P.
-        $dlp = ($k - $p) / ($p * (1.0 - $p));                       // D log L / dP.
-        $d2lp = -$k / ($p ** 2) - (1.0 - $k) / ((1.0 - $p) ** 2);   // D^2 log L / dP^2.
+        $dlp = ($k - $p) / self::stabilize_denominator($p * (1.0 - $p));                       // D log L / dP.
+        // D^2 log L / dP^2.
+        $d2lp = -$k / self::stabilize_denominator($p ** 2)
+            - (1.0 - $k) / self::stabilize_denominator((1.0 - $p) ** 2);
 
         $haa = $d2lp * $pa * $pa + $dlp * $paa;
         $hbb = $d2lp * $pb * $pb + $dlp * $pbb;
