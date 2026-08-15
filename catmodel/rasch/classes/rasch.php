@@ -414,38 +414,6 @@ class rasch extends model_raschmodel {
     }
 
     /**
-     * Calculates the 1st derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty')
-     *
-     * @return array - 1st derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_jacobian(array $ip): array {
-        // Set values for difficulty parameter.
-        $am = 0; // Mean of difficulty.
-        $as = 2; // Standard derivation of difficulty.
-
-        return [
-            ($am - $ip['difficulty']) / ($as ** 2), // The d/da .
-        ];
-    }
-
-    /**
-     * Calculates the 2nd derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty')
-     *
-     * @return array - 2nd derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_hessian(array $ip): array {
-        // Set values for difficulty parameter.
-        $as = 2; // Standard derivation of difficulty.
-
-        // Calculate d/da d/da.
-        return [[ -1 / ($as ** 2) ]];
-    }
-
-    /**
      * Get default params
      *
      * @return array

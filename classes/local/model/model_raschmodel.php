@@ -111,6 +111,29 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
     }
 
     /**
+     * Combined person-ability score and hessian in a single call.
+     *
+     * The person-ability Newton step evaluates the gradient and the hessian at the
+     * same point every iteration. Computing them together lets a model share the
+     * (potentially expensive) probability/moment computation between the two instead
+     * of repeating it. This base implementation simply delegates to the separate
+     * methods; models override it where a shared computation pays off.
+     *
+     * @param array $pp person ability parameter ('ability')
+     * @param array $ip item parameters
+     * @param float $frac response fraction
+     *
+     * @return array ['jacobian' => 1st derivative, 'hessian' => 2nd derivative]
+     *
+     */
+    public static function get_ability_derivatives(array $pp, array $ip, float $frac): array {
+        return [
+            'jacobian' => static::log_likelihood_p($pp, $ip, $frac),
+            'hessian' => static::log_likelihood_p_p($pp, $ip, $frac),
+        ];
+    }
+
+    /**
      * Nudge a denominator away from exactly zero to avoid a hard division error.
      *
      * At extreme abilities the polytomous category probabilities (and the 3PL

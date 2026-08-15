@@ -394,6 +394,13 @@ class fileparser {
      */
     protected function cast_string_to_float($value) {
 
+        // Strip a leading Excel text marker (apostrophe), e.g. '-3,321 -> -3,321. A leading
+        // apostrophe is never part of a valid number, so this can only rescue an otherwise
+        // failing parse (such as spreadsheet exports that keep the text-format marker).
+        if (is_string($value) && isset($value[0]) && $value[0] === "'") {
+            $value = substr($value, 1);
+        }
+
         // Check if separated by comma.
         $commacount = substr_count($value, ',');
         if ($commacount == 1) {

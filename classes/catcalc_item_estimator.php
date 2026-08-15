@@ -34,50 +34,6 @@ namespace local_catquiz;
  */
 interface catcalc_item_estimator {
     /**
-     * Calculates the 1st derivative of the LOG Likelihood with respect to the item parameters
-     *
-     * @param array $ability
-     * @param array $ip
-     * @param float $itemresponse
-     *
-     * @return array
-     *
-     */
-    public static function get_log_jacobian(array $ability, array $ip, float $itemresponse): array;
-
-    /**
-     * Calculates the 2nd derivative of the LOG Likelihood with respect to the item parameters
-     *
-     * @param array $ability
-     * @param array $ip
-     * @param float $itemresponse
-     *
-     * @return array
-     *
-     */
-    public static function get_log_hessian(array $ability, array $ip, float $itemresponse): array;
-
-    /**
-     * Get log tr jacobian.
-     *
-     * @param array $ip
-     *
-     * @return array
-     *
-     */
-    public static function get_log_tr_jacobian(array $ip): array;
-
-    /**
-     * Get log tr hessian.
-     *
-     * @param array $ip
-     *
-     * @return array
-     *
-     */
-    public static function get_log_tr_hessian(array $ip): array;
-
-    /**
      * Get model dim.
      *
      * @return int

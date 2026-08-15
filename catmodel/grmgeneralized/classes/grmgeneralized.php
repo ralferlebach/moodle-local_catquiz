@@ -581,6 +581,26 @@ class grmgeneralized extends model_multiparam {
     }
 
     /**
+     * Combined score and hessian sharing a single terms computation.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac response fraction
+     * @return array ['jacobian' => 1st derivative, 'hessian' => 2nd derivative]
+     */
+    public static function get_ability_derivatives(array $pp, array $ip, float $frac): array {
+        $t = self::grm_ability_terms($pp, $ip, $frac);
+        $b = $t['b'];
+        $pr = self::stabilize_denominator($t['pr']);
+        $dp = $t['wr'] - $t['wr1'];
+        $ddp = $t['vr'] - $t['vr1'];
+        return [
+            'jacobian' => $b * $dp / $pr,
+            'hessian' => ($b ** 2 * $t['pr'] * $ddp - ($b * $dp) ** 2) / ($pr ** 2),
+        ];
+    }
+
+    /**
      * Cumulative-logistic terms for the observed category, used by the ability derivatives.
      *
      * Q_j = sigma($b *(theta - a_j)) with Q_0 = 1 and Q_{kmax+1} = 0; the observed
@@ -813,8 +833,9 @@ class grmgeneralized extends model_multiparam {
         // P_k = Q_k - Q_{k+1} and Q_m = sigma(b (theta - a_m)), an out-of-order
         // threshold would yield a negative category probability and hence NaN in the
         // likelihood. The baseline entry (lowest fraction) is a placeholder and stays 0.
-        $min = -5.0;
-        $max = 5.0;
+        // Trusted-region bounds from the model's admin settings (fallback to +/-5).
+        $min = (float) (get_config('catmodel_grmgeneralized', 'trusted_region_min_a') ?: -5.0);
+        $max = (float) (get_config('catmodel_grmgeneralized', 'trusted_region_max_a') ?: 5.0);
         $gap = 1e-3;
         $sorted = self::sort_fractions($ip['difficulties']);
         $fractions = array_keys($sorted);
@@ -836,62 +857,6 @@ class grmgeneralized extends model_multiparam {
             $ip['discrimination'] = max(0.1, min(5.0, $ip['discrimination']));
         }
         return $ip;
-    }
-
-    /**
-     * Calculates the 1st derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty', 'discrimination')
-     * @return array - 1st derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_jacobian($ip): array {
-        // Set values for difficulty parameter.
-
-        // TODO: @DAVID: Diese Werte sollten dynamisch berechnet werden können.
-        $am = 0; // Mean of difficulty.
-        $as = 2; // Standard derivation of difficulty.
-
-        // Placement of the discriminatory parameter.
-        $bp = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_placement_b'));
-        // Slope of the discriminatory parameter.
-        $bs = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_slope_b'));
-
-        return [
-        ($am - $ip['difficulty']) / ($as ** 2), // Calculates d/da.
-        -($bs * exp($bs * $ip['discrimination'])) / (exp($bs * $bp) + exp($bs * $ip['discrimination'])), // Calculates d/db.
-        ];
-    }
-
-    /**
-     * Calculates the 2nd derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty', 'discrimination')
-     *
-     * @return array - 2nd derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_hessian(array $ip): array {
-        // Set values for difficulty parameter.
-
-        // TODO: @DAVID: Diese Werte sollten dynamisch berechnet werden können.
-        $am = 0; // Mean of difficulty.
-        $as = 2; // Standard derivation of difficulty.
-
-        // Placement of the discriminatory parameter.
-        $bp = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_placement_b'));
-        // Slope of the discriminatory parameter.
-        $bs = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_slope_b'));
-
-        return [
-            [
-                -1 / ($as ** 2), // Calculates d²/da².
-                0, // Calculates d/da d/db.
-            ],
-            [
-                0, // Calculates d/da d/db.
-                -($bs ** 2 * exp($bs * ($bp + $ip['discrimination']))) /
-                    (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculates d²/db².
-            ],
-        ];
     }
 
     /**

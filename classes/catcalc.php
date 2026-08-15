@@ -80,6 +80,32 @@ class catcalc {
     }
 
     /**
+     * Builds a per-response callable returning the combined ability derivatives.
+     *
+     * The returned closure computes {@see model_raschmodel::get_ability_derivatives()}
+     * once per distinct ability value and caches it, so the jacobian and the hessian
+     * callables share a single probability/moment computation. The cache lives in this
+     * method's own scope, giving every response an independent cache (a shared cache
+     * across responses would return one response's derivatives for another).
+     *
+     * @param string $model model class name
+     * @param array $itemparams item parameters for this response
+     * @param float $response response fraction
+     * @return callable fn(array $pp): array{jacobian: float, hessian: float}
+     */
+    private static function make_ability_derivative_callable($model, array $itemparams, float $response): callable {
+        $memo = [];
+        return function ($pp) use ($model, $itemparams, $response, &$memo) {
+            // Format %.17g round-trips a double exactly, so distinct Newton iterates never collide.
+            $key = sprintf('%.17g', $pp['ability']);
+            if (!array_key_exists($key, $memo)) {
+                $memo[$key] = $model::get_ability_derivatives($pp, $itemparams, $response);
+            }
+            return $memo[$key];
+        };
+    }
+
+    /**
      * Estimate person ability.
      *
      * @param mixed $personresponses
@@ -123,8 +149,17 @@ class catcalc {
                 throw new \Exception(sprintf("The given model %s can not be used with the catcalc class", $item->get_model_name()));
             }
 
-            $jfuns[] = fn ($pp) => $model::log_likelihood_p($pp, $itemparams, $qresponse->get_response());
-            $hfuns[] = fn($pp) => $model::log_likelihood_p_p($pp, $itemparams, $qresponse->get_response());
+            // Combined score/hessian: the person-ability derivatives share an
+            // (often expensive) probability/moment computation. Build a per-response
+            // callable that computes both once per ability value and caches the result;
+            // the helper gives each response its own cache scope.
+            $combined = self::make_ability_derivative_callable(
+                $model,
+                $itemparams,
+                $qresponse->get_response()
+            );
+            $jfuns[] = fn ($pp) => $combined($pp)['jacobian'];
+            $hfuns[] = fn ($pp) => $combined($pp)['hessian'];
         }
 
         if ($jfuns === [] || $hfuns === []) {

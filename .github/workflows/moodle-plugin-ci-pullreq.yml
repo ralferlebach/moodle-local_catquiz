@@ -134,8 +134,12 @@ jobs:
         run: moodle-plugin-ci phpunit --testdox
 
       - name: Behat features
-        # Temporarily non-blocking: adaptivequiz integration scenarios are unrelated to the
-        # current IRT derivative/codec work and fail on the pinned dependency environment.
+        # Temporarily non-blocking: the mod_adaptivequiz dependency (including the
+        # alise_adaptivequiz fork branch) reads $adaptivequiz->attemptfeedbackeditor
+        # unconditionally in adaptivequiz_add_instance(), while its generator never sets
+        # it, so adaptivequiz-integration scenarios fail on instance creation. This is a
+        # dependency bug unrelated to the IRT derivative/codec work; re-enable (drop this
+        # continue-on-error) once the fork sets attemptfeedbackeditor in its generator.
         continue-on-error: true
         if: ${{ always() }}
         run: moodle-plugin-ci behat --profile chrome

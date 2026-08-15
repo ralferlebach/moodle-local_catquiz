@@ -1,9 +1,46 @@
 # Changelog – local_catquiz
 
-## 1.1.2 (interne Version 2026081410)
+## 1.1.2 (interne Version 2026081411)
 
 > Diese Änderungen werden unter dem bestehenden Release-Label 1.1.2
 > ausgeliefert; nur die interne `$plugin->version` wird erhöht.
+
+### Kombinierte Personen-Ableitungen (PP-Refactor Stufe 2)
+
+- Neue `model_raschmodel::get_ability_derivatives($pp, $ip, $frac)` liefert Score
+  und Hesse in einem Durchgang. Basis-Default delegiert an
+  `log_likelihood_p`/`log_likelihood_p_p`; effiziente Overrides in 3PL, GRM, GGRM,
+  PCM und GPCM teilen sich die (teure) Wahrscheinlichkeits-/Momentberechnung.
+- Der Personen-Schätzer (`catcalc::estimate_person_ability`) nutzt pro Response
+  eine memoisierte, nach Ability-Wert geschlüsselte Hülle
+  (`make_ability_derivative_callable`), sodass Jacobian- und Hesse-Callable
+  dieselbe Berechnung teilen. Die Werte sind bitgenau identisch zu den getrennten
+  Methoden (max. Abweichung 0.00e+0), FD- und sättigungsgeprüft bis θ = ±800.
+
+### Simulationstest wieder aktiv (toleranzbasiert statt Skip)
+
+- `catcalc_test::test_simulation_steps_match_reference_within_tolerance` ersetzt den
+  zuvor geskippten, auf Vor-Refactor-FP-Rundung gepinnten Schritttest. Er prüft
+  aggregiert, dass ≥ 90 % der Referenzschritte (radCAT/classicCAT) auf 0.01
+  übereinstimmen. Die Abweichung ist bimodal (94 % < 0.01, 6 % Rand-/Degeneriert-
+  fälle mit abweichendem diskreten Newton-Zweig). Fängt grobe Regressionen
+  zuverlässig (Zahn-getestet).
+
+### Code-Hygiene
+
+- Tote Trust-Region-Methoden `get_log_tr_jacobian`/`get_log_tr_hessian` (0 Aufruf-
+  stellen) aus dem Interface `catcalc_item_estimator` und allen 7 Modellen entfernt.
+- Hartkodierte `[-5, 5]`-Grenzen in den politomen `restrict_to_trusted_region`
+  (GRM/GGRM/PCM/GPCM) durch die Admin-Settings `trusted_region_min_a`/`_max_a`
+  ersetzt (Fallback ±5), analog zu den dichotomen Modellen.
+
+### adaptivequiz-Integration (CI)
+
+- `attemptfeedbackeditor` wird in den Integrationstests (`testitemimporter_test`,
+  `strategy_test`) bei `create_instance` gesetzt. Grund: `adaptivequiz_add_instance()`
+  in der Dependency (auch im Branch `alise_adaptivequiz`) liest die Property
+  unbedingt, der Generator setzt sie nie. Behebt den Blocker bei der
+  Instanzerzeugung; beide Tests laufen wieder an.
 
 ### Sättigungsfestigkeit der Ableitungen (Division-by-Zero / NaN behoben)
 Behebt den CI-Unit-Fehler (33× `DivisionByZeroError` in

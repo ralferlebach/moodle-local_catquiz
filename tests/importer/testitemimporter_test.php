@@ -124,6 +124,9 @@ final class testitemimporter_test extends advanced_testcase {
                 'lowestlevel' => 1,
                 'standarderror' => 14,
                 'course' => $this->course->id,
+                // The mod_adaptivequiz generator reads attemptfeedbackeditor unconditionally
+                // in adaptivequiz_add_instance(); supply it so instance creation succeeds.
+                'attemptfeedbackeditor' => ['text' => '', 'format' => FORMAT_MOODLE],
             ]);
         $qformat = $this->create_qformat($questionsfile, $this->course);
         $imported = $qformat->importprocess();
