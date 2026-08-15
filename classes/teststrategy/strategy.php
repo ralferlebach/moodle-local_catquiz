@@ -135,7 +135,7 @@ abstract class strategy {
      */
     public function select_question(): result {
         $selector = $this->get_selector();
-        return $selector->run($this->context, fn ($c) => 'never_called');
+        return $selector->run($this->context);
     }
 
     /**
@@ -175,7 +175,7 @@ abstract class strategy {
         try {
             $this->check_item_params();
         } catch (Exception $e) {
-            return result::err($e->getMessage());
+            return result::err(status::ERROR_GENERAL, $e->getMessage());
         }
 
         // If checkbreak returns a value other than null, it is the question
@@ -212,7 +212,7 @@ abstract class strategy {
                 ->or_else(fn($res) => $this->after_error($res))
                 ->expect();
         } catch (Exception $e) {
-            return $this->result;
+            return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
         }
 
         $res = $this->maybereturnpilot();
@@ -243,7 +243,7 @@ abstract class strategy {
                 ->expect()
                 ->unwrap();
         } catch (Exception $e) {
-            return $this->result;
+            return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
         }
 
         if (!$selectedquestion) {

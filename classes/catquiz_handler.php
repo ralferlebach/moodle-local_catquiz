@@ -73,12 +73,19 @@ class catquiz_handler {
 
         global $DB, $PAGE;
 
+
         $elements = [];
+
+        $advendesettingheading = $mform->getElement('advancedheading');
+        $advendesettingheading->setText(
+            get_string('catmodelsettings', 'local_catquiz')
+        );
 
         $testtemplates = testenvironment::get_environments_as_array(
             'mod_adaptivequiz',
             0,
-            LOCAL_CATQUIZ_TESTENVIRONMENT_ONLYACTIVETEMPLATES);
+            LOCAL_CATQUIZ_TESTENVIRONMENT_ONLYACTIVETEMPLATES
+        );
 
         // We introduce the option of a custom test environment.
         $testtemplates[0] = get_string('newcustomtest', 'local_catquiz');
@@ -88,10 +95,10 @@ class catquiz_handler {
         $elements[] = $mform->addElement(
             'select',
             'choosetemplate',
-            get_string('choosetemplate',
-            'local_catquiz'),
+            get_string('choosetemplate', 'local_catquiz'),
             $testtemplates,
-            ['data-on-change-action' => 'reloadTestForm']);
+            ['data-on-change-action' => 'reloadTestForm']
+        );
 
         $mform->setType('choosetemplate', PARAM_INT);
 
@@ -115,9 +122,6 @@ class catquiz_handler {
 
         // We have require JS to click no submit button on change of test environment.
         $PAGE->requires->js_call_amd('local_catquiz/catquizTestChooser', 'init');
-
-        // We want to make sure the cat model section is always expanded.
-        $mform->setExpanded('catmodelheading');
 
         // Button to attach JavaScript to reload the form.
         $mform->registerNoSubmitButton('submitcattestoption');
@@ -206,7 +210,6 @@ class catquiz_handler {
 
         return $elements;
     }
-
     /**
      *  Generate recursive checkboxes for sub(-sub)scales.
      * @param array $subscales
@@ -348,28 +351,29 @@ class catquiz_handler {
             'maxfiles' => EDITOR_UNLIMITED_FILES,
             'noclean' => true,
         ];
-
-        foreach ($data as $property) {
-            if (is_array($property) || !preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)_editor/', $property, $matches)) {
-                continue;
+        if (!empty($data)) {
+            foreach ($data as $property) {
+                if (is_array($property) || !preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)_editor/', $property, $matches)) {
+                    continue;
+                }
+                $scaleid = intval($matches[1]);
+                $rangeid = intval($matches[2]);
+                $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+                $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
+                $data = (object) file_prepare_standard_editor(
+                    $data,
+                    sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid),
+                    $options,
+                    $context,
+                    'local_catquiz',
+                    $filearea,
+                    intval($test->id)
+                );
             }
-            $scaleid = intval($matches[1]);
-            $rangeid = intval($matches[2]);
-            $fieldname = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
-            $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
-            $data = (object) file_prepare_standard_editor(
-                $data,
-                sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid),
-                $options,
-                $context,
-                'local_catquiz',
-                $filearea,
-                intval($test->id)
-            );
-        }
 
-        $formdefaultvalues['choosetemplate'] = 0;
-        $formdefaultvalues['testenvironment_addoredittemplate'] = 0;
+            $formdefaultvalues['choosetemplate'] = 0;
+            $formdefaultvalues['testenvironment_addoredittemplate'] = 0;
+        }
     }
 
     /**
@@ -908,7 +912,7 @@ class catquiz_handler {
      * This is called when the attempt is finished.
      *
      * @param stdClass $adaptivequiz
-     * @param cm_info $cm
+     * @param mixed $cm
      * @param stdClass $attemptrecord
      *
      * @return string
@@ -916,9 +920,9 @@ class catquiz_handler {
      */
     public static function attempt_finished(
         stdClass $adaptivequiz,
-        cm_info $cm,
+        mixed $cm,
         stdClass $attemptrecord
-        ): string {
+    ): string {
         // Update the endtime and number of testitems used in the attempts table.
         global $DB, $COURSE;
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
@@ -1050,7 +1054,7 @@ class catquiz_handler {
             'maximumquestions' => $maxquestions,
             'minimumquestions' => $quizsettings->maxquestionsgroup->catquiz_minquestions,
             'penalty_threshold' => 60 * 60 * 24 * intval(get_config('local_catquiz', 'time_penalty_threshold')),
-            'initial_standarderror' => 1.0, // TODO: make configurable.
+            'initial_standarderror' => 1.0,
             'pilot_ratio' => $pilotratio ?? 0,
             'pilot_attempts_threshold' => LOCAL_CATQUIZ_THRESHOLD_DEFAULT,
             'questionsattempted' => intval($attemptdata->questionsattempted),

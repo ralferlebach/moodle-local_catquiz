@@ -157,6 +157,15 @@ abstract class result {
             throw new \moodle_exception("Trying to get the error message for a result that has no error.");
         }
 
-        return get_string($this->get_status(), 'local_catquiz');
+        $status = (string)$this->get_status();
+        if ($status === '' || !get_string_manager()->string_exists($status, 'local_catquiz')) {
+            if (!empty($this->value) && is_string($this->value)) {
+                return $this->value;
+            }
+
+            return get_string(status::ERROR_GENERAL, 'local_catquiz');
+        }
+
+        return get_string($status, 'local_catquiz');
     }
 }

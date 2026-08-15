@@ -1,0 +1,87 @@
+<?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Subplugin info class for the catquizcentralhub subplugin type.
+ *
+ * @package   local_catquiz
+ * @copyright Wunderbyte GmbH 2024 <info@wunderbyte.at>
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+namespace local_catquiz\plugininfo;
+
+use core\plugininfo\base;
+use part_of_admin_tree;
+use admin_settingpage;
+
+/**
+ * Plugininfo class for catquizcentralhub subplugins.
+ */
+class catquizcentralhub extends base {
+    /**
+     * Returns the information about plugin availability.
+     *
+     * @return null|bool
+     */
+    public function is_enabled() {
+        return true;
+    }
+
+    /**
+     * Should there be a way to uninstall the plugin via the administration UI.
+     *
+     * @return bool
+     */
+    public function is_uninstall_allowed() {
+        return true;
+    }
+
+    /**
+     * Returns the node name used in admin settings menu for this plugin settings (if applicable).
+     *
+     * @return null|string
+     */
+    public function get_settings_section_name() {
+        return $this->component . 'settings';
+    }
+
+    /**
+     * Loads plugin settings to the settings tree.
+     *
+     * @param part_of_admin_tree $adminroot
+     * @param string $parentnodename
+     * @param bool $hassiteconfig whether the current user has moodle/site:config capability
+     */
+    public function load_settings(part_of_admin_tree $adminroot, $parentnodename, $hassiteconfig) {
+        $ADMIN = $adminroot;
+        if (!$this->is_installed_and_upgraded()) {
+            return;
+        }
+
+        if (!$hassiteconfig || !file_exists($this->full_path('settings.php'))) {
+            return;
+        }
+
+        $section = $this->get_settings_section_name();
+        $settings = new admin_settingpage($section, $this->displayname, 'moodle/site:config', $this->is_enabled() === false);
+        include($this->full_path('settings.php'));
+
+        if ($settings) {
+            $ADMIN->add($parentnodename, $settings);
+        }
+    }
+
+}

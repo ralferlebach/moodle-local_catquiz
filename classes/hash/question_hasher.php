@@ -14,14 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace local_catquiz\remote\hash;
+namespace local_catquiz\hash;
 
 use dml_write_exception;
 
 /**
- * Handles question hash generation and verification.
- *
- * Idea: Include model name and scale in calculation of hash.
+ * Handles question hash generation and verification for cross-instance identification.
  *
  * @package    local_catquiz
  * @copyright  2024 Wunderbyte GmbH <info@wunderbyte.at>
@@ -29,25 +27,21 @@ use dml_write_exception;
  */
 class question_hasher {
     /**
-     * Gets the hash data for the given question ID
+     * Gets the hash data for the given question ID.
      *
      * @param int $questionid
-     *
      * @return string
      */
     public static function get_hash_data(int $questionid): string {
         global $DB;
 
-        // Get question data.
         $question = $DB->get_record('question', ['id' => $questionid]);
         if (!$question) {
             throw new \moodle_exception('questionnotfound', 'local_catquiz');
         }
 
-        // Get question answers.
         $answers = $DB->get_records('question_answers', ['question' => $questionid], 'id ASC');
 
-        // Build hash data array.
         $hashdata = [
             'questiontext' => $question->questiontext,
             'questiontextformat' => $question->questiontextformat,
@@ -69,7 +63,7 @@ class question_hasher {
     }
 
     /**
-     * Generate a hash for a question.
+     * Generate a hash for a question and store it in the DB.
      *
      * @param int $questionid The question ID
      * @param ?array $hashdata Optional hash data. If not given, will be generated.
@@ -84,7 +78,6 @@ class question_hasher {
         }
         $hash = hash('sha256', $hashdata);
 
-        // Store hash data for verification.
         $record = new \stdClass();
         $record->questionid = $questionid;
         $record->hashdata = $hashdata;
@@ -92,7 +85,6 @@ class question_hasher {
         $record->timemodified = time();
 
         try {
-            // Store or update hash mapping.
             if ($existing = $DB->get_record('local_catquiz_qhashmap', ['questionid' => $questionid])) {
                 $record->id = $existing->id;
                 $DB->update_record('local_catquiz_qhashmap', $record);
@@ -101,9 +93,6 @@ class question_hasher {
                 $DB->insert_record('local_catquiz_qhashmap', $record);
             }
         } catch (dml_write_exception $e) {
-            // If we are here, we could not insert or update the record. The
-            // most likely cause is that we have multiple questions with the
-            // exact same data, so they map to the same hash.
             if ($existing = $DB->record_exists('local_catquiz_qhashmap', ['questionhash' => $hash])) {
                 return $hash;
             }
@@ -139,7 +128,7 @@ class question_hasher {
 
         $currenthash = $DB->get_record('local_catquiz_qhashmap', ['questionid' => $questionid]);
         if (!$currenthash) {
-            return true; // No hash exists yet.
+            return true;
         }
 
         $newhash = self::generate_hash($questionid);

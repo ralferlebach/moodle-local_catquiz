@@ -207,7 +207,7 @@ class progress implements JsonSerializable {
      */
     public static function load(int $attemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
         $instance = self::load_from_cache($attemptid)
-            ?: self::load_from_db($attemptid)
+            ?: self::load_from_db($attemptid, $contextid)
             ?: self::create_new($attemptid, $component, $contextid, $quizsettings);
 
         $instance->hasnewresponse = false;
@@ -272,9 +272,10 @@ class progress implements JsonSerializable {
      * Try to load a progress object from the database.
      *
      * @param int $attemptid
+     * @param int $contextid
      * @return progress|false
      */
-    private static function load_from_db(int $attemptid) {
+    private static function load_from_db(int $attemptid, int $contextid) {
         global $DB;
         $record = $DB->get_record(
             'local_catquiz_progress',
@@ -282,7 +283,7 @@ class progress implements JsonSerializable {
             '*'
         );
         if ($record) {
-            $instance = self::populate_from_object($record);
+            $instance = self::populate_from_object($record, $contextid);
             return $instance;
         }
         return false;
@@ -292,9 +293,10 @@ class progress implements JsonSerializable {
      * Populates the data from an object.
      *
      * @param stdClass $object
+     * @param int $contextid Fallback used for old records saved before contextid was persisted.
      * @return self
      */
-    private static function populate_from_object(stdClass $object): self {
+    private static function populate_from_object(stdClass $object, int $contextid): self {
         global $DB;
         $instance = new self();
         $instance->id = $object->id;
@@ -304,7 +306,8 @@ class progress implements JsonSerializable {
 
         // Set properties from json encoded data.
         $data = json_decode($object->json);
-        $instance->contextid = $data->contextid;
+        // Old records saved before contextid was part of the serialized state don't have it.
+        $instance->contextid = $data->contextid ?? $contextid;
         $instance->playedquestions = (array) $data->playedquestions;
         foreach ($instance->playedquestions as $pq) {
             if (!$pq->is_pilot) {
@@ -1121,8 +1124,10 @@ class progress implements JsonSerializable {
         // Get selected subscales from quizdata.
         $selectedsubscales = [];
         foreach ($this->quizsettings as $key => $value) {
-            if (strpos($key, 'catquiz_subscalecheckbox_') !== false
-                && $value == "1") {
+            if (
+                strpos($key, 'catquiz_subscalecheckbox_') !== false
+                && $value == "1"
+            ) {
                     $catscaleid = substr_replace($key, '', 0, 25);
                     $selectedsubscales[] = $catscaleid;
             }
@@ -1140,5 +1145,4 @@ class progress implements JsonSerializable {
         global $USER;
         return sprintf('progress_user_%d_id_%d', $USER->id, $attemptid);
     }
-
 }
