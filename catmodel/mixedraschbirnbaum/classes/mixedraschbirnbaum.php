@@ -247,6 +247,39 @@ class mixedraschbirnbaum extends model_raschmodel {
     }
 
     /**
+     * Combined person-ability score and hessian sharing one L/P computation.
+     *
+     * @param array $pp person ability parameter ('ability')
+     * @param array $ip item parameters ('difficulty', 'discrimination', 'guessing')
+     * @param float $frac answer category (0 or 1.0)
+     * @return array ['jacobian' => 1st derivative, 'hessian' => 2nd derivative]
+     */
+    public static function get_ability_derivatives(array $pp, array $ip, float $frac): array {
+        $ability = $pp['ability'];
+        $a = $ip['difficulty'];
+        $b = $ip['discrimination'];
+        $c = $ip['guessing'];
+
+        $l = self::logistic($b * ($ability - $a));
+        $wl = self::logistic_w($l);
+        $p = $c + (1.0 - $c) * $l;
+
+        if ($p <= 0.0) {
+            // Degenerate saturation (c = 0, L underflowed): 2PL limits.
+            return ['jacobian' => $b * ($frac - $l), 'hessian' => -($b ** 2) * $wl];
+        }
+
+        $b2 = $b ** 2;
+        $onemp = 1.0 - $p;
+        return [
+            'jacobian' => $b * $l * ($frac - $p) / $p,
+            'hessian' => $b2 * $l * (1.0 - 2.0 * $l) * ($frac - $p) / $p
+                - $frac * $b2 * $l ** 2 * $onemp ** 2 / self::stabilize_denominator($p ** 2)
+                - (1.0 - $frac) * $b2 * $l ** 2,
+        ];
+    }
+
+    /**
      * Calculates the 1st derivative of the LOG Likelihood with respect to the item parameters
      *
      * @param array $pp - person ability parameter ('ability')
@@ -607,68 +640,6 @@ class mixedraschbirnbaum extends model_raschmodel {
         $ip['guessing'] = $c;
 
         return $ip;
-    }
-
-    /**
-     * Calculates the 1st derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty', 'discrimination', 'guessing')
-     * @return array - 1st derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_jacobian(array $ip): array {
-        // Set values for difficulty parameter.
-        $am = 0; // Mean of difficulty.
-        $as = 2; // Standard derivation of difficulty.
-
-        // Placement of the discriminatory parameter.
-        $bp = floatval(get_config('catmodel_mixedraschbirnbaum', 'trusted_region_placement_b'));
-        // Slope of the discriminatory parameter.
-        $bs = floatval(get_config('catmodel_mixedraschbirnbaum', 'trusted_region_slope_b'));
-
-        return [
-            // Calculate d/da.
-            ($am - $ip['difficulty']) / ($as ** 2),
-            // Calculate d/db.
-            -($bs * exp($bs * $ip['discrimination'])) / (exp($bs * $bp) + exp($bs * $ip['discrimination'])),
-            // Calculate d/dc.
-            0,
-        ];
-    }
-
-    /**
-     * Calculates the 2nd derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty', 'discrimination', 'guessing')
-     *
-     * @return array - 2nd derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_hessian(array $ip): array {
-        // Set values for difficulty parameter.
-        $as = 2; // Standard derivation of difficulty.
-
-        // Placement of the discriminatory parameter.
-        $bp = floatval(get_config('catmodel_mixedraschbirnbaum', 'trusted_region_placement_b'));
-        // Slope of the discriminatory parameter.
-        $bs = floatval(get_config('catmodel_mixedraschbirnbaum', 'trusted_region_slope_b'));
-
-        return [
-            [
-                -1 / ($as ** 2), // Calculate d²/da².
-                0, // Calculate d/da d/db.
-                0, // Calculate d/da d/dc.
-            ],
-            [
-                0, // The d/da d/db.
-                -($bs ** 2 * exp($bs * ($bp + $ip['discrimination']))) /
-                    (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculate d²/db².
-                0, // Calculate d/db d/dc.
-            ],
-            [
-                0, // Calculate d/da d/dc.
-                0, // Calculate d/db d/dc.
-                0, // Calculate d²/dc².
-            ],
-        ];
     }
 
     /**

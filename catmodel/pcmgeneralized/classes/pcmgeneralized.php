@@ -538,6 +538,23 @@ class pcmgeneralized extends model_multiparam {
     }
 
     /**
+     * Combined score and hessian sharing a single moment computation.
+     *
+     * @param array $pp person ability parameter
+     * @param array $ip item parameters
+     * @param float $frac response fraction
+     * @return array ['jacobian' => b(r - E[K]), 'hessian' => -b^2 Var(K)]
+     */
+    public static function get_ability_derivatives(array $pp, array $ip, float $frac): array {
+        $m = self::gpcm_ability_moments($pp, $ip);
+        $r = self::get_key_by_fractions($frac, $m['a']);
+        return [
+            'jacobian' => $m['b'] * ($r - $m['ek']),
+            'hessian' => -($m['b'] ** 2) * ($m['ek2'] - $m['ek'] ** 2),
+        ];
+    }
+
+    /**
      * Stable category moments E[K] and E[K^2] of the GPCM response distribution.
      *
      * Uses a max-shifted softmax over b*(k*theta - D_k) to avoid overflow, replacing
@@ -797,8 +814,9 @@ class pcmgeneralized extends model_multiparam {
     public static function restrict_to_trusted_region(array $ip): array {
         // Clamp each free threshold to a sensible range; keep discrimination
         // positive. The baseline entry stays 0 (re-inserted by the codec).
-        $min = -5.0;
-        $max = 5.0;
+        // Trusted-region bounds from the model's admin settings (fallback to +/-5).
+        $min = (float) (get_config('catmodel_pcmgeneralized', 'trusted_region_min_a') ?: -5.0);
+        $max = (float) (get_config('catmodel_pcmgeneralized', 'trusted_region_max_a') ?: 5.0);
         foreach ($ip['intercepts'] as $fraction => $value) {
             $ip['intercepts'][$fraction] = max($min, min($max, $value));
         }
@@ -806,62 +824,6 @@ class pcmgeneralized extends model_multiparam {
             $ip['discrimination'] = max(0.1, min(5.0, $ip['discrimination']));
         }
         return $ip;
-    }
-
-    /**
-     * Calculates the 1st derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty', 'discrimination')
-     * @return array - 1st derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_jacobian($ip): array {
-        // Set values for difficulty parameter.
-
-        // TODO: @DAVID: Diese Werte sollten dynamisch berechnet werden können.
-        $am = 0; // Mean of difficulty.
-        $as = 2; // Standard derivation of difficulty.
-
-        // Placement of the discriminatory parameter.
-        $bp = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_placement_b'));
-        // Slope of the discriminatory parameter.
-        $bs = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_slope_b'));
-
-        return [
-        ($am - $ip['difficulty']) / ($as ** 2), // Calculates d/da.
-        -($bs * exp($bs * $ip['discrimination'])) / (exp($bs * $bp) + exp($bs * $ip['discrimination'])), // Calculates d/db.
-        ];
-    }
-
-    /**
-     * Calculates the 2nd derivative trusted regions for item parameters
-     *
-     * @param array $ip - item parameters ('difficulty', 'discrimination')
-     *
-     * @return array - 2nd derivative of TR function with respect to $ip
-     */
-    public static function get_log_tr_hessian(array $ip): array {
-        // Set values for difficulty parameter.
-
-        // TODO: @DAVID: Diese Werte sollten dynamisch berechnet werden können.
-        $am = 0; // Mean of difficulty.
-        $as = 2; // Standard derivation of difficulty.
-
-        // Placement of the discriminatory parameter.
-        $bp = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_placement_b'));
-        // Slope of the discriminatory parameter.
-        $bs = floatval(get_config('catmodel_raschbirnbaumb', 'trusted_region_slope_b'));
-
-        return [
-            [
-                -1 / ($as ** 2), // Calculates d²/da².
-                0, // Calculates d/da d/db.
-            ],
-            [
-                0, // Calculates d/da d/db.
-                -($bs ** 2 * exp($bs * ($bp + $ip['discrimination']))) /
-                    (exp($bs * $bp) + exp($bs * $ip['discrimination'])) ** 2, // Calculates d²/db².
-            ],
-        ];
     }
 
     /**
