@@ -39,7 +39,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class testitemstatus_updated extends catquiz_event_base {
-
     /**
      * Init parameters.
      *
@@ -70,27 +69,29 @@ class testitemstatus_updated extends catquiz_event_base {
      */
     public function get_description() {
         $data = $this->data;
-        $otherarray = json_decode($data['other']);
+        $other = $this->get_other_data();
 
         $testitemid = $data['objectid'];
-        if (!empty($otherarray->catscaleid) &&
-            !empty($otherarray->context) &&
-            !empty($otherarray->component)
+        if (
+            !empty($other->catscaleid) &&
+            !empty($other->context) &&
+            !empty($other->component)
         ) {
             $linktotidetailview = catscale::get_link_to_testitem(
                 $testitemid,
-                $otherarray->catscaleid,
-                $otherarray->context,
-                $otherarray->component);
+                $other->catscaleid,
+                $other->context,
+                $other->component
+            );
         } else {
             $linktotidetailview = get_string('testitem', 'local_catquiz', $testitemid);
         }
         $data['testitemlink'] = $linktotidetailview;
 
         // If we have information about the testitem and it's status, we display it.
-        if (!empty($otherarray->status)) {
-            $statusint = $otherarray->status;
-            $string = 'itemstatus_'.$statusint;
+        if (!empty($other->status)) {
+            $statusint = $other->status;
+            $string = 'itemstatus_' . $statusint;
 
             $statusstring = get_string($string, 'local_catquiz');
             $data['statusstring'] = $statusstring;

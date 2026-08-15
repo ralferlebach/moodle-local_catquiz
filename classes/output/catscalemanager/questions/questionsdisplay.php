@@ -74,17 +74,17 @@ class questionsdisplay {
      *
      */
     public function __construct(
-            int $testitemid,
-            int $contextid,
-            int $catscaleid = 0,
-            int $usesubs = 1,
-            string $componentname = 'question') {
+        int $testitemid,
+        int $contextid,
+        int $catscaleid = 0,
+        int $usesubs = 1,
+        string $componentname = 'question'
+    ) {
         $this->catcontextid = $contextid;
         $this->scale = $catscaleid;
         $this->usesubs = $usesubs;
         $this->testitemid = $testitemid; // ID of record to be displayed in detail instead of table.
         $this->componentname = $componentname;
-
     }
 
     /**
@@ -102,7 +102,8 @@ class questionsdisplay {
         $catscale = empty($this->scale) ? optional_param('catscale', 0, PARAM_INT) : $this->scale;
 
         $table = new catscalequestions_table(
-            'catscale_' . $catscale . 'context' . $catcontext . ' questionstable');
+            'catscale_' . $catscale . 'context' . $catcontext . ' questionstable'
+        );
         $table->set_catscaleid_and_contextid($catscale, $catcontext);
 
         // If we integrate questions from subscales, we add different ids.
@@ -116,7 +117,7 @@ class questionsdisplay {
             $idsforquery = [$this->scale];
         }
 
-        list($select, $from, $where, $filter, $params)
+        [$select, $from, $where, $filter, $params]
             = catquiz::return_sql_for_catscalequestions($idsforquery, $catcontext, []);
 
         $table->set_filter_sql($select, $from, $where, $filter, $params);
@@ -127,7 +128,7 @@ class questionsdisplay {
             'name' => get_string('name', 'core'),
             'model' => get_string('model', 'local_catquiz'),
             'attempts' => get_string('attempts', 'local_catquiz'),
-            'lastattempttime' => get_string('lastattempttime', 'local_catquiz'),
+            'astatlastattempttime' => get_string('lastattempttime', 'local_catquiz'),
             'difficulty' => get_string('difficulty', 'local_catquiz'),
             'discrimination' => get_string('discrimination', 'local_catquiz'),
             'guessing' => get_string('guessing', 'local_catquiz'),
@@ -137,12 +138,14 @@ class questionsdisplay {
         $table->define_headers(array_values($columnsarray));
 
         $table->define_fulltextsearchcolumns([
-            'idnumber',
-            'name',
+            'label',
+            'catscalename',
+            'categoryname',
+            'questionname',
             'questiontext',
             'qtype',
             'model',
-            'lastattempttime',
+            'astatlastattempttime',
         ]);
 
         $sortcolumns = $columnsarray;
@@ -189,9 +192,8 @@ class questionsdisplay {
         $table->showdownloadbutton = true;
         $table->define_baseurl(new moodle_url('/local/catquiz/downloads/download_testitems.php'));
 
-        list($idstring, $encodedtable, $html) = $table->lazyouthtml(10, true);
+        [$idstring, $encodedtable, $html] = $table->lazyouthtml(10, true);
         return $html;
-
     }
     /**
      * Render addtestitems table.
@@ -209,7 +211,7 @@ class questionsdisplay {
         $table = new catscalequestions_table('catscaleid_' . $id . 'context' . $catcontextid . '_additems');
         $table->set_catscaleid_and_contextid($id, $catcontextid);
 
-        list($select, $from, $where, $filter, $params)
+        [$select, $from, $where, $filter, $params]
             = catquiz::return_sql_for_addcatscalequestions($catscaleid, $catcontextid);
 
         $table->set_filter_sql($select, $from, $where, $filter, $params);
@@ -283,7 +285,7 @@ class questionsdisplay {
 
         $table->filteronloadinactive = true;
 
-        list($idstring, $encodedtable, $html) = $table->lazyouthtml(10, true);
+        [$idstring, $encodedtable, $html] = $table->lazyouthtml(10, true);
         return $html;
     }
 

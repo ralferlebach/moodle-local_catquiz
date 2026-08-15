@@ -29,6 +29,7 @@ use core\chart_series;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\teststrategy\feedback_helper;
@@ -38,7 +39,7 @@ use local_catquiz\teststrategy\feedbacksettings;
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
-require_once($CFG->dirroot.'/local/catquiz/lib.php');
+require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
 /**
  * Compare the ability of this attempt to the average abilities of other students that took this test.
@@ -48,7 +49,6 @@ require_once($CFG->dirroot.'/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class comparetotestaverage extends feedbackgenerator {
-
     /**
      *
      * @var int $primaryscaleid // The scale to be displayed in detail in the colorbar.
@@ -181,14 +181,19 @@ class comparetotestaverage extends feedbackgenerator {
 
         $output = "";
 
-        for ($i = 1; $i <= $numberoffeedbackoptions; $i++) {
-            // Keys of the lowest and highest values in range...
-            // Since it's already defined via scale min max range, no more need to sanitize here.
-            $lowestlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_1";
-            $highestlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $numberoffeedbackoptions;
-            $rangestart = (float) $quizsettings->$lowestlimitkey;
-            $rangeend = (float) $quizsettings->$highestlimitkey;
+        // Keys of the lowest and highest values in range...
+        // Since it's already defined via scale min max range, no more need to sanitize here.
+        $lowestlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_1";
+        $highestlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $numberoffeedbackoptions;
 
+        $rangestart = (float) $quizsettings->$lowestlimitkey;
+        $rangeend = (float) $quizsettings->$highestlimitkey;
+
+        if (!($rangeend > $rangestart)) {
+            throw new \moodle_exception('error:minmaxrangeequal', 'local_catquiz');
+        }
+
+        for ($i = 1; $i <= $numberoffeedbackoptions; $i++) {
             $lowerlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_" . $i;
             $upperlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $i;
 
@@ -262,7 +267,11 @@ class comparetotestaverage extends feedbackgenerator {
         $quantile = count($personparams) <= 1
             ? 0
             : (count($worseabilities) / (count($personparams) - 1)) * 100;
-        $testaverage = array_sum(array_map(fn ($pp) => $pp->ability, $personparams)) / count($personparams);
+
+        $testaverage = 0;
+        if (!empty($personparams)) {
+            $testaverage = array_sum(array_map(fn ($pp) => $pp->ability, $personparams)) / count($personparams);
+        }
 
         $catscaleclass = new catscale($catscaleid);
         $abilityrange = $catscaleclass->get_ability_range();
@@ -271,16 +280,21 @@ class comparetotestaverage extends feedbackgenerator {
         $testaverageinrange = feedbacksettings::sanitize_range_min_max(
             $testaverage,
             $abilityrange['minscalevalue'],
-            $abilityrange['maxscalevalue']);
+            $abilityrange['maxscalevalue']
+        );
 
         $abilityinrange = feedbacksettings::sanitize_range_min_max(
             $ability,
             $abilityrange['minscalevalue'],
-            $abilityrange['maxscalevalue']);
+            $abilityrange['maxscalevalue']
+        );
 
-        $b = $middle - (float) $abilityrange['minscalevalue'];
-        $testaverageposition = ($b + $testaverageinrange) / $b * 50;
-        $userabilityposition = ($b + $abilityinrange) / $b * 50;
+        if (!($abilityrange['minscalevalue'] < $abilityrange['maxscalevalue'])) {
+            throw new \moodle_exception('error:minmaxrangeequal', 'local_catquiz');
+        }
+        $scalingfactor = 1 / ((float) $abilityrange['maxscalevalue'] - (float) $abilityrange['minscalevalue']) * 100;
+        $testaverageposition = $scalingfactor * (-(float) $abilityrange['minscalevalue'] + $testaverageinrange);
+        $userabilityposition = $scalingfactor * (-(float) $abilityrange['minscalevalue'] + $abilityinrange);
         $betterthan = '';
         if (round($quantile, 0) >= self::MIN_BETTER_THAN_LIMIT) {
             $betterthan = get_string('feedbackcomparison_betterthan', 'local_catquiz', ['quantile' => round($quantile, 0)]);
@@ -291,13 +305,14 @@ class comparetotestaverage extends feedbackgenerator {
             'local_catquiz',
             [
                 'betterthan' => $betterthan,
-                'quotedscale' => feedback_helper::add_quotes($catscale->name),
+                'quotedscale' => $catscale->name,
                 'ability_global' => feedback_helper::localize_float($abilityinrange),
                 'se_global' => feedback_helper::localize_float($newdata['se'][$catscaleid]),
                 'average_ability' => feedback_helper::localize_float($testaverageinrange),
                 'scale_min' => feedback_helper::localize_float($abilityrange['minscalevalue']),
                 'scale_max' => feedback_helper::localize_float($abilityrange['maxscalevalue']),
-            ]);
+            ]
+        );
 
         return [
             'contextid' => $existingdata['contextid'],
@@ -360,10 +375,9 @@ class comparetotestaverage extends feedbackgenerator {
             if (!$item->model) {
                 continue;
             }
+            $itemparam = model_item_param::from_record($item);
             $model = model_model::get_instance($item->model);
-            foreach ($model::get_parameter_names() as $paramname) {
-                $params[$paramname] = floatval($item->$paramname);
-            }
+            $params = $itemparam->get_params_array();
             foreach ($abilitysteps as $ability) {
                 $fisherinformation = $model->fisher_info(
                     ['ability' => $ability],
@@ -377,7 +391,6 @@ class comparetotestaverage extends feedbackgenerator {
                     $fisherinfos[$stringkey] += $fisherinformation;
                 }
             }
-
         }
 
         $fisherinfos = $this->feedbackhelper->get_fisherinfos_of_items($items, $models, $abilitysteps);
@@ -392,14 +405,14 @@ class comparetotestaverage extends feedbackgenerator {
                 if ($ability != $as) {
                     continue;
                 } else {
-                    $counter ++;
+                    $counter++;
                 }
             }
             $colorvalue = $this->feedbackhelper->get_color_for_personability(
                 (array) $this->get_progress()->get_quiz_settings(),
                 $as,
                 intval($primarycatscale['id'])
-                );
+            );
             $abilitystring = strval($as);
             $abilityseries['counter'][$abilitystring] = $counter;
             $abilityseries['colors'][$abilitystring] = $colorvalue;
@@ -433,5 +446,4 @@ class comparetotestaverage extends feedbackgenerator {
             'charttitle' => get_string('abilityprofile_title', 'local_catquiz'),
         ];
     }
-
 }

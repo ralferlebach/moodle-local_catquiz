@@ -24,6 +24,7 @@
 
 namespace local_catquiz\teststrategy\feedbackgenerator;
 
+use context_module;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\teststrategy\feedbacksettings;
@@ -39,11 +40,23 @@ use local_catquiz\teststrategy\feedbacksettings;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class customscalefeedback extends feedbackgenerator {
-
     /**
      * @var callable $sortfun
      */
     private $sortfun;
+
+    /**
+     * Stores the testid
+     * @var ?int
+     */
+    private ?int $testid;
+
+    /**
+     * Stores the main scale ID.
+     *
+     * @var int
+     */
+    private int $mainscale;
 
     /**
      * Creates a new customscale feedback generator.
@@ -73,6 +86,8 @@ class customscalefeedback extends feedbackgenerator {
      *
      */
     public function get_studentfeedback(array $data): array {
+        $this->testid = $data['testid'];
+        $this->mainscale = $data['catscaleid'];
 
         if (!$data['customscalefeedback_abilities'] ?? false) {
             return [];
@@ -83,39 +98,15 @@ class customscalefeedback extends feedbackgenerator {
             (array) $progress->get_quiz_settings(),
             $data['catscales']
         );
-        $firstelement = $data['customscalefeedback_abilities'][array_key_first($data['customscalefeedback_abilities'])];
-        if (!empty($firstelement['estimated'])) {
-            if (!isset($firstelement['fraction'])) {
-                $comment = get_string('estimatedbecause:default', 'local_catquiz');
-            } else {
-                switch ((int) $firstelement['fraction']) {
-                    case 1 :
-                        $comment = get_string('estimatedbecause:allanswerscorrect', 'local_catquiz');
-                        break;
-                    case 0 :
-                        if (count($this->get_progress()->get_playedquestions()) === 0) {
-                            $comment = get_string('error:nminscale', 'local_catquiz');
-                        } else {
-                            $comment = get_string('estimatedbecause:allanswersincorrect', 'local_catquiz');
-                        }
-                        break;
-                    default :
-                        $comment = get_string('estimatedbecause:default', 'local_catquiz');
-                        break;
-
-                }
-            }
-        }
 
         if (empty($customscalefeedback)) {
             return [];
-        } else {
-            return [
-                'heading' => $this->get_heading(),
-                'comment' => $comment ?? "",
-                'content' => $customscalefeedback,
-            ];
         }
+
+        return [
+            'heading' => $this->get_heading(),
+            'content' => $customscalefeedback,
+        ];
     }
 
     /**
@@ -206,7 +197,7 @@ class customscalefeedback extends feedbackgenerator {
         array $personabilities,
         array $quizsettings,
         array $catscales
-        ): string {
+    ): string {
         $scalefeedback = [];
         $relevantscalesfound = false;
 
@@ -217,7 +208,7 @@ class customscalefeedback extends feedbackgenerator {
             return $this->get_exclusion_reason_string($personabilities);
         }
         foreach ($personabilitiestoreport as $catscaleid => $personability) {
-            if (isset($personability['excluded']) && $personability['excluded']) {
+            if (!empty($personability['excluded']) || !empty($personability['hidden'])) {
                 continue;
             }
             $relevantscalesfound = true;
@@ -247,9 +238,23 @@ class customscalefeedback extends feedbackgenerator {
             return get_string('nofeedback', 'local_catquiz');
         }
 
-        $text = "";
+        // Sort in the following way:
+        // 1. Main scale always comes first.
+        // 2. Other scales are sorted by name.
+        $mainscale = $scalefeedback[$this->mainscale] ?? null;
+        unset($scalefeedback[$this->mainscale]);
+        uksort($scalefeedback, function ($a, $b) use ($catscales) {
+            $a = (object) $catscales[$a];
+            $b = (object) $catscales[$b];
+            return $catscales[$a->id]->name <=> $catscales[$b->id]->name;
+        });
+        $sorted = $scalefeedback;
+        if ($mainscale) {
+            $sorted = [$mainscale, ...$scalefeedback];
+        }
 
-        foreach ($scalefeedback as $value) {
+        $text = "";
+        foreach ($sorted as $value) {
             $text .= $value . '<br/>';
         }
         return $text;
@@ -281,6 +286,7 @@ class customscalefeedback extends feedbackgenerator {
                     } else if (isset($errorarray['semaxdefined'])) {
                         return get_string('error:semax', 'local_catquiz', $errorarray);
                     }
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
                 case "nminscale":
                     return get_string('error:nminscale', 'local_catquiz', $errorarray);
                 case "fraction":
@@ -289,6 +295,7 @@ class customscalefeedback extends feedbackgenerator {
                     } else if ($errorarray['fraction'] == 0) {
                         return get_string('error:fraction0', 'local_catquiz');
                     }
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
                 default:
                     return get_string('noscalesfound', 'local_catquiz');
             }
@@ -305,9 +312,33 @@ class customscalefeedback extends feedbackgenerator {
      * @return ?string
      */
     private function getfeedbackforrange(int $catscaleid, int $groupnumber, array $quizsettings): ?string {
-
+        if ($cm = get_coursemodule_from_instance('adaptivequiz', $this->testid)) {
+            $context = context_module::instance($cm->id);
+        }
         $quizsettingskey = 'feedbackeditor_scaleid_' . $catscaleid . '_' . $groupnumber;
-        return ((array) $quizsettings[$quizsettingskey])['text'];
+        $filearea = sprintf('feedback_files_%d_%d', $catscaleid, $groupnumber);
 
+        // To be compatible with the old format, check if content is an object and if so, extract the
+        // text from there.
+        if (!array_key_exists($quizsettingskey, $quizsettings)) {
+             $quizsettingskey .= '_editor';
+        }
+        $content = $quizsettings[$quizsettingskey];
+        if (is_object($content) && property_exists($content, 'text')) {
+            $content = $content->text;
+        }
+
+        if ($cm) {
+            return file_rewrite_pluginfile_urls(
+                $content,
+                'pluginfile.php',
+                $context->id,
+                'local_catquiz',
+                $filearea,
+                $this->testid
+            );
+        }
+
+        return $content;
     }
 }

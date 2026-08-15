@@ -26,7 +26,6 @@ namespace local_catquiz\teststrategy\preselect_task;
 
 use local_catquiz\local\result;
 use local_catquiz\teststrategy\preselect_task;
-use local_catquiz\wb_middleware;
 use stdClass;
 
 /**
@@ -36,12 +35,11 @@ use stdClass;
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class lasttimeplayedpenalty extends preselect_task implements wb_middleware {
-
+final class lasttimeplayedpenalty extends preselect_task {
     /**
      * This is used as factor in the exp function
      *
-     * The value of 4.6 (ln(99)) should ensure that after 10% of the penalty
+     * The value of ln(99) / 0.9 should ensure that after 10% of the penalty
      * timerange has passed, the resulting probability exceeds 0.01.
      *
      * Assuming a timerange of 10 days, the weight factor will be as follows:
@@ -51,38 +49,24 @@ final class lasttimeplayedpenalty extends preselect_task implements wb_middlewar
      *
      * @see https://github.com/Wunderbyte-GmbH/moodle-local_catquiz/issues/424#issuecomment-2092820159
      */
-    const EXP_FACTOR = 4.6;
+    const EXP_FACTOR = 5.1056887223718;
 
     /**
      * Run preselect task.
      *
      * @param array $context
-     * @param callable $next
      *
      * @return result
      *
      */
-    public function run(array &$context, callable $next): result {
+    public function run(array &$context): result {
         $now = time();
-        $context['questions'] = array_map(function($q) use ($now, $context) {
+        $context['questions'] = array_map(function ($q) use ($now, $context) {
             $q->lasttimeplayedpenaltyfactor = $this->get_penalty_factor($q, $now, $context['penalty_threshold']);
             return $q;
         }, $context['questions']);
 
-        return $next($context);
-    }
-
-    /**
-     * Get required context keys.
-     *
-     * @return array
-     *
-     */
-    public function get_required_context_keys(): array {
-        return [
-            'questions',
-            'penalty_threshold',
-        ];
+        return result::ok($context);
     }
 
     /**
@@ -96,8 +80,10 @@ final class lasttimeplayedpenalty extends preselect_task implements wb_middlewar
      *
      * @return float
      */
-    public function get_penalty_factor($question, int $currenttime, float $penaltytimerange): float {
+    public function get_penalty_factor(stdClass $question, int $currenttime, float $penaltytimerange): float {
         $lastplayed = $question->userlastattempttime;
-        return 1 / (1 + exp(self::EXP_FACTOR * (1 - ($currenttime - $lastplayed) / $penaltytimerange)));
+        $timedifference = ($lastplayed - $currenttime);
+
+        return 1 / (1 + exp(self::EXP_FACTOR / $penaltytimerange * ($timedifference + $penaltytimerange)));
     }
 }

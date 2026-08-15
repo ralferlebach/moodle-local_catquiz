@@ -24,6 +24,7 @@
 
 namespace local_catquiz\table;
 
+use local_catquiz\local\status;
 use local_catquiz\teststrategy\info;
 use local_wunderbyte_table\wunderbyte_table;
 use moodle_url;
@@ -36,7 +37,6 @@ use moodle_url;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class quizattempts_table extends wunderbyte_table {
-
     /**
      * Contains utl.
      *
@@ -142,5 +142,14 @@ class quizattempts_table extends wunderbyte_table {
             $url,
             get_string('cogwheeltitle', 'local_catquiz')
         );
+    }
+
+    /**
+     * Translate the status to a readable string
+     * @param mixed $values
+     * @return string
+     */
+    public function col_status($values) {
+        return status::to_string($values->status);
     }
 }

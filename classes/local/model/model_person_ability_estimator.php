@@ -31,7 +31,6 @@ namespace local_catquiz\local\model;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class model_person_ability_estimator {
-
     /**
      * @var model_responses Contains necessary data for estimation
      */
@@ -51,8 +50,7 @@ abstract class model_person_ability_estimator {
      * Estimates person abilities
      *
      * @param model_item_param_list $itemparamlist List of item parameters
-     * @param int                   $catscaleid
      * @return model_person_param_list
      */
-    abstract public function get_person_abilities(model_item_param_list $itemparamlist, int $catscaleid): model_person_param_list;
+    abstract public function get_person_abilities(model_item_param_list $itemparamlist): model_person_param_list;
 }

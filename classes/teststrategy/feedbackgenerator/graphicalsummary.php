@@ -25,6 +25,7 @@
 namespace local_catquiz\teststrategy\feedbackgenerator;
 
 use html_table;
+use html_table_cell;
 use html_writer;
 use local_catquiz\catscale;
 use local_catquiz\teststrategy\feedback_helper;
@@ -40,7 +41,6 @@ use local_catquiz\teststrategy\info;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class graphicalsummary extends feedbackgenerator {
-
     /**
      * Get student feedback.
      *
@@ -64,7 +64,13 @@ class graphicalsummary extends feedbackgenerator {
             );
         }
         if (isset($feedbackdata['graphicalsummary_data'])) {
-            $table = $this->render_table($feedbackdata['graphicalsummary_data']);
+            $showquestions = boolval(
+                $this
+                    ->get_progress()
+                    ->get_quiz_settings()
+                    ->catquiz_showquestion ?? false
+            );
+            $table = $this->render_table($feedbackdata['graphicalsummary_data'], $showquestions);
         }
         $globalscale = catscale::return_catscale_object($this->get_progress()->get_quiz_settings()->catquiz_catscales);
         $globalscalename = $globalscale->name;
@@ -74,16 +80,18 @@ class graphicalsummary extends feedbackgenerator {
         $data['description'] = get_string(
             'graphicalsummary_description',
             'local_catquiz',
-            feedback_helper::add_quotes($globalscalename)
+            $globalscalename
         );
         // If this is a deficit strategy, display more info.
         $additionalinfo = false;
-        if (array_key_exists('graphicalsummary_primaryscale', $feedbackdata)
-            && isset($feedbackdata['primaryscale']['name'])
+        if (
+            array_key_exists('graphicalsummary_primaryscale', $feedbackdata)
+            && isset($feedbackdata['primaryscale']->name)
         ) {
-            $primaryscale = reset ($feedbackdata['graphicalsummary_primaryscale']);
-            $quoteddeficitscale = feedback_helper::add_quotes($feedbackdata['primaryscale']['name']);
-            if ($primaryscale
+            $primaryscale = reset($feedbackdata['graphicalsummary_primaryscale']);
+            $quoteddeficitscale = feedback_helper::add_quotes($feedbackdata['primaryscale']->name);
+            if (
+                $primaryscale
                 && array_key_exists('primarybecause', $primaryscale)
                 && $primaryscale['primarybecause'] == 'lowestskill'
             ) {
@@ -189,10 +197,20 @@ class graphicalsummary extends feedbackgenerator {
             return $existingdata;
         }
 
-        if (!$lastresponse = $progress->get_last_response()) {
+        $lastresponse = $progress->get_last_response();
+        if (!is_array($lastresponse) || !isset($lastresponse['qid'])) {
             return null;
         }
-        $lastquestion = $progress->get_playedquestions()[$lastresponse['qid']];
+
+        $playedquestions = $progress->get_playedquestions();
+        if (!array_key_exists($lastresponse['qid'], $playedquestions)) {
+            return null;
+        }
+
+        $lastquestion = $playedquestions[$lastresponse['qid']];
+        if (empty($lastquestion)) {
+            return null;
+        }
 
         $abilitieslist = $this->select_scales_for_report($newdata, $this->feedbacksettings, $existingdata['teststrategy']);
         $primaryscale = array_filter($abilitieslist, fn ($a) => array_key_exists('primary', $a) && $a['primary'] === true);
@@ -201,14 +219,15 @@ class graphicalsummary extends feedbackgenerator {
         $graphicalsummary = $existingdata['graphicalsummary_data'] ?? [];
         $new = [];
         $new['id'] = $lastquestion->id;
-        $new['questionname'] = $lastquestion->name;
+        $new['questionname'] = $lastquestion->label;
         $new['lastresponse'] = round($lastresponse['fraction'], self::PRECISION);
         $new['difficulty'] = $lastquestion->difficulty;
         $new['questionscale'] = $lastquestion->catscaleid;
         $new['questionscale_name'] = catscale::return_catscale_object(
             $lastquestion->catscaleid
         )->name;
-        if (property_exists($lastquestion, 'fisherinformation')
+        if (
+            property_exists($lastquestion, 'fisherinformation')
             && is_float($lastquestion->fisherinformation)
         ) {
             $new['fisherinformation'] = sprintf('%.2f', $lastquestion->fisherinformation);
@@ -229,7 +248,8 @@ class graphicalsummary extends feedbackgenerator {
             'teststrategy',
             'local_catquiz',
             info::get_teststrategy($existingdata['teststrategy'])
-        ->get_description());
+            ->get_description()
+        );
 
         $progress = $this->get_progress();
         return [
@@ -297,9 +317,10 @@ class graphicalsummary extends feedbackgenerator {
      * Render a table with data that do not fit in the chart
      *
      * @param array $data The feedback data
+     * @param bool $viewquestion Adds links and modal to display questions.
      * @return ?string If all required data are present, the rendered HTML table.
      */
-    private function render_table($data): ?string {
+    private function render_table($data, $viewquestion = true): ?string {
         if (! array_key_exists('id', $data[0])) {
             return null;
         }
@@ -312,6 +333,10 @@ class graphicalsummary extends feedbackgenerator {
             get_string('catscale', 'local_catquiz'),
             get_string('personability', 'local_catquiz'),
         ];
+
+        if ($viewquestion) {
+            $table->head[] = get_string('showquestion', 'local_catquiz');
+        }
 
         $tabledata = [];
         foreach ($data as $index => $values) {
@@ -330,13 +355,37 @@ class graphicalsummary extends feedbackgenerator {
                     'local_catquiz'
                 );
             }
-            $tabledata[] = [
+
+            $questionname = $viewquestion
+                ? sprintf(
+                    '<span class="clickable" data-name="%s" data-attemptid="%d" data-slot="%d">%s</span>',
+                    $values['questionname'],
+                    $this->get_progress()->get_attemptid(),
+                    $index + 1,
+                    $values['questionname']
+                )
+                : $values['questionname'];
+            $newrow = [
                 $index + 1,
-                $values['questionname'],
+                $questionname,
                 $responsestring,
                 $values['questionscale_name'],
                 sprintf('%.2f', $values['personability_after']),
             ];
+
+            if ($viewquestion) {
+                $searchcol = new html_table_cell(
+                    sprintf(
+                        '<i class="fa fa-search clickable questionbutton" data-name="%s" data-attemptid = "%d" data-slot="%d"></i>',
+                        $values['questionname'],
+                        $this->get_progress()->get_attemptid(),
+                        $index + 1
+                    ),
+                );
+                $searchcol->attributes = ['class' => 'questionbutton'];
+                $newrow[] = $searchcol;
+            }
+            $tabledata[] = $newrow;
         }
         $table->data = $tabledata;
         return html_writer::table($table);

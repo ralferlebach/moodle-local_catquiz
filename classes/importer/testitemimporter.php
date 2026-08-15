@@ -30,7 +30,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class testitemimporter {
-
     /**
      * Define settings and call fileparser.
      *
@@ -101,7 +100,7 @@ class testitemimporter {
         ?string $delimiter = null,
         ?string $encoding = null,
         ?string $dateformat = null
-        ) {
+    ) {
 
         $settings = new csvsettings($definedcolumns);
 
@@ -238,6 +237,12 @@ class testitemimporter {
                 'mandatory' => false,
                 'format' => PARAM_TEXT,
                 'importinstruction' => get_string('maxscalevalueinformation', 'local_catquiz'),
+            ],
+            [
+                'name' => 'json',
+                'mandatory' => false,
+                'format' => PARAM_TEXT,
+                'importinstruction' => get_string('jsoninformation', 'local_catquiz'),
             ],
             ];
         return $columnssequential;

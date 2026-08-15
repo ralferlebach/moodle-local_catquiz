@@ -31,7 +31,6 @@ use external_api;
 use external_function_parameters;
 use external_value;
 use external_single_structure;
-use local_catquiz\catquiz;
 use local_catquiz\subscription;
 use moodle_exception;
 

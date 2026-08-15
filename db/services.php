@@ -35,12 +35,11 @@ $services = [
                 ],
                 'restrictedusers' => 0,
                 'shortname' => 'local_catquiz_external',
-                'downloadfiles' => 1,    // Allow file downloads.
-                'uploadfiles'  => 1,      // Allow file uploads.
+                'downloadfiles' => 1, // Allow file downloads.
+                'uploadfiles'  => 1, // Allow file uploads.
                 'enabled' => 1,
         ],
 ];
-
 
 $functions = [
         'local_catquiz_delete_catscale' => [
@@ -117,6 +116,12 @@ $functions = [
                 'classname' => 'local_catquiz\external\feedback_tab_clicked',
                 'description' => 'Sends an event about a clicked feedback tab',
                 'type' => 'write',
+                'ajax' => 1,
+        ],
+        'local_catquiz_render_question_with_response' => [
+                'classname' => 'local_catquiz\external\render_question_with_response',
+                'description' => 'Renders a question with a response',
+                'type' => 'read',
                 'ajax' => 1,
         ],
 ];

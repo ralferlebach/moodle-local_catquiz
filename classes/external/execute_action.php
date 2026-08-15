@@ -27,13 +27,11 @@
 namespace local_catquiz\external;
 
 use context_system;
-use Exception;
 use external_api;
 use external_function_parameters;
 use external_value;
 use external_single_structure;
 use local_catquiz\execute_method_from_webservice;
-use moodle_url;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -68,7 +66,7 @@ class execute_action extends external_api {
      * @param string $methodname
      * @param string $data
      *
-     * @return boolean external_function_parameters
+     * @return array external_function_parameters
      *
      */
     public static function execute(
@@ -96,7 +94,7 @@ class execute_action extends external_api {
         } else {
             $result = [
                 'success' => 0,
-                'message' => get_string('functiondoesntexist', 'local_wunderbyte_table'),
+                'message' => get_string('functiondoesntexist', 'local_catquiz'),
             ];
         }
 

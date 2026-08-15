@@ -28,6 +28,7 @@ use coding_exception;
 use context_course;
 use context_system;
 use local_catquiz\catscale;
+use local_catquiz\data\catscale_structure;
 use stdClass;
 use UnexpectedValueException;
 
@@ -39,7 +40,6 @@ use UnexpectedValueException;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class feedbackgenerator {
-
     /**
      * The precision used to store float values.
      */
@@ -89,7 +89,7 @@ abstract class feedbackgenerator {
     /**
      * @var ?stdClass $primaryscale
      */
-    protected ?stdClass $primaryscale;
+    protected ?catscale_structure $primaryscale;
 
     /**
      * Create a new feedback generator
@@ -247,7 +247,7 @@ abstract class feedbackgenerator {
         int $strategyid,
         int $forcedscaleid = 0,
         bool $feedbackonlyfordefinedscaleid = false
-        ): array {
+    ): array {
             $quizsettings = $newdata['progress']->get_quiz_settings();
 
         $transformedpersonabilities = $newdata['updated_personabilities'];
@@ -326,7 +326,8 @@ abstract class feedbackgenerator {
      */
     protected function has_teacherfeedbackpermission(): bool {
         return has_capability(
-            'local/catquiz:view_teacher_feedback', context_system::instance()
+            'local/catquiz:view_teacher_feedback',
+            context_system::instance()
         );
     }
 
@@ -395,6 +396,7 @@ abstract class feedbackgenerator {
         );
 
         $personabilities = [];
+        $selectedscaleid = null;
         // Ability range is the same for all scales with same root scale.
         $abiltiyrange = $this->feedbackhelper->get_ability_range(array_key_first($catscales));
         foreach ($personabilitiesfeedbackeditor as $catscale => $personability) {
@@ -428,7 +430,7 @@ abstract class feedbackgenerator {
      * @param array $newdata
      * @return ?stdClass
      */
-    public function get_primary_scale($existingdata, $newdata): ?stdClass {
+    public function get_primary_scale($existingdata, $newdata): ?catscale_structure {
         if (!isset($this->structuredabilities)) {
             $this->get_restructured_abilities($existingdata, $newdata);
         }
@@ -441,19 +443,28 @@ abstract class feedbackgenerator {
     /**
      * Sort personabilites array according to feedbacksettings.
      *
-     * @param array $personabilities
-     * @param int $selectedscaleid
+     * If $selectedscaleid is provided, ordering will be ignored for this one
+     * and it will always be placed at the top.
      *
+     * @param array $personabilities
+     * @param ?int $selectedscaleid
      */
-    protected function apply_sorting(array &$personabilities, int $selectedscaleid) {
+    protected function apply_sorting(array &$personabilities, ?int $selectedscaleid) {
         // Sort the array and put primary scale first.
         if ($this->feedbacksettings->is_sorted_ascending()) {
             asort($personabilities);
+        } else if ($this->feedbacksettings->is_sorted_by_name()) {
+            uasort($personabilities, fn ($a, $b) => $a['name'] <=> $b['name']);
         } else {
             arsort($personabilities);
         }
 
-        // Put selected element first.
+        // If no selected scale was provided, just return.
+        if (!$selectedscaleid) {
+            return;
+        }
+
+        // If it was provided, place the selected scale at the top.
         $value = $personabilities[$selectedscaleid];
         unset($personabilities[$selectedscaleid]);
         $personabilities = [$selectedscaleid => $value] + $personabilities;
@@ -471,5 +482,4 @@ abstract class feedbackgenerator {
             ->catquiz_catscales;
         return catscale::return_catscale_object($globalscaleid);
     }
-
 }

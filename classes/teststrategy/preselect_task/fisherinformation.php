@@ -24,11 +24,10 @@
 
 namespace local_catquiz\teststrategy\preselect_task;
 
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
-use local_catquiz\local\model\model_strategy;
 use local_catquiz\local\result;
 use local_catquiz\teststrategy\preselect_task;
-use local_catquiz\wb_middleware;
 
 /**
  * Test strategy fisherinformation.
@@ -37,18 +36,16 @@ use local_catquiz\wb_middleware;
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class fisherinformation extends preselect_task implements wb_middleware {
-
+final class fisherinformation extends preselect_task {
     /**
      * Run preselect task.
      *
      * @param array $context
-     * @param callable $next
      *
      * @return result
      *
      */
-    public function run(array &$context, callable $next): result {
+    public function run(array &$context): result {
         foreach ($context['questions'] as $item) {
             // Just skip questions where we can not calculate the fisher information.
             if (!array_key_exists($item->model, $context['installed_models'])) {
@@ -68,7 +65,7 @@ final class fisherinformation extends preselect_task implements wb_middleware {
         }
 
         $context['has_fisherinformation'] = true;
-        return $next($context);
+        return result::ok($context);
     }
 
     /**
@@ -80,30 +77,13 @@ final class fisherinformation extends preselect_task implements wb_middleware {
      * @return ?float
      */
     public function get_fisherinformation(\stdClass $question, float $ability): ?float {
+        $itemparam = model_item_param::from_record($question);
         $model = model_model::get_instance($question->model);
-        foreach ($model::get_parameter_names() as $paramname) {
-            $params[$paramname] = floatval($question->$paramname);
-        }
 
         $fisherinformation = $model->fisher_info(
             ['ability' => $ability],
-            $params
+            $itemparam->get_params_array()
         );
         return $fisherinformation;
-    }
-
-    /**
-     * Get required context keys
-     *
-     * @return array
-     *
-     */
-    public function get_required_context_keys(): array {
-        return [
-            'installed_models',
-            'person_ability',
-            'questions',
-            'original_questions',
-        ];
     }
 }

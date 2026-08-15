@@ -35,7 +35,6 @@ use local_catquiz\local\model\model_item_param_list;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class model_person_ability_estimator_demo extends model_person_ability_estimator {
-
     /**
      * Get person abilities.
      *
@@ -46,14 +45,11 @@ class model_person_ability_estimator_demo extends model_person_ability_estimator
      */
     public function get_person_abilities(model_item_param_list $itemparamlist): model_person_param_list {
         $personparamlist = new model_person_param_list();
-        $responses = $this->responses->as_array();
-        foreach ($responses as $userid => $itemresponse) {
-            foreach (array_keys($itemresponse) as $component) {
-                $ability = rand(-500, 500) / 100;
-                $p = new model_person_param($userid);
-                $p->set_ability($ability);
-                $personparamlist->add($p);
-            }
+        foreach ($this->responses->get_person_ids() as $userid) {
+            $ability = rand(-500, 500) / 100;
+            $p = new model_person_param($userid);
+            $p->set_ability($ability);
+            $personparamlist->add($p);
         }
         return $personparamlist;
     }

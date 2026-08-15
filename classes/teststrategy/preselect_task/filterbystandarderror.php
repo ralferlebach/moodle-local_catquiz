@@ -29,9 +29,9 @@ use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\result;
 use local_catquiz\local\status;
+use local_catquiz\teststrategy\context\loader\personability_loader;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\progress;
-use local_catquiz\wb_middleware;
 use UnexpectedValueException;
 
 /**
@@ -43,44 +43,34 @@ use UnexpectedValueException;
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class filterbystandarderror extends preselect_task implements wb_middleware {
-
+class filterbystandarderror extends preselect_task {
     /**
      * @var progress
      */
     private progress $progress;
 
     /**
-     * @var callable $next
-     */
-    private $next;
-
-    /**
      * Run method.
      *
      * @param array $context
-     * @param callable $next
      *
      * @return result
      *
      */
-    public function run(array &$context, callable $next): result {
-        $this->next = $next;
+    public function run(array &$context): result {
+        $this->context = $context;
         $this->progress = $context['progress'];
 
         if ($this->progress->is_first_question()) {
-            // If this is the first question and the cache is not yet set, set the
-            // root scale active.
-            $this->progress->set_active_scales([$this->context['catscaleid']]);
-            return $next($context);
+            return result::ok($context);
         }
 
         if (!$this->progress->has_new_response()) {
-            return $next($context);
+            return result::ok($context);
         }
 
         if ($this->progress->get_last_question()->is_pilot) {
-            return $next($context);
+            return result::ok($context);
         }
 
         $lastquestion = $this->progress->get_last_question();
@@ -98,9 +88,10 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
 
             if ($drop) {
                 getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(
-                    "%d: drop %s%s",
+                    "%d: [SE] drop %s%s",
                     count($this->progress->get_playedquestions()),
-                    (catscale::return_catscale_object($scaleid))->name, PHP_EOL
+                    (catscale::return_catscale_object($scaleid))->name,
+                    PHP_EOL
                 );
                 $this->progress->drop_scale($scaleid);
                 $inheritscales = $this->get_scale_heirs($scaleid);
@@ -124,7 +115,7 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
                         $inheritval
                     );
                     getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(
-                        "%d: inhere %s - pp: %.5f\n",
+                        "%d: [SE] inhere %s - pp: %.5f\n",
                         count($this->progress->get_playedquestions()),
                         (catscale::return_catscale_object($subscaleid))->name,
                         $inheritval
@@ -146,23 +137,7 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
             }
         }
 
-        return $next($context);
-    }
-
-    /**
-     * Get required context keys.
-     *
-     * @return array
-     *
-     */
-    public function get_required_context_keys(): array {
-        return [
-            'questions',
-            'progress',
-            'se_max',
-            'progress',
-            'pp_min_inc',
-        ];
+        return result::ok($context);
     }
 
     /**
@@ -172,11 +147,14 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
      * @return array
      */
     private function get_scale_heirs($scaleid): array {
-        // Subscales inherit values of parent when their ability wasn't calculated yet (is still 0.0).
+        if ($this->context['teststrategy'] == LOCAL_CATQUIZ_STRATEGY_ALLSUBS) {
+            return [];
+        }
+        // Subscales inherit values of parent when their ability wasn't calculated yet (is still the default ability).
         return array_filter(
             array_keys(catscale::get_next_level_subscales_ids_from_parent([$scaleid])),
             fn ($id) => isset($this->context['person_ability'][$id])
-            && $this->context['person_ability'][$id] === 0.0
+            && $this->context['person_ability'][$id] === personability_loader::get_default_ability()
         );
     }
 
@@ -209,7 +187,7 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
         if ($drop) {
             return result::err(status::ERROR_NO_REMAINING_QUESTIONS);
         }
-        return ($this->next)($this->context);
+        return result::ok($this->context);
     }
 
     /**
@@ -229,7 +207,8 @@ class filterbystandarderror extends preselect_task implements wb_middleware {
         // Special treatment for the main scale: exclude it only, if the minimum number of questions
         // per attempt AND questions per scale have been played.
         $ismainscale = $scaleid === intval($this->context['catscaleid']);
-        if ($ismainscale
+        if (
+            $ismainscale
             && (
                 count($this->progress->get_playedquestions()) < $this->context['minimumquestions']
                 || count($playeditems) < $this->context['min_attempts_per_scale']

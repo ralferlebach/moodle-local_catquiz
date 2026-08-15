@@ -29,6 +29,7 @@ defined('MOODLE_INTERNAL') || die();
 require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
 use core_plugin_manager;
+use Exception;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
 use MoodleQuickForm;
@@ -59,7 +60,7 @@ class model_strategy {
      *
      * @var int
      */
-    const MAX_ITERATIONS = 5; // TODO: get value from DB?
+    const MAX_ITERATIONS = 2; // TODO: get value from DB?
 
     /**
      * @var model_responses Contains necessary data for estimation
@@ -110,37 +111,48 @@ class model_strategy {
     private array $olditemparams;
 
     /**
+     * The ID of the catscale
+     *
+     * @var int $catscaleid
+     */
+    private int $catscaleid;
+
+    /**
+     * Tracks the parameters calculated by iteration round and model.
+     *
+     * @var array<array<model_item_param_list>> $calculatedparams
+     */
+    private array $calculatedparams;
+
+    /**
+     * Tracks the abilites calculated by iteration round.
+     *
+     * @var array<model_person_param_list>
+     */
+    private array $calculatedabilities;
+
+    /**
      * Model-specific instantiation can go here.
      *
      * @param model_responses $responses
      * @param array $options
-     * @param model_person_param_list|null $savedpersonabilities
      * @param array $olditemparams
      *
      */
     public function __construct(
         model_responses $responses,
         array $options = [],
-        ?model_person_param_list $savedpersonabilities = null,
         array $olditemparams = []
     ) {
         $this->responses = $responses;
-        $this->models = $this->create_installed_models();
+        $this->models = model_sorter::sort($this->create_installed_models());
         $this->abilityestimator = new model_person_ability_estimator_catcalc($this->responses);
         $this->set_options($options);
         $this->olditemparams = $olditemparams;
 
-        if ($savedpersonabilities === null || count($savedpersonabilities) === 0) {
-            $savedpersonabilities = $responses->get_initial_person_abilities();
-        } else if (count($savedpersonabilities) < count($initial = $responses->get_initial_person_abilities())) {
-            $newusers = array_diff(
-                array_keys($initial->get_person_params()),
-                array_keys($savedpersonabilities->get_person_params()));
-            foreach ($newusers as $userid) {
-                $savedpersonabilities->add(new model_person_param($userid));
-            }
+        foreach (array_keys($this->models) as $model) {
+            $this->set_calculated_progress($model, null);
         }
-        $this->initialpersonabilities = $savedpersonabilities;
     }
 
     /**
@@ -198,31 +210,79 @@ class model_strategy {
     /**
      * Starts the estimation process
      *
-     * @param int $catscaleid
      * @return array<model_item_param_list, model_person_param_list>
      */
-    public function run_estimation(int $catscaleid): array {
-        $personabilities = $this->initialpersonabilities;
+    public function run_estimation(): array {
+        $personabilities = $this->responses->get_person_abilities();
 
         /** @var array<model_item_param_list> $itemdifficulties */
         $itemdifficulties = [];
         // Re-calculate until the stop condition is triggered.
         while (!$this->should_stop()) {
+            $iterationstart = microtime(true);
             foreach ($this->models as $name => $model) {
                 $oldmodelparams = $this->olditemparams[$name] ?? null;
+                $startvalues = $this->get_startvalues_for_model($name) ?? null;
+                if ($startvalues && $oldmodelparams) {
+                    $startvalues->without($oldmodelparams->confirmed(), false);
+                }
+                $modelstart = microtime(true);
                 $itemdifficulties[$name] = $model
-                    ->estimate_item_params($this->responses, $personabilities, $oldmodelparams);
+                    ->estimate_item_params($this->responses, $personabilities, $startvalues);
+                if (getenv('CATQUIZ_CREATE_TESTOUTPUT')) {
+                    mtrace(
+                        sprintf(
+                            'Updating %d item params with model %s took %fs',
+                            count($itemdifficulties[$name]),
+                            $name,
+                            microtime(true) - $modelstart
+                        )
+                    );
+                }
+                $this->set_calculated_progress($name, $itemdifficulties[$name]);
             }
 
-            $filtereddiffi = $this->select_item_model($itemdifficulties, $personabilities);
+            // Keep track of calculated item parameters.
+            $selectstart = microtime(true);
+            $filtereddiffi = $this->select_item_model($itemdifficulties, $personabilities); // Maybe slow.
+            if (getenv('CATQUIZ_CREATE_TESTOUTPUT')) {
+                mtrace(
+                    sprintf(
+                        'Selection process of best items took %fs in iteration %d',
+                        microtime(true) - $selectstart,
+                        $this->iterations + 1
+                    )
+                );
+            }
+            $abilitystart = microtime(true);
             $personabilities = $this
                 ->abilityestimator
-                ->get_person_abilities($filtereddiffi, $catscaleid);
-
+                ->get_person_abilities($filtereddiffi);
+            if (getenv('CATQUIZ_CREATE_TESTOUTPUT')) {
+                mtrace(
+                    sprintf(
+                        'Updating person abilities took %fs in iteration %d',
+                        microtime(true) - $abilitystart,
+                        $this->iterations + 1
+                    )
+                );
+            }
+            $this->set_calculated_abilities_progress($personabilities);
+            $this->responses->set_person_abilities($personabilities);
             $this->iterations++;
+            if (getenv('CATQUIZ_CREATE_TESTOUTPUT')) {
+                mtrace(
+                    sprintf(
+                        'Updating item paramters in iteration %d took %fs',
+                        $this->iterations,
+                        microtime(true) - $iterationstart
+                    )
+                );
+            }
         }
 
         $itemdiffiwstatus = $this->set_status(
+            // TODO: merge again with oldparams that are manually confirmed and set the correct status for each model.
             $itemdifficulties,
             $filtereddiffi
         );
@@ -246,7 +306,7 @@ class model_strategy {
     ) {
         foreach ($selecteddiffic as $selecteditem) {
             $model = $selecteditem->get_model_name();
-            $id = $selecteditem->get_id();
+            $id = $selecteditem->get_componentid();
             $calcdifficulties[$model][$id]->set_status($selecteditem->get_status());
         }
         return $calcdifficulties;
@@ -263,7 +323,8 @@ class model_strategy {
      */
     public function select_item_model(
         array $itemdifflists,
-        model_person_param_list $personabilities): model_item_param_list {
+        model_person_param_list $personabilities
+    ): model_item_param_list {
         $newitemdifficulties = new model_item_param_list();
         $itemids = $this->responses->get_item_ids();
         // TODO set via settings.
@@ -282,7 +343,6 @@ class model_strategy {
                 continue;
             }
             foreach ($this->models as $model) {
-                /** @var ?model_item_param $item */
                 $item = $itemdifflists[$model->get_model_name()][$itemid];
                 if (!$item) {
                     continue;
@@ -297,41 +357,6 @@ class model_strategy {
         }
 
         return $newitemdifficulties;
-    }
-
-    /**
-     * Return item override.
-     *
-     * @param int $itemid
-     * @param array $itemdifflists
-     *
-     * @return model_item_param|null
-     *
-     */
-    private function get_item_override(int $itemid, array $itemdifflists): ?model_item_param {
-        $items = [];
-        foreach ($itemdifflists as $itemparams) {
-            if (! $itemparams[$itemid]) {
-                continue;
-            }
-            $items[] = $itemparams[$itemid];
-        }
-
-        if (! $items) {
-            return null;
-        }
-
-        $manuallyconfirmed = array_filter($items, fn ($ip) =>  $ip->get_status() === LOCAL_CATQUIZ_STATUS_CONFIRMED_MANUALLY);
-        if ($manuallyconfirmed) {
-            return reset($manuallyconfirmed);
-        }
-
-        $manuallyupdated = array_filter($items, fn ($ip) => $ip->get_status() === LOCAL_CATQUIZ_STATUS_UPDATED_MANUALLY);
-        if ($manuallyupdated) {
-            return reset($manuallyupdated);
-        }
-
-        return null;
     }
 
     /**
@@ -353,8 +378,8 @@ class model_strategy {
      * @return array
      *
      */
-    public function get_params_from_db(int $contextid, int $catscaleid): array {
-        $models = $this->get_installed_models();
+    public static function get_params_from_db(int $contextid, int $catscaleid): array {
+        $models = self::get_installed_models();
         $catscaleids = [$catscaleid, ...catscale::get_subscale_ids($catscaleid)];
         foreach (array_keys($models) as $modelname) {
             $estdifficulties[$modelname] = model_item_param_list::load_from_db(
@@ -365,6 +390,15 @@ class model_strategy {
         }
         $personabilities = model_person_param_list::load_from_db($contextid, $catscaleids);
         return [$estdifficulties, $personabilities];
+    }
+
+    /**
+     * Returns the responses
+     *
+     * @return \local_catquiz\local\model\model_responses
+     */
+    public function get_responses(): model_responses {
+        return $this->responses;
     }
 
     /**
@@ -396,6 +430,17 @@ class model_strategy {
     }
 
     /**
+     * Sets the max-iterations value.
+     *
+     * @param int $maxiterations
+     * @return self
+     */
+    public function set_max_iterations(int $maxiterations): self {
+        $this->maxiterations = $maxiterations;
+        return $this;
+    }
+
+    /**
      * Returns an array of model instances indexed by their name.
      *
      * @return array<model_model>
@@ -403,7 +448,7 @@ class model_strategy {
     private function create_installed_models(): array {
         /** @var array<model_model> $instances */
         $instances = [];
-        $ignorelist = ['mixedraschbirnbaum', 'grmgeneralized'];
+        $ignorelist = ['grmgeneralized', 'grm', 'pcmgeneralized', 'pcm'];
 
         foreach (self::get_installed_models() as $name => $classname) {
             if (in_array($name, $ignorelist)) {
@@ -417,15 +462,15 @@ class model_strategy {
     /**
      * Select item from override.
      *
-     * @param int $itemid
+     * @param string $itemid
      * @param array $itemdifflists
      *
      * @return mixed
      *
      */
-    private function select_item_from_override(int $itemid, array $itemdifflists) {
+    private function select_item_from_override(string $itemid, array $itemdifflists) {
         global $CFG;
-        if ($item = $this->get_item_override($itemid, $itemdifflists)) {
+        if ($item = model_item_param_list::get_item_override($itemid, $itemdifflists)) {
             return $item;
         }
 
@@ -441,5 +486,58 @@ class model_strategy {
             throw new \Exception("Item override to a model that has no data");
         }
         return $item;
+    }
+
+    /**
+     * Save the progress of the calculation
+     *
+     * @param string $modelname
+     * @param null|model_item_param_list $itemparams
+     * @return void
+     */
+    private function set_calculated_progress(string $modelname, ?model_item_param_list $itemparams) {
+        $this->calculatedparams[$modelname][$this->iterations] = $itemparams;
+    }
+
+    /**
+     * Get the last value calculated for the given model
+     *
+     * @param string $modelname
+     * @return null|model_item_param_list
+     */
+    private function get_last_calculated_for_model(string $modelname): ?model_item_param_list {
+        return end($this->calculatedparams[$modelname]) ?? null;
+    }
+
+    /**
+     * Gets the startvalue for the specified model
+     *
+     * @param string $modelname
+     * @return null|model_item_param_list
+     * @throws Exception
+     */
+    private function get_startvalues_for_model(string $modelname): ?model_item_param_list {
+        switch ($modelname) {
+            case 'rasch':
+                return $this->get_last_calculated_for_model('rasch');
+            case 'raschbirnbaum':
+                return $this->get_last_calculated_for_model('raschbirnbaum')
+                    ?? $this->get_last_calculated_for_model('rasch');
+            case 'mixedraschbirnbaum':
+                return $this->get_last_calculated_for_model('mixedraschbirnbaum')
+                    ?? $this->get_last_calculated_for_model('raschbirnbaum');
+            default:
+                throw new \Exception("Unknown model $modelname");
+        }
+    }
+
+    /**
+     * Set the progress of ability calculation
+     *
+     * @param model_person_param_list $abilities
+     * @return void
+     */
+    private function set_calculated_abilities_progress(model_person_param_list $abilities) {
+        $this->calculatedabilities[$this->iterations] = $abilities;
     }
 }

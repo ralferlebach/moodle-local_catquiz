@@ -29,6 +29,8 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 
 use cache_helper;
+use Exception;
+use local_catquiz\catcontext;
 use local_catquiz\testenvironment;
 use local_wunderbyte_table\wunderbyte_table;
 use stdClass;
@@ -41,7 +43,6 @@ use stdClass;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catcontext_table extends wunderbyte_table {
-
     /**
      * Return value for timecreated column.
      *
@@ -179,7 +180,6 @@ class catcontext_table extends wunderbyte_table {
         ];
 
         return $OUTPUT->render_from_template('local_wunderbyte_table/component_actionbutton', $data);
-
     }
 
     /**
@@ -191,15 +191,15 @@ class catcontext_table extends wunderbyte_table {
      */
     public function action_deleteitem(int $id, string $data): array {
 
-        if (testenvironment::delete_testenvironment($id)) {
-            $success = 1;
+        try {
+            catcontext::delete($id);
             $message = get_string('success');
-        } else {
-            $success = 0;
-            $message = get_string('error');
+            $success = true;
+            cache_helper::purge_by_event('changesincatcontexts');
+        } catch (Exception $e) {
+            $message = $e->getMessage();
+            $success = false;
         }
-
-        cache_helper::purge_by_event('changesintestenvironments');
 
         return [
             'success' => $success,

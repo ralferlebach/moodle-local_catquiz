@@ -41,7 +41,7 @@ use stdClass;
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
-require_once($CFG->dirroot.'/local/catquiz/lib.php');
+require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
 /**
  * Returns rendered learning progress.
@@ -51,7 +51,6 @@ require_once($CFG->dirroot.'/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class learningprogress extends feedbackgenerator {
-
     /**
      *
      * @var int $primaryscaleid // The scale to be displayed in detail in the colorbar.
@@ -91,13 +90,12 @@ class learningprogress extends feedbackgenerator {
         $globalscale = catscale::return_catscale_object($this->get_progress()->get_quiz_settings()->catquiz_catscales);
         $globalscalename = $globalscale->name;
         $feedback = $OUTPUT->render_from_template(
-        'local_catquiz/feedback/learningprogress',
+            'local_catquiz/feedback/learningprogress',
             [
-            'title' => get_string('learningprogress_title', 'local_catquiz'),
             'description' => get_string(
                 'learningprogress_description',
                 'local_catquiz',
-                feedback_helper::add_quotes($globalscalename)
+                $globalscalename
             ),
             'progressindividual' => $abilityprogress['individual'],
             'progresscomparison' => $abilityprogress['comparison'],
@@ -236,7 +234,6 @@ class learningprogress extends feedbackgenerator {
                     $catscales[$catscaleid]->name
                 ) ?? $catscales[$catscaleid]->name;
             };
-
         } else {
             $isselectedscale = false;
             $tooltiptitle = $catscales[$catscaleid]->name;
@@ -246,13 +243,16 @@ class learningprogress extends feedbackgenerator {
         $questionpreviews = "";
         if ($questionsinscale = $this->get_progress()->get_playedquestions(true, $catscaleid)) {
             $numberofitems = ['itemsplayed' => count($questionsinscale)];
-            $questionpreviews = array_map(fn($q) => [
+            $questionpreviews = array_map(
+                fn($q) => [
                 'preview' => $this->render_questionpreview((object) $q)['body']['question']],
                 $questionsinscale
             );
-        } else if ($this->feedbacksettings->displayscaleswithoutitemsplayed
+        } else if (
+            $this->feedbacksettings->displayscaleswithoutitemsplayed
             || $catscaleid == $selectedscaleid
-            || $catscales[$catscaleid]->parentid == 0) {
+            || $catscales[$catscaleid]->parentid == 0
+        ) {
             $numberofitems = ['noplayed' => 0];
         } else if ($catscaleid != $selectedscaleid) {
             $numberofitems = "";
@@ -273,7 +273,6 @@ class learningprogress extends feedbackgenerator {
             'isselectedscale' => $isselectedscale,
             'tooltiptitle' => $tooltiptitle,
         ];
-
     }
 
     /**
@@ -304,7 +303,8 @@ class learningprogress extends feedbackgenerator {
         // Compare to other courses.
         // Find all courses before the end of the day of this attempt.
         $records = [];
-        foreach (catquiz::get_attempts(
+        foreach (
+            catquiz::get_attempts(
                 null,
                 $initialcontext['catscaleid'],
                 $courseid,
@@ -312,7 +312,8 @@ class learningprogress extends feedbackgenerator {
                 $initialcontext['contextid'],
                 null,
                 $end
-        ) as $record) {
+            ) as $record
+        ) {
             $json = json_decode($record->json);
             $prunedrecord = $record;
             $prunedrecord->json = json_encode((object) [
@@ -352,16 +353,16 @@ class learningprogress extends feedbackgenerator {
             ];
         }
         $progresscomparison = $this->render_chart_for_comparison(
-                $attemptsofuser,
-                $attemptsofpeers,
-                (array) $primarycatscale,
-                $timerange,
-                [$beginningoftimerange, $endtime]);
+            $attemptsofuser,
+            $attemptsofpeers,
+            (array) $primarycatscale,
+            $timerange,
+            [$beginningoftimerange, $endtime]
+        );
         return [
             'individual' => $progressindividual,
             'comparison' => $progresscomparison,
         ];
-
     }
 
     /**
@@ -409,9 +410,8 @@ class learningprogress extends feedbackgenerator {
 
         return [
             'chart' => $out,
-            'charttitle' => get_string('learningprogress_title', 'local_catquiz', feedback_helper::add_quotes($scalename)),
+            'charttitle' => get_string('learningprogresstitle', 'local_catquiz'),
         ];
-
     }
 
     /**
@@ -431,7 +431,8 @@ class learningprogress extends feedbackgenerator {
         array $attemptsofpeers,
         array $primarycatscale,
         int $timerange,
-        array $beginningandendofrange) {
+        array $beginningandendofrange
+    ) {
         global $OUTPUT;
 
         if (!isset($primarycatscale['name']) || !isset($primarycatscale['id'])) {
@@ -453,7 +454,6 @@ class learningprogress extends feedbackgenerator {
         $userattemptsbydate = [];
         $firstvalue = true;
         foreach ($alldates as $index => $key) {
-
             if (!isset($pa[$key]) && !isset($ua[$key]) && $firstvalue) {
                 unset($alldates[$index]);
                 continue;
@@ -497,9 +497,8 @@ class learningprogress extends feedbackgenerator {
 
         return [
             'chart' => $out,
-            'charttitle' => get_string('progress', 'local_catquiz', feedback_helper::add_quotes($scalename)),
+            'charttitle' => get_string('progress', 'local_catquiz', $scalename),
         ];
-
     }
 
     /**
@@ -539,7 +538,6 @@ class learningprogress extends feedbackgenerator {
             }
         }
         return $result;
-
     }
 
     /**
@@ -640,7 +638,8 @@ class learningprogress extends feedbackgenerator {
                 [
                     'ability' => strval($subscaleability),
                     'difference' => strval($difference),
-                ]);
+                ]
+            );
             $series->set_labels([0 => $stringforchartlegend]);
 
             $colorvalue = $this->get_color_for_personability(
@@ -658,7 +657,6 @@ class learningprogress extends feedbackgenerator {
             'chart' => $out,
             'charttitle' => get_string('personabilitycharttitle', 'local_catquiz', $primarycatscale['name']),
         ];
-
     }
 
     /**

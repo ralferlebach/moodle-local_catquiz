@@ -27,6 +27,7 @@ namespace local_catquiz\teststrategy;
 use cache;
 use core_component;
 use local_catquiz\feedback\feedbackclass;
+use local_catquiz\testenvironment;
 use local_catquiz\teststrategy\context\contextcreator;
 use local_catquiz\teststrategy\preselect_task\firstquestionselector;
 use MoodleQuickForm;
@@ -144,9 +145,10 @@ class info {
      *
      * @param MoodleQuickForm $mform
      * @param array $elements
+     * @param ?testenvironment $template
      * @return void
      */
-    public static function instance_form_definition(MoodleQuickForm &$mform, array &$elements) {
+    public static function instance_form_definition(MoodleQuickForm &$mform, array &$elements, ?testenvironment $template) {
 
         $data = $mform->getSubmitValues();
         $defaultvalues = $mform->_defaultValues;
@@ -173,6 +175,7 @@ class info {
                     LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB,
                     LOCAL_CATQUIZ_STRATEGY_ALLSUBS,
                     LOCAL_CATQUIZ_STRATEGY_FASTEST,
+                    LOCAL_CATQUIZ_STRATEGY_RELSUBS,
                     ])) {
                 $strategyhasstandarderrorperscale[] = $ts->id;
             }
@@ -254,7 +257,13 @@ class info {
                 ['size' => '3']
             ),
             ];
-        $mform->_defaultValues['maxquestionsgroup']['catquiz_minquestions'] = get_config('local_catquiz', 'minquestions_default');
+
+        if (!optional_param('catquiz_minquestions', 0, PARAM_FLOAT) &&
+            !isset($defaultvalues['maxquestionsgroup']['catquiz_minquestions'])) {
+            $mform->_defaultValues['maxquestionsgroup']['catquiz_minquestions'] =
+                get_config('local_catquiz', 'minquestions_default');
+        }
+
         $elements[] = $mform->addGroup(
             $maxquestionspertest,
             'maxquestionsgroup',
@@ -392,12 +401,42 @@ class info {
         $elements[] = $mform->addGroup(
             $timelimitgroup,
             'catquiz_timelimitgroup',
-            get_string('maxtimeperquestion', 'local_catquiz'));
+            get_string('maxtimeperquestion', 'local_catquiz')
+        );
         $mform->setType('catquiz_maxtimeperattempt', PARAM_INT);
         $mform->setType('catquiz_maxtimeperitem', PARAM_INT);
         $mform->hideIf('catquiz_timelimitgroup', 'catquiz_includetimelimit', 'neq', 1);
 
-        feedbackclass::instance_form_definition($mform, $elements);
+        $elements[] = $mform->addElement(
+            'advcheckbox',
+            'catquiz_showquestion',
+            get_string('questionfeedbackshow', 'local_catquiz')
+        );
+        $feedbackgroup = [
+            $mform->createElement(
+                'advcheckbox',
+                'catquiz_showquestionresponse',
+                get_string('questionfeedbackshowresponse', 'local_catquiz')
+            ),
+            $mform->createElement(
+                'advcheckbox',
+                'catquiz_showquestioncorrectresponse',
+                get_string('questionfeedbackshowcorrectresponse', 'local_catquiz')
+            ),
+            $mform->createElement(
+                'advcheckbox',
+                'catquiz_showquestionfeedback',
+                get_string('questionfeedbackshowfeedback', 'local_catquiz')
+            ),
+        ];
+        $elements[] = $mform->addGroup(
+            $feedbackgroup,
+            'catquiz_questionfeedbacksettings',
+            get_string('questionfeedbacksettings', 'local_catquiz')
+        );
+        $mform->hideIf('catquiz_questionfeedbacksettings', 'catquiz_showquestion', 'neq', 1);
+
+        feedbackclass::instance_form_definition($mform, $elements, $template);
     }
 
     /**
@@ -431,6 +470,12 @@ class info {
         $scoremodifiers = core_component::get_component_classes_in_namespace(
             "local_catquiz",
             'teststrategy\preselect_task'
+        );
+        // Filter out abstract class.
+        $scoremodifiers = array_filter(
+            $scoremodifiers,
+            fn ($classname) => $classname !== 'local_catquiz\teststrategy\preselect_task\strategyscore',
+            ARRAY_FILTER_USE_KEY
         );
         foreach (array_keys($scoremodifiers) as $classname) {
             $instances[$classname] = new $classname();

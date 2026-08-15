@@ -19,7 +19,6 @@ namespace local_catquiz\output;
 use html_writer;
 use local_catquiz\catquiz;
 use local_catquiz\data\dataapi;
-use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\output\catscaledashboard;
 use local_catquiz\subscription;
 use templatable;
@@ -34,7 +33,6 @@ use renderable;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catscales implements renderable, templatable {
-
     /** @var array of objects including all items */
     public array $items;
 
@@ -97,22 +95,25 @@ class catscales implements renderable, templatable {
             // Transform object catscale_structur into array, which is needed here.
             $element = get_object_vars($catscaleitem);
 
+            // Walk only elements on the current node, meaning with the given parentid.
+            if ($element['parentid'] !== $parentid) {
+                continue;
+            }
+
             if ($subscribed = subscription::return_subscription_state($USER->id, 'catscale', $element['id'])) {
                 $element['subscribed'] = true;
             } else {
                 $element['subscribed'] = false;
             }
 
-            if ($element['parentid'] == $parentid) {
-                $children = $this->build_tree($elements, $element['id']);
-                if ($children) {
-                    $element['children'] = $children;
-                } else {
-                    // Add empty array. That is needed for mustache templated in order to avoid infinit loop.
-                    $element['children'] = [];
-                }
-                $branch[] = $element;
+            $children = $this->build_tree($elements, $element['id']);
+            if ($children) {
+                $element['children'] = $children;
+            } else {
+                // Add empty array. That is needed for mustache templated in order to avoid infinit loop.
+                $element['children'] = [];
             }
+            $branch[] = $element;
         }
         $this->branchitems[$parentid] = $branch;
         return $branch;
@@ -132,7 +133,7 @@ class catscales implements renderable, templatable {
         foreach ($out as &$item) {
             $item['image'] = $output->get_generated_image_for_id($item['id']);
             $item['numberofchildren'] = count($item['children']);
-            list($sql, $params) = catquiz::get_sql_for_number_of_questions_in_scale($item['id']);
+            [$sql, $params] = catquiz::get_sql_for_number_of_questions_in_scale($item['id']);
             $item['numberofquestions'] = $DB->count_records_sql($sql, $params);
         }
         return $out;
@@ -147,7 +148,7 @@ class catscales implements renderable, templatable {
         $out = $this->itemtree;
         foreach ($out as &$item) {
             $item['numberofchildren'] = count($item['children']);
-            list($sql, $params) = catquiz::get_sql_for_number_of_questions_in_scale($item['id']);
+            [$sql, $params] = catquiz::get_sql_for_number_of_questions_in_scale($item['id']);
             $item['numberofquestions'] = $DB->count_records_sql($sql, $params);
         }
 
@@ -170,5 +171,4 @@ class catscales implements renderable, templatable {
         }
         return $out;
     }
-
 }

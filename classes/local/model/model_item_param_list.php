@@ -25,6 +25,8 @@
 namespace local_catquiz\local\model;
 use ArrayAccess;
 use ArrayIterator;
+use cache;
+use cache_helper;
 use coding_exception;
 use Countable;
 use ddl_exception;
@@ -36,6 +38,7 @@ use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\data\dataapi;
 use local_catquiz\event\testiteminscale_added;
+use local_catquiz\hash\question_hasher;
 use moodle_exception;
 use stdClass;
 use Traversable;
@@ -53,7 +56,12 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @copyright 2024 Wunderbyte GmbH <info@wunderbyte.at>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable {
+class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate {
+    /**
+     * @var bool Indicates if the list uses question hashes instead of IDs.
+     */
+    private bool $useshashes = false;
+
     /**
      * @var array<model_item_param>
      */
@@ -77,45 +85,106 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
     }
 
     /**
+     * Returns an item parameter list for the given arguments.
+     *
+     * @param int $contextid
+     * @param ?string $modelname
+     * @param array $catscaleids
+     * @return model_item_param_list
+     * @throws coding_exception
+     */
+    public static function get(int $contextid, ?string $modelname = null, array $catscaleids = []): self {
+        // Try to get the item params from the cache.
+        $cache = cache::make('local_catquiz', 'catquiz_item_params');
+        $selectedscaleshash = hash('crc32', implode('_', $catscaleids));
+        $cachekey = sprintf('itemparams_%s_%s_%s', $contextid, $modelname, $selectedscaleshash);
+        if ($itemparamlist = $cache->get($cachekey)) {
+            return $itemparamlist;
+        }
+
+        if (!$itemparamlist = self::load_from_db($contextid, $modelname, $catscaleids)) {
+            return new model_item_param_list();
+        }
+        $cache->set($cachekey, $itemparamlist);
+        return $itemparamlist;
+    }
+
+    /**
+     * Retrieve item parameters based on the context ID and question ID.
+     *
+     * @param int $contextid The context ID to search within.
+     * @param int $questionid The ID of the question for which to retrieve parameters.
+     * @return model_item_param_list The item parameters retrieved from the cache or database.
+     */
+    public static function get_by_questionid(int $contextid, $questionid): model_item_param_list {
+        // Try to get the item params from the cache.
+        $cache = cache::make('local_catquiz', 'catquiz_item_params');
+        $cachekey = sprintf('params_%d_%d', $contextid, $questionid);
+        if ($itemparamlist = $cache->get($cachekey)) {
+            return $itemparamlist;
+        }
+
+        if (!$itemparamlist = self::load_from_db_by_questionid($contextid, $questionid)) {
+            return new model_item_param_list();
+        }
+        $cache->set($cachekey, $itemparamlist);
+        return $itemparamlist;
+    }
+
+    /**
      * Try to load existing item params from the DB.
      * If none are found, it returns an empty list.
      *
      * @param int $contextid
-     * @param string $modelname
+     * @param ?string $modelname
      * @param array $catscaleids
      *
      * @return self
      *
      */
-    public static function load_from_db(int $contextid, string $modelname, array $catscaleids = []): self {
-        global $DB;
-        $models = model_strategy::get_installed_models();
-
-        if ($catscaleids) {
-            $itemrows = catquiz::get_itemparams($contextid, $catscaleids, $modelname);
-        } else {
-            $itemrows = $DB->get_records(
-                'local_catquiz_itemparams',
-                [
-                    'contextid' => $contextid,
-                    'model' => $modelname,
-                ],
-            );
-        }
+    public static function load_from_db(int $contextid, ?string $modelname = null, array $catscaleids = []): self {
+        $itemrows = catquiz::get_itemparams($contextid, $catscaleids, $modelname);
         $itemparameters = new model_item_param_list();
         foreach ($itemrows as $r) {
             // Skip NaN values here.
             if ($r->difficulty === "NaN") {
                 continue;
             }
-            $i = new model_item_param($r->componentid, $modelname, [], $r->status);
-            $parameternames = $models[$modelname]::get_parameter_names();
-            $params = [];
-            foreach ($parameternames as $paramname) {
-                $params[$paramname] = $r->$paramname;
-            }
-            $i->set_parameters($params);
+            $i = model_item_param::from_record($r);
             $itemparameters->add($i);
+        }
+
+        return $itemparameters;
+    }
+
+    /**
+     * Try to load existing item params from the DB.
+     * If none are found, it returns an empty list.
+     *
+     * @param int $contextid
+     * @param int $questionid
+     *
+     * @return self
+     *
+     */
+    public static function load_from_db_by_questionid(int $contextid, int $questionid): self {
+        global $DB;
+
+        $itemrows = $DB->get_records(
+            'local_catquiz_itemparams',
+            [
+                'contextid' => $contextid,
+                'componentid' => $questionid,
+            ],
+        );
+        $itemparameters = new model_item_param_list();
+        foreach ($itemrows as $r) {
+            // Skip NaN values here.
+            if ($r->difficulty === "NaN") {
+                continue;
+            }
+            $i = model_item_param::from_record($r);
+            $itemparameters->add($i, true);
         }
 
         return $itemparameters;
@@ -135,12 +204,18 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
      * Add a parameter
      *
      * @param model_item_param $itemparam
+     * @param bool $bymodel Index itemparams by model name instead of component id.
      *
      * @return self
      *
      */
-    public function add(model_item_param $itemparam) {
-        $this->itemparams[$itemparam->get_id()] = $itemparam;
+    public function add(model_item_param $itemparam, bool $bymodel = false) {
+        if ($bymodel) {
+            $this->itemparams[$itemparam->get_model_name()] = $itemparam;
+            return $this;
+        }
+
+        $this->itemparams[$itemparam->get_componentid()] = $itemparam;
         return $this;
     }
 
@@ -240,7 +315,7 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
     public function as_array(): array {
         $data = [];
         foreach ($this->itemparams as $i) {
-            $data[$i->get_id()] = $i;
+            $data[$i->get_componentid()] = $i;
         }
         return $data;
     }
@@ -268,62 +343,42 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
             $existingparams[$r->componentid][$r->model] = $r;
         };
 
+        // Do not save or update items that have a NAN as one of their parameter's values.
+        $validparams = array_filter(
+            $this->itemparams,
+            fn ($i) => $i->is_valid()
+        );
         $records = array_map(
-            function ($param) use ($contextid) {
-                $record = [
-                    'componentid' => $param->get_id(),
-                    'componentname' => 'question',
-                    'model' => $param->get_model_name(),
-                    'contextid' => $contextid,
-                    'status' => $param->get_status(),
-                ];
-                foreach ($param->get_params_array() as $paramname => $value) {
-                    if (abs($value) > model_item_param::MAX) {
-                        $value = $value < 0 ? model_item_param::MIN : model_item_param::MAX;
-                    }
-                    $record[$paramname] = $value;
-                }
-
-                return $record;
-            },
-            $this->itemparams
+            fn ($i) => $i->set_contextid($contextid)->to_record(),
+            $validparams
         );
 
         $updatedrecords = [];
         $newrecords = [];
         $now = time();
-        $models = model_strategy::get_installed_models();
         foreach ($records as $record) {
-            // Do not save or update items that have a NAN as one of their parameter's values.
-            $parameternames = $models[$record['model']]::get_parameter_names();
-            foreach ($parameternames as $parametername) {
-                if (is_nan($record[$parametername])) {
-                    continue;
-                }
-            }
-
-            $isexistingparam = array_key_exists($record['componentid'], $existingparams)
-                && array_key_exists($record['model'], $existingparams[$record['componentid']]);
+            $isexistingparam = array_key_exists($record->componentid, $existingparams)
+                && array_key_exists($record->model, $existingparams[$record->componentid]);
             // If record already exists, update it. Otherwise, insert a new record to the DB.
             if ($isexistingparam) {
-                $record['id'] = $existingparams[$record['componentid']][$record['model']]->id;
-                $record['timemodified'] = $now;
+                $record->id = $existingparams[$record->componentid][$record->model]->id;
+                $record->timemodified = $now;
                 $updatedrecords[] = $record;
             } else {
-                $record['timecreated'] = $now;
-                $record['timemodified'] = $now;
+                $record->timecreated = $now;
+                $record->timemodified = $now;
                 $newrecords[] = $record;
             }
         }
 
         if (!empty($newrecords)) {
             $DB->insert_records('local_catquiz_itemparams', $newrecords);
-
         }
 
         foreach ($updatedrecords as $r) {
             $DB->update_record('local_catquiz_itemparams', $r, true);
         }
+        cache_helper::purge_by_event('changesinitemparams');
     }
 
     /**
@@ -350,17 +405,18 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
 
         // Scale logic is in this function: get scale id and update in table.
         if ($label = $newrecord['label'] ?? false) {
-            $sql = "SELECT qv.questionid, qv.questionbankentryid as qbeid
+            $sql = "SELECT qv.questionid, qv.questionbankentryid AS qbeid
             FROM {question_bank_entries} qbe
 
             JOIN {question_versions} qv
             ON qbe.id = qv.questionbankentryid
 
             LEFT JOIN {local_catquiz_items} lci
-            ON lci.componentid=qv.questionid
+            ON lci.componentid = qv.questionid
 
             WHERE qbe.idnumber LIKE :label
-            GROUP BY qv.questionid, qv.questionbankentryid";
+            GROUP BY qv.questionid, qv.questionbankentryid
+            ORDER BY qv.questionid ASC";
 
             // We check if we find entries.
             $records = $DB->get_records_sql($sql, ['label' => $label]);
@@ -371,10 +427,33 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
                     'message' => get_string('labelidnotfound', 'local_catquiz', $newrecord['label']),
                  ];
             } else if (count($records) > 1) {
-                return [
-                    'success' => 0, // Update not successful.
-                    'message' => get_string('labelidnotunique', 'local_catquiz', $newrecord['label']),
-                 ];
+                // If we are here, it means there exists more than one question version.
+                // We want to only assign the most recent version to the scale, so:
+                // 1. Ensure that the scale does not contain older items
+                // 2. Continue as if this was a new question (add it to the scale).
+
+                $new = array_pop($records);
+
+                // 1. Remove old question versions from scale:
+                if ($catscale = $DB->get_record('local_catquiz_catscales', ['name' => $newrecord['catscalename']])) {
+                    foreach ($records as $r) {
+                        catscale::remove_testitem_from_scale($catscale->id, $r->questionid);
+                    }
+                    $newrecord['warning'] = get_string(
+                        'removedolderquestionversionsfromscale',
+                        'local_catquiz',
+                        [
+                            'label' => $label,
+                            'scale' => $newrecord['catscalename'],
+                        ]
+                    );
+                }
+
+                // 2. Continue with the most recent version of the question:
+                unset($newrecord['label']);
+                $newrecord['componentid'] = $new->questionid;
+                $returnarray = self::save_or_update_testitem_in_db($newrecord);
+                return $returnarray;
             }
 
             $record = reset($records);
@@ -426,32 +505,140 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
         }
 
         $newrecord['status'] = !empty($newrecord['status']) ? $newrecord['status'] : LOCAL_CATQUIZ_STATUS_UPDATED_MANUALLY;
-        if (!$record) {
-            // Make sure the record to insert has no id.
-            unset($newrecord['id']);
-            $id = $DB->insert_record('local_catquiz_itemparams', $newrecord);
-
-        } else {
-            $newrecord['id'] = $record->id;
-            if ($DB->update_record('local_catquiz_itemparams', (object) $newrecord, true)) {
-                $id = $newrecord['id'];
-            }
+        $itemparam = model_item_param::from_record((object) $newrecord);
+        if ($record) {
+            $itemparam->set_id($record->id);
         }
+        $itemparam->save();
+        // Ensure that the item points to the itemparam with the highest status.
+        catquiz::set_active_itemparam($itemparam->get_itemid());
+        cache_helper::purge_by_event('changesinitemparams');
         if (!empty($newrecord['warning'])) {
             return [
                 'success' => 2, // Update successfull with warning.
                 'message' => $newrecord['warning'],
-                'recordid' => $id,
+                'recordid' => $itemparam->get_id(),
              ];
         } else {
             return [
                 'success' => 1, // Update successfully.
                 'message' => get_string('success', 'core'),
-                'recordid' => $id,
+                'recordid' => $itemparam->get_id(),
              ];
+        }
+    }
 
+    /**
+     * Return item override.
+     *
+     * If the item has a manual override in one of the given lists, return that one.
+     *
+     * @param string $itemid
+     * @param array $itemparamlists Contains model_item_param_list elements.
+     *
+     * @return ?model_item_param
+     */
+    public static function get_item_override(string $itemid, array $itemparamlists): ?model_item_param {
+        $items = [];
+        foreach ($itemparamlists as $itemparams) {
+            if (! $itemparams[$itemid]) {
+                continue;
+            }
+            $items[] = $itemparams[$itemid];
         }
 
+        if (! $items) {
+            return null;
+        }
+
+        $manuallyconfirmed = array_filter($items, fn ($ip) =>  $ip->get_status() === LOCAL_CATQUIZ_STATUS_CONFIRMED_MANUALLY);
+        if ($manuallyconfirmed) {
+            return reset($manuallyconfirmed);
+        }
+
+        $manuallyupdated = array_filter($items, fn ($ip) => $ip->get_status() === LOCAL_CATQUIZ_STATUS_UPDATED_MANUALLY);
+        if ($manuallyupdated) {
+            return reset($manuallyupdated);
+        }
+
+        return null;
+    }
+
+    /**
+     * Return IDs of item params that are confirmed
+     *
+     * @return array
+     */
+    public function confirmed(): array {
+        $ids = array_filter(
+            array_map(
+                fn ($ip) => $ip->get_id(),
+                $this->itemparams
+            ),
+            fn ($id) => $this->itemparams[$id]->get_status() > LOCAL_CATQUIZ_STATUS_CALCULATED
+        );
+        return $ids;
+    }
+
+    /**
+     * Return the stored item params without the ones identified by the given IDs.
+     *
+     * @param array $itemids
+     * @param bool $clone
+     * @return model_item_param_list
+     */
+    public function without(array $itemids, bool $clone = true): self {
+        if ($clone) {
+            $obj = clone($this);
+            return $obj->without($itemids, false);
+        }
+        $this->itemparams = array_filter($this->itemparams, fn ($ip) => !in_array($ip->get_id(), $itemids));
+        return $this;
+    }
+
+    /**
+     * Only keep itemparams that are associated with the given component IDs.
+     *
+     * @param array $itemids
+     * @param bool $clone
+     * @return model_item_param_list
+     */
+    public function filter_by_componentids(array $itemids, bool $clone = true): self {
+        if ($clone) {
+            $obj = clone $this;
+            return $obj->filter_by_componentids($itemids, false);
+        }
+        $this->itemparams = array_filter($this->itemparams, fn ($ip) => in_array($ip->get_componentid(), $itemids));
+        return $this;
+    }
+
+    /**
+     * Sets the list to use question hashes instead of IDs.
+     *
+     * @return self
+     */
+    public function use_hashes(): self {
+        $this->useshashes = true;
+        return $this;
+    }
+
+    /**
+     * Convert question hashes to IDs.
+     * @return self
+     */
+    public function convert_hashes_to_ids(): self {
+        if (!$this->useshashes) {
+            return $this;
+        }
+
+        foreach ($this->itemparams as $itemparam) {
+            $questionid = question_hasher::get_questionid_from_hash($itemparam->get_componentid());
+            if ($questionid) {
+                $itemparam->set_componentid($questionid);
+            }
+        }
+        $this->useshashes = false;
+        return $this;
     }
 
     /**
@@ -468,22 +655,33 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
                     WHERE name = :name";
             // Check if catscale with this name exisits.
             // Check if parentscales are given in newrecord and if they match with the path of the found scale.
-            $catscale = $DB->get_record_sql($sql, ['name' => $newrecord['catscalename']]);
-            if ($catscale != false && !empty($newrecord['parentscalenames'])) {
-                $ancestorsfoundscale = catscale::get_ancestors($catscale->id, 2);
-                $ancestorsnewrecord = explode('|', $newrecord['parentscalenames']);
-                $ancestorsnewrecord = array_reverse($ancestorsnewrecord);
-                if ($ancestorsfoundscale == $ancestorsnewrecord) {
+            $match = null;
+            $catscales = $DB->get_records_sql($sql, ['name' => $newrecord['catscalename']]);
+            if (array_key_exists('parentscalenames', $newrecord)) {
+                $ancestorsnewrecord = array_reverse(explode('|', $newrecord['parentscalenames']));
+                // Check if any of the matching scales also has a matching list of ancestors.
+                foreach ($catscales as $candidatescale) {
+                    $ancestorsfoundscale = catscale::get_ancestors($candidatescale->id, 2);
+                    if ($ancestorsfoundscale == $ancestorsnewrecord) {
+                        $match = $candidatescale;
+                        break;
+                    }
+                }
+            }
+            if (!empty($newrecord['parentscalenames'])) {
+                if ($match) {
                     // Same path, so we match.
-                    $catscaleid = $catscale->id;
+                    $catscaleid = $match->id;
                     $newrecord['catscaleid'] = $catscaleid;
 
                     if (empty($newrecord['catscaleid'])) {
                         throw new moodle_exception('nocatscaleid', 'local_catquiz');
                     }
-                    if (catscale::is_assigned_to_parent_scale($catscaleid, $newrecord['componentid'])
-                    || catscale::is_assigned_to_subscale($catscaleid, $newrecord['componentid'])) {
-                        $infodata = new stdClass;
+                    if (
+                        catscale::is_assigned_to_parent_scale($catscaleid, $newrecord['componentid'])
+                        || catscale::is_assigned_to_subscale($catscaleid, $newrecord['componentid'])
+                    ) {
+                        $infodata = new stdClass();
                         $infodata->newscalename = catscale::get_link_to_catscale($newrecord['catscaleid']);
                         $infodata->componentid = $newrecord['componentid'];
                         $newrecord['error'] = get_string('itemassignedtoparentorsubscale', 'local_catquiz', $infodata);
@@ -492,7 +690,6 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
                 } else {
                     // If at this point, the scale is still empty, we need to create and use it.
                     self::create_scales_for_new_record($newrecord);
-
                 }
             } else if ($newrecord['parentscalenames'] == "0") {
                 // To enable import to parent scales, set 'parentscalenames' to "0".
@@ -509,15 +706,26 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
         if (isset($newrecord['error'])) {
             return $newrecord;
         }
-        // See if the item already exists.
+
+        // Assign corresponding context.
+        self::assign_catcontext($newrecord);
+
+        // See if a new context was created. If so, duplicate the existing items for this scale and assign the new context.
+        $allscales = catscale::get_ancestors($newrecord['catscaleid']);
+        $globalscaleid = end($allscales);
+        $contextid = $newrecord['contextid'] ?? null;
+        if (!$contextid && $context = catcontext::get_instance($globalscaleid)) {
+            $contextid = $context->id;
+        }        // See if the item already exists.
         $scalerecord = $DB->get_record("local_catquiz_items", [
             'componentid' => $newrecord['componentid'],
             'catscaleid' => (string) $newrecord['catscaleid'],
+            'contextid' => $contextid,
         ]);
 
         // Check if item is in scale otherwise add it.
         if (!$scalerecord) {
-            $columnstoinclude = ['componentname', 'componentid', 'catscaleid', 'lastupdated'];
+            $columnstoinclude = ['componentname', 'componentid', 'catscaleid', 'lastupdated', 'contextid'];
             $recordforquery = $newrecord;
             foreach ($recordforquery as $key => $value) {
                 if (!in_array($key, $columnstoinclude, true)) {
@@ -530,7 +738,7 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
                     $recordforquery["lastupdated"] = time();
                 }
             }
-            $DB->insert_record('local_catquiz_items', $recordforquery);
+            $itemid = $DB->insert_record('local_catquiz_items', $recordforquery, true);
 
             // Trigger event.
             $event = testiteminscale_added::create([
@@ -546,8 +754,7 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
             $event->trigger();
         }
 
-        // Assign corresponding context.
-        self::assign_catcontext($newrecord);
+        $newrecord['itemid'] = $itemid ?? $scalerecord->id;
         return $newrecord;
     }
 
@@ -594,9 +801,9 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
         $matching = true;
         // Store the records that were found to avoid duplications.
         $records = [];
+        $matchesparent = fn ($record, $parent) => !$parent || $record->parentid == $parent->id;
 
         foreach ($parents as $parent) {
-
             // Check if the scale exists.
             // We also need to look at the parentids.
             $searcharray = [
@@ -604,10 +811,19 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
             ];
             // Case where no parents are given, we know we want to create new root scale.
             if ($parentsgiven) {
-                $record = $DB->get_record('local_catquiz_catscales', $searcharray);
-                if ($record
+                $record = array_filter(
+                    $DB->get_records('local_catquiz_catscales', $searcharray),
+                    fn ($r) => $matchesparent($r, end($records))
+                );
+                if (count($record) > 1) {
+                    throw new \Exception("Multiple matching parent scales found.");
+                }
+                $record = end($record);
+                if (
+                    $record
                     && $matching
-                    && !in_array($record, $records)) {
+                    && !in_array($record, $records)
+                ) {
                     $catscaleid = $record->id;
                     $records[] = $record;
                     $newrecord['catscaleid'] = $catscaleid;
@@ -618,9 +834,11 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
             }
 
             // For new rootscales, add min & max scalevalue.
-            if ($catscaleid == 0
+            if (
+                $catscaleid == 0
                 && (isset($newrecord['minability'])
-                    || isset($newrecord['maxability']))) {
+                    || isset($newrecord['maxability']))
+            ) {
                 if (isset($newrecord['minability']) && (float) $newrecord['minability'] <= 0) {
                     $minscalevalue = $newrecord['minability'];
                 }
@@ -651,7 +869,6 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
             if ($parent == $newrecord['catscalename'] || !$parentsgiven) {
                 $newrecord['catscaleid'] = $catscaleid;
             }
-
         }
     }
     /**
@@ -709,17 +926,47 @@ class model_item_param_list implements ArrayAccess, IteratorAggregate, Countable
                 throw new UnexpectedValueException('Some property is missing from the given data');
             }
 
-            $i = new model_item_param($d->id, $d->model, [], $d->status);
-
-            $params = [];
-            foreach ($models[$d->model]::get_parameter_names() as $param) {
-                $params[$param] = $d->$param;
-            }
-            $i->set_parameters($params);
-
+            $i = model_item_param::from_record($d);
             $items->add($i);
         }
         return $items;
     }
 
+    /**
+     * Filter the items to those that appear in the given responses object.
+     *
+     * @param model_responses $responses
+     * @return model_item_param_list
+     */
+    public function filter_for_responses(model_responses $responses): self {
+        foreach (array_keys($this->itemparams) as $itemid) {
+            if (!in_array($itemid, $responses->get_item_ids())) {
+                $this->offsetUnset($itemid);
+            }
+        }
+        return $this;
+    }
+
+    /**
+     * Returns the item params as CSV rows
+     *
+     * @param bool $header
+     * @param int $precision
+     * @return array
+     */
+    public function as_csv(bool $header = false, int $precision = 3): array {
+        if ($header) {
+            $rows[] = implode(
+                ';',
+                array_merge(
+                    array_keys(reset($this->itemparams)->get_params_array()),
+                    ['model']
+                )
+            );
+        }
+        foreach ($this->itemparams as $ip) {
+            $rows[] = implode(';', array_merge([$ip->get_componentid()], $ip->get_params_array(), [$ip->get_model_name()]));
+        }
+        return $rows;
+    }
 }

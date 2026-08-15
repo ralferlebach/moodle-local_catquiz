@@ -40,7 +40,6 @@ use local_catquiz\teststrategy\progress;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class personability_loader implements contextloaderinterface {
-
     /**
      * @var progress $progress
      */
@@ -95,6 +94,12 @@ class personability_loader implements contextloaderinterface {
             $cache->set('abilitybeforeattempt', $personparams[$context['catscaleid']]);
             // For the lowest skillgap teststrategy, we need at least the ability of the main scale.
             $this->progress->set_ability($personparams[$context['catscaleid']], $context['catscaleid']);
+
+            if ($context['teststrategy'] == LOCAL_CATQUIZ_STRATEGY_ALLSUBS) {
+                foreach ($personparams as $scaleid => $value) {
+                    $this->progress->set_ability($value, $scaleid);
+                }
+            }
         }
         $context['person_ability'] = $personparams;
 
@@ -131,7 +136,7 @@ class personability_loader implements contextloaderinterface {
         foreach ($catscaleids as $scaleid) {
             $ability = ! empty($filteredparams[$scaleid])
                 ? floatval($filteredparams[$scaleid]->ability)
-                : self::DEFAULT_ABILITY;
+                : $this->get_default_ability();
                 $abilities[$scaleid] = $ability;
         }
 
@@ -142,5 +147,15 @@ class personability_loader implements contextloaderinterface {
             }
         }
         return $abilities;
+    }
+
+    /**
+     * Returns the default ability.
+     *
+     * Allows tests to override the default ability.
+     * @return float
+     */
+    public static function get_default_ability() {
+        return floatval(getenv('CATQUIZ_TESTING_ABILITY', true) ?: self::DEFAULT_ABILITY);
     }
 }

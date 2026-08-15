@@ -24,9 +24,15 @@
 
 namespace local_catquiz\teststrategy;
 
+use context_course;
+use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
+use local_catquiz\output\attemptfeedback;
+use LogicException;
+use moodle_database;
 use stdClass;
 
 /**
@@ -37,13 +43,124 @@ use stdClass;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class feedback_helper {
-
     /**
      * The precision to use when rounding numbers.
      *
      * @var int
      */
     const PRECISION = 2;
+
+    /**
+     * Get feedback data for attempts
+     *
+     * @param array $args Arguments containing courseid, numberofattempts, instanceid.
+     * @param context_course $context Current course context.
+     * @param stdClass $USER Global user object.
+     * @param stdClass $COURSE Global course object
+     * @param moodle_database $DB Global DB object
+     * @param stdClass $CFG Global config object
+     * @return array Feedback data structure or error message
+     */
+    public static function get_feedback_data(
+        array $args,
+        context_course $context,
+        stdClass $USER,
+        stdClass $COURSE,
+        moodle_database $DB,
+        stdClass $CFG
+    ) {
+        // Check capability.
+        $capability = has_capability('local/catquiz:view_users_feedback', $context);
+        $userid = !$capability ? $USER->id : null;
+
+        // Get course ID.
+        $currentcourseid = 0;
+        if (isset($COURSE) && !empty($COURSE->id) && $COURSE->id > 1) {
+            $currentcourseid = $COURSE->id;
+        }
+        $courseid = $args['courseid'] ?? $currentcourseid;
+        $attemptid = $args['attemptid'] ?? 0;
+
+        // Get attempt records.
+        $records = catquiz::return_data_from_attemptstable(
+            intval($args['numberofattempts'] ?? 1),
+            intval($args['instanceid'] ?? 0),
+            intval($courseid),
+            intval($attemptid),
+            intval($userid ?? -1)
+        );
+
+        if (!$records) {
+            return ['error' => get_string('attemptfeedbacknotyetavailable', 'local_catquiz')];
+        }
+
+        $output = [
+            'attempt' => [],
+        ];
+
+        foreach ($records as $record) {
+            if (!$attemptdata = json_decode($record->json)) {
+                if ($CFG->debug > 0) {
+                    throw new \moodle_exception(sprintf('Can not read attempt data of attempt %d', $record->attemptid));
+                } else {
+                    continue;
+                }
+            }
+            $strategyid = $attemptdata->teststrategy;
+            $feedbacksettings = new feedbacksettings($strategyid);
+
+            $attemptfeedback = new attemptfeedback($record->attemptid, $record->contextid, $feedbacksettings);
+            try {
+                $feedback = $attemptfeedback->get_feedback_for_attempt($record->json, $record->debug_info) ?? "";
+            } catch (\Throwable $t) {
+                $feedback = get_string('attemptfeedbacknotavailable', 'local_catquiz');
+            }
+
+            $timestamp = !empty($record->endtime) ? intval($record->endtime) : intval($record->timemodified);
+            $timeofattempt = userdate($timestamp, get_string('strftimedatetime', 'core_langconfig'));
+
+            if ($record->userid == $USER->id) {
+                $headerstring = get_string(
+                    'ownfeedbacksheader',
+                    'local_catquiz',
+                    $timeofattempt
+                );
+            } else if (isset($record->userid)) {
+                $userrecord = $DB->get_record('user', ['id' => $record->userid], 'firstname, lastname', IGNORE_MISSING);
+
+                $firstname = '';
+                $lastname = '';
+                if ($userrecord) {
+                    $firstname = $userrecord->firstname;
+                    $lastname = $userrecord->lastname;
+                }
+
+                $headerstring = get_string(
+                    'userfeedbacksheader',
+                    'local_catquiz',
+                    [
+                        'attemptid' => $record->attemptid,
+                        'time' => $timeofattempt,
+                        'firstname' => $firstname,
+                        'lastname' => $lastname,
+                        'userid' => $record->userid,
+                    ]
+                );
+            } else {
+                $headerstring = "";
+            }
+
+            $data = [
+                'feedback' => $feedback,
+                'header' => $headerstring,
+                'attemptid' => $record->attemptid,
+                'active' => empty($output['attempt']) ? true : false,
+            ];
+            $output['attempt'][] = $data;
+        }
+
+        return $output;
+    }
 
     /**
      * Write information about colorgradient for colorbar.
@@ -57,9 +174,11 @@ class feedback_helper {
     public function get_color_for_personability(array $quizsettings, float $personability, int $catscaleid): string {
         $default = LOCAL_CATQUIZ_DEFAULT_GREY;
         $abilityrange = $this->get_ability_range($catscaleid);
-        if (!$quizsettings ||
+        if (
+            !$quizsettings ||
             $personability < (float) $abilityrange['minscalevalue'] ||
-            $personability > (float) $abilityrange['maxscalevalue']) {
+            $personability > (float) $abilityrange['maxscalevalue']
+        ) {
             return $default;
         }
         $numberoffeedbackoptions = intval($quizsettings['numberoffeedbackoptionsselect'])
@@ -77,7 +196,6 @@ class feedback_helper {
                 $colorname = $quizsettings[$colorkey];
                 return $colorarray[$colorname];
             }
-
         }
         return $default;
     }
@@ -129,14 +247,12 @@ class feedback_helper {
             if (!$item->model) {
                 continue;
             }
+            $itemparam = model_item_param::from_record($item);
             $model = model_model::get_instance($item->model);
-            foreach ($model::get_parameter_names() as $paramname) {
-                $params[$paramname] = floatval($item->$paramname);
-            }
             foreach ($abilitysteps as $ability) {
                 $fisherinformation = $model->fisher_info(
                     ['ability' => $ability],
-                    $params
+                    $itemparam->get_params_array()
                 );
                 $stringkey = strval($ability);
 
@@ -146,7 +262,6 @@ class feedback_helper {
                     $fisherinfos[$stringkey] += $fisherinformation;
                 }
             }
-
         }
         return $fisherinfos;
     }
@@ -280,7 +395,6 @@ class feedback_helper {
                 break;
             case LOCAL_CATQUIZ_TIMERANGE_MONTH:
                 $dateformat = '%m';
-                $stringfordate = 'month';
                 break;
             case LOCAL_CATQUIZ_TIMERANGE_QUARTEROFYEAR:
                 $dateformat = '%m';
@@ -300,9 +414,11 @@ class feedback_helper {
                 [
                     'q' => $date,
                     'y' => $year,
-                ]);
+                ]
+            );
         } else if ($timerange === LOCAL_CATQUIZ_TIMERANGE_MONTH) {
-            return get_string('stringdate:month:' . $date, 'local_catquiz');
+            $year = userdate($timestamp, '%y');
+            return get_string('statistics_month_' . $date, 'local_catquiz', ['y' => $year]);
         } else {
             return get_string('stringdate:' . $stringfordate, 'local_catquiz', $date);
         }
@@ -354,7 +470,8 @@ class feedback_helper {
         // If the value is outside the defined range, return null.
         $lowest = sprintf('feedback_scaleid_limit_lower_%d_1', $scaleid);
         $highest = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $quizsettings->numberoffeedbackoptionsselect);
-        if (!isset($quizsettings->$lowest)
+        if (
+            !isset($quizsettings->$lowest)
             || !isset($quizsettings->$highest)
         ) {
             return null;
@@ -368,7 +485,6 @@ class feedback_helper {
             $i++;
             $ranglow = sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $i);
             $rangup = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $i);
-
         } while (
             !($quizsettings->$ranglow <= $value && $quizsettings->$rangup >= $value)
             && $i <= $quizsettings->numberoffeedbackoptionsselect
@@ -404,7 +520,7 @@ class feedback_helper {
      */
     public static function add_quotes(string $string) {
         $leftquote = get_string('catquiz_left_quote', 'local_catquiz');
-        $rightquote = '&rdquo;';
+        $rightquote = get_string('catquiz_right_quote', 'local_catquiz');
         return sprintf('%s%s%s', $leftquote, $string, $rightquote);
     }
 
@@ -433,13 +549,25 @@ class feedback_helper {
             $lowerlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_" . $j;
             $upperlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $j;
 
+            // It would probably be a good idea to define a class for $quizsettings.
+            // That way, we could more easily check if settings are valid or include a given CAT scale.
+            if (
+                !isset($quizsettings->$upperlimitkey)
+                || !isset($quizsettings->$lowerlimitkey)
+            ) {
+                throw new LogicException(
+                    'Trying to get feedback ranges for a CAT scale that is not configured in the given quizsettings'
+                );
+            }
+
             $feedbackrangestring = get_string(
                 'subfeedbackrange',
                 'local_catquiz',
                 [
                     'upperlimit' => self::localize_float($quizsettings->$upperlimitkey),
                     'lowerlimit' => self::localize_float($quizsettings->$lowerlimitkey),
-                ]);
+                ]
+            );
 
             $text = get_string('feedbackrange', 'local_catquiz', $j);
             if ($customlabels && property_exists($quizsettings, $feedbacktextkey)) {
@@ -479,6 +607,7 @@ class feedback_helper {
             $number,
             self::PRECISION,
             $locale['decimal_point'],
-            $locale['thousands_sep']);
+            $locale['thousands_sep']
+        );
     }
 }

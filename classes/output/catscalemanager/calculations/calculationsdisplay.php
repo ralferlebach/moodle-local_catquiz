@@ -18,6 +18,7 @@ namespace local_catquiz\output\catscalemanager\calculations;
 
 use html_writer;
 use local_catquiz\catquiz;
+use local_catquiz\form\remote_settings_form;
 use local_catquiz\table\event_log_table;
 use local_wunderbyte_table\filters\types\datepicker;
 use local_wunderbyte_table\filters\types\standardfilter;
@@ -32,13 +33,21 @@ use moodle_url;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class calculationsdisplay {
-
     /**
      * Constructor.
      *
      */
     public function __construct() {
+    }
 
+    /**
+     * Renders the remote calculation configuration form.
+     *
+     * @return void
+     */
+    public function render_remote_calculation_config() {
+        $form = new remote_settings_form();
+        return html_writer::div($form->render(), '', ['id' => 'remote_settings_form']);
     }
 
     /**
@@ -49,7 +58,7 @@ class calculationsdisplay {
 
         $table = new event_log_table('eventlogtable_calculations');
 
-        list($select, $from, $where, $filter, $params) = catquiz::return_sql_for_event_logs();
+        [$select, $from, $where, $filter, $params] = catquiz::return_sql_for_event_logs();
 
         $where .= " AND eventname LIKE :eventname ";
         $params['eventname'] = '%calculation_executed';
@@ -95,7 +104,7 @@ class calculationsdisplay {
 
         $table->define_baseurl(new moodle_url('/local/catquiz/downloads/download.php'));
 
-        list(, , $html) = $table->lazyouthtml(10, true);
+        [, , $html] = $table->lazyouthtml(10, true);
         return $html;
     }
 
@@ -106,6 +115,7 @@ class calculationsdisplay {
     public function export_data_array(): array {
 
         $data = [
+            'remoteconfig' => $this->render_remote_calculation_config(),
             'table' => $this->render_calculations_log_table(),
         ];
         return $data;

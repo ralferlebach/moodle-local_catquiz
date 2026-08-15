@@ -24,6 +24,7 @@
 
 namespace local_catquiz\teststrategy\strategy;
 
+use local_catquiz\local\result;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbackgenerator\comparetotestaverage;
 use local_catquiz\teststrategy\feedbackgenerator\customscalefeedback;
@@ -33,18 +34,8 @@ use local_catquiz\teststrategy\feedbackgenerator\learningprogress;
 use local_catquiz\teststrategy\feedbackgenerator\personabilities;
 use local_catquiz\teststrategy\feedbackgenerator\questionssummary;
 use local_catquiz\teststrategy\feedbacksettings;
-use local_catquiz\teststrategy\preselect_task\addscalestandarderror;
-use local_catquiz\teststrategy\preselect_task\checkbreak;
-use local_catquiz\teststrategy\preselect_task\checkitemparams;
-use local_catquiz\teststrategy\preselect_task\checkpagereload;
-use local_catquiz\teststrategy\preselect_task\fisherinformation;
-use local_catquiz\teststrategy\preselect_task\maximumquestionscheck;
-use local_catquiz\teststrategy\preselect_task\maybe_return_pilot;
-use local_catquiz\teststrategy\preselect_task\mayberemovescale;
-use local_catquiz\teststrategy\preselect_task\noremainingquestions;
-use local_catquiz\teststrategy\preselect_task\removeplayedquestions;
+use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\preselect_task\strategyclassicscore;
-use local_catquiz\teststrategy\preselect_task\updatepersonability;
 use local_catquiz\teststrategy\strategy;
 
 /**
@@ -55,7 +46,6 @@ use local_catquiz\teststrategy\strategy;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class classicalcat extends strategy {
-
     /**
      *
      * @var int $id // strategy id defined in lib.
@@ -68,29 +58,15 @@ class classicalcat extends strategy {
      */
     public feedbacksettings $feedbacksettings;
 
-
     /**
-     * Returns required score modifiers.
+     * Return the next question
      *
-     * @return array
-     *
+     * @return preselect_task
      */
-    public function get_preselecttasks(): array {
-        return [
-            checkitemparams::class,
-            checkbreak::class,
-            checkpagereload::class,
-            updatepersonability::class,
-            addscalestandarderror::class,
-            maximumquestionscheck::class,
-            removeplayedquestions::class,
-            noremainingquestions::class,
-            mayberemovescale::class,
-            fisherinformation::class,
-            maybe_return_pilot::class,
-            strategyclassicscore::class,
-        ];
+    public function get_selector(): preselect_task {
+        return new strategyclassicscore();
     }
+
     /**
      * Returns feedback generators.
      *
@@ -138,7 +114,7 @@ class classicalcat extends strategy {
         array $feedbackdata,
         int $catscaleid = 0,
         bool $feedbackonlyfordefinedscaleid = false
-        ): array {
+    ): array {
 
         // If Fraction is 1 (all answers correct) or 0 (all answers wrong) mark abilities as estimated.
         $estimated = $feedbacksettings->fraction == 1 || $feedbacksettings->fraction == 0;
@@ -152,10 +128,44 @@ class classicalcat extends strategy {
             if ($scaleid == $rootscaleid) {
                 $personabilities[$scaleid]['primary'] = true;
             }
-
         }
 
         return $personabilities;
     }
-}
 
+    /**
+     * In this strategy, we do not need to calculate this.
+     *
+     * @return result
+     */
+    protected function first_question_selector(): result {
+        return result::ok($this->context);
+    }
+
+    /**
+     * In this strategy, we do not need to calculate this.
+     *
+     * @return result
+     */
+    protected function last_time_played_penalty(): result {
+        return result::ok($this->context);
+    }
+
+    /**
+     * In this strategy, we do not need to calculate this.
+     *
+     * @return result
+     */
+    protected function filterbystandarderror(): result {
+        return result::ok($this->context);
+    }
+
+    /**
+     * In this strategy, we do not need to calculate this.
+     *
+     * @return result
+     */
+    protected function filterbytestinfo(): result {
+        return result::ok($this->context);
+    }
+}

@@ -37,9 +37,11 @@ use local_catquiz\local\result;
 use local_catquiz\local\status;
 use context_system;
 use Exception;
+use local_catquiz\data\dataapi;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_model;
 use local_catquiz\local\model\model_strategy;
+use local_catquiz\output\catscales;
 use moodle_exception;
 use moodle_url;
 use stdClass;
@@ -56,7 +58,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catscale {
-
     /**
      *
      * @var stdClass $catscale.
@@ -79,7 +80,6 @@ class catscale {
         $catscale = self::return_catscale_object($catscaleid);
         $this->catscale = $catscale;
         $this->catscaleid = $catscaleid;
-
     }
 
     /**
@@ -123,9 +123,10 @@ class catscale {
      * @return array
      */
     public static function return_catscaleids_and_links_for_testitemitem(
-            int $componentid,
-            string $componentname = "question",
-            bool $returnlink = false) {
+        int $componentid,
+        string $componentname = "question",
+        bool $returnlink = false
+    ) {
         global $DB;
 
         $sql = "SELECT catscaleid
@@ -145,7 +146,6 @@ class catscale {
         } else {
             return $catscaleids;
         }
-
     }
 
     /**
@@ -185,7 +185,7 @@ class catscale {
             $catscaleid = $this->catscaleid;
         }
         $catscale = self::return_catscale_object($catscaleid);
-        if ($catscale->minscalevalue && $catscale->maxscalevalue && $catscale->parentid == 0 ) {
+        if ($catscale->minscalevalue && $catscale->maxscalevalue && $catscale->parentid == 0) {
             return [
                 'minscalevalue' => $catscale->minscalevalue,
                 'maxscalevalue' => $catscale->maxscalevalue,
@@ -213,11 +213,12 @@ class catscale {
      *
      */
     public static function add_or_update_testitem_to_scale(
-            int $catscaleid,
-            int $testitemid,
-            int $status = LOCAL_CATQUIZ_TESTITEM_STATUS_UNDEFINED,
-            string $component = 'question',
-            bool $overridecatscale = false) {
+        int $catscaleid,
+        int $testitemid,
+        int $status = LOCAL_CATQUIZ_TESTITEM_STATUS_UNDEFINED,
+        string $component = 'question',
+        bool $overridecatscale = false
+    ) {
 
         global $DB;
         $context = context_system::instance();
@@ -282,11 +283,12 @@ class catscale {
                 ],
                 ]);
             $event->trigger();
-
         } else {
             // We won't allow an item to be assigned to both a scale and its sub- or parent-scale.
-            if (self::is_assigned_to_parent_scale($catscaleid, $testitemid)
-                || self::is_assigned_to_subscale($catscaleid, $testitemid)) {
+            if (
+                self::is_assigned_to_parent_scale($catscaleid, $testitemid)
+                || self::is_assigned_to_subscale($catscaleid, $testitemid)
+            ) {
                     return result::err(status::ERROR_TESTITEM_ALREADY_IN_RELATED_SCALE, $testitemid);
             }
 
@@ -335,7 +337,8 @@ class catscale {
                 FROM {local_catquiz_items}
                 WHERE componentid = :testitemid AND catscaleid $insql
             SQL,
-            array_merge($inparams, ['testitemid' => $testitemid]));
+            array_merge($inparams, ['testitemid' => $testitemid])
+        );
         return !empty($records);
     }
 
@@ -362,7 +365,8 @@ class catscale {
                 FROM {local_catquiz_items}
                 WHERE componentid = :testitemid AND catscaleid $insql
             SQL,
-            array_merge($inparams, ['testitemid' => $testitemid]));
+            array_merge($inparams, ['testitemid' => $testitemid])
+        );
         return !empty($records);
     }
 
@@ -420,7 +424,8 @@ class catscale {
         int $contextid,
         bool $includesubscales = false,
         ?string $orderby = null,
-        array $selectedsubscales = []): array {
+        array $selectedsubscales = []
+    ): array {
 
         if (empty($this->catscale)) {
             return [];
@@ -441,7 +446,7 @@ class catscale {
             $scaleids = array_merge($scaleids, $subscaleids);
         }
 
-        list($select, $from, $where, , $params) = catquiz::return_sql_for_catscalequestions(
+        [$select, $from, $where, , $params] = catquiz::return_sql_for_catscalequestions(
             $scaleids,
             $contextid,
             [],
@@ -500,10 +505,7 @@ class catscale {
      *
      */
     public static function get_subscale_ids(?int $catscaleid = null): array {
-        global $DB;
-
-        $all = $DB->get_records("local_catquiz_catscales", null, "", "id, parentid");
-
+        $all = dataapi::get_all_catscales();
         return self::add_subscales($catscaleid, $all);
     }
 
@@ -545,13 +547,12 @@ class catscale {
 
         [$insql, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED);
 
-        $where = ' parentid '. $insql;
+        $where = ' parentid ' . $insql;
         $params = array_merge($params, $inparams);
         $sql = "SELECT $select FROM $from WHERE $where";
         $subscaleids = $DB->get_records_sql($sql, $params);
 
         return $subscaleids;
-
     }
 
     /**
@@ -567,8 +568,7 @@ class catscale {
      *
      */
     public static function get_ancestors(int $catscaleid, int $returnnames = 1) {
-        global $DB;
-        $all = $DB->get_records("local_catquiz_catscales", null, "", "id, parentid, name");
+        $all = dataapi::get_all_catscales();
         $ancestorsintarray = self::add_parentscales($catscaleid, $all);
         switch ($returnnames) {
             case 1:
@@ -648,7 +648,8 @@ class catscale {
         int $context,
         string $component,
         string $linktext = "",
-        $url = '/local/catquiz/manage_catscales.php') {
+        $url = '/local/catquiz/manage_catscales.php'
+    ) {
 
         if (empty($linktext)) {
             $linktext = get_string('testitem', 'local_catquiz', $testitemid);
@@ -667,6 +668,14 @@ class catscale {
 
     /**
      * This function duplicates all the records from the old context for the new context.
+     *
+     * Following steps are performed for each existing local_catquiz_itemparams item parameter:
+     * 1. Duplicate the item parameter
+     * 2. Duplicate the local_catquiz_items item that pointed to the previous
+     *    item parameter and make it point to the new item parameter via its
+     *    `activeparamid` field.
+     * 3. Update the duplicated item parameter so that its `itemid` field points to the duplicated item.
+     *
      * @param mixed $scaleid
      * @param mixed $oldcontextid
      * @param mixed $contextid
@@ -684,23 +693,101 @@ class catscale {
 
         $scaleids = self::get_subscale_ids($scaleid);
         $scaleids[] = $scaleid;
-        list($inorequal, $params) = $DB->get_in_or_equal($scaleids, SQL_PARAMS_NAMED);
+        [$inorequal, $params] = $DB->get_in_or_equal($scaleids, SQL_PARAMS_NAMED);
 
         $sql = "SELECT lcip.*
                 FROM {local_catquiz_items} lci
                 JOIN {local_catquiz_itemparams} lcip
-                ON (lci.componentid=lcip.componentid AND lci.componentname=lcip.componentname)
+                ON (lci.id = lcip.itemid AND lci.contextid = lcip.contextid)
                 WHERE lci.catscaleid $inorequal
                 AND lcip.contextid=:contextid";
         $params['catscaleid'] = $scaleid;
         $params['contextid'] = $oldcontextid;
+
+        $itemparams = $DB->get_records_sql($sql, $params);
+
+        // This holds a mapping of old itemparam to new itemparam, where the key is the old ID and the value the new ID.
+        $mapping = [];
+        $saved = [];
+        foreach ($itemparams as $record) {
+            $record->contextid = $contextid;
+            $oldid = $record->id;
+            unset($record->id);
+            $newid = $DB->insert_record('local_catquiz_itemparams', $record);
+            $record->id = $newid;
+            $saved[$newid] = $record;
+            $mapping[$oldid] = $newid;
+        }
+
+        if (!$mapping) {
+            return;
+        }
+
+        // For each new record that was pointed to as active param by a local_catquiz_items item, we duplicate that item
+        // for the new context and update the active param to point to the duplicated item param.
+        [$insql, $inparams] = $DB->get_in_or_equal(
+            array_keys($mapping),
+            SQL_PARAMS_NAMED,
+            'inoldparams'
+        );
+        $sql = <<<SQL
+            SELECT *
+            FROM {local_catquiz_items} lci
+            WHERE lci.contextid = :contextid
+            AND lci.activeparamid $insql
+        SQL;
+
+        $newitems = [];
+        $originalitems = $DB->get_records_sql(
+            $sql,
+            array_merge(['contextid' => $oldcontextid], $inparams)
+        );
+        foreach ($originalitems as $i) {
+            $i->contextid = $contextid;
+            $i->activeparamid = $mapping[$i->activeparamid];
+            unset($i->id);
+            $newitemid = $DB->insert_record('local_catquiz_items', $i);
+            $newitems[$i->activeparamid] = $newitemid;
+        }
+
+        // Now update the item params to point to the duplicated items.
+        foreach ($newitems as $ipid => $itemid) {
+            $itemparam = $saved[$ipid];
+            $itemparam->itemid = $itemid;
+            $DB->update_record('local_catquiz_itemparams', $itemparam, true);
+        }
+    }
+
+    /**
+     * This function duplicates all the records from the old context for the new context.
+     *
+     * @param int $scaleid
+     * @param int $oldcontextid
+     * @param int $contextid
+     * @return void
+     * @throws dml_exception
+     */
+    public static function duplicate_items_for_scale_with_new_contextid(int $scaleid, int $oldcontextid, int $contextid) {
+        global $DB;
+
+        // Make sure we don't do unnecessary work.
+        if ($oldcontextid == $contextid) {
+            return;
+        }
+
+        $sql = "SELECT lci.*
+                FROM {local_catquiz_items} lci
+                WHERE lci.catscaleid = :scaleid
+                AND lci.contextid = :contextid";
+        $params['contextid'] = $oldcontextid;
+        $params['scaleid'] = $scaleid;
 
         $records = $DB->get_records_sql($sql, $params);
 
         foreach ($records as $record) {
             $record->contextid = $contextid;
             unset($record->id);
-            $DB->insert_record('local_catquiz_itemparams', $record);
+            $DB->insert_record('local_catquiz_items', $record);
         }
     }
 

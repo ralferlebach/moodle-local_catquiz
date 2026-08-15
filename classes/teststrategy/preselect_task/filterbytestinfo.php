@@ -24,14 +24,11 @@
 
 namespace local_catquiz\teststrategy\preselect_task;
 
-use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\result;
-use local_catquiz\local\status;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\progress;
-use local_catquiz\wb_middleware;
 
 /**
  * Includes or excludes scales based on their information
@@ -42,8 +39,7 @@ use local_catquiz\wb_middleware;
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class filterbytestinfo extends preselect_task implements wb_middleware {
-
+class filterbytestinfo extends preselect_task {
     /**
      * @var progress
      */
@@ -53,16 +49,23 @@ class filterbytestinfo extends preselect_task implements wb_middleware {
      * Run method.
      *
      * @param array $context
-     * @param callable $next
      *
      * @return result
      *
      */
-    public function run(array &$context, callable $next): result {
+    public function run(array &$context): result {
+        $this->context = $context;
         $this->progress = $context['progress'];
 
-        if (!in_array($context['teststrategy'], [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB])) {
-            return $next($context);
+        if (
+            !in_array($context['teststrategy'], [
+            LOCAL_CATQUIZ_STRATEGY_LOWESTSUB,
+            LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB,
+            LOCAL_CATQUIZ_STRATEGY_RELSUBS,
+            LOCAL_CATQUIZ_STRATEGY_ALLSUBS,
+            ])
+        ) {
+            return result::ok($context);
         }
 
         foreach ($this->progress->get_abilities() as $scaleid => $ability) {
@@ -91,8 +94,8 @@ class filterbytestinfo extends preselect_task implements wb_middleware {
                 $this->progress->without_pilots()->get_playedquestions(true, $scaleid)
             );
             foreach ($remainingitems as $i) {
-                if (in_array($i->get_id(), $playeditems->get_item_ids())) {
-                    $remainingitems->offsetUnset($i->get_id());
+                if (in_array($i->get_componentid(), $playeditems->get_item_ids())) {
+                    $remainingitems->offsetUnset($i->get_componentid());
                 }
             }
 
@@ -109,48 +112,40 @@ class filterbytestinfo extends preselect_task implements wb_middleware {
                 $playeditems
             );
 
-            $enable = $testpotential > 1 / $this->context['se_max'] ** 2;
+            $enable = $testpotential + $testinformation > 1 / $this->context['se_max'] ** 2;
             $exclude = $testpotential + $testinformation <= 1 / $this->context['se_max'] ** 2
                 && count($this->progress->get_playedquestions(true, $scaleid)) >= $this->context['min_attempts_per_scale'];
             if ($exclude && $this->progress->is_active_scale($scaleid)) {
-                $this->progress->drop_scale($scaleid);
+                $this->progress->deactivate_scale($scaleid, true);
                 getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(
-                    "%d: deact %s%s",
+                    "%d: [TI] deact %s%s",
                     count($this->progress->get_playedquestions()),
                     (catscale::return_catscale_object($scaleid))->name,
                     PHP_EOL
                 );
                 continue;
             }
-            if ($enable && !$this->progress->is_active_scale($scaleid)) {
+            if ($enable  && !$this->progress->is_dropped_scale($scaleid) && !$this->progress->is_active_scale($scaleid)) {
+                // For allsubs, do not directly activate the scale but remove the lock so that it can be activated again
+                // if all scales have reached the minimum questions per scale.
+                if ($context['teststrategy'] === LOCAL_CATQUIZ_STRATEGY_ALLSUBS) {
+                    $this->progress->unlock_scale($scaleid);
+                    continue;
+                }
                 // Enable the scale.
-                $this->progress->add_active_scale($scaleid);
+                $this->progress->add_active_scale($scaleid, true);
                 getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(
-                    "%d: enact %s%s",
+                    "%d: [TI] enact %s (%f >= %f)%s",
                     count($this->progress->get_playedquestions()),
                     (catscale::return_catscale_object($scaleid))->name,
+                    $testpotential + $testinformation,
+                    1 / $this->context['se_max'] ** 2,
                     PHP_EOL
                 );
                 continue;
             }
         }
 
-        return $next($context);
-    }
-
-    /**
-     * Get required context keys.
-     *
-     * @return array
-     *
-     */
-    public function get_required_context_keys(): array {
-        return [
-            'questions',
-            'progress',
-            'se_max',
-            'progress',
-            'pp_min_inc',
-        ];
+        return result::ok($context);
     }
 }

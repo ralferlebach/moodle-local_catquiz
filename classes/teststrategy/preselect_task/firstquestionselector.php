@@ -24,18 +24,13 @@
 
 namespace local_catquiz\teststrategy\preselect_task;
 
-use local_catquiz\catcontext;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
-use local_catquiz\local\model\model_person_param_list;
-use local_catquiz\local\model\model_responses;
-use local_catquiz\local\model\model_strategy;
 use local_catquiz\local\result;
 use local_catquiz\local\status;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\progress;
-use local_catquiz\wb_middleware;
 use moodle_exception;
 
 /**
@@ -45,8 +40,7 @@ use moodle_exception;
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class firstquestionselector extends preselect_task implements wb_middleware {
-
+class firstquestionselector extends preselect_task {
     /**
      * @var int
      */
@@ -87,21 +81,21 @@ class firstquestionselector extends preselect_task implements wb_middleware {
      * Run preselect task.
      *
      * @param array $context
-     * @param callable $next
      *
      * @return result
      *
      */
-    public function run(array &$context, callable $next): result {
+    public function run(array &$context): result {
         $this->progress = $context['progress'];
+        $this->context = $context;
         // Don't do anything if this is not the first question of the current attempt.
         if (!$this->progress->is_first_question()) {
-            return $next($context);
+            return result::ok($context);
         }
 
         // In the classic test, we do not change how the first question is selected.
         if ($context['teststrategy'] == LOCAL_CATQUIZ_STRATEGY_CLASSIC) {
-            return $next($context);
+            return result::ok($context);
         }
 
         if ($context['questions_ordered_by'] !== 'difficulty') {
@@ -121,7 +115,7 @@ class firstquestionselector extends preselect_task implements wb_middleware {
         if ($context['firstquestion_use_existing_data']) {
             // We already have a person param for this user, so use it.
             if ($this->has_ability()) {
-                return $next($context);
+                return result::ok($context);
             }
         }
 
@@ -133,7 +127,7 @@ class firstquestionselector extends preselect_task implements wb_middleware {
             $context['person_ability'][$this->context['catscaleid']] = $startability;
             $context['progress']->set_ability($startability, $context['catscaleid']);
             $context['se'][$this->context['catscaleid']] = 1.0;
-            return $next($context);
+            return result::ok($context);
         }
 
         $items = $this->get_items();
@@ -144,22 +138,7 @@ class firstquestionselector extends preselect_task implements wb_middleware {
             $se
         );
         $context['se'][$this->context['catscaleid']] = $se;
-        return $next($context);
-    }
-
-    /**
-     * Get required context keys.
-     *
-     * @return array
-     *
-     */
-    public function get_required_context_keys(): array {
-        return [
-            'selectfirstquestion',
-            'questions_ordered_by',
-            'testid',
-            'progress',
-        ];
+        return result::ok($context);
     }
 
     /**
@@ -276,7 +255,7 @@ class firstquestionselector extends preselect_task implements wb_middleware {
      * @return bool
      */
     protected function has_ability() {
-        boolval(catquiz::get_person_abilities(
+        return boolval(catquiz::get_person_abilities(
             $this->context['contextid'],
             [$this->context['catscaleid']],
             [$this->context['userid']]
@@ -333,20 +312,12 @@ class firstquestionselector extends preselect_task implements wb_middleware {
     private function get_items() {
         // Create item list.
         $catscaleids = [$this->context['catscaleid'], ...catscale::get_subscale_ids($this->context['catscaleid'])];
-        $responsedata = catcontext::getresponsedatafromdb($this->context['contextid'], $catscaleids);
-        $responses = (new model_responses())->setdata($responsedata);
-        $modelstrategy = new model_strategy($responses);
         $catscalecontext = catscale::get_context_id($this->context['catscaleid']);
-        $itemparamlists = [];
-        $personparams = model_person_param_list::load_from_db($catscalecontext, $catscaleids);
-        foreach (array_keys($modelstrategy->get_installed_models()) as $model) {
-            $itemparamlists[$model] = model_item_param_list::load_from_db(
-                $catscalecontext,
-                $model,
-                $catscaleids
-            );
-        }
-        $items = $modelstrategy->select_item_model($itemparamlists, $personparams);
+        $items = model_item_param_list::get(
+            $catscalecontext,
+            null,
+            $catscaleids
+        );
         return $items;
     }
 }

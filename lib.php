@@ -42,6 +42,7 @@ define('LOCAL_CATQUIZ_STRATEGY_LOWESTSUB', 4);
 define('LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB', 5);
 define('LOCAL_CATQUIZ_STRATEGY_PILOT', 6);
 define('LOCAL_CATQUIZ_STRATEGY_CLASSIC', 7);
+define('LOCAL_CATQUIZ_STRATEGY_RELSUBS', 8);
 
 // Testiem Status in Scale.
 define('LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE', 0);
@@ -77,6 +78,7 @@ define('LOCAL_CATQUIZ_DEFAULT_NUMBER_OF_FEEDBACKS_PER_SCALE', 2);
 // Sortorder.
 define('LOCAL_CATQUIZ_SORTORDER_ASC', 1);
 define('LOCAL_CATQUIZ_SORTORDER_DESC', 2);
+define('LOCAL_CATQUIZ_SORTORDER_BY_NAME', 3);
 
 // Scaleid.
 define('LOCAL_CATQUIZ_PRIMARYCATSCALE_PARENT', 0);
@@ -111,8 +113,10 @@ function local_catquiz_render_navbar_output(\renderer_base $renderer) {
     global $CFG;
 
     // Early bail out conditions.
-    if (!isloggedin() || isguestuser()
-        || !has_capability('local/catquiz:canmanage', context_system::instance())) {
+    if (
+        !isloggedin() || isguestuser()
+        || !has_capability('local/catquiz:canmanage', context_system::instance())
+    ) {
         return;
     }
 
@@ -121,7 +125,7 @@ function local_catquiz_render_navbar_output(\renderer_base $renderer) {
         id="dropdownMenuButton" aria-haspopup="true" aria-expanded="false" href="'
             . $CFG->wwwroot . '/local/catquiz/manage_catscales.php"
         role="button">
-        '. get_string('catquiz', 'local_catquiz') .'
+        ' . get_string('catquiz', 'local_catquiz') . '
         </a>
     </div>';
 
@@ -136,5 +140,35 @@ function local_catquiz_render_navbar_output(\renderer_base $renderer) {
  * @return void
  */
 function local_catquiz_coursemodule_standard_elements($fromform, $fields) {
+}
 
+/**
+ * Get saved files to display images in feedbacks
+ *
+ * @param mixed $course
+ * @param mixed $birecordorcm
+ * @param mixed $context
+ * @param mixed $filearea
+ * @param mixed $args
+ * @param bool $forcedownload
+ * @param array $options
+ */
+function local_catquiz_pluginfile($course, $birecordorcm, $context, $filearea, $args, $forcedownload, array $options = []) {
+    $isfeedbackfile = strpos($filearea, 'feedback_files') === 0;
+    if (!$isfeedbackfile) {
+        send_file_not_found();
+    }
+
+    $fs = get_file_storage();
+    $filename = array_pop($args);
+    $filepath = '/';
+    $itemid = intval($args[0]);
+    if (
+        (!$file = $fs->get_file($context->id, 'local_catquiz', $filearea, $itemid, $filepath, $filename))
+        || $file->is_directory()
+    ) {
+        send_file_not_found();
+    }
+    \core\session\manager::write_close();
+    send_stored_file($file, null, 0, $forcedownload, $options);
 }

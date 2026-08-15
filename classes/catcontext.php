@@ -26,12 +26,14 @@
 namespace local_catquiz;
 
 use cache_helper;
+use dml_exception;
 use local_catquiz\event\context_created;
 use local_catquiz\event\context_updated;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_responses;
 use local_catquiz\local\model\model_strategy;
+use moodle_exception;
 use stdClass;
 
 defined('MOODLE_INTERNAL') || die();
@@ -49,7 +51,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catcontext {
-
     /**
      * $id
      *
@@ -164,7 +165,7 @@ class catcontext {
     }
     /**
      * Get a context via scaleid.
-     * We create scale-based contexts for uploaded items without context assigned.+
+     * We create scale-based contexts for uploaded items without context assigned.
      * This is to check if a context was already created for this scale.
      *
      * @param int $scaleid
@@ -220,91 +221,6 @@ class catcontext {
     }
 
     /**
-     * Create response from DB.
-     *
-     * @param int $contextid
-     * @param array $catscaleids
-     * @param int|null $testitemid
-     * @param int|null $userid
-     *
-     * @return array
-     *
-     */
-    public static function getresponsedatafromdb(
-            int $contextid,
-            array $catscaleids,
-            ?int $testitemid = null,
-            ?int $userid = null): array {
-        global $DB;
-
-        list ($sql, $params) = catquiz::get_sql_for_model_input($contextid, $catscaleids, $testitemid, $userid);
-        $data = $DB->get_records_sql($sql, $params);
-        $inputdata = self::db_to_modelinput($data);
-        return $inputdata;
-    }
-
-    /**
-     * Returns data in the following format
-     *
-     * "1" => Array( //userid
-     *     "comp1" => Array( // component
-     *         "1" => Array( //questionid
-     *             "fraction" => 0,
-     *             "max_fraction" => 1,
-     *             "min_fraction" => 0,
-     *             "qtype" => "truefalse",
-     *             "timestamp" => 1646955326
-     *         ),
-     *         "2" => Array(
-     *             "fraction" => 0,
-     *             "max_fraction" => 1,
-     *             "min_fraction" => 0,
-     *             "qtype" => "truefalse",
-     *             "timestamp" => 1646955332
-     *         ),
-     *         "3" => Array(
-     *             "fraction" => 1,
-     *             "max_fraction" => 1,
-     *             "min_fraction" => 0,
-     *             "qtype" => "truefalse",
-     *             "timestamp" => 1646955338
-     *
-     * @param mixed $data
-     *
-     * @return array
-     */
-    private static function db_to_modelinput($data): array {
-        $modelinput = [];
-        // Check: use only most recent answer for each question.
-
-        foreach ($data as $row) {
-            $entry = [
-                'fraction' => $row->fraction,
-                'max_fraction' => $row->maxfraction,
-                'min_fraction' => $row->minfraction,
-                'qtype' => $row->qtype,
-                'timestamp' => $row->timecreated,
-                'id' => $row->id,
-            ];
-
-            if (!array_key_exists($row->userid, $modelinput)) {
-                $modelinput[$row->userid] = ["component" => []];
-            }
-
-            if (! array_key_exists($row->questionid, $modelinput[$row->userid]['component'])) {
-                $modelinput[$row->userid]['component'][$row->questionid] = $entry;
-                continue;
-            }
-
-            // If we are here, there is already an entry. Only update it if this answer is newer than the last one.
-            if ($row->id > $modelinput[$row->userid]['component'][$row->questionid]['id']) {
-                $modelinput[$row->userid]['component'][$row->questionid] = $entry;
-            }
-        }
-        return $modelinput;
-    }
-
-    /**
      * Save or update catcontext class.
      *
      * @param ?stdClass $newrecord
@@ -335,7 +251,6 @@ class catcontext {
                 ],
                 ]);
             $event->trigger();
-
         } else {
             $this->id = $DB->insert_record('local_catquiz_catcontext', $this->return_as_class());
 
@@ -403,28 +318,6 @@ class catcontext {
     }
 
     /**
-     * Get_strategy.
-     *
-     * @param int $catscaleid
-     *
-     * @return model_strategy
-     *
-     */
-    public function get_strategy(int $catscaleid): model_strategy {
-        $catscaleids = [$catscaleid, ...catscale::get_subscale_ids($catscaleid)];
-        $responsedata = self::getresponsedatafromdb($this->id, $catscaleids);
-        $responses = (new model_responses())->setdata($responsedata);
-        $options = json_decode($this->json, true) ?? [];
-        $savedabilities = model_person_param_list::load_from_db($this->id, $catscaleids);
-        $installedmodels = model_strategy::get_installed_models();
-        $olditemparams = [];
-        foreach (array_keys($installedmodels) as $model) {
-            $olditemparams[$model] = model_item_param_list::load_from_db($this->id, $model, $catscaleids);
-        }
-        return new model_strategy($responses, $options, $savedabilities, $olditemparams);
-    }
-
-    /**
      * Add a default context that contains all test items.
      *
      * @return void
@@ -469,5 +362,39 @@ class catcontext {
      */
     public function gettimecalculated(): int {
         return $this->timecalculated;
+    }
+
+    /**
+     * Delete a CAT context.
+     *
+     * @param int $id
+     *
+     * @return bool
+     * @throws moodle_exception
+     */
+    public static function delete(int $id) {
+        global $DB;
+
+        // The default context should never be deleted.
+        $defaultcontextid = catquiz::get_default_context_id();
+        if ($id == $defaultcontextid) {
+            throw new moodle_exception('cannotdeletedefaultcontext', 'local_catquiz');
+        }
+
+        try {
+            $DB->delete_records('local_catquiz_catcontext', ['id' => $id]);
+        } catch (dml_exception $e) {
+            throw new moodle_exception('error');
+        }
+    }
+
+    /**
+     * Returns the options stored in the json field
+     *
+     * @return array
+     */
+    public function get_options(): array {
+        $options = json_decode($this->json, true) ?? [];
+        return $options;
     }
 }

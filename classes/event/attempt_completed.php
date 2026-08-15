@@ -35,7 +35,6 @@ use moodle_url;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class attempt_completed extends catquiz_event_base {
-
     /**
      * Init parameters.
      *
@@ -67,6 +66,10 @@ class attempt_completed extends catquiz_event_base {
     public function get_description() {
         $data = $this->data;
         $other = $this->get_other_data();
+
+        if (!$other) {
+            return '';
+        }
 
         $catscaleid = $other->catscaleid;
         $linktoscale = catscale::get_link_to_catscale($catscaleid);

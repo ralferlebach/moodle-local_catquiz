@@ -30,7 +30,7 @@ use context_module;
 use dml_exception;
 use local_catquiz\catquiz;
 use local_catquiz\local\status;
-use mod_adaptivequiz\local\attempt\attempt;
+use local_catquiz\local\attempt\attempt;
 use mod_adaptivequiz\local\attempt\attempt_state;
 use stdClass;
 
@@ -48,7 +48,6 @@ require_once("$CFG->dirroot/mod/adaptivequiz/locallib.php");
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cancel_expired_attempts extends \core\task\scheduled_task {
-
     /**
      * Allow some extra time before closing an expired attempt.
      * @var float
@@ -141,7 +140,7 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
      */
     private function initialize() {
         $this->currenttime = time();
-        $this->defaultmaxtime = 60 * 60 * get_config('local_catquiz', 'maximum_attempt_duration_hours');
+        $this->defaultmaxtime = 60 * 60 * intval(get_config('local_catquiz', 'maximum_attempt_duration_hours') ?? 24);
         $this->load_max_times_per_test();
     }
 
@@ -164,7 +163,7 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
                 continue;
             }
 
-            $maxtimeperattempt = $settings->catquiz_timelimitgroup->catquiz_maxtimeperattempt * 60;
+            $maxtimeperattempt = floatval($settings->catquiz_timelimitgroup->catquiz_maxtimeperattempt ?: 60) * 60;
             if ($settings->catquiz_timelimitgroup->catquiz_timeselect_attempt == 'h') {
                 $maxtimeperattempt *= 60;
             }
