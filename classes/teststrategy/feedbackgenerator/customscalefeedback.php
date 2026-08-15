@@ -286,7 +286,7 @@ class customscalefeedback extends feedbackgenerator {
                     } else if (isset($errorarray['semaxdefined'])) {
                         return get_string('error:semax', 'local_catquiz', $errorarray);
                     }
-                    // Fall through.
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
                 case "nminscale":
                     return get_string('error:nminscale', 'local_catquiz', $errorarray);
                 case "fraction":
@@ -295,7 +295,7 @@ class customscalefeedback extends feedbackgenerator {
                     } else if ($errorarray['fraction'] == 0) {
                         return get_string('error:fraction0', 'local_catquiz');
                     }
-                    // Fall through.
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
                 default:
                     return get_string('noscalesfound', 'local_catquiz');
             }

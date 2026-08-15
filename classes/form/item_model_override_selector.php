@@ -102,8 +102,10 @@ class item_model_override_selector extends dynamic_form {
                 $class .= " activeparam";
             }
             $form->addElement('html', '<div class="' . $class . '">');
-            $heading = get_string('pluginname', sprintf('catmodel_%s', $param->get_model_name()));
-            $form->addElement('html', '<h3>' . $heading . '</h3>');
+            $form->addElement(
+                'html',
+                '<h3>' . get_string('pluginname', sprintf('catmodel_%s', $param->get_model_name())) . '</h3>'
+            );
             $statusstring = get_string(sprintf('itemstatus_%d', $param->get_status()), 'local_catquiz');
             $form->addElement(
                 'html',

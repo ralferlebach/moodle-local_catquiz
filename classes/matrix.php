@@ -27,8 +27,6 @@ namespace local_catquiz;
 
 use ArrayObject;
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Matrix basic implementation.
  *
@@ -461,15 +459,4 @@ class matrix extends ArrayObject {
     public function issquare() {
         return $this->rows == $this->cols;
     }
-}
-
-use RuntimeException;
-
-/**
- * Simple matrix exception.
- *
- * @author Romain Vermot <romain@vermot.eu>
- * @license MIT
- */
-class MatrixException extends RuntimeException {
 }

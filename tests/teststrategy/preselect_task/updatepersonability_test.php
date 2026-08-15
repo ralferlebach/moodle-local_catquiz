@@ -74,12 +74,11 @@ final class updatepersonability_test extends TestCase {
 
         $context['progress'] = $progressstub;
 
-        $returncontext = fn($context) => result::ok($context);
         // The updatepersonaiblitytesting class is a slightly modified version
         // of the updatepersonability class that just overrides parts that load
         // data from the DB or cache.
         $updatepersonability = new updatepersonability_testing();
-        $result = $updatepersonability->process($context, $returncontext);
+        $result = $updatepersonability->run($context);
         $this->assertEquals($expected, $result->unwrap()['skip_reason']);
     }
 
@@ -110,6 +109,7 @@ final class updatepersonability_test extends TestCase {
                     'contextid' => 1,
                     'catscaleid' => 1,
                     'userid' => $USER->id,
+                    'attemptid' => 123,
                     // Can be null here, because for pilot questions the ability will not be updated.
                     'fake_response_data' => [$USER->id => []],
                 ],
@@ -125,6 +125,7 @@ final class updatepersonability_test extends TestCase {
                         2 => 0.77,
                     ],
                     'contextid' => 1,
+                    'attemptid' => 123,
                     'catscaleid' => 1,
                     'userid' => $USER->id,
                     'questions' => [

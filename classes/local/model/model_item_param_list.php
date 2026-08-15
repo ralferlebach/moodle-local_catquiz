@@ -38,6 +38,7 @@ use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\data\dataapi;
 use local_catquiz\event\testiteminscale_added;
+use local_catquiz\hash\question_hasher;
 use moodle_exception;
 use stdClass;
 use Traversable;
@@ -56,6 +57,11 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate {
+    /**
+     * @var bool Indicates if the list uses question hashes instead of IDs.
+     */
+    private bool $useshashes = false;
+
     /**
      * @var array<model_item_param>
      */
@@ -433,7 +439,14 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
                     foreach ($records as $r) {
                         catscale::remove_testitem_from_scale($catscale->id, $r->questionid);
                     }
-                    $newrecord['warning'] = 'Removed older question versions from scale';
+                    $newrecord['warning'] = get_string(
+                        'removedolderquestionversionsfromscale',
+                        'local_catquiz',
+                        [
+                            'label' => $label,
+                            'scale' => $newrecord['catscalename'],
+                        ]
+                    );
                 }
 
                 // 2. Continue with the most recent version of the question:
@@ -596,6 +609,35 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
             return $obj->filter_by_componentids($itemids, false);
         }
         $this->itemparams = array_filter($this->itemparams, fn ($ip) => in_array($ip->get_componentid(), $itemids));
+        return $this;
+    }
+
+    /**
+     * Sets the list to use question hashes instead of IDs.
+     *
+     * @return self
+     */
+    public function use_hashes(): self {
+        $this->useshashes = true;
+        return $this;
+    }
+
+    /**
+     * Convert question hashes to IDs.
+     * @return self
+     */
+    public function convert_hashes_to_ids(): self {
+        if (!$this->useshashes) {
+            return $this;
+        }
+
+        foreach ($this->itemparams as $itemparam) {
+            $questionid = question_hasher::get_questionid_from_hash($itemparam->get_componentid());
+            if ($questionid) {
+                $itemparam->set_componentid($questionid);
+            }
+        }
+        $this->useshashes = false;
         return $this;
     }
 

@@ -128,14 +128,21 @@ class feedback_helper {
             } else if (isset($record->userid)) {
                 $userrecord = $DB->get_record('user', ['id' => $record->userid], 'firstname, lastname', IGNORE_MISSING);
 
+                $firstname = '';
+                $lastname = '';
+                if ($userrecord) {
+                    $firstname = $userrecord->firstname;
+                    $lastname = $userrecord->lastname;
+                }
+
                 $headerstring = get_string(
                     'userfeedbacksheader',
                     'local_catquiz',
                     [
                         'attemptid' => $record->attemptid,
                         'time' => $timeofattempt,
-                        'firstname' => $userrecord->firstname,
-                        'lastname' => $userrecord->lastname,
+                        'firstname' => $firstname,
+                        'lastname' => $lastname,
                         'userid' => $record->userid,
                     ]
                 );

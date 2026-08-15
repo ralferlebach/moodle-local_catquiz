@@ -34,11 +34,8 @@ use dml_exception;
 use external_api;
 use external_value;
 use external_single_structure;
-use local_catquiz\catquiz_test;
 use local_catquiz\testenvironment;
 use moodle_exception;
-use qbank_previewquestion\question_preview_options;
-use question_bank;
 use question_display_options;
 use question_engine;
 use require_login_exception;
@@ -84,7 +81,10 @@ class render_question_with_response extends external_api {
             'attemptid' => $attemptid,
         ]);
 
+        require_login();
         $PAGE->set_context(context_system::instance());
+        $PAGE->set_url('/local/catquiz/external/render_question_with_response.php');
+
         // Hack alert: Forcing bootstrap_renderer to initiate moodle page.
         $OUTPUT->header();
         $PAGE->start_collecting_javascript_requirements();

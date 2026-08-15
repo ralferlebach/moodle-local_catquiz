@@ -12,6 +12,8 @@ amd/node_modules
 .vscode/launch.json
 workspace.php
 workspace2.php
+/catquizcentralhub/
+/connectivity/
 
 # Interne Sitzungsdokumentation - nicht ausliefern/hochladen.
 /doc/

@@ -27,14 +27,11 @@
 namespace local_catquiz\external;
 
 use context_system;
-use Exception;
 use external_api;
 use external_function_parameters;
 use external_value;
 use external_single_structure;
 use local_catquiz\execute_method_from_webservice;
-use local_catquiz\output\catscalemanager\questions\cards\datacard;
-use moodle_url;
 
 defined('MOODLE_INTERNAL') || die();
 

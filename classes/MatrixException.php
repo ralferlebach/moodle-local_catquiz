@@ -15,33 +15,23 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Interface wb_middleware.
+ * Class for math functions;
  *
  * @package local_catquiz
+ * @author Daniel Pasterk
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 namespace local_catquiz;
 
-use local_catquiz\local\result;
+use RuntimeException;
 
 /**
- * Interface for middleware classes
+ * Simple matrix exception.
  *
- * @package local_catquiz
- * @copyright 2024 Wunderbyte GmbH
- * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @author Romain Vermot <romain@vermot.eu>
+ * @license MIT
  */
-interface wb_middleware {
-    /**
-     * Process action.
-     *
-     * @param array $context Contains related data that might be needed by middleware instances
-     * @param callable $next
-     *
-     * @return result
-     *
-     */
-    public function process(array &$context, callable $next): result;
+class MatrixException extends RuntimeException {
 }

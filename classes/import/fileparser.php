@@ -394,19 +394,15 @@ class fileparser {
      */
     protected function cast_string_to_float($value) {
 
-        // Strip a leading Excel text marker (apostrophe), e.g. '-3,321 -> -3,321. A leading
-        // apostrophe is never part of a valid number, so this can only rescue an otherwise
-        // failing parse (such as spreadsheet exports that keep the text-format marker).
-        if (is_string($value) && isset($value[0]) && $value[0] === "'") {
-            $value = substr($value, 1);
-        }
+        $floatstring = trim((string)$value);
+        // Spreadsheet exports may wrap numbers or prefix them with apostrophes.
+        $floatstring = trim($floatstring, "\"'");
+        $floatstring = preg_replace("/^'+/", '', $floatstring);
 
         // Check if separated by comma.
-        $commacount = substr_count($value, ',');
+        $commacount = substr_count($floatstring, ',');
         if ($commacount == 1) {
-            $floatstring = str_replace(',', '.', $value);
-        } else {
-            $floatstring = $value;
+            $floatstring = str_replace(',', '.', $floatstring);
         }
         $validation = filter_var($floatstring, FILTER_VALIDATE_FLOAT);
         if ($validation !== false) {
@@ -446,7 +442,10 @@ class fileparser {
         }
         foreach ($this->columns as $column) {
             if (
-                !in_array($column->columnname, array_values($this->fieldnames))
+                !in_array(
+                    $column->columnname,
+                    array_values($this->fieldnames)
+                )
                 && $column->mandatory == true
             ) {
                 // Should all keys be there or only mandatory?

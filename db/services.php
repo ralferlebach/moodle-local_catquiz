@@ -41,7 +41,6 @@ $services = [
         ],
 ];
 
-
 $functions = [
         'local_catquiz_delete_catscale' => [
                 'classname' => 'local_catquiz\external\delete_catscale',

@@ -546,11 +546,20 @@ class catquiz {
      * @param array $catscaleids
      * @param ?int $testitemid
      * @param ?int $userid
+     * @param bool $joinitems Join items
+     * @param int $joinability If given, join the ability of the scale with the given ID.
      *
      * @return array
      *
      */
-    public static function get_sql_for_model_input($contextid, array $catscaleids, ?int $testitemid, ?int $userid) {
+    public static function get_sql_for_model_input(
+        $contextid,
+        array $catscaleids,
+        ?int $testitemid,
+        ?int $userid,
+        bool $joinitems = false,
+        int $joinability = 0
+    ) {
         global $DB;
         $testitemids = $testitemid ? [$testitemid] : [];
         $userids = $userid ? [$userid] : [];
@@ -561,8 +570,32 @@ class catquiz {
         );
          [, $from, $where, $params] = self::get_sql_for_stat_base_request($testitemids, [$contextid], $userids);
 
-        $sql = "SELECT "
-            . $DB->sql_concat("qas.id", "'-'", "qas.userid", "'-'", "q.id", "'-'", "lci.id") . " uniqueid,
+        $joinitemssql = "";
+        if ($joinitems) {
+            $joinitemssql = <<<SQL
+                JOIN {local_catquiz_items} lci
+                    ON q.id = lci.componentid
+                    AND lci.catscaleid $insql
+            SQL;
+        }
+
+        $joinabilitysql = "";
+        $abilityparams = [];
+        $selectability = "";
+        if ($joinability) {
+            $selectability = ", lcp.ability ability";
+            $abilityparams = ['scaleability' => $joinability, 'scalecontext' => $contextid];
+            $joinabilitysql = <<<SQL
+                JOIN {local_catquiz_personparams} lcp
+                    ON lcp.userid = qas.userid
+                    AND lcp.catscaleid = :scaleability
+                    AND lcp.contextid = :scalecontext
+            SQL;
+        }
+
+        $selectlci = $joinitems ? "lci.id" : "'-'";
+        $select = $DB->sql_concat("qas.id", "'-'", "qas.userid", "'-'", "q.id", "'-'", $selectlci);
+        $sql = "SELECT $select uniqueid,
             qas.id,
             qas.userid,
             qa.questionid,
@@ -571,17 +604,18 @@ class catquiz {
             qa.minfraction,
             qa.maxfraction,
             q.qtype,
-            qas.timecreated
+            qas.timecreated,
+            qa.questionusageid attemptid
+            $selectability
         FROM $from
         JOIN {question} q
             ON qa.questionid = q.id
-        JOIN {local_catquiz_items} lci
-            ON q.id = lci.componentid
-            AND lci.catscaleid $insql
+        $joinitemssql
+        $joinabilitysql
         WHERE $where
         ";
 
-        return [$sql, array_merge($inparams, $params)];
+        return [$sql, array_merge($inparams, $params, $abilityparams)];
     }
 
     /**
@@ -2559,6 +2593,18 @@ class catquiz {
     }
 
     /**
+     * Returns the itemparam for the given conditions
+     *
+     * @param array $conditions Use field as array key and required value as array value, e.g. ['contextid' => 1]
+     * @return ?stdClass
+     */
+    public static function get_itemparams_for($conditions = []): ?stdClass {
+        global $DB;
+        $record = $DB->get_record('local_catquiz_itemparams', $conditions);
+        return $record ?: null;
+    }
+
+    /**
      * Save an item param
      *
      * @param stdClass $record The record to save
@@ -2605,14 +2651,57 @@ class catquiz {
     }
 
     /**
+     * Retrieve an item together with its parameters.
+     *
+     * @param int $componentid The ID of the component.
+     * @param string $model The model of the item parameter
+     * @param int $contextid The context of the item parameter.
+     *
+     * @return ?stdClassThe record object retrieved from the database or null if not found.
+     */
+    public function get_item_with_params(int $componentid, string $model, int $contextid): ?stdClass {
+        global $DB;
+
+        $sql = <<<SQL
+                SELECT *
+                FROM {local_catquiz_items} i
+                JOIN {local_catquiz_itemparams} ip ON ip.itemid = i.id
+                    AND ip.contextid = :contextid
+                WHERE i.componentid = :componentid
+                    AND ip.model = :model
+SQL;
+        return $DB->get_record_sql(
+            $sql,
+            [
+                'componentid' => $componentid,
+                'model' => $model,
+                'contextid' => $contextid,
+            ]
+        ) ?: null;
+    }
+
+    /**
      * Update an item record in the 'local_catquiz_items' table.
      *
      * @param stdClass $item The item object containing the updated data.
+     *
      * @return void
      */
     public static function update_item(stdClass $item): void {
         global $DB;
         $DB->update_record('local_catquiz_items', $item);
+    }
+
+    /**
+     * Check if a context is actively used by any test.
+     *
+     * @param int $contextid The context ID to check
+     *
+     * @return bool True if the context is used by any test, false otherwise
+     */
+    public static function is_active_context(int $contextid): bool {
+        global $DB;
+        return $DB->record_exists('local_catquiz_tests', ['contextid' => $contextid]);
     }
 
     /**
@@ -2627,11 +2716,12 @@ class catquiz {
         // Get all contexts.
         $contexts = $DB->get_records_sql(
             <<<SQL
-                SELECT * FROM {local_catquiz_catscales} s
+                SELECT DISTINCT s.*
+                FROM {local_catquiz_catscales} s
                 JOIN {local_catquiz_catcontext} cc ON s.contextid = cc.id
                 WHERE s.contextid IS NOT NULL
-                  AND cc.starttimestamp <= :now1 AND cc.endtimestamp >= :now2
-                ;
+                AND cc.starttimestamp <= :now1 AND cc.endtimestamp >= :now2
+            ;
             SQL,
             [
                 'now1' => $now,
@@ -2654,5 +2744,150 @@ class catquiz {
             'invalid',
             'complete',
         ];
+    }
+
+        /**
+         * Create items in a new context.
+         *
+         * For each item parameter in the new context:
+         * 1. Get the corresponding item from either context
+         * 2. If an item is in active use in the old context (used by a test), create a new item (copy).
+         * 3. Otherwise update the existing item with new context and active parameter
+         * 4. Update all parameters to point to the correct item
+         *
+         * @param int $newcontextid The ID of the context to create items in
+         * @param ?int $oldcontextid The ID of the old context, if any
+         * @return void
+         */
+    public function create_items_in_new_context(int $newcontextid, ?int $oldcontextid): void {
+        global $DB;
+
+        // Copy item parameters that are present in the old context but not in
+        // the new one from old context to the new.
+        // E.g., if we fetched 100 params from the central instance but locally we have 150, copy
+        // the remaining 50 params.
+        if ($oldcontextid) {
+            $remainingparams = $this->get_params_from_old_context($oldcontextid, $newcontextid);
+            $remainingparams = array_map(
+                function ($param) use ($newcontextid) {
+                    $param->contextid = $newcontextid;
+                    $param->id = null;
+                    return $param;
+                },
+                $remainingparams
+            );
+            $DB->insert_records('local_catquiz_itemparams', $remainingparams);
+        }
+
+        // Decide if we should just replace existing items with the new contextid or create new items.
+        $createnew = false;
+        if (!$oldcontextid || $this->is_active_context($oldcontextid)) {
+            $createnew = true;
+        }
+
+        // Create a mapping of questionid -> item.
+        // If it exists in both old and new context, the mapping maps to the new context.
+        $qid2item = [];
+        $contextids = $oldcontextid
+            ? array_reverse(range($oldcontextid, $newcontextid))
+            : [$newcontextid];
+        [$insql, $inparams] = $DB->get_in_or_equal($contextids, SQL_PARAMS_NAMED, 'contextid');
+        foreach ($DB->get_records_select('local_catquiz_items', "contextid $insql", $inparams) as $i) {
+            if (!isset($qid2item[$i->componentid]) || $i->contextid > $qid2item[$i->componentid]->contextid) {
+                $qid2item[$i->componentid] = $i;
+            }
+        }
+
+        $activeparam = [];
+        $transaction = $DB->start_delegated_transaction();
+        $newparams = $DB->get_records('local_catquiz_itemparams', ['contextid' => $newcontextid]);
+        $qid2params = [];
+        foreach ($newparams as $np) {
+            $qid2params[$np->componentid][] = $np;
+        }
+
+        $tosave = [];
+
+        foreach ($newparams as $ip) {
+            $questionid = $ip->componentid;
+            $item = $qid2item[$questionid];
+
+            if ($createnew && $item->contextid == $oldcontextid) {
+                unset($item->id);
+            }
+
+            // For each itemparam in the new context, get the one with the
+            // highest `status` value. If there a multiple, pick the first one.
+            if (
+                !array_key_exists($questionid, $activeparam)
+                || $ip->status > $activeparam[$questionid]->status
+            ) {
+                $activeparam[$questionid] = $ip;
+                $item->activeparamid = $ip->id;
+                $tosave[$questionid] = $item;
+            }
+        }
+
+        foreach ($tosave as $questionid => $item) {
+            if ($createnew && $item->contextid == $oldcontextid) {
+                $item->contextid = $newcontextid;
+                $itemid = $DB->insert_record('local_catquiz_items', $item, true);
+            } else {
+                // This item is already in the database because it was 1)
+                // inserted when itemparams were fetched or 2) it existed
+                // already and will be udpated.
+                $item->contextid = $newcontextid;
+                $DB->update_record('local_catquiz_items', $item);
+                $itemid = $item->id;
+            }
+            foreach ($qid2params[$questionid] as $p) {
+                $p->itemid = $itemid;
+                $DB->update_record('local_catquiz_itemparams', $p, true);
+            }
+        }
+        $DB->commit_delegated_transaction($transaction);
+    }
+
+    /**
+     * Get scales by their labels.
+     * @param array $labels Array of scale labels
+     * @return array Array of scale objects
+     */
+    public function get_scales_by_labels(array $labels) {
+        global $DB;
+
+        if (empty($labels)) {
+            return [];
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal($labels);
+        return $DB->get_records_select('local_catquiz_catscales', "label $insql", $params);
+    }
+
+    /**
+     * Returns itemparams that are present in the oldcontext but not the new one
+     *
+     * @param int $oldcontextid
+     * @param int $newcontextid
+     *
+     * @return array
+     */
+    public function get_params_from_old_context(int $oldcontextid, int $newcontextid): array {
+        global $DB;
+        $sql = <<<SQL
+            SELECT *
+            FROM {local_catquiz_itemparams} itemsouter
+            WHERE contextid = :oldcontextid
+            AND itemsouter.componentid NOT IN (
+                SELECT componentid
+                FROM {local_catquiz_itemparams}
+                WHERE contextid = :newcontextid
+            )
+        SQL;
+        $params = [
+            'oldcontextid' => $oldcontextid,
+            'newcontextid' => $newcontextid,
+        ];
+        return $DB->get_records_sql($sql, $params);
     }
 }

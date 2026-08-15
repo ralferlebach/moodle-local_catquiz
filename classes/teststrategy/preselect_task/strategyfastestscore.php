@@ -26,7 +26,6 @@ namespace local_catquiz\teststrategy\preselect_task;
 
 use local_catquiz\local\result;
 use local_catquiz\teststrategy\preselect_task;
-use local_catquiz\wb_middleware;
 
 /**
  * Add a score to each question and sort questions descending by score
@@ -35,17 +34,16 @@ use local_catquiz\wb_middleware;
  * @copyright 2024 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class strategyfastestscore extends preselect_task implements wb_middleware {
+final class strategyfastestscore extends preselect_task {
     /**
      * Run preselect task.
      *
      * @param array $context
-     * @param callable $next
      *
      * @return result
      *
      */
-    public function run(array &$context, callable $next): result {
+    public function run(array &$context): result {
         foreach ($context['questions'] as $question) {
             $question->score = $question->lasttimeplayedpenaltyfactor
                 * $question->fisherinformation[$context['catscaleid']];
@@ -61,18 +59,5 @@ final class strategyfastestscore extends preselect_task implements wb_middleware
         });
 
         return result::ok(reset($context['questions']));
-    }
-
-    /**
-     * Get required context keys.
-     *
-     * @return array
-     *
-     */
-    public function get_required_context_keys(): array {
-        return [
-            'penalty_threshold',
-            'questions',
-        ];
     }
 }
