@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<quiz>
+<!-- question: 0  -->
+  <question type="category">
+    <category>
+      <text>$course$/top/Items für die LearningAid</text>
+    </category>
+    <info format="html">
+      <text></text>
+    </info>
+    <idnumber></idnumber>
+  </question>
+
+<!-- question: 29492  -->
+  <question type="truefalse">
+    <name>
+      <text>Assoziativ-, Kommutativ- und Distributivgesetz anwenden</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p dir="ltr" style="text-align: left;"></p><p>Ist die folgende Aussage über reelle Zahlen $$a, b$$ im
+Allgemeinen wahr oder falsch? </p>
+
+<div style="margin-left: 30px;" class="editor-indent"><p>Bei der Multiplikation darf man die Faktoren vertauschen,
+d.h., es gilt <br></p><p>\(a\cdot b=b \cdot a\).<br><i><br></i></p></div><p><i>Wählen Sie aus, ob die Aussage wahr oder falsch ist.</i><br></p><p></p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>1.0000000</defaultgrade>
+    <penalty>1.0000000</penalty>
+    <hidden>0</hidden>
+    <idnumber>W_LE01_A04a</idnumber>
+    <answer fraction="100" format="moodle_auto_format">
+      <text>true</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+    <answer fraction="0" format="moodle_auto_format">
+      <text>false</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+  </question>
+
+<!-- question: 29496  -->
+  <question type="truefalse">
+    <name>
+      <text>Assoziativ-, Kommutativ- und Distributivgesetz anwenden</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p dir="ltr" style="text-align: left;"></p><p></p><p>Ist die folgende Rechenregel korrekt? </p><div style="margin-left: 30px;" class="editor-indent">
+
+Was in Klammern steht, wird zuerst berechnet.</div><p><br><i>Wählen Sie aus, ob die Aussage wahr oder falsch ist.</i><br></p><p></p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>1.0000000</defaultgrade>
+    <penalty>1.0000000</penalty>
+    <hidden>0</hidden>
+    <idnumber>W_LE01_A04f</idnumber>
+    <answer fraction="100" format="moodle_auto_format">
+      <text>true</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+    <answer fraction="0" format="moodle_auto_format">
+      <text>false</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+  </question>
+
+<!-- question: 29495  -->
+  <question type="truefalse">
+    <name>
+      <text>Assoziativ-, Kommutativ- und Distributivgesetz anwenden</text>
+    </name>
+    <questiontext format="html">
+      <text><![CDATA[<p dir="ltr" style="text-align: left;"></p><p></p><p>Ist die folgende Aussage über reelle Zahlen $$a, b, c, d$$ im
+Allgemeinen wahr oder falsch? </p>
+
+<div style="margin-left: 30px;" class="editor-indent"><p><span style="font-size: 0.9375rem;">Es gilt</span></p>\(a-b\cdot (c+d)=a-bc+bd\)</div><p><br><i>Wählen Sie aus, ob die Aussage wahr oder falsch ist.</i><br></p><p></p>]]></text>
+    </questiontext>
+    <generalfeedback format="html">
+      <text></text>
+    </generalfeedback>
+    <defaultgrade>1.0000000</defaultgrade>
+    <penalty>1.0000000</penalty>
+    <hidden>0</hidden>
+    <idnumber>W_LE01_A04c</idnumber>
+    <answer fraction="0" format="moodle_auto_format">
+      <text>true</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+    <answer fraction="100" format="moodle_auto_format">
+      <text>false</text>
+      <feedback format="html">
+        <text></text>
+      </feedback>
+    </answer>
+  </question>
+
+</quiz>
