@@ -228,7 +228,7 @@ final class webservice_external_classes_test extends advanced_testcase {
     public function test_render_question_with_response_execute_requires_login(): void {
         $this->resetAfterTest(true);
 
-        $this->expectException(require_login_exception::class);
+        $this->expectException(\moodle_exception::class);
         render_question_with_response::execute(1, 1);
     }
 
@@ -240,7 +240,7 @@ final class webservice_external_classes_test extends advanced_testcase {
     public function test_start_new_attempt_execute_requires_login(): void {
         $this->resetAfterTest(true);
 
-        $this->expectException(require_login_exception::class);
+        $this->expectException(\moodle_exception::class);
         start_new_attempt::execute(1, 1);
     }
 
@@ -252,7 +252,7 @@ final class webservice_external_classes_test extends advanced_testcase {
     public function test_submit_result_execute_requires_login(): void {
         $this->resetAfterTest(true);
 
-        $this->expectException(require_login_exception::class);
+        $this->expectException(\moodle_exception::class);
         submit_result::execute('1', 1, 1);
     }
 

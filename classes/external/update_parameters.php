@@ -27,15 +27,12 @@ declare(strict_types=1);
 namespace local_catquiz\external;
 
 use Exception;
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\catmodel_info;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local catquiz.
@@ -71,6 +68,15 @@ class update_parameters extends external_api {
             'contextid' => $contextid,
             'catscaleid' => $catscaleid,
         ]);
+
+        // Reject invalid identifiers (Moodle ids start at 1) instead of running a
+        // no-op calculation and reporting success.
+        if ($contextid <= 0 || $catscaleid <= 0) {
+            return [
+                'success' => false,
+                'message' => '',
+            ];
+        }
 
         $cm = new catmodel_info();
         try {

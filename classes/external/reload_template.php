@@ -27,15 +27,12 @@
 namespace local_catquiz\external;
 
 use context_system;
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\execute_method_from_webservice;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local wunderbyte_table to (re)load data.

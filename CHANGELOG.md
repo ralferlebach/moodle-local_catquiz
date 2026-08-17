@@ -1,5 +1,53 @@
 # Changelog – local_catquiz
 
+## 1.1.4 (interne Version 2026081700)
+
+> Neues Release-Label **1.1.4** (fix). Übernahme des aktuellen Plugin-Stands
+> (Upstream-Merge) und Wiederherstellung der Funktionsfähigkeit gegen die
+> aktuellen Abhängigkeits-Branches. Details in `doc/session-003-changes.md`.
+
+### Abhängigkeits-Branches
+- **mod_adaptivequiz**: Fork-Branch `alise_adaptivequiz` (`2024123107`,
+  `3.0.3dev`) – bündelt die Bridge **`adaptivequizcatmodel_catquiz`** (`1.0.3`,
+  `2024123105`) unter `mod/adaptivequiz/catmodel/catquiz`.
+- **local_wunderbyte_table** `3.3.0` (`>= 2024040200`), **local_shortcodes**
+  `1.1.3` (empfohlen).
+- Der `attemptfeedbackeditor`-Bug besteht in der Fork weiter; CI-Patch
+  (`.github/ci/patch_adaptivequiz_generator.php`) bleibt aktiv.
+
+### Moodle-4.5-Kompatibilität wiederhergestellt
+- **External-Webservice-Klassen auf `core_external` migriert:** In Moodle 4.5 ist
+  die globale `external_api` (samt `external_function_parameters`,
+  `external_single_structure`, `external_value`) entfernt. Alle zwölf
+  `classes/external/*.php` nutzen jetzt den `core_external\`-Namespace; die
+  `require_once externallib.php`-Zeilen (und der dadurch überflüssige
+  `MOODLE_INTERNAL`-Guard) wurden entfernt.
+- **`manage_catscale`**: Top-Level-`VALUE_OPTIONAL` → `VALUE_DEFAULT, null`.
+- **`dataapi::update_catscale`**: Guard gegen `null`-Kontext beim Update ohne
+  `contextid` (verhinderte TypeError in `create_items_in_new_context(int)`).
+- **`update_parameters`**: ungültige IDs (`<= 0`) liefern `success = false`.
+- Fehlender Lang-String `functiondoesntexist` ergänzt.
+
+### Schema/Version
+- **Version-Bump erzwingt Schema-Rebuild:** Die neue Tabelle
+  `local_catquiz_qhashmap` (Question-Hasher) wird erst nach Erhöhung von
+  `$plugin->version` angelegt – Moodle wendet Schema-Änderungen nur bei geänderter
+  Version an.
+
+### Numerik: 3PL-Sättigung
+- **Zweitableitung bei `guessing = 0` korrigiert:** An Sättigungspunkten lieferte
+  die 3PL-Hesse `+b²` statt `≈ 0`, weil `p²` unterlief und die Kürzung zerstörte.
+  `log_likelihood_p_p` und `get_ability_derivatives` nutzen jetzt das stabile
+  Verhältnis `ratio = l/p` (kein Teilen durch `p`/`p²`). `max|3PL(c=0) − 2PL| =
+  4.7e-15`. Neuer, zahn-getesteter Regressionstest in der 3PL-Suite.
+- Der frühere CI-`DivisionByZeroError` (Datensatz #2) ist behoben.
+
+### Tests
+- `strategy_test` portabel für Moodle 4.5 **und** 5.0 (Question-Bank-API).
+- Golden-Master-Test `test_responses_lead_to_expected_item_parameters` als
+  `incomplete` markiert: die Referenz-Fixture ist veraltet relativ zur aktuellen
+  Schätzung und ist gegen eine externe Referenz neu zu erzeugen.
+
 ## 1.1.2 (interne Version 2026081413)
 
 > Diese Änderungen werden unter dem bestehenden Release-Label 1.1.2

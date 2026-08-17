@@ -1335,4 +1335,49 @@ final class mixedraschbirnbaum_test extends TestCase {
     private function getmodel(): mixedraschbirnbaum {
         return model_model::get_instance('mixedraschbirnbaum');
     }
+
+    /**
+     * With guessing c = 0 the 3PL collapses exactly onto the 2PL. The person-ability
+     * derivatives (jacobian, hessian, and the combined get_ability_derivatives form)
+     * must therefore agree with the 2PL reference bit-for-bit, and stay finite, even
+     * at deep saturation where the logistic core L underflows to a denormal.
+     *
+     * Regression guard: an earlier P/W form divided by P^2, which underflows to 0.0
+     * for a denormal P and — after stabilize_denominator — left a spurious +b^2 in the
+     * hessian instead of the correct 2PL limit (approx 0). Reverting the ratio-based
+     * form makes this test red at the negative-theta / k = 1 saturation points.
+     *
+     * @covers \catmodel_mixedraschbirnbaum\mixedraschbirnbaum::log_likelihood_p_p
+     * @covers \catmodel_mixedraschbirnbaum\mixedraschbirnbaum::get_ability_derivatives
+     * @return void
+     */
+    public function test_c0_reduces_to_2pl_at_saturation(): void {
+        $items = [
+            [-4.28, 4.43], [-0.76, 2.34], [0.14, 4.46],
+            [0.54, 5.91], [4.63, 4.79], [3.37, 0.55],
+        ];
+        $thetas = [0.0, 5.0, -5.0, 40.0, -40.0, 200.0, -200.0, 800.0, -800.0];
+        foreach ($items as [$a, $b]) {
+            $ip3 = ['difficulty' => $a, 'discrimination' => $b, 'guessing' => 0.0];
+            $ip2 = ['difficulty' => $a, 'discrimination' => $b];
+            foreach ($thetas as $th) {
+                $pp = ['ability' => $th];
+                foreach ([0.0, 1.0] as $k) {
+                    $j3 = \catmodel_mixedraschbirnbaum\mixedraschbirnbaum::log_likelihood_p($pp, $ip3, $k);
+                    $h3 = \catmodel_mixedraschbirnbaum\mixedraschbirnbaum::log_likelihood_p_p($pp, $ip3, $k);
+                    $g3 = \catmodel_mixedraschbirnbaum\mixedraschbirnbaum::get_ability_derivatives($pp, $ip3, $k);
+                    $j2 = \catmodel_raschbirnbaum\raschbirnbaum::log_likelihood_p($pp, $ip2, $k);
+                    $h2 = \catmodel_raschbirnbaum\raschbirnbaum::log_likelihood_p_p($pp, $ip2, $k);
+                    foreach ([$j3, $h3, $g3['jacobian'], $g3['hessian']] as $v) {
+                        $this->assertTrue(is_finite($v), "non-finite derivative at a=$a b=$b theta=$th k=$k");
+                    }
+                    $msg = "3PL(c=0) must equal 2PL at a=$a b=$b theta=$th k=$k";
+                    $this->assertEqualsWithDelta($j2, $j3, 1e-9, $msg);
+                    $this->assertEqualsWithDelta($h2, $h3, 1e-9, $msg);
+                    $this->assertEqualsWithDelta($j2, $g3['jacobian'], 1e-9, $msg);
+                    $this->assertEqualsWithDelta($h2, $g3['hessian'], 1e-9, $msg);
+                }
+            }
+        }
+    }
 }

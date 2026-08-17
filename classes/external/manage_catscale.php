@@ -28,16 +28,13 @@ declare(strict_types=1);
 
 namespace local_catquiz\external;
 
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\data\dataapi;
 use local_catquiz\data\catscale_structure;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local catquiz.
@@ -60,8 +57,8 @@ class manage_catscale extends external_api {
                         'name' => new external_value(PARAM_TEXT, 'The name of the catscale', VALUE_REQUIRED),
                         'description' => new external_value(PARAM_RAW, 'The description of the catscale', VALUE_REQUIRED),
                         'action' => new external_value(PARAM_ALPHA, 'update or create', VALUE_REQUIRED),
-                        'minscalevalue' => new external_value(PARAM_FLOAT, 'Min scale value', VALUE_OPTIONAL),
-                        'maxscalevalue' => new external_value(PARAM_FLOAT, 'Max scale value', VALUE_OPTIONAL),
+                        'minscalevalue' => new external_value(PARAM_FLOAT, 'Min scale value', VALUE_DEFAULT, null),
+                        'maxscalevalue' => new external_value(PARAM_FLOAT, 'Max scale value', VALUE_DEFAULT, null),
                         'parentid' => new external_value(PARAM_INT, 'The parent ID of the catscale', VALUE_DEFAULT, 0),
                         'id' => new external_value(PARAM_INT, 'The id of the catscale', VALUE_DEFAULT, 0),
                 ]

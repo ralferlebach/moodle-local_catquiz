@@ -224,11 +224,12 @@ class mixedraschbirnbaum extends model_raschmodel {
 
         // P/W form via the chain rule on P = c + (1 - c) L. The naive expression
         // divides by P (1 - P), P^2 and (1 - P)^2, all of which underflow to 0 at
-        // saturation. Cancelling 1 - P = (1 - c)(1 - L) and W_L = L (1 - L) leaves a
-        // form that divides only by P (and P^2), with P >= c:
-        // d^2/dtheta^2 log L = b^2 L (1 - 2L)(k - P) / P
-        // - k b^2 L^2 (1 - P)^2 / P^2 - (1 - k) b^2 L^2.
-        // The P = 0 case (c = 0 with an underflowed L) is the 2PL limit -b^2 W_L.
+        // saturation. We express the surviving terms through the ratio L/P, which is
+        // well defined even when both L and P are denormal (it tends to 1 for c = 0
+        // and to 0 for c > 0). This avoids forming P^2, which underflows to 0.0 for a
+        // denormal P and would otherwise break the L^2/P^2 -> 1 cancellation, leaving
+        // a spurious +b^2 instead of the correct 2PL limit at saturation.
+        // The P = 0 case (c = 0 with an exactly-underflowed L) is the 2PL limit -b^2 W_L.
         $l = self::logistic($b * ($ability - $a));
         $wl = self::logistic_w($l);
         $p = $c + (1.0 - $c) * $l;
@@ -239,8 +240,9 @@ class mixedraschbirnbaum extends model_raschmodel {
 
         $b2 = $b ** 2;
         $onemp = 1.0 - $p;
-        $terma = $b2 * $l * (1.0 - 2.0 * $l) * ($k - $p) / $p;
-        $termmid = -$k * $b2 * $l ** 2 * $onemp ** 2 / self::stabilize_denominator($p ** 2);
+        $ratio = $l / $p;
+        $terma = $b2 * $ratio * (1.0 - 2.0 * $l) * ($k - $p);
+        $termmid = -$k * $b2 * $ratio ** 2 * $onemp ** 2;
         $termlast = -(1.0 - $k) * $b2 * $l ** 2;
 
         return $terma + $termmid + $termlast;
@@ -271,10 +273,11 @@ class mixedraschbirnbaum extends model_raschmodel {
 
         $b2 = $b ** 2;
         $onemp = 1.0 - $p;
+        $ratio = $l / $p;
         return [
-            'jacobian' => $b * $l * ($frac - $p) / $p,
-            'hessian' => $b2 * $l * (1.0 - 2.0 * $l) * ($frac - $p) / $p
-                - $frac * $b2 * $l ** 2 * $onemp ** 2 / self::stabilize_denominator($p ** 2)
+            'jacobian' => $b * $ratio * ($frac - $p),
+            'hessian' => $b2 * $ratio * (1.0 - 2.0 * $l) * ($frac - $p)
+                - $frac * $b2 * $ratio ** 2 * $onemp ** 2
                 - (1.0 - $frac) * $b2 * $l ** 2,
         ];
     }
