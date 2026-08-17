@@ -234,4 +234,43 @@ final class mathcat_test extends basic_testcase {
             ],
         ];
     }
+
+    /**
+     * The codec round-trips the nested item-parameter structures used by the
+     * polytomous models (GRM/GGRM/PCM/GPCM). This guards the assumption that
+     * BFGS and gradient ascent can flatten and restore those structures.
+     *
+     * @dataProvider polytomous_itemparam_provider
+     *
+     * @param array $ip Nested item parameters.
+     * @param int $dim Expected number of scalar components.
+     * @return void
+     */
+    public function test_codec_roundtrips_polytomous_itemparams(array $ip, int $dim): void {
+        $vector = $ip;
+        $structure = mathcat::array_to_vector($vector);
+
+        $this->assertCount($dim, $vector, 'Flattened vector length must equal the parameter dimension.');
+        $this->assertEquals($ip, mathcat::vector_to_array($vector, $structure));
+    }
+
+    /**
+     * Representative nested item-parameter structures per polytomous model.
+     *
+     * @return array
+     */
+    public static function polytomous_itemparam_provider(): array {
+        return [
+            'grm' => [['difficulty' => 0.7, 'difficulties' => [-1.2, 0.3, 1.5]], 4],
+            'ggrm' => [
+                ['discrimination' => 1.3, 'difficulties' => [-1.0, 0.0, 1.0, 2.0], 'difficulty' => 0.5],
+                6,
+            ],
+            'pcm' => [['intercepts' => [-0.8, 0.2, 0.9], 'difficulty' => 0.4], 4],
+            'gpcm' => [
+                ['intercepts' => [-0.5, 0.1, 0.6, 1.1], 'discrimination' => 1.1, 'difficulty' => 0.6],
+                6,
+            ],
+        ];
+    }
 }

@@ -134,25 +134,6 @@ class mathcat {
         return $grad;
     }
 
-    /**
-     * Returns matrix vector product.
-     *
-     * @param mixed $matrix
-     * @param mixed $vector
-     *
-     * @return array
-     *
-     */
-    public static function matrix_vector_product($matrix, $vector) {
-        $result = [];
-        for ($i = 0; $i < count($matrix); $i++) {
-            $result[$i] = 0;
-            for ($j = 0; $j < count($matrix[$i]); $j++) {
-                $result[$i] += $matrix[$i][$j] * $vector[$j];
-            }
-        }
-        return $result;
-    }
 
     /**
      * Maximises a function using the BFGS quasi-Newton algorithm.
@@ -193,7 +174,7 @@ class mathcat {
         $parameter = array_values($parameter);
         $dimensions = count($parameter);
         $tolerance = 10 ** (-$precision);
-        $inversehessian = self::identity_matrix($dimensions);
+        $inversehessian = matrix::identity_array($dimensions);
 
         $evaluate = static function (array $vector) use (
             $fnfunction,
@@ -249,18 +230,18 @@ class mathcat {
         }
 
         for ($iteration = 0; $iteration < $maxiterations; $iteration++) {
-            if (self::max_absolute_value($gradient) <= $tolerance) {
+            if (matrix::max_absolute_value($gradient) <= $tolerance) {
                 return self::vector_to_array($parameter, $parameterstructure);
             }
 
-            $direction = self::matrix_vector_product($inversehessian, $gradient);
-            $directionalderivative = self::dot_product($gradient, $direction);
+            $direction = matrix::matrix_vector_product($inversehessian, $gradient);
+            $directionalderivative = matrix::dot_product($gradient, $direction);
 
             // A valid inverse negative-Hessian approximation must yield an ascent direction.
             if (!is_finite($directionalderivative) || $directionalderivative <= 0.0) {
-                $inversehessian = self::identity_matrix($dimensions);
+                $inversehessian = matrix::identity_array($dimensions);
                 $direction = $gradient;
-                $directionalderivative = self::dot_product($gradient, $direction);
+                $directionalderivative = matrix::dot_product($gradient, $direction);
             }
 
             $steplength = 1.0;
@@ -276,14 +257,14 @@ class mathcat {
                     $trial[$index] = $parametervalue + $steplength * $direction[$index];
                 }
                 $trial = $applyrestrictions($trial);
-                $step = self::vector_subtract($trial, $parameter);
-                if (self::max_absolute_value($step) <= $tolerance) {
+                $step = matrix::vector_subtract($trial, $parameter);
+                if (matrix::max_absolute_value($step) <= $tolerance) {
                     $steplength *= 0.5;
                     continue;
                 }
 
                 [$trialvalue, $trialgradient] = $evaluate($trial);
-                $actualdirectionalderivative = self::dot_product($gradient, $step);
+                $actualdirectionalderivative = matrix::dot_product($gradient, $step);
                 if ($trialvalue >= $value + 1e-4 * $actualdirectionalderivative) {
                     $candidate = $trial;
                     $candidatevalue = $trialvalue;
@@ -298,14 +279,14 @@ class mathcat {
                 return self::vector_to_array($parameter, $parameterstructure);
             }
 
-            $step = self::vector_subtract($candidate, $parameter);
+            $step = matrix::vector_subtract($candidate, $parameter);
             // Standard inverse-BFGS update applied to -f: y = grad(-f)new - grad(-f)old.
-            $y = self::vector_subtract($gradient, $candidategradient);
-            $ys = self::dot_product($y, $step);
+            $y = matrix::vector_subtract($gradient, $candidategradient);
+            $ys = matrix::dot_product($y, $step);
 
             if (is_finite($ys) && $ys > 1e-12) {
-                $hy = self::matrix_vector_product($inversehessian, $y);
-                $yhy = self::dot_product($y, $hy);
+                $hy = matrix::matrix_vector_product($inversehessian, $y);
+                $yhy = matrix::dot_product($y, $hy);
                 $coefficient = ($ys + $yhy) / ($ys * $ys);
                 $updated = $inversehessian;
                 for ($row = 0; $row < $dimensions; $row++) {
@@ -317,14 +298,14 @@ class mathcat {
                 $inversehessian = $updated;
             } else {
                 // Curvature information is not usable; restart with a neutral approximation.
-                $inversehessian = self::identity_matrix($dimensions);
+                $inversehessian = matrix::identity_array($dimensions);
             }
 
             $parameter = $candidate;
             $value = $candidatevalue;
             $gradient = $candidategradient;
 
-            if (self::max_absolute_value($step) <= $tolerance) {
+            if (matrix::max_absolute_value($step) <= $tolerance) {
                 break;
             }
         }
@@ -546,7 +527,7 @@ class mathcat {
         }
 
         for ($iteration = 0; $iteration < $maxiterations; $iteration++) {
-            $gradientlength = sqrt(self::dot_product($gradient, $gradient));
+            $gradientlength = sqrt(matrix::dot_product($gradient, $gradient));
             if (!is_finite($gradientlength) || $gradientlength <= $tolerance) {
                 break;
             }
@@ -598,13 +579,13 @@ class mathcat {
                 $bestgradient = $trialgradient;
             }
 
-            $step = self::vector_subtract($bestparameter, $parameter);
+            $step = matrix::vector_subtract($bestparameter, $parameter);
             $parameter = $bestparameter;
             $value = $bestvalue;
             $gradient = $bestgradient;
             $steplength = $trialstep;
 
-            if (self::max_absolute_value($step) <= $tolerance) {
+            if (matrix::max_absolute_value($step) <= $tolerance) {
                 break;
             }
         }
@@ -697,70 +678,6 @@ class mathcat {
             return $function1($function2);
         };
         return $returnfn;
-    }
-
-    /**
-     * Returns an identity matrix represented as a nested array.
-     *
-     * @param int $size Matrix dimension.
-     * @return array
-     */
-    private static function identity_matrix(int $size): array {
-        $matrix = array_fill(0, $size, array_fill(0, $size, 0.0));
-        for ($index = 0; $index < $size; $index++) {
-            $matrix[$index][$index] = 1.0;
-        }
-        return $matrix;
-    }
-
-    /**
-     * Calculates the scalar product of two vectors.
-     *
-     * @param array $left First vector.
-     * @param array $right Second vector.
-     * @return float
-     */
-    private static function dot_product(array $left, array $right): float {
-        if (count($left) !== count($right)) {
-            throw new \InvalidArgumentException('Vector dimensions do not match.');
-        }
-        $result = 0.0;
-        foreach ($left as $index => $value) {
-            $result += $value * $right[$index];
-        }
-        return $result;
-    }
-
-    /**
-     * Subtracts the second vector from the first vector.
-     *
-     * @param array $left First vector.
-     * @param array $right Second vector.
-     * @return array
-     */
-    private static function vector_subtract(array $left, array $right): array {
-        if (count($left) !== count($right)) {
-            throw new \InvalidArgumentException('Vector dimensions do not match.');
-        }
-        $result = [];
-        foreach ($left as $index => $value) {
-            $result[$index] = $value - $right[$index];
-        }
-        return $result;
-    }
-
-    /**
-     * Returns the largest absolute value in a vector.
-     *
-     * @param array $vector Vector to inspect.
-     * @return float
-     */
-    private static function max_absolute_value(array $vector): float {
-        $result = 0.0;
-        foreach ($vector as $value) {
-            $result = max($result, abs((float) $value));
-        }
-        return $result;
     }
 
     /**
