@@ -27,15 +27,12 @@ declare(strict_types=1);
 namespace local_catquiz\external;
 
 use Exception;
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\catmodel_info;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local catquiz.
@@ -46,7 +43,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class update_parameters extends external_api {
-
     /**
      * Describes the parameters for update_parameters webservice.
      *
@@ -56,8 +52,7 @@ class update_parameters extends external_api {
         return new external_function_parameters([
             'contextid'  => new external_value(PARAM_INT, 'context ID'),
             'catscaleid' => new external_value(PARAM_INT, 'CAT scale ID'),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -73,6 +68,15 @@ class update_parameters extends external_api {
             'contextid' => $contextid,
             'catscaleid' => $catscaleid,
         ]);
+
+        // Reject invalid identifiers (Moodle ids start at 1) instead of running a
+        // no-op calculation and reporting success.
+        if ($contextid <= 0 || $catscaleid <= 0) {
+            return [
+                'success' => false,
+                'message' => '',
+            ];
+        }
 
         $cm = new catmodel_info();
         try {
@@ -98,7 +102,6 @@ class update_parameters extends external_api {
         return new external_single_structure([
             'success' => new external_value(PARAM_BOOL, 'Successful calculation', VALUE_REQUIRED),
             'message' => new external_value(PARAM_RAW, 'message if necessary', VALUE_OPTIONAL, ''),
-            ]
-        );
+            ]);
     }
 }

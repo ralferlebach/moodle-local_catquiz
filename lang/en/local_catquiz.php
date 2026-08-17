@@ -25,6 +25,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['functiondoesntexist'] = 'The requested function does not exist.';
 $string['abilityinglobalscale'] = 'Ability in global scale';
 $string['abilityintestedscale'] = 'Ability score in top-most parent scale';
 $string['abilityintestedscale_before'] = 'Ability score in top-most parent scale - before';
