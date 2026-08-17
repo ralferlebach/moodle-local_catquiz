@@ -55,6 +55,75 @@ final class mathcat_test extends basic_testcase {
     }
 
     /**
+     * Tests gradient ascent on a smooth two-dimensional objective.
+     *
+     * @return void
+     */
+    public function test_gradient_ascent(): void {
+        $objective = fn($x) => exp(-($x['x'] - 2) ** 2) - (($x['y'] - 1) ** 2);
+
+        $result = mathcat::gradient_ascent(
+            $objective,
+            fn($x) => [
+                2 * exp(-($x['x'] - 2) ** 2) * (2 - $x['x']),
+                0,
+                0,
+            ],
+            ['x' => -pi() / 4, 'y' => 1.66, 'z' => -1.5],
+            6
+        );
+
+        $result = mathcat::gradient_ascent(
+            $objective,
+            fn($x) => [
+                0,
+                2 - 2 * $x['y'],
+                0,
+            ],
+            ['x' => $result['x'], 'y' => 1.66, 'z' => -1.5],
+            6
+        );
+
+        $result = mathcat::gradient_ascent(
+            $objective,
+            fn($x) => [
+                2 * exp(-($x['x'] - 2) ** 2) * (2 - $x['x']),
+                2 - 2 * $x['y'],
+                0,
+            ],
+            ['x' => $result['x'], 'y' => $result['y'], 'z' => -1.5],
+            6
+        );
+
+        $this->assertEqualsWithDelta(2.0, $result['x'], 1e-5);
+        $this->assertEqualsWithDelta(1.0, $result['y'], 1e-5);
+        $this->assertEqualsWithDelta(-1.5, $result['z'], 1e-12);
+    }
+
+    /**
+     * Tests BFGS maximisation with an analytic gradient.
+     *
+     * @return void
+     */
+    public function test_bfgs(): void {
+        $result = mathcat::bfgs(
+            fn($x) => exp(-($x['x'] - 2) ** 2) - (($x['y'] - 1) ** 2),
+            fn($x) => [
+                2 * exp(-($x['x'] - 2) ** 2) * (2 - $x['x']),
+                2 - 2 * $x['y'],
+                0,
+            ],
+            ['x' => -pi() / 4, 'y' => 1.66, 'z' => -1.5],
+            6,
+            200
+        );
+
+        $this->assertEqualsWithDelta(2.0, $result['x'], 1e-5);
+        $this->assertEqualsWithDelta(1.0, $result['y'], 1e-5);
+        $this->assertEqualsWithDelta(-1.5, $result['z'], 1e-12);
+    }
+
+    /**
      * Test if array_to_vector and vector_to_array work as expected
      *
      * @dataProvider conversion_of_array_to_vector_provider
