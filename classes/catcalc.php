@@ -70,13 +70,43 @@ class catcalc {
                 }
             }
 
-            $p = $numpassed / ($numfailed + $numpassed);
-            // phpcs:ignore
-            // $item_difficulty = -log($num_passed / $num_failed);
-            $itemdifficulty = -log($p / (1 - $p + 0.00001)); // TODO: numerical stability check.
+            $n = $numpassed + $numfailed;
+            // Empirical logit keeps the estimate finite in every boundary case
+            // (no responses, all correct, all incorrect) and is symmetric:
+            // p = (r + 0.5) / (n + 1),   difficulty = -log(p / (1 - p)).
+            // With n = 0 this yields p = 0.5 and a neutral difficulty of 0 rather
+            // than a division by zero; r = 0 and r = n no longer hit log(0).
+            $p = ($numpassed + 0.5) / ($n + 1);
+            $itemdifficulty = -log($p / (1 - $p));
             $itemdifficulties[$id] = $itemdifficulty;
         }
         return $itemdifficulties;
+    }
+
+    /**
+     * Builds a per-response callable returning the combined ability derivatives.
+     *
+     * The returned closure computes {@see model_raschmodel::get_ability_derivatives()}
+     * once per distinct ability value and caches it, so the jacobian and the hessian
+     * callables share a single probability/moment computation. The cache lives in this
+     * method's own scope, giving every response an independent cache (a shared cache
+     * across responses would return one response's derivatives for another).
+     *
+     * @param string $model model class name
+     * @param array $itemparams item parameters for this response
+     * @param float $response response fraction
+     * @return callable fn(array $pp): array{jacobian: float, hessian: float}
+     */
+    private static function make_ability_derivative_callable($model, array $itemparams, float $response): callable {
+        $memo = [];
+        return function ($pp) use ($model, $itemparams, $response, &$memo) {
+            // Format %.17g round-trips a double exactly, so distinct Newton iterates never collide.
+            $key = sprintf('%.17g', $pp['ability']);
+            if (!array_key_exists($key, $memo)) {
+                $memo[$key] = $model::get_ability_derivatives($pp, $itemparams, $response);
+            }
+            return $memo[$key];
+        };
     }
 
     /**
@@ -123,8 +153,17 @@ class catcalc {
                 throw new \Exception(sprintf("The given model %s can not be used with the catcalc class", $item->get_model_name()));
             }
 
-            $jfuns[] = fn ($pp) => $model::log_likelihood_p($pp, $itemparams, $qresponse->get_response());
-            $hfuns[] = fn($pp) => $model::log_likelihood_p_p($pp, $itemparams, $qresponse->get_response());
+            // Combined score/hessian: the person-ability derivatives share an
+            // (often expensive) probability/moment computation. Build a per-response
+            // callable that computes both once per ability value and caches the result;
+            // the helper gives each response its own cache scope.
+            $combined = self::make_ability_derivative_callable(
+                $model,
+                $itemparams,
+                $qresponse->get_response()
+            );
+            $jfuns[] = fn ($pp) => $combined($pp)['jacobian'];
+            $hfuns[] = fn ($pp) => $combined($pp)['hessian'];
         }
 
         if ($jfuns === [] || $hfuns === []) {
@@ -179,26 +218,50 @@ class catcalc {
             throw new \InvalidArgumentException("Model does not implement the catcalc_item_estimator interface");
         }
 
-        $modeldim = $model::get_model_dim();
+        // Build the starting item parameters. Polytomous models have a
+        // data-dependent number of thresholds, so their start values are derived
+        // from the observed response categories (get_start_ip); dichotomous models
+        // use the fixed default start sliced to their dimension.
+        if ($model::is_polytomous()) {
+            $startip = $startvalue ? $startvalue->get_params_array() : $model::get_start_ip($itemresponse);
+            $thresholdkey = isset($startip['difficulties']) ? 'difficulties' : 'intercepts';
+            $fractions = array_keys($startip[$thresholdkey]);
+        } else {
+            $modeldim = $model::get_model_dim();
+            $defaultstart = ['difficulty' => 0.50, 'discrimination' => 1.0, 'guessing' => 0.25];
+            $startvalue = $startvalue ? $startvalue->get_params_array() : [];
+            $startip = array_slice(array_merge($defaultstart, $startvalue), 0, $modeldim - 1);
+            $fractions = array_keys($startip);
+        }
 
-        // Defines the starting point.
-        $defaultstart = ['difficulty' => 0.50, 'discrimination' => 1.0, 'guessing' => 0.25];
-        $startvalue = $startvalue ? $startvalue->get_params_array() : [];
-        $z0 = array_slice(array_merge($defaultstart, $startvalue), 0, $modeldim - 1);
+        // Parameter codec: Newton-Raphson operates on a flat numeric vector, so the
+        // (possibly nested) item parameters are serialised via convert_ip_to_vector
+        // and reconstructed via convert_vector_to_ip. The fractions carry the
+        // category keys used for the reconstruction; the dimensionality is therefore
+        // driven by the data rather than a fixed constant.
+        $z0 = $model::convert_ip_to_vector($startip);
 
         $jacobian = self::build_itemparam_jacobian($itemresponse, $model);
         $hessian = self::build_itemparam_hessian($itemresponse, $model);
 
+        // Adapt the closures to accept the flat parameter vector.
+        $jacobianvec = fn ($vector) => $jacobian($model::convert_vector_to_ip($vector, $fractions));
+        $hessianvec = fn ($vector) => $hessian($model::convert_vector_to_ip($vector, $fractions));
+        $trfilter = fn ($vector) => $model::convert_ip_to_vector(
+            $model::restrict_to_trusted_region($model::convert_vector_to_ip($vector, $fractions))
+        );
+
         // Estimate item parameters via Newton-Raphson algorithm.
-        $result = mathcat::newton_raphson_multi_stable(
-            $jacobian,
-            $hessian,
+        $resultvector = mathcat::newton_raphson_multi_stable(
+            $jacobianvec,
+            $hessianvec,
             $z0,
             6,
             50,
-            fn ($ip) => $model::restrict_to_trusted_region($ip)
+            $trfilter
         );
-        return $result;
+
+        return $model::convert_vector_to_ip($resultvector, $fractions);
     }
 
     /**

@@ -27,15 +27,12 @@
 namespace local_catquiz\external;
 
 use context_system;
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\execute_method_from_webservice;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local wunderbyte_table to (re)load data.
@@ -46,7 +43,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class execute_action extends external_api {
-
     /**
      * Describes the parameters this webservice.
      *
@@ -56,8 +52,7 @@ class execute_action extends external_api {
         return new external_function_parameters([
             'methodname'  => new external_value(PARAM_TEXT, 'Methodname to be executed.', VALUE_REQUIRED),
             'data'  => new external_value(PARAM_RAW, 'Data package as json', VALUE_DEFAULT, '{}'),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -71,7 +66,8 @@ class execute_action extends external_api {
      */
     public static function execute(
         string $methodname,
-        string $data) {
+        string $data
+    ) {
 
         global $PAGE;
 
@@ -89,7 +85,7 @@ class execute_action extends external_api {
         if ($resultsuccess) {
             $result = [
                 'success' => 1,
-                'message' => get_string($methodname."_message", 'local_catquiz'),
+                'message' => get_string($methodname . "_message", 'local_catquiz'),
             ];
         } else {
             $result = [
@@ -110,7 +106,6 @@ class execute_action extends external_api {
         return new external_single_structure([
             'success' => new external_value(PARAM_INT, '1 is success, 0 isn\'t'),
             'message' => new external_value(PARAM_RAW, 'Message to be displayed', VALUE_OPTIONAL, ''),
-            ]
-        );
+            ]);
     }
 }
