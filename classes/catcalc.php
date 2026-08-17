@@ -202,6 +202,36 @@ class catcalc {
     }
 
     /**
+     * Builds the scalar Log Likelihood objective for item params and the given model.
+     *
+     * Companion to {@see self::build_itemparam_jacobian()} for optimisers that
+     * require the objective value (e.g. BFGS, gradient ascent) rather than only
+     * its gradient. The model must also implement catcalc_ability_estimator so
+     * that log_likelihood() is available.
+     *
+     * @param array $itemresponse
+     * @param catcalc_item_estimator $model
+     *
+     * @return Closure
+     */
+    public static function build_itemparam_objective(array $itemresponse, catcalc_item_estimator $model): Closure {
+        // Define the scalar Log Likelihood as a function of the item params.
+        $funs = [];
+
+        foreach ($itemresponse as $r) {
+            $funs[] = fn($ip) => $model::log_likelihood($r->get_personparams()->to_array(), $ip, $r->get_response());
+        }
+
+        return function ($ip) use ($funs) {
+            $sum = 0.0;
+            foreach ($funs as $fun) {
+                $sum += $fun($ip);
+            }
+            return $sum;
+        };
+    }
+
+    /**
      * Builds the jacobian function for item params and the given model.
      *
      * @param array $itemresponse
