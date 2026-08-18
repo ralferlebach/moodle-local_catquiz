@@ -45,6 +45,16 @@ use moodle_exception;
  */
 class catcalc {
     /**
+     * Residual gradient (max abs) above which a Newton item-parameter result is
+     * treated as not converged and a BFGS rescue is tried (issue: experiment K1).
+     * Converged Newton runs leave a residual far below this; only ill-conditioned
+     * geometries exceed it.
+     *
+     * @var float
+     */
+    private const NEWTON_RESCUE_GRADIENT = 1.0e-2;
+
+    /**
      * Estimate initial item difficulties.
      *
      * @param mixed $itemlist
@@ -260,6 +270,35 @@ class catcalc {
             50,
             $trfilter
         );
+
+        // K1 (experiment consequence): Newton quality gate with a BFGS rescue and a
+        // keep-best policy. On flat or ill-conditioned geometries (near-zero
+        // discrimination, missing categories, bimodal ability) the Hessian is nearly
+        // singular and Newton can stop at a point with a large residual gradient --
+        // a worse optimum than a first-order method reaches. When the residual
+        // gradient is large, run BFGS from the same start and keep whichever result
+        // has the higher log-likelihood. Well-behaved items converge to a tiny
+        // residual, so the gate does not fire and the result is unchanged; and
+        // keep-best guarantees the outcome is never worse than Newton alone.
+        $gradient = $jacobianvec($resultvector);
+        $residual = 0.0;
+        foreach ($gradient as $component) {
+            $residual = max($residual, abs((float) $component));
+        }
+        if (is_finite($residual) && $residual > self::NEWTON_RESCUE_GRADIENT) {
+            $objective = self::build_itemparam_objective($itemresponse, $model);
+            $objectivevec = fn ($vector) => $objective($model::convert_vector_to_ip($vector, $fractions));
+            try {
+                $rescuevector = mathcat::bfgs($objectivevec, $jacobianvec, $z0, 6, 100, $trfilter);
+                if ($objectivevec($rescuevector) > $objectivevec($resultvector)) {
+                    $resultvector = $rescuevector;
+                }
+            } catch (\Throwable $e) {
+                // Keep the Newton result if the rescue cannot run (e.g. a reduced
+                // category structure whose free dimension is inconsistent).
+                unset($e);
+            }
+        }
 
         return $model::convert_vector_to_ip($resultvector, $fractions);
     }
