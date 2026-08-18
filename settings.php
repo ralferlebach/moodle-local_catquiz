@@ -133,5 +133,4 @@ if ($hassiteconfig) {
         24, // Default value.
         PARAM_INT // Expect integer type.
     ));
-
 }

@@ -42,6 +42,8 @@ use local_catquiz\external\subscribe;
 use local_catquiz\external\update_parameters;
 use require_login_exception;
 
+defined('MOODLE_INTERNAL') || die();
+
 /**
  * Simple render stub for reload_template test.
  */
