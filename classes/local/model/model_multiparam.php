@@ -36,7 +36,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class model_multiparam extends model_raschmodel {
-
     /**
      * Get static param array
      *
@@ -133,5 +132,32 @@ abstract class model_multiparam extends model_raschmodel {
      */
     public function supports_parameter_edits(): bool {
         return true;
+    }
+    /**
+     * Clamp a discrimination (slope) into the model's configured trusted region.
+     *
+     * The graded/partial-credit models require a strictly positive slope: a
+     * non-positive discrimination would invert the category ordering and produce
+     * degenerate (zero/negative) category probabilities. The bounds are read from
+     * the model's trusted_region_min_b / trusted_region_max_b settings (defaults
+     * 0.1 and 5.0); an unset or empty setting falls back to those defaults, and the
+     * lower bound is additionally floored at a small positive value so a
+     * misconfigured non-positive minimum can never disable the invariant.
+     *
+     * @param string $componentname e.g. 'catmodel_grmgeneralized'
+     * @param float $discrimination raw discrimination
+     *
+     * @return float clamped discrimination
+     */
+    protected static function restrict_discrimination(string $componentname, float $discrimination): float {
+        $floor = 0.1;
+        $minconfig = get_config($componentname, 'trusted_region_min_b');
+        $maxconfig = get_config($componentname, 'trusted_region_max_b');
+        $min = ($minconfig === false || $minconfig === '') ? $floor : max($floor, (float) $minconfig);
+        $max = ($maxconfig === false || $maxconfig === '') ? 5.0 : (float) $maxconfig;
+        if ($max < $min) {
+            $max = $min;
+        }
+        return max($min, min($max, $discrimination));
     }
 }

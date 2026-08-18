@@ -48,7 +48,19 @@ class local_catquiz_generator extends testing_module_generator {
         }
 
         $course = get_course($data['courseid']);
-        $context = context_course::instance($course->id);
+        // Moodle 5.0+ moves the question bank into a dedicated mod_qbank activity, so
+        // questions live in that module context. Moodle 4.5 has no mod_qbank and
+        // questions belong to the course context. Choose whichever the running
+        // platform provides so the generator works on the 4.5 target and stays
+        // forward-compatible with the Moodle 5.x migration. Using a non-existent
+        // 'qbank' module makes get_plugin_generator() fail before any question is
+        // imported (this broke every Behat scenario on 4.5).
+        if (file_exists("{$CFG->dirroot}/mod/qbank/lib.php")) {
+            $qbank = $this->datagenerator->create_module('qbank', ['course' => $course->id]);
+            $context = context_module::instance($qbank->cmid);
+        } else {
+            $context = context_course::instance($course->id);
+        }
         $category = question_get_top_category($context->id, true);
 
         // Load data into class.

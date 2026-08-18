@@ -623,6 +623,10 @@ class updatepersonability extends preselect_task {
         }
 
         $flippedresponses = $this->get_flipped_last_response();
+        if (!$flippedresponses) {
+            return $originalability;
+        }
+
         $alternativeability = catcalc::estimate_person_ability(
             $flippedresponses,
             $this->get_item_param_list($scaleid),
@@ -653,7 +657,12 @@ class updatepersonability extends preselect_task {
         if (isset($this->flippedresponses)) {
             return $this->flippedresponses;
         }
+
         $lastquestion = $this->progress->get_last_question();
+        if (!$lastquestion || !isset($this->arrayresponses[$lastquestion->id])) {
+            return [];
+        }
+
         $this->flippedresponses = $this->arrayresponses;
         $frac = floatval($this->flippedresponses[$lastquestion->id]->get_response());
         $flipped = abs(1 - $frac);
@@ -674,9 +683,18 @@ class updatepersonability extends preselect_task {
         if (!$questions || count($questions) < 3) {
             return false;
         }
+
+        $questionswithresponse = array_values(array_filter(
+            $questions,
+            fn ($q) => isset($this->arrayresponses[$q->id])
+        ));
+        if (count($questionswithresponse) < 3) {
+            return false;
+        }
+
         $fraction = array_sum(
-            array_map(fn ($q) => floatval($this->arrayresponses[$q->id]->get_response()), $questions)
-        ) / count($questions);
+            array_map(fn ($q) => floatval($this->arrayresponses[$q->id]->get_response()), $questionswithresponse)
+        ) / count($questionswithresponse);
         if (round($fraction, 0) != round($fraction, 6)) {
             return false;
         }

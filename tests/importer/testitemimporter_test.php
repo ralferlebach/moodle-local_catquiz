@@ -29,6 +29,7 @@ use advanced_testcase;
 use coding_exception;
 use context_course;
 use context_module;
+use context_system;
 use core_question\local\bank\question_edit_contexts;
 use Exception;
 use local_catquiz\importer\testitemimporter;
@@ -124,6 +125,9 @@ final class testitemimporter_test extends advanced_testcase {
                 'lowestlevel' => 1,
                 'standarderror' => 14,
                 'course' => $this->course->id,
+                // The mod_adaptivequiz generator reads attemptfeedbackeditor unconditionally
+                // in adaptivequiz_add_instance(); supply it so instance creation succeeds.
+                'attemptfeedbackeditor' => ['text' => '', 'format' => FORMAT_MOODLE],
             ]);
         $qformat = $this->create_qformat($questionsfile, $this->course);
         $imported = $qformat->importprocess();
@@ -174,7 +178,9 @@ final class testitemimporter_test extends advanced_testcase {
      */
     private function create_qformat($filename, $course) {
         $qformat = new qformat_xml();
-        $qformat->setContexts((new question_edit_contexts(context_course::instance($course->id)))->all());
+        $contexts = (new question_edit_contexts(context_course::instance($course->id)))->all();
+        $contexts[] = context_system::instance();
+        $qformat->setContexts($contexts);
         $qformat->setCourse($course);
         $qformat->setFilename(__DIR__ . '/../fixtures/' . $filename);
         $qformat->setRealfilename($filename);

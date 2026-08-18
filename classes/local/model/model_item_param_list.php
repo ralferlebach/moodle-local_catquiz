@@ -38,7 +38,7 @@ use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\data\dataapi;
 use local_catquiz\event\testiteminscale_added;
-use local_catquiz\remote\hash\question_hasher;
+use local_catquiz\hash\question_hasher;
 use moodle_exception;
 use stdClass;
 use Traversable;
@@ -373,7 +373,6 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
 
         if (!empty($newrecords)) {
             $DB->insert_records('local_catquiz_itemparams', $newrecords);
-
         }
 
         foreach ($updatedrecords as $r) {
@@ -440,7 +439,14 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
                     foreach ($records as $r) {
                         catscale::remove_testitem_from_scale($catscale->id, $r->questionid);
                     }
-                    $newrecord['warning'] = 'Removed older question versions from scale';
+                    $newrecord['warning'] = get_string(
+                        'removedolderquestionversionsfromscale',
+                        'local_catquiz',
+                        [
+                            'label' => $label,
+                            'scale' => $newrecord['catscalename'],
+                        ]
+                    );
                 }
 
                 // 2. Continue with the most recent version of the question:
@@ -519,7 +525,6 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
                 'message' => get_string('success', 'core'),
                 'recordid' => $itemparam->get_id(),
              ];
-
         }
     }
 
@@ -814,7 +819,8 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
                     throw new \Exception("Multiple matching parent scales found.");
                 }
                 $record = end($record);
-                if ($record
+                if (
+                    $record
                     && $matching
                     && !in_array($record, $records)
                 ) {
@@ -828,9 +834,11 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
             }
 
             // For new rootscales, add min & max scalevalue.
-            if ($catscaleid == 0
+            if (
+                $catscaleid == 0
                 && (isset($newrecord['minability'])
-                    || isset($newrecord['maxability']))) {
+                    || isset($newrecord['maxability']))
+            ) {
                 if (isset($newrecord['minability']) && (float) $newrecord['minability'] <= 0) {
                     $minscalevalue = $newrecord['minability'];
                 }
@@ -861,7 +869,6 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
             if ($parent == $newrecord['catscalename'] || !$parentsgiven) {
                 $newrecord['catscaleid'] = $catscaleid;
             }
-
         }
     }
     /**
