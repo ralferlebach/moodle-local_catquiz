@@ -66,6 +66,9 @@ final class itemparam_recovery_test extends advanced_testcase {
             set_config('trusted_region_slope_b', 3, $plugin);
         }
         set_config('trusted_region_max_c', 0.5, 'catmodel_mixedraschbirnbaum');
+
+        set_config('trusted_region_min_a', -10, 'catmodel_grm');
+        set_config('trusted_region_max_a', 10, 'catmodel_grm');
     }
 
     /**
@@ -79,11 +82,27 @@ final class itemparam_recovery_test extends advanced_testcase {
      */
     private function generate_responses(model_model $model, array $truth, int $seed, int $n): array {
         mt_srand($seed);
+        $polytomous = $model::is_polytomous();
+        $categoryfractions = $polytomous ? array_keys($truth['difficulties']) : [];
         $responses = [];
         for ($i = 0; $i < $n; $i++) {
             $ability = -3.5 + 7.0 * $i / ($n - 1);
-            $probability = $model::likelihood(['ability' => $ability], $truth, 1.0);
-            $response = (mt_rand() / mt_getrandmax()) < $probability ? 1.0 : 0.0;
+            if ($polytomous) {
+                // Sample a graded category from its probability under the true params.
+                $roll = mt_rand() / mt_getrandmax();
+                $cumulative = 0.0;
+                $response = (float) end($categoryfractions);
+                foreach ($categoryfractions as $fraction) {
+                    $cumulative += (float) $model::likelihood(['ability' => $ability], $truth, (float) $fraction);
+                    if ($roll <= $cumulative) {
+                        $response = (float) $fraction;
+                        break;
+                    }
+                }
+            } else {
+                $probability = $model::likelihood(['ability' => $ability], $truth, 1.0);
+                $response = (mt_rand() / mt_getrandmax()) < $probability ? 1.0 : 0.0;
+            }
             $personparam = new model_person_param((string) $i, 1);
             $personparam->set_ability($ability);
             $responses[] = new model_item_response('item1', $response, $personparam);
@@ -110,14 +129,37 @@ final class itemparam_recovery_test extends advanced_testcase {
 
         $estimated = catcalc::estimate_item_params($responses, $model);
 
-        foreach ($truth as $name => $value) {
-            $this->assertArrayHasKey($name, $estimated);
-            $this->assertEqualsWithDelta(
-                $value,
-                $estimated[$name],
-                $tolerance,
-                "Parameter '$name' not recovered within tolerance for model '$modelname'."
-            );
+        if (isset($truth['difficulties'])) {
+            // Polytomous: compare the free thresholds (fraction > 0) by fraction.
+            foreach ($truth['difficulties'] as $fraction => $value) {
+                if ((float) $fraction <= 0.0) {
+                    continue;
+                }
+                $estimatedvalue = null;
+                foreach ($estimated['difficulties'] as $estfraction => $estvalue) {
+                    if (abs((float) $estfraction - (float) $fraction) < 1e-9) {
+                        $estimatedvalue = $estvalue;
+                        break;
+                    }
+                }
+                $this->assertNotNull($estimatedvalue, "Threshold at fraction $fraction missing for '$modelname'.");
+                $this->assertEqualsWithDelta(
+                    $value,
+                    $estimatedvalue,
+                    $tolerance,
+                    "Threshold at fraction $fraction not recovered within tolerance for '$modelname'."
+                );
+            }
+        } else {
+            foreach ($truth as $name => $value) {
+                $this->assertArrayHasKey($name, $estimated);
+                $this->assertEqualsWithDelta(
+                    $value,
+                    $estimated[$name],
+                    $tolerance,
+                    "Parameter '$name' not recovered within tolerance for model '$modelname'."
+                );
+            }
         }
     }
 
@@ -138,6 +180,11 @@ final class itemparam_recovery_test extends advanced_testcase {
                 'mixedraschbirnbaum',
                 ['difficulty' => 0.7, 'discrimination' => 1.3, 'guessing' => 0.2],
                 0.40,
+            ],
+            'GRM' => [
+                'grm',
+                ['difficulties' => ['0.0' => 0.0, '0.5' => -0.7, '1.0' => 0.9]],
+                0.35,
             ],
         ];
     }
