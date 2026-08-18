@@ -31,11 +31,16 @@ $tasks = [
     [
         'classname' => recalculate_cat_model_params::class,
         'blocking' => 0,
+        // Issue #44: safe defaults. The incremental recalculation must be a deliberate
+        // admin decision, so it ships disabled, and its default cadence is
+        // quarterly (1st of every third month) instead of daily. Admin changes to
+        // the schedule are preserved on upgrade (Moodle keeps customised tasks).
+        'disabled' => 1,
         'minute' => 'R',
         'hour' => '0',
-        'day' => '*',
+        'day' => '1',
         'dayofweek' => '*',
-        'month' => '*',
+        'month' => '*/3',
     ],
     [
         'classname' => cancel_expired_attempts::class,

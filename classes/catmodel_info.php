@@ -93,11 +93,18 @@ class catmodel_info {
      * @param int $contextid
      * @param int $catscaleid
      * @param int $userid
+     * @param bool $inplace When true, item parameters are written into the given
+     *                      (existing) context and no new context is created or
+     *                      activated; person parameters are left unchanged. This
+     *                      is the context-preserving incremental path used by the
+     *                      scheduled recalculation (see issue #44). When false, a
+     *                      new context is created and item and person parameters
+     *                      are written into it (the disruptive path, see issue #43).
      *
-     * @return void
+     * @return array [models => summary keyed by model display name, targetcontextid => int]
      *
      */
-    public function update_params($contextid, $catscaleid, $userid = 0) {
+    public function update_params($contextid, $catscaleid, $userid = 0, bool $inplace = false) {
         global $USER;
         if (!$userid) {
             $userid = $USER->id;
@@ -127,15 +134,27 @@ class catmodel_info {
                 ],
             ]);
             $event->trigger();
-            return;
+            return ['models' => [], 'targetcontextid' => (int) $contextid];
         }
-        $newcontext = dataapi::create_new_context_for_updated_parameters($catscale);
+        // Issue #44: the incremental path keeps the existing context. It writes item
+        // parameters into that context (save_to_db upserts by componentid+model)
+        // and leaves person parameters untouched, so contextid before == after and
+        // historical statistics/exports stay visible. The disruptive path keeps
+        // its versioning behaviour (a new "updatedparams" context).
+        if ($inplace) {
+            $targetcontextid = $contextid;
+        } else {
+            $newcontext = dataapi::create_new_context_for_updated_parameters($catscale);
+            $targetcontextid = $newcontext->id;
+        }
         $updatedmodels = [];
         foreach ($itemdifficulties as $modelname => $itemparamlist) {
             $itemcounter = 0;
             /** @var model_item_param_list $itemparamlist */
-            $itemparamlist->save_to_db($newcontext->id);
-            $personabilities->save_to_db($newcontext->id, $catscaleid);
+            $itemparamlist->save_to_db($targetcontextid);
+            if (!$inplace) {
+                $personabilities->save_to_db($targetcontextid, $catscaleid);
+            }
             $itemcounter += count($itemparamlist->itemparams);
             $model = get_string('pluginname', 'catmodel_' . $modelname);
             $updatedmodels[$model] = $itemcounter;
@@ -157,6 +176,8 @@ class catmodel_info {
 
         catcontext::load_from_db($contextid)
             ->save_or_update((object)['timecalculated' => time()]);
+
+        return ['models' => $updatedmodels, 'targetcontextid' => (int) $targetcontextid];
     }
 
     /**

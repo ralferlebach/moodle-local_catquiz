@@ -1,5 +1,38 @@
 # Changelog – local_catquiz
 
+## 1.1.4 (interne Version 2026081715)
+
+> Issue #43: Zentraler Berechnungsdienst mit zwei Modi (inkrementell/disruptiv)
+> und CAT-Management-UI. Details in `doc/session-015-changes.md`.
+
+- Neuer stabiler Vertrag `classes/local/calculation/`: `calculation_mode`,
+  `calculation_trigger`, `calculation_request`, `calculation_result`,
+  `calculation_strategy` + `incremental_recalculation`/`disruptive_recalculation`,
+  `calculation_service` (einziger Einstiegspunkt, Moodle-Lock je Skala,
+  Lauf-Zusammenfassung je Skala).
+- Scheduled Task nutzt den Service (inkrementell); neuer `adhoc_calculation`-Task;
+  Web-Request queued nur.
+- `manage_calculation.php`: capability-gated UI (disruptiv: `RISK_DATALOSS` +
+  Bestätigung), Statusübersicht je Skala, verlinkt aus den Einstellungen.
+  Capabilities `local/catquiz:recalculate` + `:disruptiverecalculate`.
+- Test `tests/calculation_service_test.php` (7 Tests, inkl. Kontext-Invariante,
+  Lock, Ad-hoc-Queue). Sprachstrings EN + DE.
+
+## 1.1.4 (interne Version 2026081714)
+
+> Issue #44: Scheduled-Nachberechnung erzeugt keine neuen CAT-Kontexte mehr und
+> blendet keine historischen Daten aus. Details in `doc/session-014-changes.md`.
+
+- Scheduled Task `recalculate_cat_model_params` **standardmäßig deaktiviert** +
+  **vierteljährliche** Kadenz; Upgrade-Schritt setzt bestehende Installationen auf
+  denselben sicheren Stand (nur wenn nicht admin-angepasst).
+- Task lädt den **persistenten aktiven Kontext** aus `catscale.contextid`, nie aus
+  dem Prozess-Cache; `needs_update` vor jeder Mutation; **kein** neuer/aktivierter
+  Kontext (Kontext-Invariante `contextid vorher == nachher`); mtrace-Zusammenfassung.
+- `catmodel_info::update_params(..., $inplace)`: kontexterhaltender Pfad
+  (Itemparameter upsert in bestehenden Kontext, PP unverändert).
+- Test `tests/task_recalculate_context_test.php` (Defaults + Kontext-Invariante).
+
 ## 1.1.4 (interne Version 2026081713)
 
 > CI-Reparaturen und IP-Edge-Case-Experimente. Details in

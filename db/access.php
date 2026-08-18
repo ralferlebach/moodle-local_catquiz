@@ -76,4 +76,22 @@ $capabilities = [
                         'teacher' => CAP_ALLOW,
                 ],
         ],
+        // Capability to trigger an incremental recalculation (issue #43).
+        'local/catquiz:recalculate' => [
+                'captype' => 'write',
+                'contextlevel' => CONTEXT_SYSTEM,
+                'archetypes' => [
+                        'manager' => CAP_ALLOW,
+                ],
+        ],
+        // Capability to trigger a disruptive recalculation (new context). This is
+        // at least as strict as the incremental recalculation capability.
+        'local/catquiz:disruptiverecalculate' => [
+                'captype' => 'write',
+                'contextlevel' => CONTEXT_SYSTEM,
+                'riskbitmask' => RISK_DATALOSS,
+                'archetypes' => [
+                        'manager' => CAP_ALLOW,
+                ],
+        ],
 ];

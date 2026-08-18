@@ -51,6 +51,16 @@ if ($hassiteconfig) {
         )
     );
 
+    $calclink = new moodle_url('/local/catquiz/manage_calculation.php');
+    $calcactionlink = new action_link($calclink, get_string('calculationmanagement', 'local_catquiz'));
+    $settings->add(
+        new admin_setting_heading(
+            'local_catquiz/calculationmanagement',
+            get_string('calculationmanagement', 'local_catquiz'),
+            $OUTPUT->render($calcactionlink),
+        )
+    );
+
     $settings->add(
         new admin_setting_heading(
             'local_catquiz/cattags',

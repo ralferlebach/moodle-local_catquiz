@@ -1193,5 +1193,26 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026052700, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026081714) {
+        // Issue #44: make the scheduled recalculation safe on existing installs.
+        // Disable it and switch it to a quarterly cadence, but only when the admin
+        // has not customised it (so deliberate admin settings are preserved).
+        $task = \core\task\manager::get_scheduled_task(
+            \local_catquiz\task\recalculate_cat_model_params::class
+        );
+        if ($task !== false && !$task->is_customised()) {
+            $task->set_disabled(true);
+            $task->set_minute('R');
+            $task->set_hour('0');
+            $task->set_day('1');
+            $task->set_month('*/3');
+            $task->set_day_of_week('*');
+            \core\task\manager::configure_scheduled_task($task);
+        }
+
+        // Catquiz savepoint reached.
+        upgrade_plugin_savepoint(true, 2026081714, 'local', 'catquiz');
+    }
+
     return true;
 }
