@@ -1,5 +1,28 @@
 # Changelog – local_catquiz
 
+## 1.1.4 (interne Version 2026081717)
+
+> Experiment-Konsequenzen K3, K4, K5. Details in `doc/session-017-changes.md`.
+
+- **K3:** `get_fractions` (GRM/GGRM) zählte eine nicht-null-Baseline reduzierter
+  Strukturen doppelt (Jacobian eine Komponente zu lang); Fix: niedrigste Fraktion
+  als Baseline überspringen. missing-bottom-Fälle schätzen jetzt korrekt.
+- **K4:** K1-Gate nutzt den projizierten Gradienten (KKT) -> keine unnötigen
+  Rescues an Randoptima.
+- **K5:** `catcalc::item_identifiability_report()` (beobachtete Kategorien,
+  projizierter Restgradient, Boundary-Flag, well-identified, Warnungen) + Test.
+
+## 1.1.4 (interne Version 2026081716)
+
+> Experiment-Konsequenzen K1 & K2. Details in `doc/session-016-changes.md`.
+
+- **K1 (Numerik):** Newton-Qualitäts-Gate + BFGS-Rescue mit keep-best in
+  `catcalc::estimate_item_params` – schlecht konditionierte/flache Geometrien
+  erreichen jetzt das bessere Optimum (z. B. GPCM missing-middle −508 → −222);
+  gutartige Items bleiben bit-identisch.
+- **K2 (Numerik):** NaN-feste GRM/GGRM-Startschwellen (freie Schwellen streng über
+  der Baseline, schlüsselerhaltend; opt-in nur graded-Modelle).
+
 ## 1.1.4 (interne Version 2026081715)
 
 > Issue #43: Zentraler Berechnungsdienst mit zwei Modi (inkrementell/disruptiv)

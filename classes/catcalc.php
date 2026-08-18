@@ -271,19 +271,32 @@ class catcalc {
             $trfilter
         );
 
-        // K1 (experiment consequence): Newton quality gate with a BFGS rescue and a
-        // keep-best policy. On flat or ill-conditioned geometries (near-zero
+        // K1/K4 (experiment consequences): Newton quality gate with a BFGS rescue
+        // and a keep-best policy. On flat or ill-conditioned geometries (near-zero
         // discrimination, missing categories, bimodal ability) the Hessian is nearly
         // singular and Newton can stop at a point with a large residual gradient --
-        // a worse optimum than a first-order method reaches. When the residual
-        // gradient is large, run BFGS from the same start and keep whichever result
-        // has the higher log-likelihood. Well-behaved items converge to a tiny
-        // residual, so the gate does not fire and the result is unchanged; and
-        // keep-best guarantees the outcome is never worse than Newton alone.
+        // a worse optimum than a first-order method reaches. When the residual is
+        // large, run BFGS from the same start and keep whichever result has the
+        // higher log-likelihood. Well-behaved items converge to a tiny residual, so
+        // the gate does not fire and the result is unchanged; and keep-best
+        // guarantees the outcome is never worse than Newton alone.
+        // K4: use the PROJECTED gradient, not the raw one. At an active
+        // trusted-region bound the raw gradient can be large while the point is a
+        // legitimate (KKT) boundary optimum. The projected residual is the step the
+        // box actually permits along the gradient -- projected = trust(x+eps*g) - x
+        // -- so a bound that clamps an outward-pointing gradient contributes ~0 and
+        // does not trigger a spurious rescue.
         $gradient = $jacobianvec($resultvector);
+        $eps = 1.0e-6;
+        $probe = [];
+        foreach ($resultvector as $i => $value) {
+            $probe[$i] = $value + $eps * (float) ($gradient[$i] ?? 0.0);
+        }
+        $projected = $trfilter($probe);
         $residual = 0.0;
-        foreach ($gradient as $component) {
-            $residual = max($residual, abs((float) $component));
+        foreach ($resultvector as $i => $value) {
+            $step = ((float) ($projected[$i] ?? $value) - (float) $value) / $eps;
+            $residual = max($residual, abs($step));
         }
         if (is_finite($residual) && $residual > self::NEWTON_RESCUE_GRADIENT) {
             $objective = self::build_itemparam_objective($itemresponse, $model);
@@ -301,6 +314,81 @@ class catcalc {
         }
 
         return $model::convert_vector_to_ip($resultvector, $fractions);
+    }
+
+    /**
+     * Identifiability report for an estimated item (experiment consequence K5).
+     *
+     * Returns per-item diagnostics that a calibration workflow (issue #43) can
+     * surface or persist: the number of observed response categories, the
+     * projected gradient residual at the estimate (K4), whether any parameter sits
+     * at a trusted-region bound, a well-identified flag and human-readable
+     * warnings. It never mutates state and can be called after estimate_item_params.
+     *
+     * @param array $itemresponse array of model_item_response
+     * @param model_model $model
+     * @param array $ip estimated item parameters
+     * @return array {observedcategories:int, gradientresidual:float, atbound:bool,
+     *               wellidentified:bool, warnings:string[]}
+     */
+    public static function item_identifiability_report(array $itemresponse, model_model $model, array $ip): array {
+        $observed = [];
+        foreach ($itemresponse as $r) {
+            $observed[(string) $r->get_response()] = true;
+        }
+
+        // Reconstruct the codec key layout used for this model/estimate.
+        if ($model::is_polytomous()) {
+            $thresholdkey = isset($ip['difficulties']) ? 'difficulties' : 'intercepts';
+            $fractions = array_keys($ip[$thresholdkey]);
+        } else {
+            $fractions = array_keys($ip);
+        }
+        $vector = $model::convert_ip_to_vector($ip);
+        $jacobian = self::build_itemparam_jacobian($itemresponse, $model);
+        $tofrac = fn ($v) => $model::convert_vector_to_ip($v, $fractions);
+        $trfilter = fn ($v) => $model::convert_ip_to_vector($model::restrict_to_trusted_region($tofrac($v)));
+
+        $gradient = $jacobian($tofrac($vector));
+
+        // Projected gradient residual (K4): the step the trusted region permits
+        // along the gradient. A bound clamping an outward-pointing gradient
+        // contributes ~0, so a legitimate boundary optimum is not flagged as
+        // non-converged here.
+        $eps = 1.0e-6;
+        $probe = [];
+        foreach ($vector as $i => $value) {
+            $probe[$i] = $value + $eps * (float) ($gradient[$i] ?? 0.0);
+        }
+        $projected = $trfilter($probe);
+        $residual = 0.0;
+        $atbound = false;
+        foreach ($vector as $i => $value) {
+            $rawstep = (float) ($gradient[$i] ?? 0.0);
+            $projstep = ((float) ($projected[$i] ?? $value) - (float) $value) / $eps;
+            $residual = max($residual, abs($projstep));
+            // Active bound: the gradient wants to move the parameter but the
+            // trusted-region projection blocks (most of) that move.
+            if (abs($rawstep) > 1.0e-6 && abs($projstep) < 0.5 * abs($rawstep)) {
+                $atbound = true;
+            }
+        }
+
+        $warnings = [];
+        if ($atbound) {
+            $warnings[] = 'parameter at trusted-region boundary';
+        }
+        if (!is_finite($residual) || $residual > self::NEWTON_RESCUE_GRADIENT) {
+            $warnings[] = 'large residual gradient (possibly weakly identified or flat)';
+        }
+
+        return [
+            'observedcategories' => count($observed),
+            'gradientresidual' => $residual,
+            'atbound' => $atbound,
+            'wellidentified' => is_finite($residual) && $residual <= self::NEWTON_RESCUE_GRADIENT && !$atbound,
+            'warnings' => $warnings,
+        ];
     }
 
     /**

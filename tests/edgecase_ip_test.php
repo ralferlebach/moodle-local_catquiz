@@ -109,6 +109,18 @@ final class edgecase_ip_test extends advanced_testcase {
         $tofrac = fn($vector) => $model::convert_vector_to_ip($vector, $fractions);
         $lstart = $objective($tofrac($z0));
 
+        if ($fixture['expected'] === 'reduced_structure_limitation') {
+            // K2 guarantees a finite start objective even when the bottom category
+            // is unobserved. Estimating the resulting reduced (baseline-shifted)
+            // category structure is a separate, documented limitation (follow-up
+            // K3: the graded jacobian and codec disagree on the free dimension).
+            $this->assertTrue(
+                is_finite((float) $lstart),
+                "K2 must give a finite start objective for {$fixture['id']}."
+            );
+            return;
+        }
+
         if ($fixture['expected'] === 'degenerate_start_thresholds') {
             // Documented known failure: the GRM-family start thresholds are not
             // finite when the baseline category is unobserved. A future fix of

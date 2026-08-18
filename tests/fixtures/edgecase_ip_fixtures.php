@@ -4221,9 +4221,9 @@ return [
         'id' => 'ip_grm_missing_bottom',
         'model' => 'grm',
         'estimation' => 'ip',
-        'class' => 'N',
+        'class' => 'W',
         'seed' => 314159,
-        'expected' => 'degenerate_start_thresholds',
+        'expected' => 'weakly_identified',
         'generator' => [
             'counts' => [
                 '0.00' => 0,
@@ -6337,9 +6337,9 @@ return [
         'id' => 'ip_grmgeneralized_missing_bottom',
         'model' => 'grmgeneralized',
         'estimation' => 'ip',
-        'class' => 'N',
+        'class' => 'W',
         'seed' => 314159,
-        'expected' => 'degenerate_start_thresholds',
+        'expected' => 'weakly_identified',
         'generator' => [
             'counts' => [
                 '0.00' => 0,

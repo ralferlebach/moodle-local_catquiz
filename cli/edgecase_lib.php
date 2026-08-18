@@ -85,15 +85,13 @@ function edgecase_catalog(): array {
     foreach (['grm', 'grmgeneralized', 'pcm', 'pcmgeneralized'] as $m) {
         $key = in_array($m, ['pcm', 'pcmgeneralized']) ? 'intercepts' : 'difficulties';
         foreach ($variants as $vtag => $counts) {
-            // GRM-family cumulative start thresholds degenerate when the baseline
-            // (bottom) category is unobserved. PCM-family adjacent intercepts stay
-            // finite. Mark the known failure.
-            $isgrmfamily = in_array($m, ['grm', 'grmgeneralized']);
-            $degenerate = ($isgrmfamily && $vtag === 'missing_bottom');
+            // K2 fixed the NaN start thresholds and K3 fixed the reduced-structure
+            // dimension mismatch, so the GRM-family missing-bottom case now
+            // estimates like the other weakly identified missing-category cases.
             $cases[] = [
                 'id' => "ip_{$m}_{$vtag}",
                 'model' => $m, 'estimation' => 'ip',
-                'class' => ($vtag === 'two_of_five' || $degenerate) ? 'N' : 'W',
+                'class' => ($vtag === 'two_of_five') ? 'N' : 'W',
                 'seed' => 314159,
                 'generator' => [
                     'counts' => $counts,
@@ -102,8 +100,7 @@ function edgecase_catalog(): array {
                     'discrimination' => (in_array($m, ['grmgeneralized', 'pcmgeneralized']) ? 1.0 : null),
                     'ability' => 'spread',
                 ],
-                'expected' => $degenerate ? 'degenerate_start_thresholds'
-                    : (($vtag === 'two_of_five') ? 'not_identified' : 'weakly_identified'),
+                'expected' => ($vtag === 'two_of_five') ? 'not_identified' : 'weakly_identified',
             ];
         }
     }

@@ -389,8 +389,18 @@ class grm extends model_multiparam {
 
         $a = self::sort_fractions($array);
 
+        // Skip the lowest fraction: it is the baseline category, whatever its
+        // value. The previous "> 0" test wrongly assumed the baseline is always
+        // 0.0; for a reduced category structure (e.g. an unobserved bottom
+        // category shifting the baseline to 0.25) it double-counted the baseline
+        // and produced a jacobian one component too long (see experiments K3).
+        $first = true;
         foreach ($a as $fraction => $val) {
-            if ((float) $fraction > 0 && (float) $fraction <= 1) {
+            if ($first) {
+                $first = false;
+                continue;
+            }
+            if ((float) $fraction <= 1) {
                 $frac[] = $fraction;
             }
         }
