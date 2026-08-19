@@ -1,3 +1,6 @@
+# Enforce LF line endings for all text files.
+* text=auto eol=lf
+
 # Files and directories that must not be part of a distributed release archive
 # (git archive / export). Runtime code, language strings, templates, PHPUnit and
 # Behat tests, and the changelog are kept; development-only tooling and internal
