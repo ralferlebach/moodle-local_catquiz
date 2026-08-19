@@ -22,11 +22,11 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use local_catquiz\catquiz;
 use local_catquiz\local\calculation\calculation_mode;
 use local_catquiz\local\calculation\calculation_request;
 use local_catquiz\local\calculation\calculation_service;
 use local_catquiz\local\calculation\calculation_trigger;
+use local_catquiz\table\calculationstatus_table;
 
 require_once(__DIR__ . '/../../config.php');
 
@@ -87,39 +87,31 @@ echo $OUTPUT->header();
 echo $OUTPUT->heading(get_string('calculationmanagement', 'local_catquiz'));
 echo html_writer::tag('p', get_string('calculationmanagement_help', 'local_catquiz'));
 
-$candisruptive = has_capability('local/catquiz:disruptiverecalculate', $context);
+// Per-scale status and trigger buttons as a wunderbyte_table (sortable, paged).
+$table = new calculationstatus_table('catquizcalculationstatus');
+$now = time();
+$select = 's.id, s.name, s.contextid';
+$from = '{local_catquiz_catscales} s '
+    . 'JOIN {local_catquiz_catcontext} cc ON cc.id = s.contextid';
+$where = 's.parentid = 0 AND cc.starttimestamp <= :now1 AND cc.endtimestamp >= :now2';
+$params = ['now1' => $now, 'now2' => $now];
+$table->set_filter_sql($select, $from, $where, '', $params);
 
-$table = new html_table();
-$table->head = [
-    get_string('catscale', 'local_catquiz'),
-    get_string('contextid', 'local_catquiz'),
-    get_string('lastcalculation', 'local_catquiz'),
-    get_string('actions'),
+$columns = [
+    'name' => get_string('catscale', 'local_catquiz'),
+    'contextid' => get_string('contextid', 'local_catquiz'),
+    'lastcalculation' => get_string('lastcalculation', 'local_catquiz'),
+    'action' => get_string('actions'),
 ];
+$table->define_columns(array_keys($columns));
+$table->define_headers(array_values($columns));
+$table->define_sortablecolumns(['name', 'contextid']);
+$table->define_fulltextsearchcolumns(['name']);
+$table->sort_default_column = 'name';
+$table->sort_default_order = SORT_ASC;
+$table->pageable(true);
+$table->showcountlabel = true;
+$table->showreloadbutton = true;
 
-foreach (catquiz::get_all_scales_for_active_contexts() as $scale) {
-    $summary = calculation_service::get_last_summary((int) $scale->id);
-    $status = $summary ? $summary->to_console_line() : get_string('none');
-
-    $incrementalurl = new moodle_url('/local/catquiz/manage_calculation.php', [
-        'scaleid' => $scale->id, 'mode' => calculation_mode::INCREMENTAL_RECALCULATION, 'sesskey' => sesskey(),
-    ]);
-    $actions = $OUTPUT->single_button($incrementalurl, get_string('startrecalculation', 'local_catquiz'), 'get');
-
-    if ($candisruptive) {
-        $disruptiveurl = new moodle_url('/local/catquiz/manage_calculation.php', [
-            'scaleid' => $scale->id, 'mode' => calculation_mode::DISRUPTIVE_RECALCULATION, 'sesskey' => sesskey(),
-        ]);
-        $actions .= $OUTPUT->single_button($disruptiveurl, get_string('startdisruptive', 'local_catquiz'), 'get');
-    }
-
-    $table->data[] = [
-        format_string($scale->name),
-        $scale->contextid,
-        $status,
-        $actions,
-    ];
-}
-
-echo html_writer::table($table);
+echo $table->outhtml(20, true);
 echo $OUTPUT->footer();

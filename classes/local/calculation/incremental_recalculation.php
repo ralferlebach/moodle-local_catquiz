@@ -33,6 +33,8 @@ use local_catquiz\catmodel_info;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class incremental_recalculation implements calculation_strategy {
+    use identifiability_aware;
+
     /**
      * The mode this strategy implements.
      *
@@ -76,6 +78,7 @@ final class incremental_recalculation implements calculation_strategy {
         $result->set('targetcontextid', (int) ($summary['targetcontextid'] ?? $request->get_contextid()));
         $result->set('modelchanges', $summary['models']);
         $result->set('changeditems', array_sum($summary['models']));
+        $this->apply_identifiability($result, $summary['identifiability'] ?? null);
         $result->set('iterations', 1);
         $result->set('convergencereason', 'single in-place item-parameter update');
         return $result->finish(calculation_result::STATUS_SUCCESS);

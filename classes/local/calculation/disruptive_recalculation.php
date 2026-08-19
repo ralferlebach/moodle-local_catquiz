@@ -33,6 +33,8 @@ use Throwable;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class disruptive_recalculation implements calculation_strategy {
+    use identifiability_aware;
+
     /**
      * The mode this strategy implements.
      *
@@ -89,6 +91,7 @@ final class disruptive_recalculation implements calculation_strategy {
         $result->set('targetcontextid', $targetcontextid);
         $result->set('modelchanges', $summary['models']);
         $result->set('changeditems', array_sum($summary['models']));
+        $this->apply_identifiability($result, $summary['identifiability'] ?? null);
         $result->set('convergencereason', 'estimation converged; new context activated');
         return $result->finish(calculation_result::STATUS_SUCCESS);
     }

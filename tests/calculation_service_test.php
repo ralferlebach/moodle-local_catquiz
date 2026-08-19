@@ -33,6 +33,7 @@ use local_catquiz\local\calculation\calculation_result;
 use local_catquiz\local\calculation\calculation_service;
 use local_catquiz\local\calculation\calculation_trigger;
 use local_catquiz\local\calculation\disruptive_recalculation;
+use local_catquiz\local\calculation\identifiability_aware;
 use local_catquiz\local\calculation\incremental_recalculation;
 
 /**
@@ -254,5 +255,37 @@ final class calculation_service_test extends advanced_testcase {
 
         $this->assertSame(calculation_result::STATUS_ERROR, $result->get_status());
         $this->assertNotEmpty($result->get('errors'));
+    }
+    /**
+     * The identifiability summary (K5) is written into the result criteria and warnings.
+     *
+     * @covers \\local_catquiz\\local\\calculation\\identifiability_aware
+     * @return void
+     */
+    public function test_identifiability_is_applied_to_result(): void {
+        $this->resetAfterTest(true);
+        $result = new calculation_result(calculation_mode::DISRUPTIVE_RECALCULATION, 1, 10);
+        $applier = new class {
+            use identifiability_aware;
+
+            /**
+             * Expose the protected trait method for testing.
+             * @param calculation_result $result
+             * @param array $summary
+             * @return void
+             */
+            public function apply(calculation_result $result, array $summary): void {
+                $this->apply_identifiability($result, $summary);
+            }
+        };
+        $applier->apply($result, [
+            'total' => 5, 'wellidentified' => 3, 'weaklyidentified' => 2, 'atbound' => 1,
+            'warnings' => ['Item q1 (grm): large residual gradient'],
+        ]);
+        $array = $result->to_array();
+        $this->assertSame(5, $array['criteriaafter']['itemstotal']);
+        $this->assertSame(2, $array['criteriaafter']['weaklyidentified']);
+        $this->assertSame(1, $array['criteriaafter']['atbound']);
+        $this->assertContains('Item q1 (grm): large residual gradient', $array['warnings']);
     }
 }

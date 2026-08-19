@@ -31,6 +31,8 @@ use local_catquiz\data\dataapi;
 use local_catquiz\event\calculation_executed;
 use local_catquiz\event\calculation_skipped;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_model;
+use local_catquiz\catcalc;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\local\model\model_strategy_factory;
@@ -134,7 +136,7 @@ class catmodel_info {
                 ],
             ]);
             $event->trigger();
-            return ['models' => [], 'targetcontextid' => (int) $contextid];
+            return ['models' => [], 'targetcontextid' => (int) $contextid, 'identifiability' => null];
         }
         // Issue #44: the incremental path keeps the existing context. It writes item
         // parameters into that context (save_to_db upserts by componentid+model)
@@ -177,7 +179,67 @@ class catmodel_info {
         catcontext::load_from_db($contextid)
             ->save_or_update((object)['timecalculated' => time()]);
 
-        return ['models' => $updatedmodels, 'targetcontextid' => (int) $targetcontextid];
+        $identifiability = self::identifiability_summary($strategy, $itemdifficulties);
+
+        return [
+            'models' => $updatedmodels,
+            'targetcontextid' => (int) $targetcontextid,
+            'identifiability' => $identifiability,
+        ];
+    }
+
+    /**
+     * Aggregate per-item identifiability over the estimated items (K5 wiring).
+     *
+     * Runs catcalc::item_identifiability_report() for every estimated item and
+     * returns counts plus a bounded list of human-readable warnings, so a
+     * calibration workflow (issue #43) can surface which items are weakly
+     * identified or sit at a trusted-region bound. Errors on individual items are
+     * ignored so the summary never breaks the calculation.
+     *
+     * @param model_strategy $strategy
+     * @param array $itemdifficulties modelname => model_item_param_list
+     * @return array {total:int, wellidentified:int, weaklyidentified:int, atbound:int, warnings:string[]}
+     */
+    private static function identifiability_summary($strategy, array $itemdifficulties): array {
+        $summary = ['total' => 0, 'wellidentified' => 0, 'weaklyidentified' => 0, 'atbound' => 0, 'warnings' => []];
+        $maxwarnings = 20;
+        try {
+            $itemresponses = $strategy->get_responses()->get_item_response();
+        } catch (\Throwable $e) {
+            return $summary;
+        }
+        foreach ($itemdifficulties as $modelname => $itemparamlist) {
+            $model = model_model::get_instance($modelname);
+            foreach ($itemparamlist as $itemparam) {
+                $componentid = $itemparam->get_componentid();
+                if (!isset($itemresponses[$componentid])) {
+                    continue;
+                }
+                $ip = $itemparam->get_params_array();
+                if (!is_array($ip)) {
+                    continue;
+                }
+                try {
+                    $report = catcalc::item_identifiability_report($itemresponses[$componentid], $model, $ip);
+                } catch (\Throwable $e) {
+                    continue;
+                }
+                $summary['total']++;
+                if ($report['wellidentified']) {
+                    $summary['wellidentified']++;
+                } else {
+                    $summary['weaklyidentified']++;
+                }
+                if ($report['atbound']) {
+                    $summary['atbound']++;
+                }
+                if (!empty($report['warnings']) && count($summary['warnings']) < $maxwarnings) {
+                    $summary['warnings'][] = "Item {$componentid} ({$modelname}): " . implode('; ', $report['warnings']);
+                }
+            }
+        }
+        return $summary;
     }
 
     /**

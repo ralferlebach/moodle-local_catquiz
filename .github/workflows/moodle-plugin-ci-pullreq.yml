@@ -82,8 +82,11 @@ jobs:
       - name: Install moodle-plugin-ci
         run: |
           moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
-          moodle-plugin-ci add-plugin --branch alise_adaptivequiz Wunderbyte-GmbH/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
 
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
@@ -91,14 +94,6 @@ jobs:
           MOODLE_BRANCH: ${{ matrix.moodle-branch }}
           MUSTACHE_IGNORE_NAMES: 'feedbackform_collapsible_close.mustache,feedbackform_collapsible_open.mustache,catscaleshortcodetablechildren.mustache'
 
-      - name: Work around mod_adaptivequiz generator bug (attemptfeedbackeditor)
-        # The mod_adaptivequiz dependency (incl. the alise_adaptivequiz fork) reads
-        # $adaptivequiz->attemptfeedbackeditor unconditionally in add/update_instance(),
-        # but its test generator never sets it, so every generator-created instance
-        # (PHPUnit and Behat) fails on creation. Inject the missing default until the
-        # fork fixes its generator. Idempotent; CI-only (export-ignored from releases).
-        if: ${{ always() }}
-        run: php plugin/.github/ci/patch_adaptivequiz_generator.php "$(pwd)"
 
       - name: PHP Lint
         if: ${{ always() }}
@@ -143,10 +138,8 @@ jobs:
         run: moodle-plugin-ci phpunit --testdox
 
       - name: Behat features
-        # Blocking again: the mod_adaptivequiz generator bug that used to break instance
-        # creation is worked around by the patch step above (see
-        # .github/ci/patch_adaptivequiz_generator.php), so the adaptivequiz-integration
-        # scenarios can create instances. Drop the workaround once the fork sets
-        # attemptfeedbackeditor in its own generator.
+        # Dependencies are pulled from the ralferlebach v-3.0 forks, whose
+        # mod_adaptivequiz no longer has the attemptfeedbackeditor generator bug,
+        # so instance creation works without a patch step.
         if: ${{ always() }}
         run: moodle-plugin-ci behat --profile chrome
