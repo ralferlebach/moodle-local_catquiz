@@ -308,7 +308,11 @@ class catmodel_info {
             [$catscaleid, ...$subscales],
             $context->gettimecalculated()
         );
-        $newresponses = intval(($DB->get_record_sql($sql, $params))->count);
+        // Use count_records_sql for the COUNT(*) query: it reads the count portably.
+        // Accessing ->count on the raw record broke on MySQL/MariaDB, where the
+        // unaliased COUNT(*) column is named "COUNT(*)" rather than "count", which
+        // raised an "undefined property" warning (an exception under test debugging).
+        $newresponses = $DB->count_records_sql($sql, $params);
 
         return $newresponses > 0;
     }
