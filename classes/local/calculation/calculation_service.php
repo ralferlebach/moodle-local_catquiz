@@ -153,4 +153,30 @@ class calculation_service {
         }
         return calculation_result::from_array($data);
     }
+
+    /**
+     * Whether a calculation is currently pending or running for a scale (issue #43).
+     *
+     * Inspects the adhoc task queue for a queued adhoc_calculation task carrying the
+     * given scale id. A task without a start time is pending; one with a start time
+     * is running.
+     *
+     * @param int $scaleid
+     * @return string|null 'running', 'pending' or null when nothing is queued
+     */
+    public static function get_pending_status(int $scaleid): ?string {
+        global $DB;
+        $records = $DB->get_records_select(
+            'task_adhoc',
+            $DB->sql_like('classname', ':cn'),
+            ['cn' => '%adhoc_calculation']
+        );
+        foreach ($records as $record) {
+            $data = json_decode($record->customdata, true);
+            if (is_array($data) && (int) ($data['scaleid'] ?? 0) === $scaleid) {
+                return empty($record->timestarted) ? 'pending' : 'running';
+            }
+        }
+        return null;
+    }
 }

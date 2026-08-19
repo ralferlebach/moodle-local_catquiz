@@ -91,4 +91,33 @@ final class incremental_estimation_test extends advanced_testcase {
         // Item parameters were produced.
         $this->assertNotEmpty($itemdifficulties);
     }
+
+    /**
+     * The disruptive loop seeds via an initial 1PL step and reports a stop reason.
+     *
+     * @return void
+     */
+    public function test_disruptive_estimation_bootstraps_and_reports_convergence(): void {
+        $this->resetAfterTest(true);
+        set_config('trusted_region_min_b', -10.0, 'local_catquiz');
+        set_config('trusted_region_max_b', 10.0, 'local_catquiz');
+
+        $responses = $this->build_responses();
+        // No old item parameters are passed -> the initial 1PL/Rasch step must run.
+        $strategy = new model_strategy($responses, ['max_iterations' => 3]);
+        [$itemdifficulties, $personabilities] = $strategy->run_disruptive_estimation();
+
+        // Explicit initial 1PL/Rasch bootstrap was used (no start parameters existed).
+        $this->assertTrue($strategy->used_initial_rasch());
+
+        // A definite stop reason was recorded (either convergence or the iteration limit).
+        $reason = $strategy->get_convergence_reason();
+        $this->assertContains($reason, ['no further improvement', 'maximum iterations reached']);
+
+        // The iteration count never exceeds the configured maximum.
+        $this->assertLessThanOrEqual(3, $strategy->get_iterations());
+        $this->assertGreaterThanOrEqual(1, $strategy->get_iterations());
+        $this->assertNotEmpty($itemdifficulties);
+        $this->assertNotEmpty($personabilities);
+    }
 }

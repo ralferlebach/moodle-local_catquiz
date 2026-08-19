@@ -52,6 +52,23 @@ class calculationstatus_table extends wunderbyte_table {
     }
 
     /**
+     * Show whether a calculation is currently running or pending for the scale.
+     *
+     * @param stdClass $values
+     * @return string
+     */
+    public function col_status(stdClass $values): string {
+        $status = calculation_service::get_pending_status((int) $values->id);
+        if ($status === 'running') {
+            return get_string('calculationrunning', 'local_catquiz');
+        }
+        if ($status === 'pending') {
+            return get_string('calculationpending', 'local_catquiz');
+        }
+        return get_string('none');
+    }
+
+    /**
      * Render the trigger buttons (incremental always; disruptive if allowed).
      *
      * @param stdClass $values

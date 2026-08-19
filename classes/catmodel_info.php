@@ -123,7 +123,7 @@ class catmodel_info {
             if ($inplace) {
                 [$itemdifficulties, $personabilities] = $strategy->run_incremental_estimation();
             } else {
-                [$itemdifficulties, $personabilities] = $strategy->run_estimation();
+                [$itemdifficulties, $personabilities] = $strategy->run_disruptive_estimation();
             }
         } catch (moodle_exception $e) {
             $errorcode = 'noresponsestoestimate';
@@ -205,11 +205,14 @@ class catmodel_info {
             ? $strategy->aggregate_information_criteria($oldparams, $personabilities)
             : [];
         $iterations = $strategy->get_iterations();
-        $convergencereason = $inplace
-            ? 'single in-place item-parameter pass (person parameters fixed)'
-            : ($iterations >= $strategy->get_max_iterations()
-                ? 'maximum iterations reached'
-                : 'no further improvement');
+        if ($inplace) {
+            $convergencereason = 'single in-place item-parameter pass (person parameters fixed)';
+        } else {
+            $convergencereason = $strategy->get_convergence_reason();
+            if ($strategy->used_initial_rasch()) {
+                $convergencereason .= '; seeded via initial 1PL/Rasch estimation';
+            }
+        }
 
         $responses = $strategy->get_responses();
         $itemresponsemap = $responses->get_item_response();

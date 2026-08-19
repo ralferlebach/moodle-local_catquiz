@@ -96,6 +96,16 @@ class model_strategy {
     private int $iterations = 0;
 
     /**
+     * @var string reason the disruptive estimation loop stopped
+     */
+    private string $convergencereason = '';
+
+    /**
+     * @var bool whether the disruptive run seeded via an initial 1PL/Rasch step
+     */
+    private bool $usedinitialrasch = false;
+
+    /**
      * @var string|null modeloverride
      */
     private ?string $modeloverride;
@@ -205,6 +215,107 @@ class model_strategy {
         } else if ($maxiterations <= 0) {
             $errors['max_iterations'] = get_string('notpositive', 'local_catquiz');
         }
+    }
+
+    /**
+     * Minimum AIC improvement per iteration to count as "further improvement".
+     */
+    const CONVERGENCE_MIN_DELTA = 1e-6;
+
+    /**
+     * Disruptive recalculation: iterate PP/IP with explicit convergence handling.
+     *
+     * Issue #43 (disruptive): if no usable start parameters exist, an explicit
+     * initial 1PL/Rasch estimation seeds the start values. The loop then iterates
+     * person and item parameters and stops on the first of: no further improvement
+     * of the aggregate information criterion, or the maximum iteration limit. The
+     * chosen stop reason is recorded and retrievable via get_convergence_reason().
+     * run_estimation() is left untouched so the model regression stays bit-exact.
+     *
+     * @return array [model_item_param_list[] keyed by model, model_person_param_list]
+     */
+    public function run_disruptive_estimation(): array {
+        $personabilities = $this->responses->get_person_abilities();
+        $this->convergencereason = '';
+        $this->usedinitialrasch = false;
+
+        // Explicit initial 1PL/Rasch step when no usable start parameters exist.
+        if (!$this->has_start_parameters() && isset($this->models['rasch'])) {
+            $raschstart = $this->models['rasch']->estimate_item_params($this->responses, $personabilities, null);
+            $this->set_calculated_progress('rasch', $raschstart);
+            $this->usedinitialrasch = true;
+        }
+
+        /** @var array<model_item_param_list> $itemdifficulties */
+        $itemdifficulties = [];
+        $filtereddiffi = null;
+        $previouscriterion = null;
+        while ($this->iterations < $this->maxiterations) {
+            foreach ($this->models as $name => $model) {
+                $oldmodelparams = $this->olditemparams[$name] ?? null;
+                $startvalues = $this->get_startvalues_for_model($name) ?? null;
+                if ($startvalues && $oldmodelparams) {
+                    $startvalues->without($oldmodelparams->confirmed(), false);
+                }
+                $itemdifficulties[$name] = $model
+                    ->estimate_item_params($this->responses, $personabilities, $startvalues);
+                $this->set_calculated_progress($name, $itemdifficulties[$name]);
+            }
+            $filtereddiffi = $this->select_item_model($itemdifficulties, $personabilities);
+            $personabilities = $this->abilityestimator->get_person_abilities($filtereddiffi);
+            $this->set_calculated_abilities_progress($personabilities);
+            $this->responses->set_person_abilities($personabilities);
+            $this->iterations++;
+
+            // No-improvement convergence on the aggregate AIC (lower is better).
+            $criterion = $this->aggregate_information_criteria($itemdifficulties, $personabilities)['aic'];
+            $noimprovement = $previouscriterion !== null
+                && is_finite($criterion)
+                && $criterion >= $previouscriterion - self::CONVERGENCE_MIN_DELTA;
+            if ($noimprovement) {
+                $this->convergencereason = 'no further improvement';
+                break;
+            }
+            $previouscriterion = $criterion;
+        }
+        if ($this->convergencereason === '') {
+            $this->convergencereason = 'maximum iterations reached';
+        }
+
+        $itemdiffiwstatus = $this->set_status($itemdifficulties, $filtereddiffi);
+        return [$itemdiffiwstatus, $personabilities];
+    }
+
+    /**
+     * Whether any usable (non-empty) start item parameters are available.
+     *
+     * @return bool
+     */
+    private function has_start_parameters(): bool {
+        foreach ($this->olditemparams as $list) {
+            if ($list !== null && count($list) > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The reason the last disruptive estimation loop stopped.
+     *
+     * @return string
+     */
+    public function get_convergence_reason(): string {
+        return $this->convergencereason ?? '';
+    }
+
+    /**
+     * Whether the last disruptive run seeded start values via an initial 1PL/Rasch step.
+     *
+     * @return bool
+     */
+    public function used_initial_rasch(): bool {
+        return $this->usedinitialrasch ?? false;
     }
 
     /**

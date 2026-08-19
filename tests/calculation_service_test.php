@@ -297,4 +297,29 @@ final class calculation_service_test extends advanced_testcase {
         $this->assertSame(40, $array['numresponses']);
         $this->assertContains('Item q1 (grm): large residual gradient', $array['warnings']);
     }
+    /**
+     * A queued adhoc calculation is reported as pending for its scale (issue #43).
+     *
+     * @covers \\local_catquiz\\local\\calculation\\calculation_service::get_pending_status
+     * @return void
+     */
+    public function test_pending_status_detects_queued_calculation(): void {
+        $this->resetAfterTest(true);
+        $scaleid = 4242;
+        $this->assertNull(calculation_service::get_pending_status($scaleid));
+
+        $service = new calculation_service();
+        $request = new calculation_request(
+            $scaleid,
+            999,
+            calculation_mode::INCREMENTAL_RECALCULATION,
+            calculation_trigger::MANUAL,
+            0
+        );
+        $service->queue($request);
+
+        $this->assertSame('pending', calculation_service::get_pending_status($scaleid));
+        // A different scale is unaffected.
+        $this->assertNull(calculation_service::get_pending_status($scaleid + 1));
+    }
 }

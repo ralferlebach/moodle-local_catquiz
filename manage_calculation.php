@@ -100,6 +100,7 @@ $table->set_filter_sql($select, $from, $where, '', $params);
 $columns = [
     'name' => get_string('catscale', 'local_catquiz'),
     'contextid' => get_string('contextid', 'local_catquiz'),
+    'status' => get_string('calculationstatus', 'local_catquiz'),
     'lastcalculation' => get_string('lastcalculation', 'local_catquiz'),
     'action' => get_string('actions'),
 ];
