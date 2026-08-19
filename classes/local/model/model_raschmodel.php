@@ -496,6 +496,12 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
             case 'aic':
                 return $this->calc_aic_item($personabilities, $itemparams, $k);
 
+            case 'bic':
+                return $this->calc_bic_item($personabilities, $itemparams, $k);
+
+            case 'caic':
+                return $this->calc_caic_item($personabilities, $itemparams, $k);
+
             default:
                 throw new \UnexpectedValueException("Unknown information criterium" . $criterion);
         }

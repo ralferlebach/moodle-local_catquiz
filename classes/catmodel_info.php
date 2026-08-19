@@ -107,7 +107,7 @@ class catmodel_info {
      *
      */
     public function update_params($contextid, $catscaleid, $userid = 0, bool $inplace = false) {
-        global $USER;
+        global $USER, $DB;
         if (!$userid) {
             $userid = $USER->id;
         }
@@ -117,7 +117,14 @@ class catmodel_info {
         $initialabilities = model_person_param_list::load_from_db($contextid, [$catscaleid]);
         $strategy->get_responses()->set_person_abilities($initialabilities);
         try {
-            [$itemdifficulties, $personabilities] = $strategy->run_estimation();
+            // Issue #43: the incremental (in-place) path performs exactly one
+            // item-parameter pass with the fixed person abilities; the disruptive
+            // path iterates person and item parameters.
+            if ($inplace) {
+                [$itemdifficulties, $personabilities] = $strategy->run_incremental_estimation();
+            } else {
+                [$itemdifficulties, $personabilities] = $strategy->run_estimation();
+            }
         } catch (moodle_exception $e) {
             $errorcode = 'noresponsestoestimate';
             // Only handle our own exception.
@@ -150,16 +157,25 @@ class catmodel_info {
             $targetcontextid = $newcontext->id;
         }
         $updatedmodels = [];
-        foreach ($itemdifficulties as $modelname => $itemparamlist) {
-            $itemcounter = 0;
-            /** @var model_item_param_list $itemparamlist */
-            $itemparamlist->save_to_db($targetcontextid);
-            if (!$inplace) {
-                $personabilities->save_to_db($targetcontextid, $catscaleid);
+        // Issue #43: persist the item parameters atomically. A failure must not
+        // leave a half-updated item-parameter set in the context.
+        $transaction = $DB->start_delegated_transaction();
+        try {
+            foreach ($itemdifficulties as $modelname => $itemparamlist) {
+                $itemcounter = 0;
+                /** @var model_item_param_list $itemparamlist */
+                $itemparamlist->save_to_db($targetcontextid);
+                if (!$inplace) {
+                    $personabilities->save_to_db($targetcontextid, $catscaleid);
+                }
+                $itemcounter += count($itemparamlist->itemparams);
+                $model = get_string('pluginname', 'catmodel_' . $modelname);
+                $updatedmodels[$model] = $itemcounter;
             }
-            $itemcounter += count($itemparamlist->itemparams);
-            $model = get_string('pluginname', 'catmodel_' . $modelname);
-            $updatedmodels[$model] = $itemcounter;
+            $transaction->allow_commit();
+        } catch (\Throwable $e) {
+            $transaction->rollback($e);
+            throw $e;
         }
 
         $updatedmodelsjson = json_encode($updatedmodels);
@@ -181,10 +197,41 @@ class catmodel_info {
 
         $identifiability = self::identifiability_summary($strategy, $itemdifficulties);
 
+        // Issue #43: AIC/BIC/CAIC before (old params) and after (new params) over
+        // the same person abilities, plus the iteration/convergence metadata.
+        $criteriaafter = $strategy->aggregate_information_criteria($itemdifficulties, $personabilities);
+        $oldparams = $strategy->get_old_item_params();
+        $criteriabefore = !empty($oldparams)
+            ? $strategy->aggregate_information_criteria($oldparams, $personabilities)
+            : [];
+        $iterations = $strategy->get_iterations();
+        $convergencereason = $inplace
+            ? 'single in-place item-parameter pass (person parameters fixed)'
+            : ($iterations >= $strategy->get_max_iterations()
+                ? 'maximum iterations reached'
+                : 'no further improvement');
+
+        $responses = $strategy->get_responses();
+        $itemresponsemap = $responses->get_item_response();
+        $numresponses = 0;
+        foreach ($itemresponsemap as $peritem) {
+            $numresponses += count($peritem);
+        }
+        $counts = [
+            'numresponses' => $numresponses,
+            'numpersons' => count($responses->get_person_ids()),
+            'numitems' => count($responses->get_item_ids()),
+        ];
+
         return [
             'models' => $updatedmodels,
             'targetcontextid' => (int) $targetcontextid,
             'identifiability' => $identifiability,
+            'counts' => $counts,
+            'criteriabefore' => $criteriabefore,
+            'criteriaafter' => $criteriaafter,
+            'iterations' => $iterations,
+            'convergencereason' => $convergencereason,
         ];
     }
 

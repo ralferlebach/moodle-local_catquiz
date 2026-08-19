@@ -25,22 +25,46 @@ namespace local_catquiz\local\calculation;
  */
 trait identifiability_aware {
     /**
-     * Populate the result's after-criteria and warnings from the identifiability summary.
+     * Populate the response/person/item counts on the result.
      *
      * @param calculation_result $result
-     * @param array|null $identifiability aggregate from catmodel_info::update_params
+     * @param array|null $counts from catmodel_info::update_params
      * @return void
      */
-    protected function apply_identifiability(calculation_result $result, ?array $identifiability): void {
-        if (empty($identifiability)) {
+    protected function apply_counts(calculation_result $result, ?array $counts): void {
+        if (empty($counts)) {
             return;
         }
-        $result->set('criteriaafter', [
-            'itemstotal' => $identifiability['total'] ?? 0,
-            'wellidentified' => $identifiability['wellidentified'] ?? 0,
-            'weaklyidentified' => $identifiability['weaklyidentified'] ?? 0,
-            'atbound' => $identifiability['atbound'] ?? 0,
-        ]);
+        $result->set('numresponses', (int) ($counts['numresponses'] ?? 0));
+        $result->set('numpersons', (int) ($counts['numpersons'] ?? 0));
+        $result->set('numitems', (int) ($counts['numitems'] ?? 0));
+    }
+
+    /**
+     * Populate the AIC/BIC/CAIC before/after criteria and convergence metadata.
+     *
+     * The identifiability warnings (K5) are added to the result's warnings; the
+     * numeric AIC/BIC/CAIC aggregates go into criteriabefore/criteriaafter.
+     *
+     * @param calculation_result $result
+     * @param array $summary from catmodel_info::update_params
+     * @return void
+     */
+    protected function apply_criteria(calculation_result $result, array $summary): void {
+        if (isset($summary['criteriabefore'])) {
+            $result->set('criteriabefore', $summary['criteriabefore']);
+        }
+        if (isset($summary['criteriaafter'])) {
+            $result->set('criteriaafter', $summary['criteriaafter']);
+        }
+        if (isset($summary['iterations'])) {
+            $result->set('iterations', (int) $summary['iterations']);
+        }
+        if (!empty($summary['convergencereason'])) {
+            $result->set('convergencereason', $summary['convergencereason']);
+        }
+        // K5 identifiability warnings.
+        $identifiability = $summary['identifiability'] ?? null;
         foreach (($identifiability['warnings'] ?? []) as $warning) {
             $result->add_warning($warning);
         }

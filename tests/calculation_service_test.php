@@ -269,23 +269,32 @@ final class calculation_service_test extends advanced_testcase {
             use identifiability_aware;
 
             /**
-             * Expose the protected trait method for testing.
+             * Expose the protected trait methods for testing.
              * @param calculation_result $result
              * @param array $summary
              * @return void
              */
             public function apply(calculation_result $result, array $summary): void {
-                $this->apply_identifiability($result, $summary);
+                $this->apply_criteria($result, $summary);
+                $this->apply_counts($result, $summary['counts'] ?? null);
             }
         };
         $applier->apply($result, [
-            'total' => 5, 'wellidentified' => 3, 'weaklyidentified' => 2, 'atbound' => 1,
-            'warnings' => ['Item q1 (grm): large residual gradient'],
+            'criteriabefore' => ['aic' => 200.0, 'bic' => 210.0, 'caic' => 213.0],
+            'criteriaafter' => ['aic' => 180.0, 'bic' => 191.0, 'caic' => 194.0],
+            'iterations' => 3,
+            'convergencereason' => 'maximum iterations reached',
+            'counts' => ['numresponses' => 40, 'numpersons' => 10, 'numitems' => 4],
+            'identifiability' => [
+                'warnings' => ['Item q1 (grm): large residual gradient'],
+            ],
         ]);
         $array = $result->to_array();
-        $this->assertSame(5, $array['criteriaafter']['itemstotal']);
-        $this->assertSame(2, $array['criteriaafter']['weaklyidentified']);
-        $this->assertSame(1, $array['criteriaafter']['atbound']);
+        $this->assertSame(180.0, $array['criteriaafter']['aic']);
+        $this->assertSame(200.0, $array['criteriabefore']['aic']);
+        $this->assertSame(3, $array['iterations']);
+        $this->assertSame('maximum iterations reached', $array['convergencereason']);
+        $this->assertSame(40, $array['numresponses']);
         $this->assertContains('Item q1 (grm): large residual gradient', $array['warnings']);
     }
 }

@@ -208,6 +208,107 @@ class model_strategy {
     }
 
     /**
+     * Aggregate AIC/BIC/CAIC over a set of item parameters (issue #43 result).
+     *
+     * Uses the shared model_model::get_information_criterion() so both calculation
+     * modes report identical definitions. Items that cannot be evaluated are
+     * skipped so the aggregate never breaks the calculation.
+     *
+     * @param array $itemdifficulties modelname => model_item_param_list
+     * @param model_person_param_list $personabilities
+     * @return array {aic:float, bic:float, caic:float}
+     */
+    public function aggregate_information_criteria(array $itemdifficulties, $personabilities): array {
+        $totals = ['aic' => 0.0, 'bic' => 0.0, 'caic' => 0.0];
+        foreach ($itemdifficulties as $name => $itemparamlist) {
+            if (!isset($this->models[$name])) {
+                continue;
+            }
+            $model = $this->models[$name];
+            foreach ($itemparamlist as $itemparam) {
+                foreach (['aic', 'bic', 'caic'] as $criterion) {
+                    try {
+                        $value = $model->get_information_criterion(
+                            $criterion,
+                            $personabilities,
+                            $itemparam,
+                            $this->responses
+                        );
+                        if (is_finite($value)) {
+                            $totals[$criterion] += $value;
+                        }
+                    } catch (\Throwable $e) {
+                        continue;
+                    }
+                }
+            }
+        }
+        return $totals;
+    }
+
+    /**
+     * Get the old (pre-calculation) item parameters keyed by model name.
+     *
+     * @return array modelname => model_item_param_list
+     */
+    public function get_old_item_params(): array {
+        return $this->olditemparams;
+    }
+
+    /**
+     * Incremental recalculation: exactly one item-parameter pass with fixed PP.
+     *
+     * Issue #43 (incremental): the person abilities already present in the
+     * responses are treated as fixed. Item parameters are estimated exactly once
+     * per model, the best model is selected per item, and the person abilities are
+     * NOT re-estimated. This is the deliberate one-pass counterpart to
+     * run_estimation() (which iterates PP/IP).
+     *
+     * @return array [model_item_param_list[] keyed by model, model_person_param_list]
+     */
+    public function run_incremental_estimation(): array {
+        $personabilities = $this->responses->get_person_abilities();
+
+        /** @var array<model_item_param_list> $itemdifficulties */
+        $itemdifficulties = [];
+        foreach ($this->models as $name => $model) {
+            $oldmodelparams = $this->olditemparams[$name] ?? null;
+            $startvalues = $this->get_startvalues_for_model($name) ?? null;
+            if ($startvalues && $oldmodelparams) {
+                $startvalues->without($oldmodelparams->confirmed(), false);
+            }
+            $itemdifficulties[$name] = $this->models[$name]
+                ->estimate_item_params($this->responses, $personabilities, $startvalues);
+            $this->set_calculated_progress($name, $itemdifficulties[$name]);
+        }
+
+        // Model selection per item (AIC/BIC/CAIC). No person-ability re-estimation.
+        $filtereddiffi = $this->select_item_model($itemdifficulties, $personabilities);
+        $this->iterations = 1;
+
+        $itemdiffiwstatus = $this->set_status($itemdifficulties, $filtereddiffi);
+        return [$itemdiffiwstatus, $personabilities];
+    }
+
+    /**
+     * Number of PP/IP iterations performed by the last estimation run.
+     *
+     * @return int
+     */
+    public function get_iterations(): int {
+        return $this->iterations;
+    }
+
+    /**
+     * Maximum number of iterations configured for the disruptive estimation loop.
+     *
+     * @return int
+     */
+    public function get_max_iterations(): int {
+        return $this->maxiterations;
+    }
+
+    /**
      * Starts the estimation process
      *
      * @return array<model_item_param_list, model_person_param_list>
