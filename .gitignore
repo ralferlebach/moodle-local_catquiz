@@ -1,19 +1,64 @@
+# OS artefacts
+.DS_Store
+Thumbs.db
+desktop.ini
+*Zone.Identifier
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# PHP / Composer
+vendor/
+composer.lock
+
+# AMD build artefacts (keep src, ignore build output)
+amd/build/
+amd/Gruntfile.js
+amd/package.json
+amd/package-lock.json
+amd/node_modules
+
+# moodle-plugin-ci working directories
+ci/
+moodle/
+
+# PHPUnit / coverage
+.phpunit.result.cache
+.phpunit.cache/
+coverage/
+*.clover
+
+# Behat screenshots
+behatfaildumps/
+
+# Temporary / backup files
+*.bak
+*.tmp
+*.swp
+*~
+
+# Local developer overrides
+.env
+.env.local
+
 .project
 .settings
 /nbproject/private/
 project.xml
 project.properties
-.DS_Store
-.idea
-amd/Gruntfile.js
-amd/package.json
-amd/package-lock.json
-amd/node_modules
-.vscode/launch.json
-workspace.php
-workspace2.php
-/catquizcentralhub/
-/connectivity/
+
+/catquizcentralhub/host
+/catquizcentralhub/client
 
 # Interne Sitzungsdokumentation - nicht ausliefern/hochladen.
 /doc/
