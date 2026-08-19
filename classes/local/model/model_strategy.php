@@ -287,6 +287,15 @@ class model_strategy {
     }
 
     /**
+     * The names of the models the strategy will calibrate (productive model set).
+     *
+     * @return string[]
+     */
+    public function get_model_names(): array {
+        return array_keys($this->models);
+    }
+
+    /**
      * Whether any usable (non-empty) start item parameters are available.
      *
      * @return bool
@@ -660,12 +669,8 @@ class model_strategy {
     private function create_installed_models(): array {
         /** @var array<model_model> $instances */
         $instances = [];
-        $ignorelist = ['grmgeneralized', 'grm', 'pcmgeneralized', 'pcm'];
 
         foreach (self::get_installed_models() as $name => $classname) {
-            if (in_array($name, $ignorelist)) {
-                continue;
-            }
             $instances[$name] = model_model::get_instance($name);
         }
         return $instances;
@@ -738,6 +743,18 @@ class model_strategy {
             case 'mixedraschbirnbaum':
                 return $this->get_last_calculated_for_model('mixedraschbirnbaum')
                     ?? $this->get_last_calculated_for_model('raschbirnbaum');
+            // Polytomous models: only re-use the model's own previous result. Cross-model
+            // seeding (as in the dichotomous chain) is unsafe here because the threshold
+            // parameter structures differ between families; a null return makes the model
+            // fall back to its empirical start values (get_start_ip).
+            case 'pcm':
+                return $this->get_last_calculated_for_model('pcm');
+            case 'pcmgeneralized':
+                return $this->get_last_calculated_for_model('pcmgeneralized');
+            case 'grm':
+                return $this->get_last_calculated_for_model('grm');
+            case 'grmgeneralized':
+                return $this->get_last_calculated_for_model('grmgeneralized');
             default:
                 throw new \Exception("Unknown model $modelname");
         }

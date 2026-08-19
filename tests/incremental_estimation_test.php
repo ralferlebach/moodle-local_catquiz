@@ -120,4 +120,97 @@ final class incremental_estimation_test extends advanced_testcase {
         $this->assertNotEmpty($itemdifficulties);
         $this->assertNotEmpty($personabilities);
     }
+
+    /**
+     * Build responses for polytomous items with three ordered categories.
+     *
+     * @return model_responses
+     */
+    private function build_polytomous_responses(): model_responses {
+        $responses = new model_responses();
+        // Three items, each scored in three categories (0.0, 0.5, 1.0), answered by
+        // a spread of persons so every category is observed per item.
+        $data = [
+            ['P1', 'I1', 0.0], ['P1', 'I2', 0.0], ['P1', 'I3', 0.5],
+            ['P2', 'I1', 0.5], ['P2', 'I2', 0.0], ['P2', 'I3', 0.0],
+            ['P3', 'I1', 1.0], ['P3', 'I2', 0.5], ['P3', 'I3', 0.5],
+            ['P4', 'I1', 0.5], ['P4', 'I2', 1.0], ['P4', 'I3', 1.0],
+            ['P5', 'I1', 1.0], ['P5', 'I2', 1.0], ['P5', 'I3', 0.5],
+            ['P6', 'I1', 0.0], ['P6', 'I2', 0.5], ['P6', 'I3', 1.0],
+            ['P7', 'I1', 1.0], ['P7', 'I2', 0.5], ['P7', 'I3', 0.0],
+            ['P8', 'I1', 0.5], ['P8', 'I2', 1.0], ['P8', 'I3', 0.5],
+        ];
+        foreach ($data as [$person, $item, $fraction]) {
+            $responses->set($person, $item, $fraction);
+        }
+        $pplist = new model_person_param_list();
+        $abilities = [
+            'P1' => -1.5, 'P2' => -1.0, 'P3' => 0.5, 'P4' => 0.8,
+            'P5' => 1.5, 'P6' => 0.0, 'P7' => 0.3, 'P8' => 1.0,
+        ];
+        foreach ($abilities as $userid => $ability) {
+            $pp = new model_person_param($userid, 1);
+            $pp->set_ability($ability);
+            $pplist->add($pp);
+        }
+        $responses->set_person_abilities($pplist);
+        return $responses;
+    }
+
+    /**
+     * Polytomous models are part of the productive model set and are actually
+     * calibrated by the disruptive pipeline (issue #726).
+     *
+     * This is the teeth test for enabling GRM/GGRM/PCM/GPCM in production: if the
+     * four polytomous models were excluded from model_strategy again, the model-set
+     * assertion below would fail.
+     *
+     * @return void
+     */
+    public function test_polytomous_models_are_calibrated_productively(): void {
+        $this->resetAfterTest(true);
+        set_config('trusted_region_min_b', -10.0, 'local_catquiz');
+        set_config('trusted_region_max_b', 10.0, 'local_catquiz');
+        set_config('trusted_region_min_a', 0.5, 'local_catquiz');
+        set_config('trusted_region_max_a', 2.0, 'local_catquiz');
+
+        $responses = $this->build_polytomous_responses();
+        $strategy = new model_strategy($responses, ['max_iterations' => 3]);
+
+        // The productive model set must contain all seven models, polytomous included.
+        $models = $strategy->get_model_names();
+        foreach (
+            ['rasch', 'raschbirnbaum', 'mixedraschbirnbaum',
+                  'pcm', 'pcmgeneralized', 'grm', 'grmgeneralized'] as $expected
+        ) {
+            $this->assertContains($expected, $models, "Model '$expected' missing from productive set");
+        }
+
+        // Run the productive disruptive calibration over polytomous items.
+        [$itemdifficulties, $personabilities] = $strategy->run_disruptive_estimation();
+
+        // Productive IP: every polytomous model produced item-parameter estimates.
+        foreach (['pcm', 'pcmgeneralized', 'grm', 'grmgeneralized'] as $model) {
+            $this->assertArrayHasKey($model, $itemdifficulties, "No IP results for '$model'");
+            $this->assertGreaterThan(
+                0,
+                count($itemdifficulties[$model]),
+                "Polytomous model '$model' produced no item parameters"
+            );
+            // Estimated difficulties must be finite.
+            foreach ($itemdifficulties[$model] as $itemparam) {
+                foreach ((array) $itemparam->get_params_array() as $value) {
+                    if (is_numeric($value)) {
+                        $this->assertTrue(is_finite((float) $value), "Non-finite IP in '$model'");
+                    }
+                }
+            }
+        }
+
+        // Productive PP: person abilities remain finite after a polytomous calibration.
+        $this->assertNotEmpty($personabilities);
+        foreach ($personabilities as $pp) {
+            $this->assertTrue(is_finite($pp->get_ability()), 'Non-finite person ability');
+        }
+    }
 }
