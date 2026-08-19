@@ -814,3 +814,6 @@ $string['disruptiveconfirm'] = 'Eine disruptive Neuberechnung berechnet alle Par
 $string['lastcalculation'] = 'Letzte Nachberechnung';
 $string['startdisruptive'] = 'Neuberechnung starten';
 $string['startrecalculation'] = 'Nachberechnung starten';
+$string['calculationstatus'] = 'Berechnungsstatus';
+$string['calculationrunning'] = 'Läuft';
+$string['calculationpending'] = 'Wartet';

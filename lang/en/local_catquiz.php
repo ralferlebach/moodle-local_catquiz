@@ -804,3 +804,6 @@ $string['disruptiveconfirm'] = 'A disruptive recalculation recomputes all parame
 $string['lastcalculation'] = 'Last recalculation';
 $string['startdisruptive'] = 'Start recalculation anew';
 $string['startrecalculation'] = 'Start recalculation';
+$string['calculationstatus'] = 'Calculation status';
+$string['calculationrunning'] = 'Running';
+$string['calculationpending'] = 'Pending';
