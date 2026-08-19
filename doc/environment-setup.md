@@ -23,8 +23,9 @@ verifizierten Fixpunkte dieser Umgebung stehen in §0.
 | Moodle-Pfad       | `/home/claude/moodle`                                        |
 | dataroot          | `/home/claude/moodledata`                                    |
 | phpunit_dataroot  | `/home/claude/moodledata_phpu`, `phpunit_prefix=phpu_`       |
-| phpcs / moodle-cs | `/tmp/moodlecs`, `moodlehq/moodle-cs ^3.7`                   |
-| Abhängigkeiten    | mod_adaptivequiz, local_wunderbyte_table (+ shortcodes, Bridge) |
+| phpcs / moodle-cs | `/tmp/moodlecs` mit `moodlehq/moodle-cs 3.7.0` (exakt wie CI) |
+| moodle-plugin-ci  | v4 unter `/home/claude/ci` (reproduziert die CI-Checks lokal) |
+| Abhängigkeiten    | mod_adaptivequiz **@v-3.0** + Bridge adaptivequizcatmodel_catquiz @v-3.0; catquizcentralhub_{host,client}; local_wunderbyte_table; filter_shortcodes |
 
 ---
 
@@ -47,13 +48,16 @@ Flag bei den CLI-Aufrufen mitgegeben (siehe §6).
 ## 2. PostgreSQL: Start, Rolle, Datenbank
 
 ```bash
-sudo service postgresql start        # bzw. pg_ctlcluster 16 main start
-sudo -u postgres psql -c "CREATE ROLE moodle LOGIN PASSWORD 'moodle';"
+# Server starten. Achtung: im CLI-Container ist `sudo` häufig NICHT vorhanden.
+service postgresql start             # ohne sudo; alternativ: pg_ctlcluster 16 main start
+# Rolle/DB einmalig anlegen (als postgres-Systemnutzer, wo verfügbar):
+sudo -u postgres psql -c "CREATE ROLE moodle LOGIN PASSWORD 'moodle';"   # sonst als postgres-User
 sudo -u postgres psql -c "CREATE DATABASE moodle OWNER moodle;"
 ```
 
 > Der DB-Server läuft nach einem Container-Neustart oft nicht automatisch – vor
-> Testläufen immer `sudo service postgresql start` voranstellen.
+> Testläufen immer den Start voranstellen. **`sudo` fehlt im Container häufig** →
+> dann `service postgresql start` bzw. `pg_ctlcluster 16 main start` (ohne sudo).
 
 ## 3. Moodle beziehen und konfigurieren
 
@@ -108,27 +112,43 @@ cd /home/claude/moodle
 # local_catquiz aus der Quelle spiegeln
 rm -rf local/catquiz && cp -a /home/claude/catquiz local/catquiz
 
-# Abhängigkeiten (Wunderbyte-Forks). adaptivequiz: den ALiSe-Branch verwenden.
-# Der Branch alise_adaptivequiz BÜNDELT die Bridge adaptivequizcatmodel_catquiz
-# unter mod/adaptivequiz/catmodel/catquiz – kein separates Klonen nötig. Die
-# harten Abhängigkeiten (version.php): local_wunderbyte_table >= 2024040200,
-# mod_adaptivequiz >= 2024031502, adaptivequizcatmodel_catquiz >= 2024062800.
-git clone --depth 1 --branch alise_adaptivequiz \
-    https://github.com/Wunderbyte-GmbH/moodle-mod_adaptivequiz.git mod/adaptivequiz
+# Abhängigkeiten. Stand seit Sommer 2026: adaptivequiz + Bridge aus dem v-3.0-Zweig
+# (ralferlebach). v-3.0 bündelt die Bridge NICHT automatisch – Adapter separat unter
+# mod/adaptivequiz/catmodel/catquiz einspielen (Subplugin-Typ adaptivequizcatmodel).
+git clone --depth 1 --branch v-3.0 \
+    https://github.com/ralferlebach/moodle-mod_adaptivequiz.git mod/adaptivequiz
+git clone --depth 1 --branch v-3.0 \
+    https://github.com/ralferlebach/moodle-adaptivequizcatmodel_catquiz.git \
+    mod/adaptivequiz/catmodel/catquiz
 git clone --depth 1 --branch main \
     https://github.com/Wunderbyte-GmbH/moodle-local_wunderbyte_table.git local/wunderbyte_table
 git clone --depth 1 --branch master \
     https://github.com/branchup/moodle-filter_shortcodes.git filter/shortcodes
-rm -rf mod/adaptivequiz/.git local/wunderbyte_table/.git filter/shortcodes/.git
+# catquizcentralhub-Subplugins installieren unter local/catquiz/catquizcentralhub/{host,client}
+git clone --depth 1 https://github.com/ralferlebach/moodle-catquizcentralhub_host.git \
+    local/catquiz/catquizcentralhub/host
+git clone --depth 1 https://github.com/ralferlebach/moodle-catquizcentralhub_client.git \
+    local/catquiz/catquizcentralhub/client
+rm -rf mod/adaptivequiz/.git mod/adaptivequiz/catmodel/catquiz/.git \
+    local/wunderbyte_table/.git filter/shortcodes/.git \
+    local/catquiz/catquizcentralhub/host/.git local/catquiz/catquizcentralhub/client/.git
 
 # Upgrade der DB nach dem Einspielen der Plugins
 php -d max_input_vars=5000 admin/cli/upgrade.php --non-interactive
 ```
 
-> **Achtung adaptivequiz-Bug:** `adaptivequiz_add_instance()` liest
-> `attemptfeedbackeditor` unbedingt, auch im `alise_adaptivequiz`-Branch (der
-> Branch-Swap behebt das nicht). Unsere Integrationstests umgehen das, indem sie
-> die Property bei `create_instance` setzen. Details im Engineering-Guide §6.
+> **Achtung v-3.0-Generator (ersetzt den alten attemptfeedbackeditor-Workaround):**
+> Der mod_adaptivequiz-Test-Generator verlangt beim Erzeugen einer Instanz jetzt
+> zwingend `questionpool` bzw. `questionpoolnamed` und liest `attemptfeedbackeditor`
+> NICHT mehr. Tests, die adaptivequiz-Instanzen erzeugen, müssen eine Fragenkategorie
+> mitgeben – PHPUnit: `create_instance([... 'questionpool' => [$cat->id]])` (Kategorie
+> vorher via core_question-Generator anlegen); Behat: Spalte `questionpoolnamed` mit
+> einer zuvor über `the following "question categories" exist:` angelegten Kategorie.
+>
+> **plugininfo-Pflicht:** mod_adaptivequiz muss die Klasse
+> `\mod_adaptivequiz\plugininfo\adaptivequizcatmodel` enthalten (Typ-Artefakt des
+> Parents). Fehlt sie, bricht `moodle-plugin-ci` die Installation bei der
+> Subplugin-Typ-Prüfung mit einer debugging-Meldung ab.
 
 ## 5. Code-Style: phpcs / moodle-cs
 
@@ -161,8 +181,10 @@ php -d max_input_vars=5000 admin/tool/phpunit/cli/init.php --no-composer-self-up
 Einzelne Suite / gesamtes Plugin:
 
 ```bash
-vendor/bin/phpunit local/catquiz/catmodel/rasch/tests/rasch_test.php
-vendor/bin/phpunit --filter test_ability_can_be_calculated_with_all_models \
+XDEBUG_MODE=off vendor/bin/phpunit --no-coverage \
+    local/catquiz/catmodel/rasch/tests/rasch_test.php
+XDEBUG_MODE=off vendor/bin/phpunit --no-coverage \
+    --filter test_ability_can_be_calculated_with_all_models \
     local/catquiz/tests/catcalc_test.php
 ```
 
@@ -171,6 +193,9 @@ vendor/bin/phpunit --filter test_ability_can_be_calculated_with_all_models \
 > **Wegwerf-CLI-Skripte** (FD-/Sättigungs-Harness) gehören in den *Spiegel*
 > (`local/catquiz/cli/`), nicht in die Quelle – sie werden vom `cp -a`
 > überschrieben und müssen danach neu angelegt werden.
+> **`XDEBUG_MODE=off ... --no-coverage`** spart Zeit/Speicher. Mehrere Testdateien
+> in EINEM Aufruf zählt Moodles PHPUnit-Runner oft nur als eine – im Zweifel
+> einzeln laufen.
 
 ## 7. Behat (Akzeptanztests)
 
@@ -210,6 +235,23 @@ moodle-plugin-ci phpunit  local/catquiz
 moodle-plugin-ci behat    local/catquiz     # nur mit Browser-Treiber
 ```
 
+Die **blockierenden** CI-Schritte (fail = roter Lauf) sind `codechecker`, `phpdoc`,
+`phpunit`, `behat`. `phpcpd` und `phpmd` sind bewusst `continue-on-error`
+(non-blocking) – ihre Meldungen (z. B. Duplikate in Riesen-Fixtures, „zu lange
+Methoden") kippen den Lauf nicht. `codechecker` läuft mit `--max-warnings 0`, d. h.
+JEDE Warnung blockt: u. a. `moodle.Files.LangFilesOrdering` (lang-Strings müssen
+alphabetisch sortiert sein) und `moodle.PHPUnit.TestCaseCovers.Missing` (jede
+Testmethode braucht `@covers`).
+
+> **LangFilesOrdering lokal reproduzieren:** Der Sniff läuft nur im Moodle-Baum ab
+> Version 404 – ohne Baum-Kontext greift er nicht. Direkt erzwingen und
+> auto-sortieren (phpcbf) mit `--runtime-set moodleBranch 405`:
+> ```bash
+> /tmp/moodlecs/vendor/bin/phpcbf --standard=moodle --warning-severity=1 \
+>     --runtime-set moodleBranch 405 \
+>     lang/en/local_catquiz.php lang/de/local_catquiz.php
+> ```
+
 Gherkin-Dateien (`tests/behat/*.feature`) werden von `moodle-plugin-ci behat`
 bzw. dem Behat-Runner geparst; reine Syntaxprüfung ohne Ausführung via
 `vendor/bin/behat --dry-run`.
@@ -228,7 +270,8 @@ vendor/bin/phpunit local/catquiz/catmodel/<modell>/tests/<modell>_test.php
 
 ## 10. Typische Stolpersteine
 
-- **DB down:** `sudo service postgresql start` vergessen → Verbindungsfehler.
+- **DB down:** Server-Start vergessen → Verbindungsfehler. `sudo` fehlt im
+  Container oft → `service postgresql start` bzw. `pg_ctlcluster 16 main start`.
 - **PHPUnit nicht reinitialisiert** nach `cp -a` → „No tests executed" oder
   veraltete Datenprovider.
 - **`max_input_vars`** fehlt → PHPUnit-Init bricht mit Moodle-Umgebungscheck ab.
@@ -244,3 +287,14 @@ vendor/bin/phpunit local/catquiz/catmodel/<modell>/tests/<modell>_test.php
   erhöhen und PHPUnit reinitialisieren.
 - **Neue Testdateien unter `cli/`** werden von PHPUnit nicht entdeckt – Ad-hoc-
   Tests unter `local/catquiz/tests/` ablegen und reinitialisieren.
+- **adaptivequiz-Generator (v-3.0):** `create_instance` ohne `questionpool`/
+  `questionpoolnamed` → `coding_exception`. Kategorie mitgeben; `attemptfeedbackeditor`
+  ist obsolet.
+- **codechecker `--max-warnings 0`:** unsortierte lang-Strings
+  (`moodle.Files.LangFilesOrdering`) und fehlende `@covers`
+  (`moodle.PHPUnit.TestCaseCovers.Missing`) blocken den Lauf, obwohl es „nur"
+  Warnungen sind. lang-Dateien mit `phpcbf --runtime-set moodleBranch 405` sortieren.
+- **LangFilesOrdering triggert lokal nicht** ohne Moodle-Baum/Version → im Spiegel
+  laufen oder `--runtime-set moodleBranch 405` setzen.
+- **plugininfo fehlt:** ohne `\mod_adaptivequiz\plugininfo\adaptivequizcatmodel`
+  bricht die Plugin-Installation in der CI ab (Subplugin-Typ-Prüfung).
