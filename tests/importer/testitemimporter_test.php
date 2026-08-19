@@ -118,6 +118,12 @@ final class testitemimporter_test extends advanced_testcase {
         $this->setAdminUser();
         $this->course = $this->getDataGenerator()->create_course();
 
+        // The v-3.0 mod_adaptivequiz generator requires a question pool.
+        $qgenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $qcategory = $qgenerator->create_question_category(
+            ['contextid' => context_course::instance($this->course->id)->id]
+        );
+
         $this->adaptivequiz = $this->getDataGenerator()
             ->get_plugin_generator('mod_adaptivequiz')
             ->create_instance([
@@ -125,9 +131,7 @@ final class testitemimporter_test extends advanced_testcase {
                 'lowestlevel' => 1,
                 'standarderror' => 14,
                 'course' => $this->course->id,
-                // The mod_adaptivequiz generator reads attemptfeedbackeditor unconditionally
-                // in adaptivequiz_add_instance(); supply it so instance creation succeeds.
-                'attemptfeedbackeditor' => ['text' => '', 'format' => FORMAT_MOODLE],
+                'questionpool' => [$qcategory->id],
             ]);
         $qformat = $this->create_qformat($questionsfile, $this->course);
         $imported = $qformat->importprocess();

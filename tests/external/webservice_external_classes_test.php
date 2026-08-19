@@ -76,6 +76,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * delete_catscale::execute() should remove an existing catscale row.
      *
      * @return void
+     * @covers \local_catquiz\external\delete_catscale::execute
      */
     public function test_delete_catscale_execute_deletes_scale(): void {
         global $DB;
@@ -96,6 +97,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * execute_action::execute() should return failed status for unknown method.
      *
      * @return void
+     * @covers \local_catquiz\external\execute_action::execute
      */
     public function test_execute_action_execute_returns_failure_for_unknown_method(): void {
         $this->resetAfterTest(true);
@@ -110,6 +112,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * feedback_tab_clicked::execute() should trigger the feedbacktab_clicked event.
      *
      * @return void
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
      */
     public function test_feedback_tab_clicked_execute_triggers_event(): void {
         $this->resetAfterTest(true);
@@ -133,6 +136,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * get_next_question::execute() currently rejects arguments due execute_parameters mismatch.
      *
      * @return void
+     * @covers \local_catquiz\external\get_next_question::execute
      */
     public function test_get_next_question_execute_raises_invalid_parameter_exception(): void {
         $this->resetAfterTest(true);
@@ -146,6 +150,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * manage_catscale::execute() should create a new catscale.
      *
      * @return void
+     * @covers \local_catquiz\external\manage_catscale::execute
      */
     public function test_manage_catscale_execute_creates_scale(): void {
         global $DB;
@@ -171,6 +176,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * manage_catscale::execute() should update an existing catscale.
      *
      * @return void
+     * @covers \local_catquiz\external\manage_catscale::execute
      */
     public function test_manage_catscale_execute_updates_scale(): void {
         global $DB;
@@ -201,6 +207,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * reload_template::execute() should return failed status if action method does not exist.
      *
      * @return void
+     * @covers \local_catquiz\external\reload_template::execute
      */
     public function test_reload_template_execute_returns_failure_for_unknown_method(): void {
         $this->resetAfterTest(true);
@@ -226,6 +233,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * render_question_with_response::execute() should require login.
      *
      * @return void
+     * @covers \local_catquiz\external\render_question_with_response::execute
      */
     public function test_render_question_with_response_execute_requires_login(): void {
         $this->resetAfterTest(true);
@@ -238,6 +246,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * start_new_attempt::execute() should require login.
      *
      * @return void
+     * @covers \local_catquiz\external\start_new_attempt::execute
      */
     public function test_start_new_attempt_execute_requires_login(): void {
         $this->resetAfterTest(true);
@@ -250,6 +259,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * submit_result::execute() should require login.
      *
      * @return void
+     * @covers \local_catquiz\external\submit_result::execute
      */
     public function test_submit_result_execute_requires_login(): void {
         $this->resetAfterTest(true);
@@ -262,6 +272,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * subscribe::execute() should toggle subscription state.
      *
      * @return void
+     * @covers \local_catquiz\external\subscribe::execute
      */
     public function test_subscribe_execute_toggles_subscription(): void {
         global $DB;
@@ -291,6 +302,7 @@ final class webservice_external_classes_test extends advanced_testcase {
      * update_parameters::execute() should return failed status for invalid ids.
      *
      * @return void
+     * @covers \local_catquiz\external\update_parameters::execute
      */
     public function test_update_parameters_execute_returns_failure_for_invalid_ids(): void {
         $this->resetAfterTest(true);
