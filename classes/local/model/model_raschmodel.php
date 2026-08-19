@@ -329,8 +329,7 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
      */
     protected static function empirical_start_thresholds(
         array $itemresponse,
-        ?array $categoryfractions = null,
-        bool $enforceascending = false
+        ?array $categoryfractions = null
     ): array {
         if ($categoryfractions !== null && count($categoryfractions) > 0) {
             // Structure from the item: keep every declared category, observed or not.
@@ -383,24 +382,6 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
             }
         }
 
-        // Enforce strictly ascending free thresholds anchored at the baseline (0)
-        // for models that require ordered boundaries (graded response / GGRM): the
-        // baseline is the lowest boundary, so a free threshold at or below it
-        // produces a negative category probability (NaN objective). This happens
-        // for a reduced category structure whose bottom category is unobserved (see
-        // experiments K2). Adjacent-category models (PCM/GPCM) do not require this
-        // and pass $enforceascending = false. Fraction keys are preserved.
-        if ($enforceascending) {
-            $gap = 1e-3;
-            $prev = 0.0;
-            for ($k = 1; $k <= $m; $k++) {
-                $key = (string) $fractions[$k];
-                if ($result[$key] < $prev + $gap) {
-                    $result[$key] = $prev + $gap;
-                }
-                $prev = $result[$key];
-            }
-        }
         return $result;
     }
 

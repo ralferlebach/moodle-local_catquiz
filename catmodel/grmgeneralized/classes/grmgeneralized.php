@@ -195,7 +195,7 @@ class grmgeneralized extends model_multiparam {
      */
     public static function get_start_ip(array $itemresponse): array {
         return [
-            'difficulties' => self::empirical_start_thresholds($itemresponse, null, true),
+            'difficulties' => self::empirical_start_thresholds($itemresponse),
             'discrimination' => 1.0,
         ];
     }
@@ -868,19 +868,13 @@ class grmgeneralized extends model_multiparam {
             $sorted[$fraction] = max($min, min($max, $sorted[$fraction]));
         }
 
-        // Forward pass: enforce the ascending minimum gap, anchored at the baseline
-        // placeholder (value 0). Every free threshold must stay strictly above the
-        // baseline; a threshold at or below it produces a negative category
-        // probability and hence NaN (e.g. unobserved bottom category, see K2).
+        // Forward pass: enforce the ascending minimum gap a_i >= a_{i-1} + gap.
         $count = count($free);
-        $baselinevalue = isset($fractions[0]) ? $sorted[$fractions[0]] : 0.0;
-        $prev = $baselinevalue;
-        for ($i = 0; $i < $count; $i++) {
-            $lower = $prev + $gap;
+        for ($i = 1; $i < $count; $i++) {
+            $lower = $sorted[$free[$i - 1]] + $gap;
             if ($sorted[$free[$i]] < $lower) {
                 $sorted[$free[$i]] = $lower;
             }
-            $prev = $sorted[$free[$i]];
         }
 
         // The forward pass can push the top threshold past max. Project the whole

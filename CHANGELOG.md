@@ -1,5 +1,16 @@
 # Changelog – local_catquiz
 
+## 1.1.4 (interne Version 2026081718)
+
+> CI-Fix: K2 zurückgenommen (K3 ist der Wurzelfix). Details in
+> `doc/session-018-changes.md`.
+
+- **K2 vollständig zurückgenommen:** die „freie Schwellen über der Baseline"-
+  Heuristik klemmte legitim negative GRM-Schwellen (Recovery -0.7 -> 0.001);
+  K3 (get_fractions-Fix) trägt die missing-bottom-Fälle allein. Recovery grün.
+- phpdoc-Fehler (empirical_start_thresholds) durch den Revert behoben.
+- `catscale_structure` min/max scale value nach float gecastet (PHP 8.1).
+
 ## 1.1.4 (interne Version 2026081717)
 
 > Experiment-Konsequenzen K3, K4, K5. Details in `doc/session-017-changes.md`.
