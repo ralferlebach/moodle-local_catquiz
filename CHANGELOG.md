@@ -1,5 +1,17 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082003)
+
+> Strang „Diagramme+Feedback+Statistik": Behat-Abnahme für Issue #10
+> (Feedbackansicht valide vs. ungültig). Details in `doc/session-035-changes.md`.
+
+- **#10 Behat:** Neues Feature `catquiz_feedback_validity.feature` mit zwei
+  Szenarien. Ungültiger Versuch (alle Antworten falsch → `fraction = 0`, alle
+  Skalen ausgeschlossen) → genau ein zentraler Hinweis („No valid test result
+  could be determined for this attempt."); valider Versuch (gemischte Antworten)
+  → Feedback ohne den zentralen Hinweis. Auswahl-neutraler Invalid-Hebel (keine
+  Änderung an SE-/nminscale-Auswahlparametern).
+
 ## 1.1.5 (interne Version 2026082002)
 
 > Strang „Diagramme+Feedback+Statistik": Issue #10 Folge-Inkrement
