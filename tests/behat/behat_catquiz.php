@@ -85,42 +85,57 @@ class behat_catquiz extends behat_base {
                 case 'autocomplete':
                     $field->setValue($value);
                     // The suggestion list is populated asynchronously (debounced
-                    // AJAX). Wait for the suggestion that actually contains the
-                    // requested value instead of pressing Enter and clicking the
-                    // first list item: Enter may already commit the top item, in
-                    // which case a subsequent click hits a different (or already
-                    // selected) entry and the selection is lost again.
+                    // AJAX). Wait for the visible suggestion that actually
+                    // contains the requested value instead of pressing Enter and
+                    // clicking the first list item.
                     $escapedvalue = behat_context_helper::escape($value);
-                    $suggestionxpath = $xpathtarget1 . "[contains(normalize-space(.), $escapedvalue)]";
+                    $suggestionxpath = $xpathtarget1
+                        . "[@role='option']"
+                        . "[not(@aria-hidden='true')]"
+                        . "[contains(normalize-space(.), $escapedvalue)]";
                     $suggestion = null;
                     for ($attempt = 0; $attempt < 20; $attempt++) {
-                        $suggestion = $this->getSession()->getPage()->find('xpath', $suggestionxpath);
-                        if ($suggestion) {
+                        $candidate = $this->getSession()->getPage()->find('xpath', $suggestionxpath);
+                        if ($candidate && $candidate->isVisible()) {
+                            $suggestion = $candidate;
                             break;
                         }
                         $this->getSession()->wait(300);
                     }
                     if (!$suggestion) {
                         throw new \Behat\Mink\Exception\ExpectationException(
-                            "Autocomplete suggestion containing '$value' did not appear",
+                            "Visible autocomplete suggestion containing '$value' did not appear",
                             $this->getSession()
                         );
                     }
                     $suggestion->click();
-                    // Close the suggestion list so it cannot overlap and swallow
-                    // clicks meant for the elements that are filled next.
+                    // Moodle's autocomplete transfers the selection to the hidden
+                    // native <select> asynchronously (a promise chain that ends in
+                    // option.selected = true plus a native change event). Wait for
+                    // that to complete rather than forcing the native state
+                    // ourselves: the test must verify Moodle's own behaviour, and
+                    // the native <select> is the value actually submitted (Behat
+                    // 001 / catquiz_courses).
+                    $containerxpath = "(//div[contains(@id, '" . $dynamicidentifier . "')])[" . $numberofitem . "]";
+                    $selected = false;
+                    for ($attempt = 0; $attempt < 30; $attempt++) {
+                        if ($this->native_autocomplete_has_selected_text($containerxpath, $value)) {
+                            $selected = true;
+                            break;
+                        }
+                        $this->getSession()->wait(200);
+                    }
+                    if (!$selected) {
+                        throw new \Behat\Mink\Exception\ExpectationException(
+                            "Autocomplete '$value' was clicked, but Moodle did not select the "
+                                . "corresponding native option. Native options: "
+                                . $this->get_native_autocomplete_debug($containerxpath),
+                            $this->getSession()
+                        );
+                    }
+                    // Close the suggestion list only after the selection completed,
+                    // so it cannot overlap and swallow later clicks.
                     $field->keyPress(27);
-                    // The visible autocomplete widget and the underlying native
-                    // <select multiple> can drift apart: clicking a suggestion may
-                    // fail to mark the matching <option> as selected, and it is the
-                    // native <select> — not the visible chips — that is submitted
-                    // with the form. If it is left unselected the value is silently
-                    // dropped on save and is gone after reload (Behat 001 /
-                    // catquiz_courses). Enforce the native selection as the source
-                    // of truth and notify listeners so the widget re-renders.
-                    $containerxpath = "(//div[contains(@id, '" . $dynamicidentifier . "')])
-                        [" . $numberofitem . "]";
-                    $this->ensure_native_select_option_selected($containerxpath, $value);
                     break;
                 case 'wb_colourpicker':
                     $field->click();
@@ -133,45 +148,71 @@ class behat_catquiz extends behat_base {
     }
 
     /**
-     * Ensures the native <select> inside a container has the option with the
-     * given visible text selected, then notifies listeners.
+     * Whether the hidden native <select> of a Moodle autocomplete has an option
+     * with the given text selected.
      *
-     * Moodle's autocomplete enhancement hides the real <select> and drives its
-     * own visible widget. When a test operates the visible widget, the native
-     * <select> can be left without a selected <option>; since the <select> is
-     * what the form submits, the value is silently dropped on save. This makes
-     * the native selection the source of truth and dispatches change events so
-     * the visible widget re-renders to match.
+     * Uses evaluateScript so it reads the real DOM state: Moodle hides the
+     * original <select> (display:none, aria-hidden), so Mink's getText() on its
+     * options is unreliable, while option.selected and option.textContent are
+     * accurate regardless of visibility.
      *
      * @param string $containerxpath Xpath of the form item wrapping the select.
-     * @param string $value          The visible option text to select.
+     * @param string $value          The visible option text to look for.
      *
-     * @return void
+     * @return bool
      */
-    protected function ensure_native_select_option_selected($containerxpath, $value) {
-        $select = $this->getSession()->getPage()->find('xpath', $containerxpath . "//select");
-        if (!$select) {
-            return;
-        }
-        $selectid = $select->getAttribute('id');
-        if (empty($selectid)) {
-            return;
-        }
-        $jsid = json_encode($selectid);
-        $jsvalue = json_encode($value);
-        $js = "(function(){"
-            . "var select=document.getElementById($jsid);"
-            . "if(!select){return;}"
-            . "var wanted=$jsvalue;"
-            . "for(var i=0;i<select.options.length;i++){"
-            . "var opt=select.options[i];"
-            . "if(opt.text.trim()===wanted||opt.textContent.indexOf(wanted)!==-1){opt.selected=true;}"
-            . "}"
-            . "select.dispatchEvent(new Event('change',{bubbles:true}));"
-            . "if(window.jQuery){window.jQuery(select).trigger('change');}"
-            . "})();";
-        $this->getSession()->executeScript($js);
-        $this->getSession()->wait(300);
+    protected function native_autocomplete_has_selected_text($containerxpath, $value) {
+        $xpath = json_encode($containerxpath . '//select');
+        $wanted = json_encode($value);
+        $script = <<<JS
+(function() {
+    const select = document.evaluate(
+        $xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
+    ).singleNodeValue;
+    if (!select) {
+        return false;
+    }
+    const wanted = $wanted;
+    return Array.from(select.options).some(function (option) {
+        return option.selected && (option.textContent || '').trim().indexOf(wanted) !== -1;
+    });
+})()
+JS;
+        return (bool) $this->getSession()->evaluateScript($script);
+    }
+
+    /**
+     * Returns a JSON dump of the native <select> options and their state.
+     *
+     * Included in failure messages so a red run shows the actual DOM state
+     * (which option exists and whether it is selected) instead of only
+     * "not selected".
+     *
+     * @param string $containerxpath Xpath of the form item wrapping the select.
+     *
+     * @return string
+     */
+    protected function get_native_autocomplete_debug($containerxpath) {
+        $xpath = json_encode($containerxpath . '//select');
+        $script = <<<JS
+(function() {
+    const select = document.evaluate(
+        $xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
+    ).singleNodeValue;
+    if (!select) {
+        return 'NO SELECT';
+    }
+    return JSON.stringify(Array.from(select.options).map(function (option) {
+        return {
+            value: option.value,
+            text: (option.textContent || '').trim(),
+            selected: option.selected,
+            disabled: option.disabled
+        };
+    }));
+})()
+JS;
+        return (string) $this->getSession()->evaluateScript($script);
     }
 
     /**
@@ -194,21 +235,13 @@ class behat_catquiz extends behat_base {
      */
     public function autocomplete_should_have_natively_selected($numberofitem, $dynamicidentifier, $value) {
         $containerxpath = "(//div[contains(@id, '" . $dynamicidentifier . "')])[" . $numberofitem . "]";
-        $select = $this->getSession()->getPage()->find('xpath', $containerxpath . "//select");
-        if (!$select) {
-            throw new \Behat\Mink\Exception\ExpectationException(
-                "No native <select> found under '$dynamicidentifier' number '$numberofitem'",
-                $this->getSession()
-            );
-        }
-        foreach ($select->findAll('xpath', ".//option") as $option) {
-            if ($option->isSelected() && strpos($option->getText(), $value) !== false) {
-                return;
-            }
+        if ($this->native_autocomplete_has_selected_text($containerxpath, $value)) {
+            return;
         }
         throw new \Behat\Mink\Exception\ExpectationException(
-            "Native <select> under '$dynamicidentifier' number '$numberofitem' "
-                . "has no selected option containing '$value'",
+            "Native autocomplete select under '$dynamicidentifier' number '$numberofitem' "
+                . "does not have '$value' selected. Native options: "
+                . $this->get_native_autocomplete_debug($containerxpath),
             $this->getSession()
         );
     }

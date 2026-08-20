@@ -1,5 +1,22 @@
 # Changelog – local_catquiz
 
+# Changelog – local_catquiz
+
+## 1.1.5 (interne Version 2026082004)
+
+> Behat 001: Autocomplete-Assertion auf den realen DOM-State umgestellt und die
+> Race Condition beseitigt. Details in `doc/session-036-changes.md`.
+
+- **001 Behat-Step-Fix (nur `behat_catquiz.php`, keine Produktionsklasse):** Die
+  native-`<select>`-Assertion nutzt jetzt `evaluateScript` (`option.selected` +
+  `option.textContent`) statt Minks `getText()`, das auf dem versteckten
+  Moodle-Autocomplete-`<select>` leeren Text liefern und so falsch-negativ sein
+  konnte. Der Fill-Step wartet nach dem Suggestion-Klick auf Moodles **asynchrone**
+  native Selektion, bevor er ESC sendet (Race Condition behoben). Der JS-Hack
+  `ensure_native_select_option_selected()` wurde entfernt – der Test prüft wieder
+  Moodles echtes Verhalten. Fehlermeldungen enthalten jetzt einen vollständigen
+  Options-Dump (`value`/`text`/`selected`).
+
 ## 1.1.5 (interne Version 2026082003)
 
 > Strang „Diagramme+Feedback+Statistik": Behat-Abnahme für Issue #10
