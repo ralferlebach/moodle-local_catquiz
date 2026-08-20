@@ -110,6 +110,48 @@ final class strategy_test extends advanced_testcase {
         $this->assertNotEmpty($itemparams, 'No itemparams were imported');
     }
 
+    /**
+     * A legacy/non-numeric catquiz_selectfirstquestion must not abort the attempt.
+     *
+     * Regression: on PHP 8 a stored string value (e.g. 'startwitheasiestquestion')
+     * threw "Unknown option to select first question" in the first-question selector,
+     * surfacing as 'attemptnofirstquestion' and preventing any CAT attempt from
+     * starting. The selector must fall back to the normal level instead.
+     *
+     * @covers \local_catquiz\teststrategy\preselect_task\firstquestionselector
+     */
+    public function test_legacy_selectfirstquestion_does_not_break_attempt(): void {
+        global $DB, $USER;
+        $rootscale = $DB->get_record('local_catquiz_catscales', ['parentid' => 0]);
+        $generator = $this->getDataGenerator()->get_plugin_generator('local_catquiz');
+        $generator->create_catquiz_testsettings([
+            'courseid' => $this->course->id,
+            'adaptivecatquizid' => $this->adaptivequiz->id,
+            'catscalesid' => $rootscale->id,
+            'cateststrategyid' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB,
+            'catmodel' => 'catquiz',
+            'catquiz_selectfirstquestion' => 'startwitheasiestquestion',
+            'catquiz_maxquestions' => 4,
+            'catquiz_standarderror_min' => 0.4,
+            'catquiz_standarderror_max' => 0.6,
+            'numberoffeedbackoptions' => 2,
+        ]);
+        catquiz_handler::prepare_attempt_caches();
+        $this->preventResetByRollback();
+        $att = new attempt($this->adaptivequiz, $USER->id);
+        $attemptdata = $att->get_attempt();
+        [$qid, $msg] = catquiz_handler::fetch_question_id(
+            $this->adaptivequiz->id,
+            'mod_adaptivequiz',
+            $attemptdata
+        );
+        $this->assertNotEquals(
+            0,
+            $qid,
+            "First question must be selectable despite a legacy selectfirstquestion value: $msg"
+        );
+    }
+
 
     /**
      * Check if a second import updates saved items as expected
