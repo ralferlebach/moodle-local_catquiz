@@ -536,37 +536,61 @@ class feedback_helper {
         if (!$quizsettings) {
             return null;
         }
+        // Issue #14: delegate to the single half-open resolver so a score is
+        // assigned to exactly one range everywhere.
+        return self::get_feedback_range_index($quizsettings, $scaleid, $value);
+    }
+
+    /**
+     * Returns the 1-based feedback range a value falls into, or null if none.
+     *
+     * Issue #14: ranges are treated as half-open [lower, upper) so a value on a
+     * shared boundary belongs to exactly one range; the topmost range is closed
+     * [lower, upper] so the maximum value is still covered. A value outside every
+     * configured range yields null.
+     *
+     * @param stdClass|array $quizsettings
+     * @param int $scaleid
+     * @param float|null $value
+     * @return int|null
+     */
+    public static function get_feedback_range_index($quizsettings, int $scaleid, ?float $value): ?int {
         if ($value === null) {
             return null;
         }
-
-        // If the value is outside the defined range, return null.
-        $lowest = sprintf('feedback_scaleid_limit_lower_%d_1', $scaleid);
-        $highest = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $quizsettings->numberoffeedbackoptionsselect);
-        if (
-            !isset($quizsettings->$lowest)
-            || !isset($quizsettings->$highest)
-        ) {
+        $settings = (array) $quizsettings;
+        $n = (int) ($settings['numberoffeedbackoptionsselect'] ?? 0);
+        if ($n < 1) {
+            // Fall back to probing consecutive range keys (some callers pass the
+            // raw settings without the option count).
+            while (isset($settings[sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $n + 1)])) {
+                $n++;
+            }
+        }
+        if ($n < 1) {
             return null;
         }
-        if ($value < $quizsettings->$lowest || $value > $quizsettings->$highest) {
-            return null;
+        for ($j = 1; $j <= $n; $j++) {
+            $lowerkey = sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $j);
+            $upperkey = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $j);
+            if (!isset($settings[$lowerkey]) || !isset($settings[$upperkey])) {
+                continue;
+            }
+            $lower = (float) $settings[$lowerkey];
+            $upper = (float) $settings[$upperkey];
+            if ($value < $lower) {
+                continue;
+            }
+            // Top range is inclusive on the upper bound; all others half-open.
+            if ($j < $n) {
+                if ($value < $upper) {
+                    return $j;
+                }
+            } else if ($value <= $upper) {
+                return $j;
+            }
         }
-        // Get the range of the selected value.
-        $i = 0;
-        do {
-            $i++;
-            $ranglow = sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $i);
-            $rangup = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $i);
-        } while (
-            !($quizsettings->$ranglow <= $value && $quizsettings->$rangup >= $value)
-            && $i <= $quizsettings->numberoffeedbackoptionsselect
-        );
-        if ($i > $quizsettings->numberoffeedbackoptionsselect) {
-            return null;
-        }
-
-        return $i;
+        return null;
     }
 
     /**

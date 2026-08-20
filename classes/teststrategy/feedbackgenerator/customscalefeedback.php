@@ -89,7 +89,7 @@ class customscalefeedback extends feedbackgenerator {
         $this->testid = $data['testid'];
         $this->mainscale = $data['catscaleid'];
 
-        if (!$data['customscalefeedback_abilities'] ?? false) {
+        if (!($data['customscalefeedback_abilities'] ?? false)) {
             return [];
         }
         $progress = $this->get_progress();
@@ -212,23 +212,23 @@ class customscalefeedback extends feedbackgenerator {
                 continue;
             }
             $relevantscalesfound = true;
-            for ($j = 1; $j <= $quizsettings['numberoffeedbackoptionsselect']; $j++) {
-                $lowerlimitprop = sprintf('feedback_scaleid_limit_lower_%d_%d', $catscaleid, $j);
-                $lowerlimit = floatval($quizsettings[$lowerlimitprop]);
-                $upperlimitprop = sprintf('feedback_scaleid_limit_upper_%d_%d', $catscaleid, $j);
-                $upperlimit = floatval($quizsettings[$upperlimitprop]);
-                if ($personability['value'] < $lowerlimit || $personability['value'] > $upperlimit) {
-                    continue;
-                }
-
-                $feedback = $this->getfeedbackforrange($catscaleid, $j, $quizsettings);
-                // Do not display empty feedback messages.
-                if (!$feedback) {
-                    continue;
-                }
-
-                $scalefeedback[$catscaleid] = $feedback;
+            // Issue #14: a score is assigned to exactly one range (half-open
+            // intervals), instead of matching every range whose inclusive bounds
+            // contain the value and letting the last match overwrite the earlier.
+            $rangeindex = feedback_helper::get_feedback_range_index(
+                $quizsettings,
+                $catscaleid,
+                (float) $personability['value']
+            );
+            if ($rangeindex === null) {
+                continue;
             }
+            $feedback = $this->getfeedbackforrange($catscaleid, $rangeindex, $quizsettings);
+            // Do not display empty feedback messages.
+            if (!$feedback) {
+                continue;
+            }
+            $scalefeedback[$catscaleid] = $feedback;
         }
 
         if (!$scalefeedback) {

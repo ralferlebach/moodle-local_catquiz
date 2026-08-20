@@ -1,5 +1,40 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082008)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #14 (benutzerdefinierte
+> Feedbackbereiche überschneidungsfrei). Details in `doc/session-040-changes.md`.
+
+- **#14 Genau ein Bereich:** Neuer kanonischer, **halboffener** Resolver
+  `feedback_helper::get_feedback_range_index` ([a,b) je Bereich, oberster Bereich
+  [c,d] inklusive). Ein Score auf einer gemeinsamen Grenze gehört jetzt zu genau
+  einem Bereich. Genutzt in `customscalefeedback`, `get_range_of_value` sowie
+  `get_courses_to_enrol`/`get_groups_to_enrol` (konsistente Zuordnung, keine
+  Doppel-Einschreibung an Grenzen).
+- **#14 Präzedenz:** `if (!($data['customscalefeedback_abilities'] ?? false))`
+  korrekt geklammert.
+- **#14 Validierung:** Speicher-Validierung deckt jetzt auch den ersten Bereich
+  ab (aufsteigend, `upper_1 > lower_1`); Lücken/Überlappungen zwischen Bereichen
+  waren bereits über `upper_{j-1} == lower_j` erzwungen.
+- Neuer Test `feedback_ranges_test` (Grenzen/Lücken/Überlappungen, zahn-getestet).
+
+## 1.1.5 (interne Version 2026082007)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #13 (Fragenzusammenfassung
+> fachlich korrekt zählen). Details in `doc/session-039-changes.md`.
+
+- **#13 Zählung je Frage:** `catquiz::get_attempt_statistics` liefert jetzt genau
+  **eine Zeile je Frage** (letzter bewerteter Step je `questionattemptid`) statt
+  je Step – Mehrfach-Steps werden nicht mehr mehrfach gezählt.
+- **#13 Kategorien getrennt:** „unbeantwortet/übersprungen" ist eine eigene
+  Kategorie (`gradedunanswered`) und wird nicht mehr zu „falsch" addiert; neue
+  Zeile im Template + String `numberofanswersunanswered` (EN/DE).
+- **#13 Pilotausschluss:** Pilotitems werden über die Progress-Pilot-IDs aus den
+  Leistungszählern ausgeschlossen. Summe der Kategorien = Zahl relevanter
+  (nicht-Pilot) QUBA-Slots.
+- Neuer Test `questionssummary_counting_test` (Mehrfachsteps + Pilot,
+  zahn-getestet).
+
 ## 1.1.5 (interne Version 2026082006)
 
 > Strang „Diagramme+Feedback+Statistik": Issue #12 (Fragenmodal & Antwort-

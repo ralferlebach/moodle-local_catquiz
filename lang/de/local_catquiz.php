@@ -562,6 +562,7 @@ $string['numberofanswers'] = 'Antworten';
 $string['numberofanswerscorrect'] = 'Richtig';
 $string['numberofanswersincorrect'] = 'Falsch';
 $string['numberofanswerspartlycorrect'] = 'Teilweise richtig';
+$string['numberofanswersunanswered'] = 'Unbeantwortet';
 $string['numberofattempts'] = 'Anzahl der Testversuche';
 $string['numberoffeedbackoptionpersubscale'] = 'Anzahl der Fähigkeits-Stufen';
 $string['numberoffeedbackoptionpersubscale_help'] = 'Wählen Sie aus, in wievielen Fähigkeits-Stufen Sie Ihr Feedback differenzieren möchten. Mithilfe der Fähigkeits-Stufen können Sie in Abhängigkeit der ermittelten Fähigkeit für jede Skala Ihren Teilnehmenden unterschiedliche schriftliche Rückmeldungen erteilen, diese in unterschiedliche Kurse einschreiben oder diese unterschiedlichen Gruppen zuordnen.';

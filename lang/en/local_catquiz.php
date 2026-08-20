@@ -548,6 +548,7 @@ $string['numberofanswers'] = 'Answers total';
 $string['numberofanswerscorrect'] = 'Correct';
 $string['numberofanswersincorrect'] = 'Wrong';
 $string['numberofanswerspartlycorrect'] = 'Partly correct';
+$string['numberofanswersunanswered'] = 'Unanswered';
 $string['numberofattempts'] = 'Number of attempts';
 $string['numberoffeedbackoptionpersubscale'] = 'Number of ability ranges';
 $string['numberoffeedbackoptionpersubscale_help'] = 'Select how many options of feedback you need per subscale. Using the feedback options, you can provide graded, written feedback depending on the ability score identified and enroll in different courses or groups.';

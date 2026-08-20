@@ -508,27 +508,26 @@ class attemptfeedback implements renderable, templatable {
             $coursestoenrol[$scaleid] = [
                 'course_ids' => [],
             ];
-            $i = 0;
-            while (isset($quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_' . ++$i])) {
-                $lowerlimit = $quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_' . $i];
-                $upperlimit = $quizsettings['feedback_scaleid_limit_upper_' . $scaleid . '_' . $i];
-                if ($data['value'] < (float) $lowerlimit || $data['value'] > (float) $upperlimit) {
-                    continue;
-                }
-                if (!($courses = $quizsettings['catquiz_courses_' . $scaleid . '_' . $i] ?? [])) {
-                    continue;
-                }
-                // The first element at array key 0 is a dummy value to
-                // display some message like "please select course" in the
-                // form and has a course ID of 0.
-                $courses = array_filter($courses, fn ($v) => $v != 0);
-                $showenrolmentmessage = !empty($quizsettings["enrolment_message_checkbox_" . $scaleid . "_" . $i]);
-                $coursestoenrol[$scaleid] = [
-                    'range' => $i,
-                    'show_message' => $showenrolmentmessage,
-                    'course_ids' => $courses,
-                ];
+            // Issue #14: a score falls into exactly one range (half-open), so the
+            // enrolment for a scale is driven by that single range instead of
+            // every range whose inclusive bounds contain the value.
+            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
+            if ($i === null) {
+                continue;
             }
+            if (!($courses = $quizsettings['catquiz_courses_' . $scaleid . '_' . $i] ?? [])) {
+                continue;
+            }
+            // The first element at array key 0 is a dummy value to
+            // display some message like "please select course" in the
+            // form and has a course ID of 0.
+            $courses = array_filter($courses, fn ($v) => $v != 0);
+            $showenrolmentmessage = !empty($quizsettings["enrolment_message_checkbox_" . $scaleid . "_" . $i]);
+            $coursestoenrol[$scaleid] = [
+                'range' => $i,
+                'show_message' => $showenrolmentmessage,
+                'course_ids' => $courses,
+            ];
         }
         return $coursestoenrol;
     }
@@ -565,19 +564,16 @@ class attemptfeedback implements renderable, templatable {
         $groupstoenrol = [];
         foreach ($candidatescales as $scaleid => $data) {
             $groupstoenrol[$scaleid] = [];
-            $i = 0;
-            while (isset($quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_' . ++$i])) {
-                $lowerlimit = $quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_' . $i];
-                $upperlimit = $quizsettings['feedback_scaleid_limit_upper_' . $scaleid . '_' . $i];
-                if ($data['value'] < (float) $lowerlimit || $data['value'] > (float) $upperlimit) {
-                    continue;
-                }
-                if (!($groups = $quizsettings['catquiz_group_' . $scaleid . '_' . $i] ?? "")) {
-                    continue;
-                }
-                $groups = explode(",", $groups);
-                array_push($groupstoenrol[$scaleid], ...$groups);
+            // Issue #14: a score falls into exactly one range (half-open).
+            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
+            if ($i === null) {
+                continue;
             }
+            if (!($groups = $quizsettings['catquiz_group_' . $scaleid . '_' . $i] ?? "")) {
+                continue;
+            }
+            $groups = explode(",", $groups);
+            array_push($groupstoenrol[$scaleid], ...$groups);
         }
         return $groupstoenrol;
     }

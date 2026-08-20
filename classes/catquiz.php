@@ -1369,13 +1369,31 @@ class catquiz {
      */
     public static function get_attempt_statistics(int $attemptid) {
         global $DB;
+        // Issue #13: return exactly one row per question (per question attempt),
+        // carrying the fraction of its LAST graded step. A question can have
+        // several graded steps, so counting steps would overcount; here the inner
+        // subquery reduces to the latest graded step per question attempt. A
+        // question without any graded step (skipped/unanswered) yields a NULL
+        // fraction via the LEFT JOIN, which the caller counts as "unanswered"
+        // rather than "wrong". Pilot exclusion happens in the caller because the
+        // pilot flag is context-computed, not a database column.
         return $DB->get_records_sql(
-            "SELECT state, COUNT(*) as count
+            "SELECT qa.id AS questionattemptid, qa.questionid, laststep.fraction
             FROM {adaptivequiz_attempt} aa
-            LEFT JOIN {question_attempts} qa ON aa.uniqueid = qa.questionusageid
-            LEFT JOIN {question_attempt_steps} qas ON qa.id = qas.questionattemptid AND fraction IS NOT NULL
-            WHERE aa.id = :attemptid
-            GROUP BY state;",
+            JOIN {question_attempts} qa ON aa.uniqueid = qa.questionusageid
+            LEFT JOIN (
+                SELECT qas.questionattemptid, qas.fraction
+                FROM {question_attempt_steps} qas
+                JOIN (
+                    SELECT questionattemptid, MAX(sequencenumber) AS maxseq
+                    FROM {question_attempt_steps}
+                    WHERE fraction IS NOT NULL
+                    GROUP BY questionattemptid
+                ) laststepseq
+                    ON laststepseq.questionattemptid = qas.questionattemptid
+                    AND laststepseq.maxseq = qas.sequencenumber
+            ) laststep ON laststep.questionattemptid = qa.id
+            WHERE aa.id = :attemptid",
             ['attemptid' => $attemptid]
         );
     }
