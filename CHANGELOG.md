@@ -1,5 +1,29 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082000)
+
+> Strang „Diagramme+Feedback+Statistik": Behat-001 gefixt und #44 abgeschlossen.
+> Details in `doc/session-032-changes.md`.
+
+- **001 `catquiz_courses` (Behat):** Ursache über einen neuen PHPUnit-Roundtrip-
+  Test (`catquiz_courses_persistence_test`) auf die Browser-/Form-Interaktion
+  eingegrenzt (PHP/JSON-Persistenz ist nachweislich intakt). Der Autocomplete-
+  Behat-Step setzt jetzt zusätzlich das native `<select multiple>` verlässlich
+  (`option.selected` + `change`-Event, jQuery-Fallback) – das ist der tatsächlich
+  submittierte Formwert. Drei native-`<select>`-Kontrollpunkte (nach Auswahl,
+  nach Validierungsfehler, nach Save+Reload) lokalisieren jeden künftigen
+  Verlust punktgenau.
+- **#44 Nachberechnung:** Kern-Invariante zahn-getestet
+  (`incremental_keeps_context_test`): inkrementell **mit** neuen Responses behält
+  den aktiven Kontext (kein neuer Kontext, `catscale.contextid` unverändert,
+  Personparameter unangetastet); disruptiv versioniert in einen neuen Kontext
+  (Selbstvalidierung des Fixtures).
+- **Fix `model_item_param_list::confirmed()`:** griff die Item-ID (`get_id()`) als
+  Array-Key in die nach `componentid` gekeyte Liste – undefinierter Key und in
+  Produktion `null->get_status()` (Fatal) in der inkrementellen Schätzung. Jetzt
+  keying-robuste Iteration über die Werte. Dieser Bug blockierte die inkrementelle
+  Nachberechnung real; vom #44-Zahn-Test aufgedeckt.
+
 ## 1.1.4 (interne Version 2026081718)
 
 > CI-Fix: K2 zurückgenommen (K3 ist der Wurzelfix). Details in

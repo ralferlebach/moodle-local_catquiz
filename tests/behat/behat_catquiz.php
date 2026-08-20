@@ -110,6 +110,17 @@ class behat_catquiz extends behat_base {
                     // Close the suggestion list so it cannot overlap and swallow
                     // clicks meant for the elements that are filled next.
                     $field->keyPress(27);
+                    // The visible autocomplete widget and the underlying native
+                    // <select multiple> can drift apart: clicking a suggestion may
+                    // fail to mark the matching <option> as selected, and it is the
+                    // native <select> — not the visible chips — that is submitted
+                    // with the form. If it is left unselected the value is silently
+                    // dropped on save and is gone after reload (Behat 001 /
+                    // catquiz_courses). Enforce the native selection as the source
+                    // of truth and notify listeners so the widget re-renders.
+                    $containerxpath = "(//div[contains(@id, '" . $dynamicidentifier . "')])
+                        [" . $numberofitem . "]";
+                    $this->ensure_native_select_option_selected($containerxpath, $value);
                     break;
                 case 'wb_colourpicker':
                     $field->click();
@@ -119,5 +130,86 @@ class behat_catquiz extends behat_base {
                     $field->setValue($value);
             }
         }
+    }
+
+    /**
+     * Ensures the native <select> inside a container has the option with the
+     * given visible text selected, then notifies listeners.
+     *
+     * Moodle's autocomplete enhancement hides the real <select> and drives its
+     * own visible widget. When a test operates the visible widget, the native
+     * <select> can be left without a selected <option>; since the <select> is
+     * what the form submits, the value is silently dropped on save. This makes
+     * the native selection the source of truth and dispatches change events so
+     * the visible widget re-renders to match.
+     *
+     * @param string $containerxpath Xpath of the form item wrapping the select.
+     * @param string $value          The visible option text to select.
+     *
+     * @return void
+     */
+    protected function ensure_native_select_option_selected($containerxpath, $value) {
+        $select = $this->getSession()->getPage()->find('xpath', $containerxpath . "//select");
+        if (!$select) {
+            return;
+        }
+        $selectid = $select->getAttribute('id');
+        if (empty($selectid)) {
+            return;
+        }
+        $jsid = json_encode($selectid);
+        $jsvalue = json_encode($value);
+        $js = "(function(){"
+            . "var select=document.getElementById($jsid);"
+            . "if(!select){return;}"
+            . "var wanted=$jsvalue;"
+            . "for(var i=0;i<select.options.length;i++){"
+            . "var opt=select.options[i];"
+            . "if(opt.text.trim()===wanted||opt.textContent.indexOf(wanted)!==-1){opt.selected=true;}"
+            . "}"
+            . "select.dispatchEvent(new Event('change',{bubbles:true}));"
+            . "if(window.jQuery){window.jQuery(select).trigger('change');}"
+            . "})();";
+        $this->getSession()->executeScript($js);
+        $this->getSession()->wait(300);
+    }
+
+    /**
+     * Asserts that the native <select> of an autocomplete has an option with the
+     * given text selected.
+     *
+     * This checks the value that is actually submitted with the form, which is
+     * independent of the visible autocomplete chips. Placing this assertion at
+     * the hand-over points (right after selection, after a failed validation
+     * submit, and after save + reload) localises exactly where a selection is
+     * lost (Behat 001 / catquiz_courses).
+     *
+     * @Then /^the autocomplete number "([^"]*)" for "([^"]*)" has "([^"]*)" natively selected$/
+     *
+     * @param string $numberofitem
+     * @param string $dynamicidentifier
+     * @param string $value
+     *
+     * @return void
+     */
+    public function autocomplete_should_have_natively_selected($numberofitem, $dynamicidentifier, $value) {
+        $containerxpath = "(//div[contains(@id, '" . $dynamicidentifier . "')])[" . $numberofitem . "]";
+        $select = $this->getSession()->getPage()->find('xpath', $containerxpath . "//select");
+        if (!$select) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "No native <select> found under '$dynamicidentifier' number '$numberofitem'",
+                $this->getSession()
+            );
+        }
+        foreach ($select->findAll('xpath', ".//option") as $option) {
+            if ($option->isSelected() && strpos($option->getText(), $value) !== false) {
+                return;
+            }
+        }
+        throw new \Behat\Mink\Exception\ExpectationException(
+            "Native <select> under '$dynamicidentifier' number '$numberofitem' "
+                . "has no selected option containing '$value'",
+            $this->getSession()
+        );
     }
 }
