@@ -2333,13 +2333,6 @@ final class strategy_test extends advanced_testcase {
         $this->setAdminUser();
         $this->course = $this->getDataGenerator()->create_course();
 
-        // The v-3.0 mod_adaptivequiz generator requires a question pool. Create an
-        // empty category to satisfy it; catquiz drives question selection itself.
-        $qgenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
-        $qcategory = $qgenerator->create_question_category(
-            ['contextid' => context_course::instance($this->course->id)->id]
-        );
-
         $this->adaptivequiz = $this->getDataGenerator()
             ->get_plugin_generator('mod_adaptivequiz')
             ->create_instance([
@@ -2347,7 +2340,6 @@ final class strategy_test extends advanced_testcase {
                 'lowestlevel' => 1,
                 'standarderror' => 14,
                 'course' => $this->course->id,
-                'questionpool' => [$qcategory->id],
             ]);
         $qformat = $this->create_qformat($questionsfile, $this->course);
         $imported = $qformat->importprocess();

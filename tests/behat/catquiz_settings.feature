@@ -17,9 +17,6 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And the following "local_catquiz > questions" exist:
       | filepath                                                            | filename                               | course |
       | local/catquiz/tests/fixtures/quiz-adaptivetest-Simulation-small.xml | quiz-adaptivetest-Simulation-small.xml | C1     |
-    And the following "question categories" exist:
-      | contextlevel | reference | name           |
-      | Course       | C1        | CAT pool       |
     And the following "local_catquiz > importedcatscales" exist:
       | filepath                                          | filename             |
       | local/catquiz/tests/fixtures/simulation_small.csv | simulation_small.csv |
@@ -61,8 +58,8 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
   @javascript
   Scenario: CATquiz settings: teacher setup catscale usage in quiz and verify it
     Given the following "activities" exist:
-      | activity     | name             | course | section | idnumber         | questionpoolnamed |
-      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 | CAT pool          |
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
     ## And I wait until the page is ready
@@ -121,8 +118,8 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I press "Save changes"
     And I log out
     When the following "activities" exist:
-      | activity     | name             | course | section | idnumber         | questionpoolnamed |
-      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 | CAT pool          |
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | startwitheasiestquestion    | 7                    | 0.4                       | 0.6                       | 3                       |
@@ -139,8 +136,8 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
   @javascript
   Scenario: CATquiz settings: teacher setup question settings and validate it
     Given the following "activities" exist:
-      | activity     | name             | course | section | idnumber         | questionpoolnamed |
-      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 | CAT pool          |
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
     And I set the following fields to these values:
@@ -238,8 +235,8 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
   @javascript
   Scenario: CATquiz settings: teacher setup basic feedback settings
     Given the following "activities" exist:
-      | activity     | name             | course | section | idnumber         | questionpoolnamed |
-      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 | CAT pool          |
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
     ## And I wait until the page is ready
