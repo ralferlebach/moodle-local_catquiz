@@ -84,11 +84,32 @@ class behat_catquiz extends behat_base {
             switch ($fieldtype) {
                 case 'autocomplete':
                     $field->setValue($value);
-                    $field->keyPress(13); // Enter.
-                    // Get selected option and click it.
-                    $this->getSession()->wait(500); // Required for Moodle < 4.3.
-                    $field = $this->getSession()->getPage()->find('xpath', $xpathtarget1);
-                    $field->click();
+                    // The suggestion list is populated asynchronously (debounced
+                    // AJAX). Wait for the suggestion that actually contains the
+                    // requested value instead of pressing Enter and clicking the
+                    // first list item: Enter may already commit the top item, in
+                    // which case a subsequent click hits a different (or already
+                    // selected) entry and the selection is lost again.
+                    $escapedvalue = behat_context_helper::escape($value);
+                    $suggestionxpath = $xpathtarget1 . "[contains(normalize-space(.), $escapedvalue)]";
+                    $suggestion = null;
+                    for ($attempt = 0; $attempt < 20; $attempt++) {
+                        $suggestion = $this->getSession()->getPage()->find('xpath', $suggestionxpath);
+                        if ($suggestion) {
+                            break;
+                        }
+                        $this->getSession()->wait(300);
+                    }
+                    if (!$suggestion) {
+                        throw new \Behat\Mink\Exception\ExpectationException(
+                            "Autocomplete suggestion containing '$value' did not appear",
+                            $this->getSession()
+                        );
+                    }
+                    $suggestion->click();
+                    // Close the suggestion list so it cannot overlap and swallow
+                    // clicks meant for the elements that are filled next.
+                    $field->keyPress(27);
                     break;
                 case 'wb_colourpicker':
                     $field->click();
