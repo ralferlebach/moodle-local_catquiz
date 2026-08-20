@@ -40,7 +40,7 @@ Feature: As a admin I want to manage CAT scales along with obtained attempts dat
     And I log out
     ## Pass 1 attempt as a student
     And I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "button"
+    And I click on "Start attempt" "link"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"

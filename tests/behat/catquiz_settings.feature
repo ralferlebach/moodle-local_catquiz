@@ -53,7 +53,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I click on "Save and return to course" "button"
     And I log out
     And I am on the "adaptivecatquiz1" "Activity" page logged in as "student1"
-    Then "Start attempt" "button" should exist
+    Then "Start attempt" "link" should exist
 
   @javascript
   Scenario: CATquiz settings: teacher setup catscale usage in quiz and verify it
