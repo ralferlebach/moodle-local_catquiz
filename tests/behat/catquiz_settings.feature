@@ -122,7 +122,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
       | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
-      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | startwitheasiestquestion    | 7                    | 0.4                       | 0.6                       | 3                       |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 7                    | 0.4                       | 0.6                       | 3                       |
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
     And I click on "Feedback for “Simulation”" "text"

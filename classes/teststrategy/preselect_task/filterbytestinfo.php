@@ -113,8 +113,18 @@ class filterbytestinfo extends preselect_task {
             );
 
             $enable = $testpotential + $testinformation > 1 / $this->context['se_max'] ** 2;
+            // A scale must never be deactivated before at least one question has
+            // actually been administered from it. On the very first question the
+            // ability is only the configured starting guess (e.g. "very easy" =>
+            // -2). At such an extreme guess the test potential can fall below the
+            // se_max threshold, which — when min_attempts_per_scale is 0 — used to
+            // deactivate the one and only active scale with zero played questions,
+            // leaving no active scale and aborting the whole attempt with
+            // 'attemptnofirstquestion'. Require at least one played question (and
+            // the configured minimum) before a scale may be excluded.
+            $playedinscale = count($this->progress->get_playedquestions(true, $scaleid));
             $exclude = $testpotential + $testinformation <= 1 / $this->context['se_max'] ** 2
-                && count($this->progress->get_playedquestions(true, $scaleid)) >= $this->context['min_attempts_per_scale'];
+                && $playedinscale >= max(1, (int) $this->context['min_attempts_per_scale']);
             if ($exclude && $this->progress->is_active_scale($scaleid)) {
                 $this->progress->deactivate_scale($scaleid, true);
                 getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(

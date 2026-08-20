@@ -31,7 +31,7 @@ Feature: As a admin I want to manage CAT scales along with obtained attempts dat
       | adaptivequiz | My Adaptive Quiz | C1     | 1       | adaptivecatquiz1 | Adaptive Quiz Intro |
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
-      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | startwitheasiestquestion    | 4                    | 0.4                       | 0.6                       | 2                       |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 4                    | 0.4                       | 0.6                       | 2                       |
     ## Below steps are required to save a correct JSON settings
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher
     And I follow "Settings"
