@@ -1,5 +1,41 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082002)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #10 Folge-Inkrement
+> (Nebenwirkungs-Gating + Forced-Scale-Passthrough). Details in
+> `doc/session-034-changes.md`.
+
+- **#10 Einschreibungs-Gating:** `get_courses_to_enrol()` / `get_groups_to_enrol()`
+  wählen Kandidatenskalen jetzt über `feedback_helper::get_reportable_scales()`
+  (schließt `excluded`/`hidden` aus, nicht nur `toreport`). Ein ungültiges
+  Ergebnis löst damit **keine** automatische Kurs-/Gruppen-Einschreibung mehr aus.
+- **#10 Forced-Scale-Passthrough:** `feedbackgenerator::select_scales_for_report()`
+  reicht `forcedscaleid`/`feedbackonlyfordefinedscaleid` jetzt bis zur
+  Auswahlstrategie durch (Mapping auf deren `catscaleid`); neue Träger-Properties
+  `feedbacksettings::$forcedscaleid` / `$feedbackonlyfordefinedscaleid`
+  (Default 0/false → verhaltensbewahrend, wenn nicht gesetzt).
+- Neuer Testfall `attemptfeedback_test`: `toreport`-, aber `excluded`-Skala
+  schreibt nicht ein (zahn-getestet).
+
+## 1.1.5 (interne Version 2026082001)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #10 (Feedback an valide Ergebnisse
+> binden), Kern-Inkrement. Details in `doc/session-033-changes.md`.
+
+- **#10 Generator-Gating:** `feedbackgenerator::no_data()` liefert jetzt ein
+  leeres Ergebnis – Generatoren ohne Daten erzeugen keinen „nicht verfügbar"-Tab
+  mehr (die Assembly überspringt leere Ergebnisse).
+- **#10 Zentraler Hinweis:** Hat ein Versuch keine berichtbare Skala (`toreport`,
+  nicht `excluded`/`hidden`), zeigt die Feedbackansicht **genau einen** zentralen
+  Hinweis („Für diesen Versuch konnte kein valides Testergebnis bestimmt werden.")
+  inkl. Ablehnungsgrund statt verstreuter Skalen-/„nicht verfügbar"-Blöcke.
+- Validität und Ablehnungsgründe in `feedback_helper` zentralisiert
+  (`has_reportable_result`, `get_reportable_scales`, `get_exclusion_reason_string`);
+  `customscalefeedback` delegiert nun an den geteilten Helfer (DRY).
+- Neue Strings `feedbacknovalidresult(+heading)` (EN/DE). Neuer Test
+  `feedback_gating_test` (zahn-getestet).
+
 ## 1.1.5 (interne Version 2026082000)
 
 > Strang „Diagramme+Feedback+Statistik": Behat-001 gefixt und #44 abgeschlossen.

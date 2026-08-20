@@ -27,6 +27,7 @@ use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\event\attempt_completed;
 use local_catquiz\teststrategy\feedbackgenerator;
+use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\teststrategy\info;
 use local_catquiz\teststrategy\progress;
@@ -495,10 +496,11 @@ class attemptfeedback implements renderable, templatable {
             return [];
         }
 
-        // Use only the toreport scale.
-        $candidatescales = array_filter(
-            $feedbackdata['personabilities_abilities'],
-            fn($v) => array_key_exists('toreport', $v) && $v['toreport'] === true
+        // Issue #10: only reportable scales (toreport, not excluded/hidden) may
+        // trigger an automatic enrolment. An invalid result has no reportable
+        // scale, so no enrolment happens.
+        $candidatescales = feedback_helper::get_reportable_scales(
+            $feedbackdata['personabilities_abilities']
         );
 
         $coursestoenrol = [];
@@ -552,10 +554,11 @@ class attemptfeedback implements renderable, templatable {
             return [];
         }
 
-        // Use only the toreport scale.
-        $candidatescales = array_filter(
-            $feedbackdata['personabilities_abilities'],
-            fn($v) => array_key_exists('toreport', $v) && $v['toreport'] === true
+        // Issue #10: only reportable scales (toreport, not excluded/hidden) may
+        // trigger an automatic enrolment. An invalid result has no reportable
+        // scale, so no enrolment happens.
+        $candidatescales = feedback_helper::get_reportable_scales(
+            $feedbackdata['personabilities_abilities']
         );
 
         // Check if there is a course associated with that value and if so, return it.
@@ -621,6 +624,26 @@ class attemptfeedback implements renderable, templatable {
                 }
                 $context[$fbtype][] = $feedback;
             }
+        }
+
+        // Issue #10: bind the student feedback to a valid result. When the report
+        // pipeline produced no reportable scale (toreport, not excluded/hidden),
+        // the attempt has no valid result: drop the per-scale feedback and show
+        // exactly one central notice that carries the rejection reason, instead
+        // of scattering "not available"/exclusion blocks across several tabs.
+        $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
+        if (is_array($abilities) && !feedback_helper::has_reportable_result($abilities)) {
+            $reason = feedback_helper::get_exclusion_reason_string($abilities);
+            $content = get_string('feedbacknovalidresult', 'local_catquiz');
+            if ($reason !== '') {
+                $content .= ' ' . $reason;
+            }
+            $context['studentfeedback'] = [[
+                'heading' => get_string('feedbacknovalidresultheading', 'local_catquiz'),
+                'content' => $content,
+                'generatorname' => 'novalidresult',
+                'frontpage' => '1',
+            ]];
         }
 
         return $context;

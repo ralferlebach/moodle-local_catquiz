@@ -51,6 +51,79 @@ class feedback_helper {
     const PRECISION = 2;
 
     /**
+     * Returns the reportable scales from a list of person abilities.
+     *
+     * A scale is reportable when it is flagged toreport and is neither excluded
+     * nor hidden. This is the single definition of "valid result" used by the
+     * feedback assembly (issue #10).
+     *
+     * @param array $personabilities
+     * @return array
+     */
+    public static function get_reportable_scales(array $personabilities): array {
+        return array_filter(
+            $personabilities,
+            fn ($a) => is_array($a)
+                && !empty($a['toreport'])
+                && empty($a['excluded'])
+                && empty($a['hidden'])
+        );
+    }
+
+    /**
+     * Whether a person-abilities list contains at least one reportable scale.
+     *
+     * @param array $personabilities
+     * @return bool
+     */
+    public static function has_reportable_result(array $personabilities): bool {
+        return self::get_reportable_scales($personabilities) !== [];
+    }
+
+    /**
+     * Maps an excluded scale's error to a human-readable rejection reason.
+     *
+     * Shared by customscalefeedback and by the central "no valid result" notice
+     * (issue #10) so both surface the same reasons.
+     *
+     * @param array $personabilities
+     * @return string
+     */
+    public static function get_exclusion_reason_string(array $personabilities): string {
+        foreach ($personabilities as $personability) {
+            if (!is_array($personability) || !isset($personability['excluded']) || !isset($personability['error'])) {
+                continue;
+            }
+            $errorcode = array_keys($personability['error'])[0];
+            $errorarray = $personability['error'][$errorcode];
+
+            switch ($errorcode) {
+                case "rootonly": // Default string: the detail may be too complex for users.
+                    return get_string('error:rootonly', 'local_catquiz', $errorarray);
+                case "se": // Default string: the detail may be too complex for users.
+                    if (isset($errorarray['semindefined'])) {
+                        return get_string('error:semin', 'local_catquiz', $errorarray);
+                    } else if (isset($errorarray['semaxdefined'])) {
+                        return get_string('error:semax', 'local_catquiz', $errorarray);
+                    }
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
+                case "nminscale":
+                    return get_string('error:nminscale', 'local_catquiz', $errorarray);
+                case "fraction":
+                    if ($errorarray['fraction'] == 1) {
+                        return get_string('error:fraction1', 'local_catquiz');
+                    } else if ($errorarray['fraction'] == 0) {
+                        return get_string('error:fraction0', 'local_catquiz');
+                    }
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
+                default:
+                    return get_string('noscalesfound', 'local_catquiz');
+            }
+        }
+        return get_string('noscalesfound', 'local_catquiz');
+    }
+
+    /**
      * Get feedback data for attempts
      *
      * @param array $args Arguments containing courseid, numberofattempts, instanceid.

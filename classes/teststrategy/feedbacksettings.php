@@ -60,6 +60,20 @@ class feedbacksettings {
     public int $sortorder;
 
     /**
+     * The scale whose feedback is forced, or 0 for none (issue #10).
+     *
+     * @var int
+     */
+    public int $forcedscaleid = 0;
+
+    /**
+     * Whether feedback is restricted to the forced scale only (issue #10).
+     *
+     * @var bool
+     */
+    public bool $feedbackonlyfordefinedscaleid = false;
+
+    /**
      * @var ?array
      */
     public ?array $areastohide = [];

@@ -256,25 +256,37 @@ abstract class feedbackgenerator {
 
         $feedbacksettings->set_params_from_attempt($newdata, $quizsettings);
 
+        // Issue #10: forward the forced-scale configuration end to end. When the
+        // caller passes the defaults, fall back to the values carried on the
+        // feedback settings, then hand them to the selection strategy (which maps
+        // $forcedscaleid onto its $catscaleid parameter).
+        $forcedscaleid = $forcedscaleid ?: (int) $feedbacksettings->forcedscaleid;
+        $feedbackonlyfordefinedscaleid = $feedbackonlyfordefinedscaleid
+            || $feedbacksettings->feedbackonlyfordefinedscaleid;
+
         return info::get_teststrategy($strategyid)
         ->select_scales_for_report(
             $feedbacksettings,
             $transformedpersonabilities,
-            $newdata
+            $newdata,
+            $forcedscaleid,
+            $feedbackonlyfordefinedscaleid
         );
     }
 
     /**
-     * Returns a fallback if no feedback can be generated.
+     * Returns an empty result when a generator has no reportable data.
+     *
+     * Issue #10: a generator without data must not produce a tab. The assembly
+     * (attemptfeedback::generate_feedback) skips empty results, so returning an
+     * empty array here suppresses the tab instead of rendering a stray
+     * "feedback not available" block. When the whole attempt has no reportable
+     * result, a single central notice is shown by the assembly instead.
      *
      * @return array
-     * @throws coding_exception
      */
     protected function no_data(): array {
-        return [
-            'heading' => $this->get_heading(),
-            'content' => get_string('attemptfeedbacknotavailable', 'local_catquiz'),
-        ];
+        return [];
     }
 
     /**

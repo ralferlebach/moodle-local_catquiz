@@ -269,38 +269,7 @@ class customscalefeedback extends feedbackgenerator {
      *
      */
     private function get_exclusion_reason_string(array $personabilities): string {
-
-        foreach ($personabilities as $personability) {
-            if (!isset($personability['excluded'])) {
-                continue;
-            }
-            $errorcode = array_keys($personability['error'])[0];
-            $errorarray = $personability['error'][$errorcode];
-
-            switch ($errorcode) {
-                case "rootonly": // Uses default string because information might be to complicated for users.
-                    return get_string('error:rootonly', 'local_catquiz', $errorarray);
-                case "se": // Uses default string because information might be to complicated for users.
-                    if (isset($errorarray['semindefined'])) {
-                        return get_string('error:semin', 'local_catquiz', $errorarray);
-                    } else if (isset($errorarray['semaxdefined'])) {
-                        return get_string('error:semax', 'local_catquiz', $errorarray);
-                    }
-                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
-                case "nminscale":
-                    return get_string('error:nminscale', 'local_catquiz', $errorarray);
-                case "fraction":
-                    if ($errorarray['fraction'] == 1) {
-                        return get_string('error:fraction1', 'local_catquiz');
-                    } else if ($errorarray['fraction'] == 0) {
-                        return get_string('error:fraction0', 'local_catquiz');
-                    }
-                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
-                default:
-                    return get_string('noscalesfound', 'local_catquiz');
-            }
-        }
-        return get_string('noscalesfound', 'local_catquiz');
+        return \local_catquiz\teststrategy\feedback_helper::get_exclusion_reason_string($personabilities);
     }
 
     /**
