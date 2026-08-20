@@ -425,6 +425,7 @@ $string['hoursago'] = 'Vor {$a} Stunden';
 $string['hubactions'] = 'Berechnungen auf zentraler Instanz';
 $string['hubactionshelp'] = 'Hier können Berechnungen, die spezifisch für zentrale Instanzen sind, ausgeführt werden';
 $string['id'] = 'ID';
+$string['invalidquestionslot'] = 'Die angeforderte Frage wurde in diesem Versuch nicht gefunden.';
 $string['ifdefinedusedtomatch'] = 'Wenn angegeben findet der Abgleich über diesen Wert statt.';
 $string['importcolumnsinfos'] = 'Informationen zu Importfeldern:';
 $string['importcontextinfo'] = 'Die Kontextid sollte gesetzt werden, wenn bestehende Items bearbeitet werden, damit die eindeutige Zuordnung gelingt. Für den Import von neuen Items, empfiehlt es sich, den Kontext leer zu lassen. Es wird dann ein neuer Kontext automatisch generiert, welcher die Items aus dem Standardkontext plus die neu importierten enthält. Falls beim Import neuer Items ein Kontext angegeben wird, muss der Kontext der entsprechenden obersten Skala umgestellt werden (im CAT-Manager Dashboard, Skalen-Bereich), damit diese Items zum Einsatz kommen.';

@@ -412,6 +412,7 @@ $string['hoursago'] = '{$a} hours ago';
 $string['hubactions'] = 'Actions for central instances';
 $string['hubactionshelp'] = 'Perform calculations specific for central instances';
 $string['id'] = 'ID';
+$string['invalidquestionslot'] = 'The requested question could not be found in this attempt.';
 $string['ifdefinedusedtomatch'] = 'If defined, will be used to match.';
 $string['importcolumnsinfos'] = 'Informations about columns to be imported:';
 $string['importcontextinfo'] = 'The context id should be set when existing items are updated for unambiguous matching with exisiting items. When importing new items, it is advisable to leave the context field empty. A new context is then generated automatically, which contains the items from the default context plus the newly imported items. If a context is defined when importing new items, the context of the corresponding top scale must be changed (in the CAT Manager dashboard, Scales area) in order to use these items during quiz.';

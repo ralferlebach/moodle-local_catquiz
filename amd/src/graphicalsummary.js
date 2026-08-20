@@ -40,17 +40,25 @@ export const init = async() => {
             let iconPromise = addIconToContainerWithPromise(row);
             const attemptid = this.getAttribute('data-attemptid');
             const slot = this.getAttribute('data-slot');
+            const questionattemptid = this.getAttribute('data-questionattemptid') || 0;
             const name = this.getAttribute('data-name');
-            const questiondata = await fetchQuestionData(slot, attemptid);
+            const questiondata = await fetchQuestionData(slot, attemptid, questionattemptid);
             // Hide the loader icon by resolving it.
             iconPromise.resolve();
             const modal = await ModalFactory.create({
                 title: name,
-                body: '<div data-id="modalbodyquestion"></div>',
+                body: '',
             });
+            // Remove the modal from the DOM when it is closed, so opening the next
+            // question creates a fresh modal instead of leaving stale, hidden ones
+            // behind (issue #12).
+            modal.setRemoveOnClose(true);
             await modal.show();
-            const element = document.querySelector('[data-id="modalbodyquestion"]');
-            Templates.appendNodeContents(element, questiondata.questionhtml, questiondata.javascript);
+            // Write into THIS modal's own body node, never a global selector: a
+            // global lookup would target the first (now hidden) modal from the
+            // second question onwards, leaving later modals empty.
+            const bodyElement = modal.getBody()[0];
+            Templates.appendNodeContents(bodyElement, questiondata.questionhtml, questiondata.javascript);
         });
     });
 };
@@ -58,14 +66,16 @@ export const init = async() => {
 /**
  * @param {integer} slot Question slot
  * @param {integer} attemptid The attempt ID
+ * @param {integer} questionattemptid The question attempt ID (0 to skip the check)
  * @return string
  */
-const fetchQuestionData = async(slot, attemptid) => {
+const fetchQuestionData = async(slot, attemptid, questionattemptid) => {
     let data = await Ajax.call([{
         methodname: 'local_catquiz_render_question_with_response',
         args: {
             slot: slot,
             attemptid: attemptid,
+            questionattemptid: questionattemptid,
         }
     }])[0];
     return {

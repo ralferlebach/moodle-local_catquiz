@@ -1,25 +1,44 @@
 # Changelog – local_catquiz
 
-# Changelog – local_catquiz
+## 1.1.5 (interne Version 2026082006)
 
-# Changelog – local_catquiz
+> Strang „Diagramme+Feedback+Statistik": Issue #12 (Fragenmodal & Antwort-
+> darstellung reparieren). Details in `doc/session-038-changes.md`.
+
+- **#12 Fragenmodal (JS):** `graphicalsummary.js` schreibt den Inhalt jetzt in
+  den **eigenen** Modal-Body (`modal.getBody()`), nicht mehr über den globalen
+  Selektor `[data-id="modalbodyquestion"]` (der ab dem 2. Modal ins alte,
+  versteckte schrieb). `setRemoveOnClose(true)`; Build via grunt neu erzeugt.
+- **#12 Echter Slot:** `data-slot`/`data-questionattemptid` stammen jetzt aus dem
+  gespeicherten realen `qa.slot`/`questionattemptid` (SQL um `qa.slot` ergänzt);
+  Legacy-Fallback auf den Zeilenindex für Altdaten.
+- **#12 Endpoint (`render_question_with_response`):** `validate_context()`,
+  Eigentümer-/Review-Zugriffscheck (`local/catquiz:view_users_feedback`) **vor**
+  jeder Ausgabe → fremde Versuche für Participants nicht abrufbar; Slot- und
+  optionale Question-ID-Validierung; QUBA-HTML **unverändert** (kein
+  `format_text`), plus `render_question_head_html()`.
+- **#12 Antwort:** tatsächliche Antwort (`responsesummary`, escaped) in der
+  Antwortspalte.
+- Neuer Test `render_question_with_response_test` (Zugriff + Slotzuordnung,
+  zahn-getestet); neuer String `invalidquestionslot` (EN/DE).
 
 ## 1.1.5 (interne Version 2026082005)
 
 > Strang „Diagramme+Feedback+Statistik": Issue #11 (Lernfortschritt auf die
 > Globalskala beziehen). Details in `doc/session-037-changes.md`.
 
-- **#11 Globalskala:** Die „Lernfortschritt"-Charts folgen jetzt der Globalskala
-  (`catquiz_catscales`) statt der Primary-Skala des aktuellen Versuchs. Wechselnde
-  Primary-Skalen beeinflussen die Datenreihe nicht mehr.
-- **#11 Lücken & 0.0:** Versuche ohne Globalwert erzeugen eine Lücke (null) statt
-  übersprungen/ersetzt zu werden; ein Globalwert von exakt 0.0 wird korrekt
+- **#11 Lernfortschritt = Globalskala:** Die „Lernfortschritt"-Charts
+  (`render_chart_for_individual_user` und `render_chart_for_comparison`) folgen
+  jetzt der Globalskala (`catquiz_catscales`) statt der wechselnden Primary-Skala
+  des aktuellen Versuchs. `get_studentfeedback` übergibt die Globalskala an
+  `render_abilityprogress`.
+- **#11 Lücken & 0.0:** Versuche ohne Globalwert erzeugen eine **Lücke** (null)
+  statt übersprungen/ersetzt zu werden; ein Wert von exakt 0.0 wird korrekt
   dargestellt (explizite Nullprüfung statt `empty()`, auch in
-  `find_non_nullable_value`).
-- `primaryscale` aus den Required-Context-Keys von `learningprogress` entfernt.
-  Werteextraktion in `extract_scale_progress_values()` ausgelagert (testbar).
-- Neuer Test `learningprogress_globalscale_test` (Global- vs. Primary-Verlauf,
-  zahn-getestet).
+  `find_non_nullable_value`). Werteextraktion in `extract_scale_progress_values`.
+- **#11 Required-Keys:** `primaryscale` aus `get_required_context_keys()`
+  entfernt (der Verlauf hängt nicht mehr an der Primary-Skala).
+- Neuer Test `learningprogress_globalscale_test` (zahn-getestet).
 
 ## 1.1.5 (interne Version 2026082004)
 

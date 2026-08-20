@@ -61,6 +61,12 @@ class render_question_with_response extends external_api {
         return new external_function_parameters([
             'slot'  => new external_value(PARAM_INT, 'Slot'),
             'attemptid'  => new external_value(PARAM_INT, 'Attempt ID'),
+            'questionattemptid' => new external_value(
+                PARAM_INT,
+                'Question attempt id used to verify the slot maps to the expected question',
+                VALUE_DEFAULT,
+                0
+            ),
         ]);
     }
 
@@ -72,11 +78,12 @@ class render_question_with_response extends external_api {
      *
      * @return array
      */
-    public static function execute(int $slot, int $attemptid): array {
+    public static function execute(int $slot, int $attemptid, int $questionattemptid = 0): array {
         global $PAGE, $OUTPUT;
         self::validate_parameters(self::execute_parameters(), [
             'slot' => $slot,
             'attemptid' => $attemptid,
+            'questionattemptid' => $questionattemptid,
         ]);
 
         require_login();
@@ -86,7 +93,7 @@ class render_question_with_response extends external_api {
         // Hack alert: Forcing bootstrap_renderer to initiate moodle page.
         $OUTPUT->header();
         $PAGE->start_collecting_javascript_requirements();
-        $questionhtml = self::render_question($slot, $attemptid);
+        $questionhtml = self::render_question($slot, $attemptid, $questionattemptid);
         $jsfooter = $PAGE->requires->get_end_code();
 
         return [
@@ -112,16 +119,32 @@ class render_question_with_response extends external_api {
      *
      * @param int $slot
      * @param int $attemptid
+     * @param int $questionattemptid Expected question attempt id (0 = skip check).
      * @return array
      * @throws dml_exception
      * @throws coding_exception
      * @throws require_login_exception
      * @throws moodle_exception
      */
-    private static function render_question(int $slot, int $attemptid): array {
-        global $DB, $PAGE;
-        $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid]);
+    private static function render_question(int $slot, int $attemptid, int $questionattemptid = 0): array {
+        global $DB, $PAGE, $USER;
+        $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
         $instanceid = $attempt->instance;
+
+        $cm = get_coursemodule_from_instance('adaptivequiz', $instanceid, 0, false, MUST_EXIST);
+        $context = context_module::instance($cm->id);
+        // Moodle-compliant context validation (also enforces login for the context).
+        self::validate_context($context);
+        $PAGE->set_context($context);
+
+        // Issue #12: enforce access before revealing anything about the attempt.
+        // An attempt may only be inspected by its owner or by a user with the
+        // review capability; otherwise a participant could pass a foreign
+        // attemptid and read another user's question and response.
+        if ((int) $attempt->userid !== (int) $USER->id) {
+            require_capability('local/catquiz:view_users_feedback', $context);
+        }
+
         // Get the question settings for this quiz.
         $data = (object)['componentid' => $instanceid, 'component' => 'mod_adaptivequiz'];
         $testenvironment = new testenvironment($data);
@@ -130,13 +153,22 @@ class render_question_with_response extends external_api {
             return ['body' => get_string('questionfeedbackdisabled', 'local_catquiz')];
         }
 
-        require_login();
-        $cm = get_coursemodule_from_instance('adaptivequiz', $instanceid);
-        $context = context_module::instance($cm->id);
-        $PAGE->set_context($context);
         // Get the question attempt.
         $uniqueid = $attempt->uniqueid;
         $quba = question_engine::load_questions_usage_by_activity($uniqueid);
+
+        // Issue #12: validate that the slot really exists in this usage and, when
+        // a question attempt id is supplied, that the slot maps to exactly that
+        // question attempt. This replaces the previous reliance on a slot that was
+        // reconstructed from a table row index.
+        try {
+            $qa = $quba->get_question_attempt($slot);
+        } catch (\moodle_exception $e) {
+            throw new moodle_exception('invalidquestionslot', 'local_catquiz');
+        }
+        if ($questionattemptid > 0 && (int) $qa->get_database_id() !== $questionattemptid) {
+            throw new moodle_exception('invalidquestionslot', 'local_catquiz');
+        }
 
         // Render the question.
         $displayoptions = new question_display_options();
@@ -157,10 +189,16 @@ class render_question_with_response extends external_api {
         $displayoptions->generalfeedback = $showfeedback;
         $displayoptions->feedback = $showfeedback;
 
-        $html = format_text($quba->render_question($slot, $displayoptions));
+        // Issue #12: emit the QUBA HTML unchanged. Running it through format_text
+        // corrupts inputs, ids, JavaScript hooks and STACK structures. The head
+        // html carries per-question CSS/JS (MathJax, STACK, ...) that the modal
+        // needs; the question's own JavaScript is collected by the page
+        // requirements in execute() (question_engine::initialise_js()).
+        $headhtml = $quba->render_question_head_html($slot);
+        $html = $quba->render_question($slot, $displayoptions);
 
         return [
-            'body' => $html,
+            'body' => $headhtml . $html,
         ];
     }
 }

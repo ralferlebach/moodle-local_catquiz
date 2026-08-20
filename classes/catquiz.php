@@ -637,6 +637,7 @@ class catquiz {
         SELECT
             qs.id,
             questionattemptid,
+            qa.slot,
             state,
             fraction originalfraction,
             ROUND(fraction, 3) fraction,
