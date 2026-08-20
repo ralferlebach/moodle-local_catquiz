@@ -2,6 +2,25 @@
 
 # Changelog – local_catquiz
 
+# Changelog – local_catquiz
+
+## 1.1.5 (interne Version 2026082005)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #11 (Lernfortschritt auf die
+> Globalskala beziehen). Details in `doc/session-037-changes.md`.
+
+- **#11 Globalskala:** Die „Lernfortschritt"-Charts folgen jetzt der Globalskala
+  (`catquiz_catscales`) statt der Primary-Skala des aktuellen Versuchs. Wechselnde
+  Primary-Skalen beeinflussen die Datenreihe nicht mehr.
+- **#11 Lücken & 0.0:** Versuche ohne Globalwert erzeugen eine Lücke (null) statt
+  übersprungen/ersetzt zu werden; ein Globalwert von exakt 0.0 wird korrekt
+  dargestellt (explizite Nullprüfung statt `empty()`, auch in
+  `find_non_nullable_value`).
+- `primaryscale` aus den Required-Context-Keys von `learningprogress` entfernt.
+  Werteextraktion in `extract_scale_progress_values()` ausgelagert (testbar).
+- Neuer Test `learningprogress_globalscale_test` (Global- vs. Primary-Verlauf,
+  zahn-getestet).
+
 ## 1.1.5 (interne Version 2026082004)
 
 > Behat 001: Autocomplete-Assertion auf den realen DOM-State umgestellt und die
