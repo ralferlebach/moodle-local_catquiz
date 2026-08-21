@@ -1,5 +1,38 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082105)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase E / Issue #8: Aktivitäts-
+> Completion an ein **valides** CAT-Ergebnis koppeln — schließt den Strang.
+> Cross-Plugin (mod_adaptivequiz + Adapter + local_catquiz-Finalizer). Details
+> in `doc/session-056-changes.md`.
+
+- **Neue Completion-Regel `completionvalidresult`** (mod_adaptivequiz): ein
+  technisch abgeschlossener, aber **invalider** Versuch erfüllt die Regel nicht;
+  erst ein Versuch mit validem CAT-Ergebnis schließt die Aktivität ab. Die
+  bestehende Regel `completionattemptcompleted` bleibt unverändert (Abwärts-
+  kompatibilität). `custom_completion::get_state()` verzweigt auf die Regel und
+  prüft `adaptivequiz_attempt` (attemptstate=complete, resultvalid=1).
+- **Neue Felder:** `adaptivequiz.completionvalidresult` (Regel-Schalter der
+  Aktivität) sowie `adaptivequiz_attempt.resultstatus`/`resultvalid`
+  (Ergebnis-Verdikt je Versuch). Additive, idempotente Migration.
+- **Finalizer (local_catquiz)** setzt `resultvalid`/`resultstatus` auf
+  `adaptivequiz_attempt` aus dem zentralen Validator-Ergebnis — feld-existenz-
+  geschützt, damit local_catquiz auch mit älterem mod_adaptivequiz robust bleibt.
+  Da der Finalizer-Hook vor dem `attempt_completed`-Event läuft, sieht die
+  Completion-Neuberechnung `resultvalid` bereits gesetzt.
+- **Observer/Form/Backup:** `attempt_state_change_observers` berechnet Completion
+  auch bei aktiver `completionvalidresult`-Regel neu; `mod_form` bietet die
+  Checkbox; Backup/Restore/Duplicate übernehmen `completionvalidresult` sowie
+  `resultstatus`/`resultvalid`/`timefinished` der Versuche.
+- **Tests:** `custom_completion_test::test_completionvalidresult_requires_a_valid_result`
+  (invalide → nicht erfüllt; valide → erfüllt; Legacy-Regel unberührt);
+  `attempt_finalizer_test` prüft nun `resultvalid`/`resultstatus`. Gesamte
+  adaptivequiz-Suite 151/151. Behat `completion_valid_result.feature`
+  (non-blocking). Core-Analyse bestätigt: `update_state` wertet Custom-Regeln bei
+  automatischer Completion neu aus, der COMPLETE-Hint ist nur Early-Return-
+  Optimierung — „completed-but-invalid" ergibt korrekt INCOMPLETE.
+
 ## 1.1.5 (interne Version 2026082104)
 
 > Strang „Abschluss+Ergebnisspeicherung", Phase D / Issue #9: versuchsspezifische

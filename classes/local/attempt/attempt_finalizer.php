@@ -107,6 +107,17 @@ final class attempt_finalizer {
             $result
         );
 
+        // Issue #8: expose the validity verdict on the adaptivequiz attempt so
+        // the completionvalidresult rule can query it. Guarded by a column check
+        // so local_catquiz keeps working against an older mod_adaptivequiz that
+        // does not yet have these fields.
+        if ($DB->get_manager()->field_exists('adaptivequiz_attempt', 'resultvalid')) {
+            $isvalid = $result->is_valid() ? 1 : 0;
+            $DB->set_field('adaptivequiz_attempt', 'resultvalid', $isvalid, ['id' => $adaptiveattemptid]);
+            $status = $isvalid ? 'valid' : 'invalid';
+            $DB->set_field('adaptivequiz_attempt', 'resultstatus', $status, ['id' => $adaptiveattemptid]);
+        }
+
         // Issue #9: refresh the personparams "latest known state" snapshot only
         // now, and only for valid scales measured in this attempt - never from a
         // mere carry-over or an intermediate estimate.
@@ -123,8 +134,8 @@ final class attempt_finalizer {
             }
         }
 
-        // Issue #8 will additionally set resultstatus/resultvalid on the
-        // adaptivequiz_attempt from $result and $stopreason.
+        // Issue #8 sets resultstatus/resultvalid on the adaptivequiz_attempt
+        // above, which the completionvalidresult rule then consumes.
         unset($stopreason);
 
         $transaction->allow_commit();

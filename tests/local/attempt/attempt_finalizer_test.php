@@ -160,6 +160,11 @@ final class attempt_finalizer_test extends advanced_testcase {
         );
         $this->assertNotFalse($snapshot);
         $this->assertEquals(0.4, (float) $snapshot->ability);
+
+        // Issue #8: the validity verdict is exposed on the adaptivequiz attempt.
+        $updated = $DB->get_record('adaptivequiz_attempt', ['id' => $adaptiveattemptid], 'resultvalid, resultstatus');
+        $this->assertEquals(1, (int) $updated->resultvalid);
+        $this->assertEquals('valid', $updated->resultstatus);
     }
 
     /**

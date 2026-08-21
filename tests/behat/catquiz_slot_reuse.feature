@@ -31,7 +31,16 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
       | adaptivequiz | My Adaptive Quiz | C1     | 1       | adaptivecatquiz1 | Adaptive Quiz Intro |
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_minquestions | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
-      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 4                    | 4                    | 0.0                       | 1000.0                    | 2                       |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 2                    | 4                    | 0.0                       | 1000.0                    | 2                       |
+    ## Round-trip the generated CAT settings through the activity form. The
+    ## adaptivequiz integration normalises and reserialises the settings here;
+    ## without this step the adapter can finish after the first question. Keep
+    ## the stopping thresholds non-binding so maxquestions = 4 defines the end.
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I click on "Save and return to course" "button"
+    And I log out
 
   @javascript
   Scenario: Reloading an unanswered question re-shows the same item
