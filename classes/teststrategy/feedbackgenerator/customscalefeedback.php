@@ -177,6 +177,17 @@ class customscalefeedback extends feedbackgenerator {
             $existingdata['teststrategy']
         );
 
+        // Issue #14: attach the per-scale standard error so the feedback range
+        // resolver can optionally apply measurement-uncertainty gating.
+        if (isset($newdata['se']) && is_array($newdata['se'])) {
+            foreach ($personabilitiesfeedbackeditor as $scaleid => &$abilityentry) {
+                if (is_array($abilityentry) && isset($newdata['se'][$scaleid])) {
+                    $abilityentry['se'] = (float) $newdata['se'][$scaleid];
+                }
+            }
+            unset($abilityentry);
+        }
+
         return [
             'personabilities' => $personabilities,
             'customscalefeedback_abilities' => $personabilitiesfeedbackeditor,
@@ -215,11 +226,41 @@ class customscalefeedback extends feedbackgenerator {
             // Issue #14: a score is assigned to exactly one range (half-open
             // intervals), instead of matching every range whose inclusive bounds
             // contain the value and letting the last match overwrite the earlier.
-            $rangeindex = feedback_helper::get_feedback_range_index(
-                $quizsettings,
-                $catscaleid,
-                (float) $personability['value']
-            );
+            // When measurement-uncertainty gating is enabled (factor > 0), the
+            // whole confidence interval ability +/- k*SE must fall into one range;
+            // otherwise the classification is uncertain and a neutral transition
+            // message is shown instead of a definite range feedback.
+            $uncertaintyfactor = (float) get_config('local_catquiz', 'feedback_uncertainty_factor');
+            if ($uncertaintyfactor > 0.0) {
+                $se = isset($personability['se']) ? (float) $personability['se'] : null;
+                $rangeindex = feedback_helper::get_feedback_range_index_with_uncertainty(
+                    $quizsettings,
+                    $catscaleid,
+                    (float) $personability['value'],
+                    $se,
+                    $uncertaintyfactor
+                );
+                if ($rangeindex === null) {
+                    // Only emit the neutral notice when the point value itself is
+                    // inside the configured ranges (i.e. the interval merely
+                    // straddles a boundary), not when the value is out of range.
+                    $pointindex = feedback_helper::get_feedback_range_index(
+                        $quizsettings,
+                        $catscaleid,
+                        (float) $personability['value']
+                    );
+                    if ($pointindex !== null) {
+                        $scalefeedback[$catscaleid] = get_string('feedbackrangeuncertain', 'local_catquiz');
+                    }
+                    continue;
+                }
+            } else {
+                $rangeindex = feedback_helper::get_feedback_range_index(
+                    $quizsettings,
+                    $catscaleid,
+                    (float) $personability['value']
+                );
+            }
             if ($rangeindex === null) {
                 continue;
             }

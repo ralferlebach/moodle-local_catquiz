@@ -187,4 +187,35 @@ final class feedback_ranges_test extends advanced_testcase {
         feedbackclass::validation_range_limits_nogaps($errors, $data);
         $this->assertArrayHasKey("feedback_scaleid_limit_upper_{$scaleid}_1", $errors);
     }
+
+    /**
+     * Measurement-uncertainty gating: the whole CI must lie within one range.
+     *
+     * @return void
+     */
+    public function test_uncertainty_gating(): void {
+        $s = $this->settings();
+        // Value 1.5 sits in the middle of range 2 ([1,2)); a small SE keeps the
+        // whole interval inside range 2 -> definite classification.
+        $this->assertSame(
+            2,
+            feedback_helper::get_feedback_range_index_with_uncertainty($s, self::SCALE, 1.5, 0.1, 1.0)
+        );
+        // Value 1.95 with SE 0.1 and k=1 -> interval [1.85, 2.05] straddles the
+        // 2|3 boundary -> uncertain -> null.
+        $this->assertNull(
+            feedback_helper::get_feedback_range_index_with_uncertainty($s, self::SCALE, 1.95, 0.1, 1.0)
+        );
+        // Disabled (k = 0) collapses to the plain point classification.
+        $this->assertSame(
+            2,
+            feedback_helper::get_feedback_range_index_with_uncertainty($s, self::SCALE, 1.95, 0.1, 0.0)
+        );
+        // No SE also collapses to the point classification.
+        $this->assertSame(
+            2,
+            feedback_helper::get_feedback_range_index_with_uncertainty($s, self::SCALE, 1.95, null, 1.0)
+        );
+    }
+
 }

@@ -678,6 +678,50 @@ class feedback_helper {
     }
 
     /**
+     * Returns the range only if the whole confidence interval falls into it.
+     *
+     * Issue #14 (measurement uncertainty, opt-in): a categorical feedback range
+     * is only considered reliably reached when the confidence interval
+     * [value - k*se, value + k*se] lies entirely within a single range. If the
+     * interval straddles a range boundary the classification is uncertain and
+     * null is returned, so the caller can show a neutral transition message
+     * instead of a definite range feedback. With $k <= 0 or a null/zero standard
+     * error this collapses to the plain point classification.
+     *
+     * @param stdClass|array $quizsettings
+     * @param int $scaleid
+     * @param float|null $value
+     * @param float|null $se Standard error of the ability estimate.
+     * @param float $k Confidence factor (e.g. 1.0). <= 0 disables the widening.
+     *
+     * @return int|null
+     */
+    public static function get_feedback_range_index_with_uncertainty(
+        $quizsettings,
+        int $scaleid,
+        ?float $value,
+        ?float $se,
+        float $k
+    ): ?int {
+        if ($value === null) {
+            return null;
+        }
+        // No uncertainty configured: behave exactly like the point resolver.
+        if ($k <= 0.0 || $se === null || $se <= 0.0) {
+            return self::get_feedback_range_index($quizsettings, $scaleid, $value);
+        }
+        $margin = $k * $se;
+        $lowerindex = self::get_feedback_range_index($quizsettings, $scaleid, $value - $margin);
+        $upperindex = self::get_feedback_range_index($quizsettings, $scaleid, $value + $margin);
+        // Only a definite classification when both interval ends land in the very
+        // same range (and neither falls outside the configured ranges).
+        if ($lowerindex !== null && $lowerindex === $upperindex) {
+            return $lowerindex;
+        }
+        return null;
+    }
+
+    /**
      * Returns the bin number for a given value
      *
      * @param float $value

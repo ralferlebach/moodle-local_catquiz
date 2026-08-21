@@ -153,4 +153,25 @@ final class peer_comparison_stats_test extends advanced_testcase {
         $stats = catquiz::get_peer_comparison_stats($this->contextid, $this->scaleid, 1.0, 10);
         $this->assertSame(4, $stats->n, 'Saturated results must not be counted as peers.');
     }
+
+    /**
+     * The minimum-peers threshold is configurable (issue #15).
+     *
+     * @return void
+     */
+    public function test_min_peers_configurable(): void {
+        $this->resetAfterTest();
+        // Default falls back to MIN_USERS (3).
+        set_config('minpeersforcomparison', '', 'local_catquiz');
+        $this->assertSame(
+            \local_catquiz\teststrategy\feedbackgenerator\comparetotestaverage::MIN_USERS,
+            \local_catquiz\teststrategy\feedbackgenerator\comparetotestaverage::get_min_peers()
+        );
+        // A configured value overrides the default.
+        set_config('minpeersforcomparison', 7, 'local_catquiz');
+        $this->assertSame(
+            7,
+            \local_catquiz\teststrategy\feedbackgenerator\comparetotestaverage::get_min_peers()
+        );
+    }
 }

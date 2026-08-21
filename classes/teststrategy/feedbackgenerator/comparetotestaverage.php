@@ -61,7 +61,6 @@ class comparetotestaverage extends feedbackgenerator {
      * @var int
      */
     const MIN_USERS = 3;
-
     /**
      * Limit to show comparison text
      *
@@ -160,6 +159,19 @@ class comparetotestaverage extends feedbackgenerator {
      */
     public function get_generatorname(): string {
         return 'comparetotestaverage';
+    }
+
+    /**
+     * Minimum number of distinct peers required to show the comparison.
+     *
+     * Issue #15: configurable via the plugin setting minpeersforcomparison;
+     * falls back to MIN_USERS when the setting is absent or invalid.
+     *
+     * @return int
+     */
+    public static function get_min_peers(): int {
+        $configured = (int) get_config('local_catquiz', 'minpeersforcomparison');
+        return $configured >= 1 ? $configured : self::MIN_USERS;
     }
 
     /**
@@ -326,7 +338,7 @@ class comparetotestaverage extends feedbackgenerator {
             'upperscalelimit' => $abilityrange['maxscalevalue'],
             'middle' => $middle,
             'comparetotestaverage_has_worse' => (int) $stats->lowercount > 0,
-            'comparetotestaverage_has_enough_peers' => $npeers >= self::MIN_USERS,
+            'comparetotestaverage_has_enough_peers' => $npeers >= self::get_min_peers(),
             'personabilities_abilities' => $this->get_restructured_abilities($existingdata, $newdata),
         ];
     }

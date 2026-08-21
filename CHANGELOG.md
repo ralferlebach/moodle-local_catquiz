@@ -1,5 +1,27 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082014)
+
+> Strang „Diagramme+Feedback+Statistik": Nachbesserung nach externem Review –
+> #14 Messunsicherheit (opt-in), #15 konfigurierbares Mindest-N, expliziter
+> Overlap-Test. Details in `doc/session-045-changes.md`.
+
+- **#14 Messunsicherheit (konfigurierbar, opt-in):** Neuer Resolver
+  `feedback_helper::get_feedback_range_index_with_uncertainty` – ein
+  Feedbackbereich gilt nur als sicher erreicht, wenn das Konfidenzintervall
+  `Fähigkeit ± k·SE` vollständig in einem Bereich liegt; sonst neutrale
+  Übergangsrückmeldung (`feedbackrangeuncertain`). Steuerung über die neue
+  Admin-Einstellung `feedback_uncertainty_factor` (Default 0 = aus). In
+  `customscalefeedback` verdrahtet (SE aus `newdata['se']` an die Report-Skalen
+  gehängt).
+- **#15 Mindest-N konfigurierbar:** `comparetotestaverage::get_min_peers()` liest
+  die neue Admin-Einstellung `minpeersforcomparison` (Fallback `MIN_USERS`=3);
+  ersetzt die hartkodierte Konstante in der „genug Peers"-Entscheidung.
+- **#14 Overlap-Test:** expliziter PHPUnit-Test, dass eine überlappende
+  Bereichskonfiguration abgelehnt wird.
+- Tests `feedback_ranges_test` (+Unsicherheit, +Overlap) und
+  `peer_comparison_stats_test` (+Config) zahn-getestet erweitert.
+
 ## 1.1.5 (interne Version 2026082013)
 
 > Strang „Diagramme+Feedback+Statistik": CI-Nacharbeit (phpcs-Warnungen,
