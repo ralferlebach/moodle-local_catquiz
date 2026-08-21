@@ -1,5 +1,22 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082017)
+
+> phpcs-Fix (Lang-Reihenfolge) + weitere Dev-Pipeline-Aufteilung. Details in
+> `doc/session-048-changes.md`.
+
+- **phpcs-Fix:** `lang/en` und `lang/de` global streng nach `SORT_STRING`
+  sortiert (Moodle-Standard). Behebt die CI-`moodle.Files.LangFilesOrdering`-
+  Warnungen (`attemptfeedbacknotyetavailable`, `ifdefinedusedtomatch`), die durch
+  eine abweichende Sektionsdetektion lokal nicht sichtbar waren. Keys unverändert
+  erhalten, Streu-Leerzeile entfernt; plugin-weit 0 Errors/Warnings.
+- **Dev-Pipeline weiter aufgeteilt** (vimipad-Modell): `lint-php`
+  (phplint + codechecker, ohne Moodle-Install → schnell) und `lint-jsamd`
+  (grunt + mustache) getrennt; neuer `quality`-Job (phpdoc, phpmd, phpcpd,
+  savepoints, validate) läuft **parallel** zu `phpunit`/`behat` statt sie zu
+  gaten. `phpunit` ← `lint-php`; `behat` ← `lint-php` + `lint-jsamd`;
+  `ci-complete` ← alle. Error-Summary/Screenshots je Job erhalten.
+
 ## 1.1.5 (interne Version 2026082016)
 
 > CI-Diagnostik: herunterladbare Error-Summary (ZIP) in beiden CI-Pipelines,
