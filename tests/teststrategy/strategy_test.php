@@ -369,6 +369,121 @@ final class strategy_test extends advanced_testcase {
     }
 
     /**
+     * Tolerance-based end-to-end trajectory guard.
+     *
+     * The pinned {@see self::test_strategy_returns_expected_questions} asserts the
+     * exact per-step ability and question sequence and is therefore skipped after
+     * the P/W estimator refactor (a single re-branched estimate cascades into a
+     * different sequence). This guard instead drives a full CAT attempt through
+     * catquiz_handler::fetch_question_id() with an all-wrong response pattern and
+     * asserts invariants that do not depend on the exact discrete Newton branch:
+     *
+     *  - a run of wrong answers drives the estimated ability substantially down;
+     *  - the trajectory is (near-)monotonically non-increasing - a correct
+     *    estimator never raises the ability after a wrong answer (pilot items,
+     *    which do not update the ability, produce flat steps and are allowed).
+     *
+     * Unlike the estimator-only tolerance test
+     * ({@see \local_catquiz\catcalc_test::test_simulation_steps_match_reference_within_tolerance},
+     * which feeds the start value directly), this exercises the full
+     * loader -> person_ability -> estimation -> personparams data flow, so it
+     * guards refactors of that path.
+     *
+     * @return void
+     */
+    public function test_all_wrong_attempt_drives_ability_down(): void {
+        putenv(
+            sprintf(
+                'USE_TESTING_CLASS_FOR=%s',
+                implode(',', [
+                    'local_catquiz\teststrategy\preselect_task\updatepersonability',
+                    'local_catquiz\teststrategy\preselect_task\maybe_return_pilot',
+                ])
+            )
+        );
+        putenv('CATQUIZ_TESTING_ABILITY=0.0');
+        putenv('CATQUIZ_TESTING_STANDARDERROR=1.0');
+        putenv('CATQUIZ_TESTING_SKIP_FEEDBACK=true');
+
+        global $DB, $USER;
+
+        $settings = [
+            'maxquestions' => 250,
+            'maxquestionspersubscale' => 25,
+            'standarderror_min' => 0.25,
+            'standarderror_max' => 0.5,
+        ];
+        $this->createtestenvironment(LOCAL_CATQUIZ_STRATEGY_FASTEST, $settings)->save_or_update();
+
+        catquiz_handler::prepare_attempt_caches();
+        $this->preventResetByRollback();
+
+        $attempt = new attempt($this->adaptivequiz, $USER->id);
+        $attemptrec = $attempt->get_attempt();
+        $attemptid = $attemptrec->id;
+
+        $abilities = [];
+        $hasqubaid = false;
+        // Run a bounded number of all-wrong steps. We do not assert on the exact
+        // stopping point (it depends on the estimator branch); we assert on the
+        // ability trajectory the full flow produces.
+        $cap = 80;
+        for ($steps = 0; $steps < $cap; $steps++) {
+            $attemptrec = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
+            $adaptivequiz = $DB->get_record('adaptivequiz', ['id' => $attemptrec->instance], '*', MUST_EXIST);
+            $attempt = new attempt($adaptivequiz, $attemptrec->userid);
+            $attemptdata = $attempt->get_attempt();
+
+            [$nextquestionid, $message] = catquiz_handler::fetch_question_id('1', 'mod_adaptivequiz', $attemptdata);
+
+            $abilityrecord = $DB->get_record(
+                'local_catquiz_personparams',
+                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid],
+                'ability'
+            );
+            $abilities[] = $abilityrecord ? (float) $abilityrecord->ability : 0.0;
+
+            if ($nextquestionid == 0) {
+                // The attempt stopped on its own; the trajectory so far is enough.
+                break;
+            }
+
+            $question = question_bank::load_question($nextquestionid);
+            $this->createresponse($question, false);
+
+            $attemptrec = $attempt->get_attempt();
+            $attemptrec->timemodified = time();
+            $attemptrec->questionsattempted = ($attemptrec->questionsattempted ?? 0) + 1;
+            $DB->update_record('adaptivequiz_attempt', $attemptrec);
+
+            if (!$hasqubaid) {
+                $attempt->set_quba_id($this->quba->get_id());
+                $hasqubaid = true;
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(10, count($abilities), 'Several items should be administered.');
+
+        // All-wrong answers drive the estimated ability substantially below the start.
+        $this->assertLessThan(
+            $abilities[0] - 0.7,
+            end($abilities),
+            'A series of wrong answers must drive the estimated ability substantially down.'
+        );
+
+        // The trajectory is (near-)monotonically non-increasing: no step rises by
+        // more than a small numerical tolerance. Pilot items keep it flat; a
+        // correct estimator never raises the ability after a wrong answer.
+        for ($k = 1; $k < count($abilities); $k++) {
+            $this->assertLessThanOrEqual(
+                $abilities[$k - 1] + 0.15,
+                $abilities[$k],
+                'The ability must not rise after a wrong answer (step ' . $k . ').'
+            );
+        }
+    }
+
+    /**
      * Data provider to test that the expected questions are returned.
      *
      * @return array
