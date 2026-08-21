@@ -1,7 +1,8 @@
 ##############################################################################
 # k6 read-endpoint load test – local_catquiz
 #
-# Runs on pull requests and merges to main (and on demand). It builds a
+# Runs after merges/pushes to main (and on demand). Pull requests are covered
+# by Moodle Plugin CI Main, avoiding duplicate load-test executions. It builds a
 # self-contained Moodle 4.5 site with the plugin and its dependencies, seeds a
 # large CAT-manager/statistics profile and load-tests the read pages with k6.
 #
@@ -25,9 +26,6 @@ on:
       users:
         description: Seeded persons
         default: '2000'
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
@@ -142,7 +140,7 @@ jobs:
 
       - name: Upload k6 summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: k6-summary
           path: k6-summary.json

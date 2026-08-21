@@ -1,7 +1,9 @@
 ##############################################################################
 # Moodle Plugin CI - development (accelerated) pipeline
 #
-# Runs on push / PR to every branch EXCEPT main. Work is split into PARALLEL
+# Runs on pushes to every branch EXCEPT main. Pull requests to main are handled
+# by moodle-plugin-ci-main.yml, avoiding duplicate push + pull_request runs.
+# Work is split into PARALLEL
 # jobs (vimipad model). Fast checks that need no Moodle install gate the heavy
 # suites; the slower quality checks run ALONGSIDE unit/behat instead of gating
 # them:
@@ -26,9 +28,6 @@ on:
     tags:
       - '[0-9]+'
       - '[0-9]+.[0-9]+.[0-9]+'
-  pull_request:
-    branches-ignore:
-      - main
 
 concurrency:
   group: ci-dev-${{ github.event.pull_request.number || github.ref }}
