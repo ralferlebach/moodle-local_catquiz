@@ -1,5 +1,38 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082100)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase A / Issue #5: autoritativer,
+> idempotenter Versuchsabschluss und atomare Endzeit. Cross-Plugin
+> (local_catquiz + mod_adaptivequiz). Details in `doc/session-052-changes.md`.
+
+- **Neuer `attempt_finalizer`** (`classes/local/attempt/attempt_finalizer.php`):
+  der einzige, idempotente und transaktionale Weg, einen CATquiz-Versuch
+  abzuschließen. Setzt die Endzeit aus der autoritativen `timefinished` des
+  adaptivequiz-Versuchs (nicht mehr aus dem Session-Cache) und die finale
+  Anzahl genutzter Testitems. Mehrfacher Aufruf ist ein No-op. Enthält leere
+  Erweiterungspunkte für #7 (Validierung), #9 (Historie/Vorwerte) und #8
+  (resultstatus/resultvalid).
+- **`catquiz::save_attempt_to_db()` entkoppelt:** kein automatisches
+  `endtime = time()` mehr während des laufenden Versuchs. `endtime` und
+  `timecreated` werden nur noch bei INSERT gesetzt; bei UPDATE bleiben beide
+  erhalten (die Endzeit gehört ausschließlich dem Finalizer).
+- **`catquiz_handler::attempt_finished()`** liest die Endzeit nicht mehr aus dem
+  Cache, sondern delegiert idempotent an den Finalizer und rendert nur noch.
+- **DB-Härtung:** Unique-Index auf `local_catquiz_attempts.attemptid`
+  (höchstens ein CATquiz-Versuch je adaptivequiz-Versuch) inkl.
+  Dedup-Reparaturmigration für historische Dubletten.
+- **mod_adaptivequiz (Fork, Work-Package):** neues, unveränderliches Feld
+  `timefinished` in `adaptivequiz_attempt`; `adaptivequiz_complete_attempt()`
+  setzt es genau einmal beim Wechsel auf COMPLETED und löst den neuen
+  catmodel-Hook `post_complete_attempt_callback` aus (ruft den Finalizer,
+  unabhängig davon, ob die Abschlussseite erreicht wird). Fehlerhaften
+  `adaptivequiz_complete_attempt()`-Aufruf in `closeattempt.php` korrigiert.
+- **Tests:** `attempt_finalizer_test` (Endzeit-Quelle, No-op-Fälle,
+  Idempotenz-**Zahn-Test**); adaptivequiz-`timefinished`-Immutabilitätstest mit
+  Sentinel-**Zahn-Test**. Beide Zahn-Tests verifiziert (Guard entfernt → rot).
+  Behat `catquiz_attempt_completion.feature` (non-blocking).
+
 ## 1.1.5 (interne Version 2026082022)
 
 > phpcs-Fix im neuen Regressionstest + Dev-CI: Code Checker nach „Code analysis".

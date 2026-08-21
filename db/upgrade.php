@@ -1214,5 +1214,39 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026081714, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026082100) {
+        // Issue #5: harden the identity of a local CAT attempt so that at most
+        // one row exists per adaptive quiz attempt. First repair historical
+        // duplicates (keep the most recent row per attemptid), then replace the
+        // non-unique index with a unique one.
+        $duplicates = $DB->get_records_sql(
+            "SELECT attemptid, MAX(id) AS keepid, COUNT(*) AS cnt
+               FROM {local_catquiz_attempts}
+              WHERE attemptid IS NOT NULL
+           GROUP BY attemptid
+             HAVING COUNT(*) > 1"
+        );
+        foreach ($duplicates as $dup) {
+            $DB->delete_records_select(
+                'local_catquiz_attempts',
+                'attemptid = :attemptid AND id <> :keepid',
+                ['attemptid' => $dup->attemptid, 'keepid' => $dup->keepid]
+            );
+        }
+
+        $table = new xmldb_table('local_catquiz_attempts');
+        $oldindex = new xmldb_index('attemptid', XMLDB_INDEX_NOTUNIQUE, ['attemptid']);
+        if ($dbman->index_exists($table, $oldindex)) {
+            $dbman->drop_index($table, $oldindex);
+        }
+        $newindex = new xmldb_index('attemptid', XMLDB_INDEX_UNIQUE, ['attemptid']);
+        if (!$dbman->index_exists($table, $newindex)) {
+            $dbman->add_index($table, $newindex);
+        }
+
+        // Catquiz savepoint reached.
+        upgrade_plugin_savepoint(true, 2026082100, 'local', 'catquiz');
+    }
+
     return true;
 }

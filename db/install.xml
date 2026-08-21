@@ -225,7 +225,7 @@
         <INDEX NAME="catscaleid" UNIQUE="false" FIELDS="scaleid"/>
         <INDEX NAME="contextid" UNIQUE="false" FIELDS="contextid"/>
         <INDEX NAME="courseid" UNIQUE="false" FIELDS="courseid"/>
-        <INDEX NAME="attemptid" UNIQUE="false" FIELDS="attemptid"/>
+        <INDEX NAME="attemptid" UNIQUE="true" FIELDS="attemptid" COMMENT="Issue #5: at most one CATquiz attempt per adaptive quiz attempt."/>
         <INDEX NAME="instanceid" UNIQUE="false" FIELDS="instanceid"/>
         <INDEX NAME="endtime" UNIQUE="false" FIELDS="endtime"/>
         <INDEX NAME="timecreated" UNIQUE="false" FIELDS="instanceid"/>
