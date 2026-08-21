@@ -1,5 +1,68 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082102)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase C / Issue #7: zentraler
+> `attempt_result_validator`. Reine local_catquiz-Arbeit; adaptivequiz
+> unverändert. Details in `doc/session-054-changes.md`.
+
+- **Zentraler Validator + DTOs** (`classes/local/result/`):
+  `attempt_result_validator`, `attempt_result`, `scale_result`. Ein einziger Ort
+  entscheidet die Ergebnisvalidität; alle Konsumenten nutzen dasselbe
+  Ergebnisobjekt. Ablehnungsgründe sind maschinenlesbar (Konstanten
+  `REASON_SE_MAX/SE_MIN/N_MIN/FRACTION/ROOTONLY/REPORTING_DISABLED/HIDDEN/
+  NOT_PRIMARY/NOT_MEASURED`).
+- **Entscheidung 8.1 (Reporting ≠ Validität):** `reportable` (Anzeige/Config)
+  und `statisticallyvalid` (Messqualität) sind getrennt modelliert. Ein
+  abgeschaltetes Reporting macht eine Skala nicht mehr statistisch invalide.
+  Ergebnisvalidität für Completion: `valid = primary && statisticallyvalid &&
+  measuredincurrentattempt` (ohne Reporting). Der historische Reportable-Satz
+  (`toreport && !excluded && !hidden`) wird von
+  `attempt_result::get_reportable_scale_ids()` **exakt** reproduziert.
+- **Gating zentralisiert:** `feedback_helper::get_reportable_scales()` und
+  `has_reportable_result()` routen jetzt durch den Validator — eine Definition
+  statt verstreuter Prüfungen; Verhalten unverändert (Regression grün).
+- **N ohne Pilots/Dubletten:** `validate($attemptid)` bezieht N je Skala aus
+  `progress::get_playedquestions(true, …)` (pilot-gefiltert; Dubletten durch #6
+  ausgeschlossen); `measuredincurrentattempt` = N > 0 (Vorwert-only ⇒ nicht
+  valide).
+- **Tests:** `attempt_result_validator_test` (8 Tests, 52 Assertions): saubere
+  Primary-Skala, SE/N/Fraction/Rootonly-Ablehnungen, Carryover-only,
+  Non-Primary, historischer Reportable-Satz, `validate()`-Integration, plus
+  **Zahn-Test** der 8.1-Entkopplung (verifiziert: Entkopplung entfernt → rot,
+  `feedback_gating` bleibt grün). Bestehende Feedback-Behat
+  (`catquiz_feedback_validity.feature`) deckt valide/invalide Ausgänge ab und
+  läuft nun durch den zentralen Validator.
+
+## 1.1.5 (interne Version 2026082101)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase B / Issue #6: Doppelte
+> Fragen-Slots bei Reload verhindern (Slot-Wiederverwendung + Attempt-Lock +
+> defensive Dubletten-Prüfung). Reine mod_adaptivequiz-/Adapter-Arbeit; kein
+> local_catquiz-Produktivcode geändert. Details in `doc/session-053-changes.md`.
+
+- **Adapter `adaptivequizcatmodel_catquiz` (Slot-Wiederverwendung):**
+  `catquiz_item_administration::evaluate_ability_to_administer_next_item()` gibt
+  jetzt bei noch aktivem (unbeantwortetem) Vorgänger-Slot
+  `next_item::from_quba_slot()` zurück, statt immer eine neue Frage zu wählen.
+  Ein Reload eines unbeantworteten Items erzeugt damit keinen zweiten QUBA-Slot
+  mehr; Question-Usage und CAT-Progress bleiben konsistent.
+- **mod_adaptivequiz (Locking + defensiver Guard):**
+  `cat_session::run_item_administration()` läuft unter einem Attempt-Lock
+  (Schlüssel: adaptivequiz-Instanz + User; deckt AJAX und normale Requests) und
+  serialisiert damit Doppelklick-/Parallel-Requests. Vor `add_question()` prüft
+  der neue Helfer `find_active_slot_for_question()`, ob bereits ein aktiver Slot
+  derselben Frage existiert, und verwendet diesen wieder (mit `debugging()`-Log)
+  statt einen Dublett-Slot anzulegen.
+- **Diagnose-CLI** `cli/diagnose_duplicate_slots.php` (read-only): identifiziert
+  historische Versuche mit mehreren Slots derselben Frage. Keine Auto-Reparatur
+  (divergierte QUBA-Zustände sind nicht immer eindeutig auflösbar).
+- **Tests:** Adapter-Slot-Reuse (`catquiz_item_administration_test`) und
+  defensiver Helfer (`cat_session_test::test_find_active_slot_for_question`),
+  beide mit **Zahn-Test** verifiziert (Guard entfernt → rot). Behat
+  `catquiz_slot_reuse.feature` (non-blocking). Gesamte adaptivequiz-Suite
+  150/150.
+
 ## 1.1.5 (interne Version 2026082100)
 
 > Strang „Abschluss+Ergebnisspeicherung", Phase A / Issue #5: autoritativer,

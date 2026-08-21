@@ -30,6 +30,7 @@ use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
+use local_catquiz\local\result\attempt_result_validator;
 use local_catquiz\output\attemptfeedback;
 use LogicException;
 use moodle_database;
@@ -110,12 +111,17 @@ class feedback_helper {
      * @return array
      */
     public static function get_reportable_scales(array $personabilities): array {
+        // Issue #7: the definition of a reportable/valid scale lives in the
+        // central attempt_result_validator. Route through it so feedback,
+        // completion and persistence all share one definition. The validator
+        // reproduces the historical set (toreport, not excluded, not hidden).
+        $result = attempt_result_validator::from_personabilities($personabilities);
+        $reportableids = array_flip($result->get_reportable_scale_ids());
+
         return array_filter(
             $personabilities,
-            fn ($a) => is_array($a)
-                && !empty($a['toreport'])
-                && empty($a['excluded'])
-                && empty($a['hidden'])
+            fn ($a, $scaleid) => is_array($a) && isset($reportableids[(int) $scaleid]),
+            ARRAY_FILTER_USE_BOTH
         );
     }
 
@@ -126,7 +132,7 @@ class feedback_helper {
      * @return bool
      */
     public static function has_reportable_result(array $personabilities): bool {
-        return self::get_reportable_scales($personabilities) !== [];
+        return attempt_result_validator::from_personabilities($personabilities)->has_reportable_result();
     }
 
     /**
