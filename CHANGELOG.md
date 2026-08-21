@@ -1,5 +1,21 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082022)
+
+> phpcs-Fix im neuen Regressionstest + Dev-CI: Code Checker nach „Code analysis".
+> Details in `doc/session-051-changes.md`.
+
+- **phpcs-Fix:** `filterbytestinfo_minquestions_test` – fehlender
+  `MOODLE_INTERNAL`-Guard vor `require_once` ergänzt und trailing Whitespace
+  entfernt (aus dem CI-`lint-php`-Artefakt diagnostiziert). Plugin-weit wieder
+  0 Errors/0 Warnings.
+- **Dev-CI:** Der Moodle Code Checker (phpcs) ist reine Coding-Style-Prüfung und
+  keine Voraussetzung für die Lauffähigkeit – daher von `lint-php` nach
+  `codeanalysis` verschoben (dort blockierend). `lint-php` = nur `phplint`
+  (Syntax) und schaltet `phpunit`/`behat` sofort frei. `codeanalysis`
+  (phpcs blockierend; phpmd/phpcpd advisory) ist jetzt Voraussetzung für
+  `ci-complete`.
+
 ## 1.1.5 (interne Version 2026082021)
 
 > Behat-Fix (CAT-Steuerung) + Härtungen aus externer Expertise; CI: phpmd/phpcpd

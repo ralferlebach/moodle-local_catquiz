@@ -21,6 +21,8 @@ use local_catquiz\local\result;
 use local_catquiz\teststrategy\preselect_task\filterbytestinfo;
 use local_catquiz\teststrategy\progress;
 
+defined('MOODLE_INTERNAL') || die();
+
 global $CFG;
 require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
@@ -131,7 +133,6 @@ final class filterbytestinfo_minquestions_test extends advanced_testcase {
                 'model' => 'rasch',
                 'status' => \LOCAL_CATQUIZ_STATUS_CALCULATED,
                 'difficulty' => 50.0,
-                
             ];
             if ($withpilotflag) {
                 $r->is_pilot = false;
