@@ -217,5 +217,4 @@ final class feedback_ranges_test extends advanced_testcase {
             feedback_helper::get_feedback_range_index_with_uncertainty($s, self::SCALE, 1.95, null, 1.0)
         );
     }
-
 }
