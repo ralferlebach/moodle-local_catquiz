@@ -31,14 +31,16 @@ Feature: Feedback output is bound to a valid CAT result.
       | adaptivequiz | My Adaptive Quiz | C1     | 1       | adaptivecatquiz1 | Adaptive Quiz Intro |
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_minquestions | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
-      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 4                    | 4                    | 0.0                       | 1000.0                    | 2                       |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 2                    | 4                    | 0.0                       | 1000.0                    | 2                       |
     ## The generator above already persists the CAT settings. Do not round-trip
     ## them through the activity form here: form persistence has its own Behat
     ## coverage, while these scenarios must isolate feedback validity. Likewise,
-    ## standard-error/test-information stopping is deliberately made non-binding
-    ## so catquiz_minquestions = catquiz_maxquestions = 4 determines the attempt
-    ## length. The invalid case below is produced solely by the strategy-defined
-    ## fraction = 1 rule for "Infer lowest skill gap".
+    ## standard-error/test-information stopping is deliberately made non-binding.
+    ## Keep catquiz_minquestions below catquiz_maxquestions because equal values
+    ## are rejected by the CAT settings form. With maxquestions = 4, the attempt
+    ## still ends deterministically after question 4. The invalid case below is
+    ## produced solely by the strategy-defined fraction = 1 rule for "Infer lowest
+    ## skill gap".
 
   @javascript
   Scenario: An invalid attempt shows a single central notice, not per-scale feedback
