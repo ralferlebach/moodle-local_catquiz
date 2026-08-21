@@ -221,6 +221,14 @@ class graphicalsummary extends feedbackgenerator {
         $new['id'] = $lastquestion->id;
         $new['questionname'] = $lastquestion->label;
         $new['lastresponse'] = round($lastresponse['fraction'], self::PRECISION);
+        // Issue #12: store the real QUBA slot and question attempt id so the
+        // "show question" modal fetches exactly this question attempt instead of
+        // reconstructing the slot from the table row index (which is wrong after
+        // reloads, duplicate slots or missing rows). responsesummary carries the
+        // actually given answer. All three are absent for legacy attempts.
+        $new['slot'] = $lastresponse['slot'] ?? null;
+        $new['questionattemptid'] = $lastresponse['questionattemptid'] ?? null;
+        $new['responsesummary'] = $lastresponse['responsesummary'] ?? null;
         $new['difficulty'] = $lastquestion->difficulty;
         $new['questionscale'] = $lastquestion->catscaleid;
         $new['questionscale_name'] = catscale::return_catscale_object(
@@ -340,6 +348,10 @@ class graphicalsummary extends feedbackgenerator {
 
         $tabledata = [];
         foreach ($data as $index => $values) {
+            // Issue #12: prefer the stored real slot; fall back to the row index
+            // for legacy attempts saved before the slot was persisted.
+            $slot = $values['slot'] ?? ($index + 1);
+            $questionattemptid = $values['questionattemptid'] ?? 0;
             $responsestring = get_string(
                 'feedback_table_answerincorrect',
                 'local_catquiz'
@@ -356,19 +368,31 @@ class graphicalsummary extends feedbackgenerator {
                 );
             }
 
+            // Issue #12: show the actually given answer (responsesummary) escaped,
+            // in addition to the correct/incorrect verdict, instead of only a
+            // verdict or technical identifiers.
+            $responsesummary = $values['responsesummary'] ?? null;
+            $responsecell = $responsestring;
+            if ($responsesummary !== null && $responsesummary !== '') {
+                $responsecell .= html_writer::empty_tag('br')
+                    . html_writer::tag('span', s($responsesummary), ['class' => 'catquiz-responsesummary']);
+            }
+
             $questionname = $viewquestion
                 ? sprintf(
-                    '<span class="clickable" data-name="%s" data-attemptid="%d" data-slot="%d">%s</span>',
+                    '<span class="clickable" data-name="%s" data-attemptid="%d" data-slot="%d"'
+                        . ' data-questionattemptid="%d">%s</span>',
                     $values['questionname'],
                     $this->get_progress()->get_attemptid(),
-                    $index + 1,
+                    $slot,
+                    $questionattemptid,
                     $values['questionname']
                 )
                 : $values['questionname'];
             $newrow = [
                 $index + 1,
                 $questionname,
-                $responsestring,
+                $responsecell,
                 $values['questionscale_name'],
                 sprintf('%.2f', $values['personability_after']),
             ];
@@ -376,10 +400,12 @@ class graphicalsummary extends feedbackgenerator {
             if ($viewquestion) {
                 $searchcol = new html_table_cell(
                     sprintf(
-                        '<i class="fa fa-search clickable questionbutton" data-name="%s" data-attemptid = "%d" data-slot="%d"></i>',
+                        '<i class="fa fa-search clickable questionbutton" data-name="%s" data-attemptid = "%d"'
+                            . ' data-slot="%d" data-questionattemptid="%d"></i>',
                         $values['questionname'],
                         $this->get_progress()->get_attemptid(),
-                        $index + 1
+                        $slot,
+                        $questionattemptid
                     ),
                 );
                 $searchcol->attributes = ['class' => 'questionbutton'];

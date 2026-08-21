@@ -51,6 +51,128 @@ class feedback_helper {
     const PRECISION = 2;
 
     /**
+     * Reduces per-attempt items to one value per person by a documented rule.
+     *
+     * Issue #16: person-weighted analyses (histograms, cohort trajectories) and
+     * the exports derived from them must use the same selection rule, so that a
+     * person with several attempts contributes exactly one value. Items with a
+     * null value are dropped. This is the single place that rule lives.
+     *
+     * @param array $items Each item is an object/array with keys/properties
+     *                     'userid', 'endtime' and 'value'.
+     * @param string $rule 'last' (latest by endtime, default), 'first' or 'best'.
+     *
+     * @return array Map of userid => value (float).
+     */
+    public static function reduce_to_one_value_per_person(array $items, string $rule = 'last'): array {
+        $byuser = [];
+        foreach ($items as $item) {
+            $item = (object) $item;
+            if (!isset($item->value) || $item->value === null) {
+                continue;
+            }
+            $userid = (int) $item->userid;
+            $endtime = (int) ($item->endtime ?? 0);
+            $value = (float) $item->value;
+
+            if (!isset($byuser[$userid])) {
+                $byuser[$userid] = ['endtime' => $endtime, 'value' => $value];
+                continue;
+            }
+            $current = $byuser[$userid];
+            switch ($rule) {
+                case 'first':
+                    $take = $endtime < $current['endtime'];
+                    break;
+                case 'best':
+                    $take = $value > $current['value'];
+                    break;
+                case 'last':
+                default:
+                    $take = $endtime >= $current['endtime'];
+                    break;
+            }
+            if ($take) {
+                $byuser[$userid] = ['endtime' => $endtime, 'value' => $value];
+            }
+        }
+        return array_map(fn ($v) => $v['value'], $byuser);
+    }
+
+    /**
+     * Returns the reportable scales from a list of person abilities.
+     *
+     * A scale is reportable when it is flagged toreport and is neither excluded
+     * nor hidden. This is the single definition of "valid result" used by the
+     * feedback assembly (issue #10).
+     *
+     * @param array $personabilities
+     * @return array
+     */
+    public static function get_reportable_scales(array $personabilities): array {
+        return array_filter(
+            $personabilities,
+            fn ($a) => is_array($a)
+                && !empty($a['toreport'])
+                && empty($a['excluded'])
+                && empty($a['hidden'])
+        );
+    }
+
+    /**
+     * Whether a person-abilities list contains at least one reportable scale.
+     *
+     * @param array $personabilities
+     * @return bool
+     */
+    public static function has_reportable_result(array $personabilities): bool {
+        return self::get_reportable_scales($personabilities) !== [];
+    }
+
+    /**
+     * Maps an excluded scale's error to a human-readable rejection reason.
+     *
+     * Shared by customscalefeedback and by the central "no valid result" notice
+     * (issue #10) so both surface the same reasons.
+     *
+     * @param array $personabilities
+     * @return string
+     */
+    public static function get_exclusion_reason_string(array $personabilities): string {
+        foreach ($personabilities as $personability) {
+            if (!is_array($personability) || !isset($personability['excluded']) || !isset($personability['error'])) {
+                continue;
+            }
+            $errorcode = array_keys($personability['error'])[0];
+            $errorarray = $personability['error'][$errorcode];
+
+            switch ($errorcode) {
+                case "rootonly": // Default string: the detail may be too complex for users.
+                    return get_string('error:rootonly', 'local_catquiz', $errorarray);
+                case "se": // Default string: the detail may be too complex for users.
+                    if (isset($errorarray['semindefined'])) {
+                        return get_string('error:semin', 'local_catquiz', $errorarray);
+                    } else if (isset($errorarray['semaxdefined'])) {
+                        return get_string('error:semax', 'local_catquiz', $errorarray);
+                    }
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
+                case "nminscale":
+                    return get_string('error:nminscale', 'local_catquiz', $errorarray);
+                case "fraction":
+                    if ($errorarray['fraction'] == 1) {
+                        return get_string('error:fraction1', 'local_catquiz');
+                    } else if ($errorarray['fraction'] == 0) {
+                        return get_string('error:fraction0', 'local_catquiz');
+                    }
+                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
+                default:
+                    return get_string('noscalesfound', 'local_catquiz');
+            }
+        }
+        return get_string('noscalesfound', 'local_catquiz');
+    }
+
+    /**
      * Get feedback data for attempts
      *
      * @param array $args Arguments containing courseid, numberofattempts, instanceid.
@@ -343,6 +465,8 @@ class feedback_helper {
      * @param int $scaleid
      * @param int $timerange
      * @param bool $allowempty If set to yes, missing abilities are returned as null.
+     * @param bool $perperson If true, reduce to one value per person and period.
+     * @param string $rule Selection rule when reducing per person: last/first/best.
      *
      * @return array
      *
@@ -351,9 +475,41 @@ class feedback_helper {
         array $attempts,
         int $scaleid,
         int $timerange,
-        bool $allowempty = false
+        bool $allowempty = false,
+        bool $perperson = false,
+        string $rule = 'last'
     ) {
         $attemptsbytimerange = [];
+
+        if ($perperson) {
+            // Issue #16: for cohort trajectories, determine exactly one value per
+            // person and period before aggregating, using the shared selection
+            // rule. Buckets collect (userid, endtime, value) items per period.
+            $itemsbytimerange = [];
+            foreach ($attempts as $attempt) {
+                if (empty($attempt->endtime)) {
+                    continue;
+                }
+                $data = json_decode($attempt->json);
+                // Issue #11/#16: keep a valid value of exactly 0.0 (null check).
+                $hasvalue = isset($data->personabilities->$scaleid) && $data->personabilities->$scaleid !== null;
+                if (!$hasvalue) {
+                    continue;
+                }
+                $datestring = self::return_datestring_label($timerange, $attempt->endtime);
+                $itemsbytimerange[$datestring][] = (object) [
+                    'userid' => (int) ($attempt->userid ?? 0),
+                    'endtime' => (int) $attempt->endtime,
+                    'value' => (float) $data->personabilities->$scaleid,
+                ];
+            }
+            foreach ($itemsbytimerange as $datestring => $items) {
+                $attemptsbytimerange[$datestring] = array_values(
+                    self::reduce_to_one_value_per_person($items, $rule)
+                );
+            }
+            return $attemptsbytimerange;
+        }
 
         // Create new array with endtime and sort. Create entry for each day.
         foreach ($attempts as $attempt) {
@@ -363,7 +519,8 @@ class feedback_helper {
             }
             $datestring = self::return_datestring_label($timerange, $attempt->endtime);
 
-            if (!empty($data->personabilities->$scaleid) || $allowempty) {
+            $hasvalue = isset($data->personabilities->$scaleid) && $data->personabilities->$scaleid !== null;
+            if ($hasvalue || $allowempty) {
                 if (!isset($attemptsbytimerange[$datestring])) {
                     $attemptsbytimerange[$datestring] = [];
                 }
@@ -463,37 +620,105 @@ class feedback_helper {
         if (!$quizsettings) {
             return null;
         }
+        // Issue #14: delegate to the single half-open resolver so a score is
+        // assigned to exactly one range everywhere.
+        return self::get_feedback_range_index($quizsettings, $scaleid, $value);
+    }
+
+    /**
+     * Returns the 1-based feedback range a value falls into, or null if none.
+     *
+     * Issue #14: ranges are treated as half-open [lower, upper) so a value on a
+     * shared boundary belongs to exactly one range; the topmost range is closed
+     * [lower, upper] so the maximum value is still covered. A value outside every
+     * configured range yields null.
+     *
+     * @param stdClass|array $quizsettings
+     * @param int $scaleid
+     * @param float|null $value
+     * @return int|null
+     */
+    public static function get_feedback_range_index($quizsettings, int $scaleid, ?float $value): ?int {
         if ($value === null) {
             return null;
         }
+        $settings = (array) $quizsettings;
+        $n = (int) ($settings['numberoffeedbackoptionsselect'] ?? 0);
+        if ($n < 1) {
+            // Fall back to probing consecutive range keys (some callers pass the
+            // raw settings without the option count).
+            while (isset($settings[sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $n + 1)])) {
+                $n++;
+            }
+        }
+        if ($n < 1) {
+            return null;
+        }
+        for ($j = 1; $j <= $n; $j++) {
+            $lowerkey = sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $j);
+            $upperkey = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $j);
+            if (!isset($settings[$lowerkey]) || !isset($settings[$upperkey])) {
+                continue;
+            }
+            $lower = (float) $settings[$lowerkey];
+            $upper = (float) $settings[$upperkey];
+            if ($value < $lower) {
+                continue;
+            }
+            // Top range is inclusive on the upper bound; all others half-open.
+            if ($j < $n) {
+                if ($value < $upper) {
+                    return $j;
+                }
+            } else if ($value <= $upper) {
+                return $j;
+            }
+        }
+        return null;
+    }
 
-        // If the value is outside the defined range, return null.
-        $lowest = sprintf('feedback_scaleid_limit_lower_%d_1', $scaleid);
-        $highest = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $quizsettings->numberoffeedbackoptionsselect);
-        if (
-            !isset($quizsettings->$lowest)
-            || !isset($quizsettings->$highest)
-        ) {
+    /**
+     * Returns the range only if the whole confidence interval falls into it.
+     *
+     * Issue #14 (measurement uncertainty, opt-in): a categorical feedback range
+     * is only considered reliably reached when the confidence interval
+     * [value - k*se, value + k*se] lies entirely within a single range. If the
+     * interval straddles a range boundary the classification is uncertain and
+     * null is returned, so the caller can show a neutral transition message
+     * instead of a definite range feedback. With $k <= 0 or a null/zero standard
+     * error this collapses to the plain point classification.
+     *
+     * @param stdClass|array $quizsettings
+     * @param int $scaleid
+     * @param float|null $value
+     * @param float|null $se Standard error of the ability estimate.
+     * @param float $k Confidence factor (e.g. 1.0). <= 0 disables the widening.
+     *
+     * @return int|null
+     */
+    public static function get_feedback_range_index_with_uncertainty(
+        $quizsettings,
+        int $scaleid,
+        ?float $value,
+        ?float $se,
+        float $k
+    ): ?int {
+        if ($value === null) {
             return null;
         }
-        if ($value < $quizsettings->$lowest || $value > $quizsettings->$highest) {
-            return null;
+        // No uncertainty configured: behave exactly like the point resolver.
+        if ($k <= 0.0 || $se === null || $se <= 0.0) {
+            return self::get_feedback_range_index($quizsettings, $scaleid, $value);
         }
-        // Get the range of the selected value.
-        $i = 0;
-        do {
-            $i++;
-            $ranglow = sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $i);
-            $rangup = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $i);
-        } while (
-            !($quizsettings->$ranglow <= $value && $quizsettings->$rangup >= $value)
-            && $i <= $quizsettings->numberoffeedbackoptionsselect
-        );
-        if ($i > $quizsettings->numberoffeedbackoptionsselect) {
-            return null;
+        $margin = $k * $se;
+        $lowerindex = self::get_feedback_range_index($quizsettings, $scaleid, $value - $margin);
+        $upperindex = self::get_feedback_range_index($quizsettings, $scaleid, $value + $margin);
+        // Only a definite classification when both interval ends land in the very
+        // same range (and neither falls outside the configured ranges).
+        if ($lowerindex !== null && $lowerindex === $upperindex) {
+            return $lowerindex;
         }
-
-        return $i;
+        return null;
     }
 
     /**

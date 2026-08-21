@@ -26,6 +26,7 @@ namespace local_catquiz;
 
 use dml_exception;
 use local_catquiz\data\dataapi;
+use local_catquiz\local\model\model_person_param;
 use local_catquiz\event\usertocourse_enroled;
 use local_catquiz\event\usertogroup_enroled;
 use local_catquiz\local\status;
@@ -637,6 +638,7 @@ class catquiz {
         SELECT
             qs.id,
             questionattemptid,
+            qa.slot,
             state,
             fraction originalfraction,
             ROUND(fraction, 3) fraction,
@@ -1368,13 +1370,31 @@ class catquiz {
      */
     public static function get_attempt_statistics(int $attemptid) {
         global $DB;
+        // Issue #13: return exactly one row per question (per question attempt),
+        // carrying the fraction of its LAST graded step. A question can have
+        // several graded steps, so counting steps would overcount; here the inner
+        // subquery reduces to the latest graded step per question attempt. A
+        // question without any graded step (skipped/unanswered) yields a NULL
+        // fraction via the LEFT JOIN, which the caller counts as "unanswered"
+        // rather than "wrong". Pilot exclusion happens in the caller because the
+        // pilot flag is context-computed, not a database column.
         return $DB->get_records_sql(
-            "SELECT state, COUNT(*) as count
+            "SELECT qa.id AS questionattemptid, qa.questionid, laststep.fraction
             FROM {adaptivequiz_attempt} aa
-            LEFT JOIN {question_attempts} qa ON aa.uniqueid = qa.questionusageid
-            LEFT JOIN {question_attempt_steps} qas ON qa.id = qas.questionattemptid AND fraction IS NOT NULL
-            WHERE aa.id = :attemptid
-            GROUP BY state;",
+            JOIN {question_attempts} qa ON aa.uniqueid = qa.questionusageid
+            LEFT JOIN (
+                SELECT qas.questionattemptid, qas.fraction
+                FROM {question_attempt_steps} qas
+                JOIN (
+                    SELECT questionattemptid, MAX(sequencenumber) AS maxseq
+                    FROM {question_attempt_steps}
+                    WHERE fraction IS NOT NULL
+                    GROUP BY questionattemptid
+                ) laststepseq
+                    ON laststepseq.questionattemptid = qas.questionattemptid
+                    AND laststepseq.maxseq = qas.sequencenumber
+            ) laststep ON laststep.questionattemptid = qa.id
+            WHERE aa.id = :attemptid",
             ['attemptid' => $attemptid]
         );
     }
@@ -1423,6 +1443,112 @@ class catquiz {
             $sql,
             $params
         );
+    }
+
+    /**
+     * Reduces attempt snapshots to one historical ability per person.
+     *
+     * Issue #16: historical statistics must use the ability recorded at the time
+     * of the attempt (personability_after_attempt), not the person's current
+     * parameter. For a person-weighted analysis exactly one value per person is
+     * used; the documented rule here is the latest attempt in the period (by
+     * endtime). Attempts without a stored snapshot (legacy) are excluded.
+     *
+     * @param array $attempts Attempt records with userid, endtime and
+     *                        personability_after_attempt.
+     * @param string $rule    Selection rule for multiple attempts: 'last',
+     *                        'first' or 'best'.
+     *
+     * @return array Map of userid => historical ability (float).
+     */
+    public static function get_snapshot_ability_per_person(array $attempts, string $rule = 'last'): array {
+        // Issue #16: build (userid, endtime, value) items from the attempt
+        // snapshots and reduce to one value per person via the shared rule, so
+        // charts, statistics and exports all apply the same selection.
+        $items = [];
+        foreach ($attempts as $attempt) {
+            $items[] = [
+                'userid' => (int) $attempt->userid,
+                'endtime' => (int) ($attempt->endtime ?? 0),
+                // A missing snapshot (legacy attempt) becomes null and is dropped.
+                'value' => $attempt->personability_after_attempt ?? null,
+            ];
+        }
+        return \local_catquiz\teststrategy\feedback_helper::reduce_to_one_value_per_person($items, $rule);
+    }
+
+    /**
+     * Returns aggregated peer-comparison statistics for one context and scale.
+     *
+     * Issue #15: the reference group is context-true and statistically sound.
+     * It comprises, within the given CAT context and scale, exactly one value per
+     * person (the latest personparam per user), excludes the compared user, and
+     * is aggregated in SQL rather than loading every row into PHP. The returned
+     * counts allow a midrank percentile:
+     *     100 * (lowercount + 0.5 * equalcount) / n
+     * where n is the number of distinct peers.
+     *
+     * @param int $contextid     CAT context the comparison is scoped to.
+     * @param int $catscaleid    Scale the comparison is scoped to.
+     * @param float $score       The compared person's ability (rounded to 4 dp).
+     * @param int $excludeuserid The user to exclude from the reference group.
+     *
+     * @return \stdClass Object with n, meanvalue, lowercount, equalcount.
+     */
+    public static function get_peer_comparison_stats(
+        int $contextid,
+        int $catscaleid,
+        float $score,
+        int $excludeuserid
+    ): \stdClass {
+        global $DB;
+        // Compare at the stored precision (4 decimals) so ties are detected.
+        $score = round($score, 4);
+        // Issue #15 + #10: only valid results count as peers. Invalid results
+        // (e.g. the "all correct" / "all wrong" case that #10 excludes from
+        // feedback) diverge and are stored clamped to the saturation bound
+        // ±MODEL_POS_INF; a valid ability is strictly inside that bound.
+        $inf = model_person_param::MODEL_POS_INF;
+        $sql = "
+            SELECT
+                COUNT(1) AS n,
+                AVG(peers.ability) AS meanvalue,
+                SUM(CASE WHEN peers.ability < :scorelt THEN 1 ELSE 0 END) AS lowercount,
+                SUM(CASE WHEN peers.ability = :scoreeq THEN 1 ELSE 0 END) AS equalcount
+            FROM (
+                SELECT pp.userid, pp.ability
+                FROM {local_catquiz_personparams} pp
+                WHERE pp.contextid = :contextid
+                  AND pp.catscaleid = :catscaleid
+                  AND pp.userid <> :excludeuserid
+                  AND pp.ability IS NOT NULL
+                  AND ABS(pp.ability) < :inf
+                  AND pp.id = (
+                      SELECT MAX(pp2.id)
+                      FROM {local_catquiz_personparams} pp2
+                      WHERE pp2.contextid = pp.contextid
+                        AND pp2.catscaleid = pp.catscaleid
+                        AND pp2.userid = pp.userid
+                        AND pp2.ability IS NOT NULL
+                        AND ABS(pp2.ability) < :inf2
+                  )
+            ) peers";
+        $params = [
+            'contextid' => $contextid,
+            'catscaleid' => $catscaleid,
+            'excludeuserid' => $excludeuserid,
+            'scorelt' => $score,
+            'scoreeq' => $score,
+            'inf' => $inf,
+            'inf2' => $inf,
+        ];
+        $record = $DB->get_record_sql($sql, $params);
+        return (object) [
+            'n' => (int) ($record->n ?? 0),
+            'meanvalue' => $record->meanvalue !== null ? (float) $record->meanvalue : 0.0,
+            'lowercount' => (int) ($record->lowercount ?? 0),
+            'equalcount' => (int) ($record->equalcount ?? 0),
+        ];
     }
 
     /**
@@ -1930,10 +2056,11 @@ class catquiz {
             $sql .= " AND contextid = :contextid";
         }
         if (!is_null($starttime)) {
-            $sql .= " AND a.timecreated >= :starttime";
+            // Issue #16: filter historical periods by actual completion time.
+            $sql .= " AND a.endtime >= :starttime";
         }
         if (!is_null($endtime)) {
-            $sql .= " AND a.timecreated <= :endtime";
+            $sql .= " AND a.endtime <= :endtime";
         }
         $sql .= " ORDER BY a.endtime";
         $params = [
@@ -2512,11 +2639,12 @@ class catquiz {
         }
 
         if ($starttime) {
-            $where .= " AND a.starttime >= :starttime";
+            // Issue #16: same completion-time period rule as the charts.
+            $where .= " AND a.endtime >= :starttime";
         }
 
         if ($endtime) {
-            $where .= " AND a.starttime <= :endtime";
+            $where .= " AND a.endtime <= :endtime";
         }
 
         $sql = "SELECT a.attemptid,

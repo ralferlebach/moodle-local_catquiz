@@ -146,15 +146,28 @@ class local_catquiz_generator extends testing_module_generator {
         $jsondata->componentid = $adaptivequiz->adaptivecatquizid;
         $jsondata->component = 'mod_adaptivequiz';
         $jsondata->catquiz_selectteststrategy = $adaptivequiz->cateststrategyid;
-        $jsondata->catquiz_selectfirstquestion = $adaptivequiz->catquiz_selectfirstquestion ?? null;
-        $jsondata->maxquestionsgroup->catquiz_maxquestions = $adaptivequiz->catquiz_maxquestions ?? null;
-        $jsondata->maxquestionsgroup->catquiz_minquestions = $adaptivequiz->catquiz_minquestions ?? null;
-        $jsondata->maxquestionsscalegroup->catquiz_minquestionspersubscale = $adaptivequiz->catquiz_minquestionspersubscale ?? null;
-        $jsondata->maxquestionsscalegroup->catquiz_maxquestionspersubscale = $adaptivequiz->catquiz_maxquestionspersubscale ?? null;
-        $jsondata->catquiz_standarderrorgroup->catquiz_standarderror_min = $adaptivequiz->catquiz_standarderror_min ?? null;
-        $jsondata->catquiz_standarderrorgroup->catquiz_standarderror_max = $adaptivequiz->catquiz_standarderror_max ?? null;
-        $jsondata->catquiz_includetimelimit = $adaptivequiz->catquiz_includetimelimit ?? null;
-        $jsondata->numberoffeedbackoptionsselect = $adaptivequiz->numberoffeedbackoptions ?? null;
+        // Only override the fixture defaults for settings that were actually
+        // supplied. Previously every optional setting was assigned "?? null",
+        // which destroyed the fixture default (e.g. catquiz_minquestionspersubscale
+        // "1" -> null -> intval() 0), making generated environments unrealistic
+        // and masking the configured minimum-question behaviour.
+        $optionaloverrides = [
+            [&$jsondata->catquiz_selectfirstquestion, 'catquiz_selectfirstquestion'],
+            [&$jsondata->maxquestionsgroup->catquiz_maxquestions, 'catquiz_maxquestions'],
+            [&$jsondata->maxquestionsgroup->catquiz_minquestions, 'catquiz_minquestions'],
+            [&$jsondata->maxquestionsscalegroup->catquiz_minquestionspersubscale, 'catquiz_minquestionspersubscale'],
+            [&$jsondata->maxquestionsscalegroup->catquiz_maxquestionspersubscale, 'catquiz_maxquestionspersubscale'],
+            [&$jsondata->catquiz_standarderrorgroup->catquiz_standarderror_min, 'catquiz_standarderror_min'],
+            [&$jsondata->catquiz_standarderrorgroup->catquiz_standarderror_max, 'catquiz_standarderror_max'],
+            [&$jsondata->catquiz_includetimelimit, 'catquiz_includetimelimit'],
+            [&$jsondata->numberoffeedbackoptionsselect, 'numberoffeedbackoptions'],
+        ];
+        foreach ($optionaloverrides as [&$target, $field]) {
+            if (property_exists($adaptivequiz, $field)) {
+                $target = $adaptivequiz->$field;
+            }
+        }
+        unset($target);
         $jsondata->json = json_encode($jsondata);
 
         // Setup testenv finally.

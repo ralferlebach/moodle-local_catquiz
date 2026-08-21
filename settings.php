@@ -126,6 +126,29 @@ if ($hassiteconfig) {
         '/^[1-9]\d*$/'
     ));
 
+    // Issue #14: optional measurement-uncertainty gating for categorical feedback.
+    // 0 disables it; a value like 1 requires the confidence interval
+    // [ability - k*SE, ability + k*SE] to lie fully within a single range before
+    // that range's feedback is shown.
+    $settings->add(new admin_setting_configtext(
+        'local_catquiz/feedback_uncertainty_factor',
+        get_string('feedback_uncertainty_factor_name', 'local_catquiz'),
+        get_string('feedback_uncertainty_factor_desc', 'local_catquiz'),
+        0,
+        '/^\d+(\.\d+)?$/'
+    ));
+
+    // Issue #15: minimum number of distinct peers required before the
+    // peer comparison is shown (small groups are suppressed identically in
+    // charts and exports).
+    $settings->add(new admin_setting_configtext(
+        'local_catquiz/minpeersforcomparison',
+        get_string('minpeersforcomparison_name', 'local_catquiz'),
+        get_string('minpeersforcomparison_desc', 'local_catquiz'),
+        3,
+        '/^[1-9]\d*$/'
+    ));
+
     $settings->add(
         new admin_setting_configcheckbox(
             'local_catquiz/store_debug_info',

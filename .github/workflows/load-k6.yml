@@ -1,0 +1,143 @@
+##############################################################################
+# k6 read-endpoint load test – local_catquiz
+#
+# Runs on pull requests and merges to main (and on demand). It builds a
+# self-contained Moodle 4.5 site with the plugin and its dependencies, seeds a
+# large CAT-manager/statistics profile and load-tests the read pages with k6.
+#
+# NOTE: this exercises a live site (login + heavy pages), so it lives outside the
+# static moodle-plugin-ci pipeline. Thresholds in
+# tests/load/catquiz-read-endpoints.js are initial values; tune them after the
+# first baseline run.
+##############################################################################
+
+name: Load test (k6)
+
+on:
+  workflow_dispatch:
+    inputs:
+      vus:
+        description: Concurrent virtual users
+        default: '25'
+      duration:
+        description: Plateau duration (e.g. 90s)
+        default: '90s'
+      users:
+        description: Seeded persons
+        default: '2000'
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: load-k6-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  k6:
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+
+    env:
+      DB: pgsql
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      LOAD_ADMIN_PASS: 'Admin!23'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+
+      - name: Build Moodle, dependencies and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+
+      - name: Serve the site
+        run: |
+          # moodle-plugin-ci exposes the Moodle checkout via $MOODLE_DIR and
+          # configures $CFG->wwwroot = http://localhost:8000.
+          echo "MOODLE_DIR=$MOODLE_DIR" >> "$GITHUB_ENV"
+          php -S localhost:8000 -t "$MOODLE_DIR" >/tmp/moodle-server.log 2>&1 &
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+              http://localhost:8000/login/index.php || true)
+            [ "$code" = "200" ] && break
+            sleep 3
+          done
+
+      - name: Seed a large profile
+        id: seed
+        run: |
+          php "$MOODLE_DIR/local/catquiz/tests/load/seed_large.php" \
+            --users='${{ github.event.inputs.users || 2000 }}' > /tmp/seed.env
+          cat /tmp/seed.env
+          # Expose the export lines as environment variables.
+          sed -n "s/^export \([A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/seed.env >> "$GITHUB_ENV"
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 load test
+        run: |
+          k6 run \
+            -e BASE_URL="$BASE_URL" \
+            -e ADMIN_USER="$ADMIN_USER" \
+            -e ADMIN_PASS="$ADMIN_PASS" \
+            -e SCALEID="$SCALEID" \
+            -e CONTEXTID="$CONTEXTID" \
+            -e VUS='${{ github.event.inputs.vus || 25 }}' \
+            -e DURATION='${{ github.event.inputs.duration || '90s' }}' \
+            --summary-export=k6-summary.json \
+            plugin/tests/load/catquiz-read-endpoints.js
+
+      - name: Show Moodle server log on failure
+        if: failure()
+        run: tail -100 /tmp/moodle-server.log || true
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-summary
+          path: k6-summary.json
+          retention-days: 7
+          if-no-files-found: ignore

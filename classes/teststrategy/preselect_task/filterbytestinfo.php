@@ -123,8 +123,19 @@ class filterbytestinfo extends preselect_task {
             // 'attemptnofirstquestion'. Require at least one played question (and
             // the configured minimum) before a scale may be excluded.
             $playedinscale = count($this->progress->get_playedquestions(true, $scaleid));
+            $playedintest = count($this->progress->get_playedquestions());
+            $minimumperscale = max(1, (int) $this->context['min_attempts_per_scale']);
+            $ismainscale = $scaleid === (int) $this->context['catscaleid'];
+            // The main scale may only be excluded once the globally configured
+            // minimum number of questions has actually been administered. This
+            // mirrors filterbystandarderror so that catquiz_minquestions is
+            // respected here too; otherwise a low test potential at the starting
+            // guess would deactivate the main scale after question 1 and end the
+            // whole attempt before the minimum is reached.
+            $minimumreached = $playedinscale >= $minimumperscale
+                && (!$ismainscale || $playedintest >= (int) ($this->context['minimumquestions'] ?? 0));
             $exclude = $testpotential + $testinformation <= 1 / $this->context['se_max'] ** 2
-                && $playedinscale >= max(1, (int) $this->context['min_attempts_per_scale']);
+                && $minimumreached;
             if ($exclude && $this->progress->is_active_scale($scaleid)) {
                 $this->progress->deactivate_scale($scaleid, true);
                 getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(

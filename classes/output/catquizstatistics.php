@@ -293,7 +293,7 @@ class catquizstatistics {
         global $OUTPUT;
         $series = [];
         $labels = [];
-        $attemptsbytimerange = $this->get_attempts_by_timerange();
+        $attemptsbytimerange = $this->get_attempts_by_timerange(false, true);
         $fh = new feedback_helper();
         $chart = new \core\chart_bar();
         if (!$attemptsbytimerange) {
@@ -301,7 +301,7 @@ class catquizstatistics {
                 'chart' => '',
             ];
         }
-        foreach ($this->get_attempts_by_timerange() as $timestamp => $attempts) {
+        foreach ($this->get_attempts_by_timerange(false, true) as $timestamp => $attempts) {
             $labels[] = (string)$timestamp;
             foreach ($attempts as $attempt) {
                 if (is_object($attempt)) {
@@ -352,12 +352,12 @@ class catquizstatistics {
         $models = model_strategy::get_installed_models();
         $fisherinfos = $feedbackhelper->get_fisherinfos_of_items($items, $models, $abilitysteps);
         $attempts = $this->get_attempts();
-        // Prepare data for scorecounter bars.
-        $userids = array_unique(array_map(fn ($attempt) => $attempt->userid, $attempts));
-        $abilityrecords = [];
-        if ($userids) {
-            $abilityrecords = catquiz::get_person_abilities($this->contextid, [$this->scaleid], $userids);
-        }
+        // Issue #16: build the histogram from the historical attempt snapshots
+        // (personability_after_attempt at the time of the attempt), not from the
+        // person's current parameter. Person-weighted: one value per person, the
+        // latest attempt in the selected period.
+        $historicalabilities = catquiz::get_snapshot_ability_per_person($attempts, 'last');
+        $abilityrecords = array_map(fn ($ability) => (object) ['ability' => $ability], $historicalabilities);
         $abilityseries = [];
         $quizsettings = reset($this->quizsettings); // TODO: check if the settings match for all tests.
         foreach ($abilitysteps as $as) {
@@ -723,7 +723,10 @@ class catquizstatistics {
                 $this->testid,
                 $this->contextid,
                 $this->starttime,
-                $this->endtime
+                $this->endtime,
+                // Issue #16: historical cohorts must not change when a person is
+                // later unenrolled -> include by historical participation.
+                false
             ) as $record
         ) {
             $json = json_decode($record->json);
@@ -742,11 +745,13 @@ class catquizstatistics {
      * Return attempts for the time range of this object
      *
      * @param bool $allowempty
+     * @param bool $perperson If true, reduce to one value per person and period.
      * @return array
      */
-    private function get_attempts_by_timerange(bool $allowempty = false): array {
-        if (isset($this->attemptsbytimerange[$allowempty])) {
-            return $this->attemptsbytimerange[$allowempty];
+    private function get_attempts_by_timerange(bool $allowempty = false, bool $perperson = false): array {
+        $cachekey = ($allowempty ? '1' : '0') . ($perperson ? '1' : '0');
+        if (isset($this->attemptsbytimerange[$cachekey])) {
+            return $this->attemptsbytimerange[$cachekey];
         }
 
         $records = [];
@@ -758,7 +763,9 @@ class catquizstatistics {
                 $this->testid,
                 $this->contextid,
                 $this->starttime,
-                $this->endtime
+                $this->endtime,
+                // Issue #16: historical participation (see get_attempts()).
+                false
             ) as $record
         ) {
             // Store a subset of the json to save memory.
@@ -787,13 +794,14 @@ class catquizstatistics {
         $beginningoftimerange = intval($startingrecord->endtime);
         $timerange = feedback_helper::get_timerange_for_attempts($beginningoftimerange, $this->endtime);
         $this->timerangekeys = feedback_helper::get_timerangekeys($timerange, [$beginningoftimerange, $this->endtime]);
-        $this->attemptsbytimerange[$allowempty] = feedback_helper::order_attempts_by_timerange(
+        $this->attemptsbytimerange[$cachekey] = feedback_helper::order_attempts_by_timerange(
             $records,
             $this->scaleid,
             $timerange,
-            $allowempty
+            $allowempty,
+            $perperson
         );
-        return $this->attemptsbytimerange[$allowempty];
+        return $this->attemptsbytimerange[$cachekey];
     }
 
     /**
@@ -945,9 +953,21 @@ class catquizstatistics {
         $chart = new chart_line();
         $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
 
-        $orderedattemptspeers = feedback_helper::order_attempts_by_timerange($attemptsofpeers, $this->scaleid, $timerange);
+        $orderedattemptspeers = feedback_helper::order_attempts_by_timerange(
+            $attemptsofpeers,
+            $this->scaleid,
+            $timerange,
+            false,
+            true
+        );
         $pa = $this->assign_average_result_to_timerange($orderedattemptspeers);
-        $orderedattemptsuser = feedback_helper::order_attempts_by_timerange($attemptsofuser, $this->scaleid, $timerange);
+        $orderedattemptsuser = feedback_helper::order_attempts_by_timerange(
+            $attemptsofuser,
+            $this->scaleid,
+            $timerange,
+            false,
+            true
+        );
         $ua = $this->assign_average_result_to_timerange($orderedattemptsuser);
 
         // If we do not have enough data, return.
@@ -1200,7 +1220,10 @@ class catquizstatistics {
              $this->courseid,
              $this->testid,
              $this->starttime,
-             $this->endtime
+             $this->endtime,
+             // Issue #16: the export must use the same cohort rule as the charts
+             // (historical participation), so unenrolment does not diverge them.
+             false
          );
 
         $data = [];

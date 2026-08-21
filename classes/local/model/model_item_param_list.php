@@ -570,13 +570,18 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
      * @return array
      */
     public function confirmed(): array {
-        $ids = array_filter(
-            array_map(
-                fn ($ip) => $ip->get_id(),
-                $this->itemparams
-            ),
-            fn ($id) => $this->itemparams[$id]->get_status() > LOCAL_CATQUIZ_STATUS_CALCULATED
-        );
+        // The list may be keyed by component id (see add()), which is not the
+        // item-param row id returned by get_id(). Iterate the values directly
+        // instead of indexing $this->itemparams by the mapped id: the old code
+        // did $this->itemparams[$ip->get_id()], which hit an undefined key (and,
+        // once dereferenced, a fatal method call on null) whenever the id and
+        // the array key differed - i.e. for every param loaded from the DB.
+        $ids = [];
+        foreach ($this->itemparams as $itemparam) {
+            if ($itemparam->get_status() > LOCAL_CATQUIZ_STATUS_CALCULATED) {
+                $ids[] = $itemparam->get_id();
+            }
+        }
         return $ids;
     }
 

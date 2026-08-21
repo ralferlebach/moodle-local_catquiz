@@ -1,5 +1,415 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082022)
+
+> phpcs-Fix im neuen Regressionstest + Dev-CI: Code Checker nach „Code analysis".
+> Details in `doc/session-051-changes.md`.
+
+- **phpcs-Fix:** `filterbytestinfo_minquestions_test` – fehlender
+  `MOODLE_INTERNAL`-Guard vor `require_once` ergänzt und trailing Whitespace
+  entfernt (aus dem CI-`lint-php`-Artefakt diagnostiziert). Plugin-weit wieder
+  0 Errors/0 Warnings.
+- **Dev-CI:** Der Moodle Code Checker (phpcs) ist reine Coding-Style-Prüfung und
+  keine Voraussetzung für die Lauffähigkeit – daher von `lint-php` nach
+  `codeanalysis` verschoben (dort blockierend). `lint-php` = nur `phplint`
+  (Syntax) und schaltet `phpunit`/`behat` sofort frei. `codeanalysis`
+  (phpcs blockierend; phpmd/phpcpd advisory) ist jetzt Voraussetzung für
+  `ci-complete`.
+
+## 1.1.5 (interne Version 2026082021)
+
+> Behat-Fix (CAT-Steuerung) + Härtungen aus externer Expertise; CI: phpmd/phpcpd
+> als eigenständiger Job. Details in `doc/session-050-changes.md`.
+
+- **Produktfix `filterbytestinfo`:** Die Hauptskala wird jetzt erst dann durch
+  Testinformation/SE deaktiviert, wenn die global konfigurierte Mindestfragenzahl
+  (`catquiz_minquestions`) erreicht ist – analog zu `filterbystandarderror`.
+  Behebt, dass Versuche mit `catquiz_minquestions = 4` bereits nach Frage 1 auf
+  `attemptfinished.php` landeten (Ursache der beiden roten Feedback-Behat-Szenarien).
+- **Regressionstest** `filterbytestinfo_minquestions_test`: Hauptskala bleibt bei
+  `minimumquestions=4` nach Frage 1–3 aktiv, darf ab Frage 4 deaktiviert werden;
+  ohne globales Minimum gilt weiter das alte Verhalten. Zahn-getestet.
+- **Generator-Härtung** (`tests/generator/lib.php`): optionale Settings nur bei
+  tatsächlicher Angabe überschreiben (kein Zerstören der Fixture-Defaults mit
+  `null` mehr, z. B. `catquiz_minquestionspersubscale`).
+- **Eventlog-Behat entflakt:** flakiger Import-Event-Assert („Testitem added")
+  entfernt (Pagination-abhängig); Emission jetzt deterministisch per PHPUnit
+  (`eventlog_testitemadded_test`) abgedeckt. Die deterministischen r1-Asserts
+  (Attempt-Completion) bleiben.
+- **Observer-Bugfix:** `strpos($classname, 'local_catquiz') >= 0` (immer wahr!) →
+  `str_contains(...)`; verhindert Cache-Invalidierung bei jedem Moodle-Event.
+- **CI (dev):** `phpmd`/`phpcpd` in einen eigenständigen, install-freien Job
+  `codeanalysis` (advisory, non-blocking) ausgelagert. `lint-php`
+  (phplint + codechecker) schaltet `phpunit`/`behat` nun sofort frei – phpmd/phpcpd
+  sind keine Voraussetzung mehr.
+
+## 1.1.5 (interne Version 2026082020)
+
+> CI-Beschleunigung: Composer-/npm-Caching; `phpmd`/`phpcpd` in den
+> install-freien `lint-php`-Job verschoben. Details in
+> `doc/session-049-changes.md`.
+
+- **Composer-Cache** (`actions/cache`, `~/.cache/composer`) in allen Install-Jobs
+  von dev + main sowie den Last-Test-Workflows; **npm-Cache** (`~/.npm`) in den
+  Grunt-Jobs. Spart bei catquiz besonders viel, da jeder Install sechs externe
+  Plugin-Abhängigkeiten zieht.
+- **`phpmd`/`phpcpd`** (non-blocking) von `quality` in `lint-php` verschoben:
+  beide laufen auf dem Quellcode ohne Moodle-Install und gehören damit zu den
+  install-freien PHP-Checks. `lint-php` bleibt ein valides Gate (beide
+  `continue-on-error`). `quality` ist jetzt schlank: `phpdoc`/`savepoints`/
+  `validate` (die den Moodle-Baum brauchen).
+
+## 1.1.5 (interne Version 2026082019)
+
+- **Dev-CI:** redundante `lint-jsamd`→`ci-complete`-Kante entfernt (transitiv über
+  `behat` abgedeckt).
+
+## 1.1.5 (interne Version 2026082018)
+
+- **phpcs-Fix:** Leerzeile vor der schließenden Klassen-`}` in
+  `feedback_ranges_test.php` entfernt
+  (`PSR2.Classes.ClassDeclaration.CloseBraceAfterBody`).
+
+## 1.1.5 (interne Version 2026082017)
+
+> phpcs-Fix (Lang-Reihenfolge) + weitere Dev-Pipeline-Aufteilung. Details in
+> `doc/session-048-changes.md`.
+
+- **phpcs-Fix:** `lang/en` und `lang/de` global streng nach `SORT_STRING`
+  sortiert (Moodle-Standard). Behebt die CI-`moodle.Files.LangFilesOrdering`-
+  Warnungen (`attemptfeedbacknotyetavailable`, `ifdefinedusedtomatch`), die durch
+  eine abweichende Sektionsdetektion lokal nicht sichtbar waren. Keys unverändert
+  erhalten, Streu-Leerzeile entfernt; plugin-weit 0 Errors/Warnings.
+- **Dev-Pipeline weiter aufgeteilt** (vimipad-Modell): `lint-php`
+  (phplint + codechecker, ohne Moodle-Install → schnell) und `lint-jsamd`
+  (grunt + mustache) getrennt; neuer `quality`-Job (phpdoc, phpmd, phpcpd,
+  savepoints, validate) läuft **parallel** zu `phpunit`/`behat` statt sie zu
+  gaten. `phpunit` ← `lint-php`; `behat` ← `lint-php` + `lint-jsamd`;
+  `ci-complete` ← alle. Error-Summary/Screenshots je Job erhalten.
+
+## 1.1.5 (interne Version 2026082016)
+
+> CI-Diagnostik: herunterladbare Error-Summary (ZIP) in beiden CI-Pipelines,
+> Behat-Screenshots (ZIP) im Dev-Branch bei Behat-Fehlern. Details in
+> `doc/session-047-changes.md`.
+
+- **Error-Summary (beide Pipelines):** jeder Check schreibt seine Ausgabe per
+  `tee` nach `ci-logs/` (mit `pipefail`, Exit-Code bleibt erhalten). Ein
+  `always()`-Schritt sammelt die Logs + eine `summary.txt` und lädt sie als
+  Artefakt `error-summary-*` hoch (GitHub bietet Artefakte als ZIP-Download an).
+- **Behat-Screenshots (Dev, bei Fehler):** der Dev-Behat-Job lädt die
+  Behat-Faildumps (Screenshots + HTML) bei `failure()` als Artefakt
+  `behat-screenshots-dev` hoch. In der main-Pipeline analog `behat-screenshots-main-*`.
+- Artefaktnamen je Job/Matrix eindeutig (Pflicht bei `upload-artifact@v4`).
+
+## 1.1.5 (interne Version 2026082015)
+
+> CI-Umbau nach vimipad-Vorbild: schnelle parallele Pipeline für Dev-Branches,
+> sequenzielle Pipeline nur für main, plus JMeter- und k6-Last-Tests für
+> main-Pulls/Merges. Details in `doc/session-046-changes.md`.
+
+- **Dev-Pipeline** (`moodle-plugin-ci-dev.yml`, `branches-ignore: main`):
+  parallel — schneller `static`-Gate-Job (phplint, phpcpd, phpmd, codechecker,
+  phpdoc, validate, savepoints, mustache, grunt), danach `phpunit` (reduzierte
+  3-Zellen-Matrix) und `behat` (eine Zelle) parallel; `ci-complete`-Gate.
+- **Main-Pipeline** (`moodle-plugin-ci-main.yml`, nur `main`): unverändert
+  sequenziell über die volle 6-Zellen-Matrix (lint → phpunit → behat je Zelle);
+  `ci-complete`-Gate für Branch Protection.
+- **Last-Tests** (`load-k6.yml`, `load-jmeter.yml`, Trigger: Pull/Push auf
+  `main` + manuell): self-contained Site (Moodle 4.5 + Abhängigkeiten) via
+  moodle-plugin-ci, großes Profil via `tests/load/seed_large.php`, Read-Last auf
+  CAT-Manager/Statistik. Neue Assets unter `tests/load/`
+  (`seed_large.php`, `catquiz-read-endpoints.js`, `catquiz-read-endpoints.jmx`).
+- Alte `moodle-plugin-ci-push.yml` / `moodle-plugin-ci-pullreq.yml` entfernt
+  (durch dev/main ersetzt); `erpnext.yml` unverändert.
+
+## 1.1.5 (interne Version 2026082014)
+
+> Strang „Diagramme+Feedback+Statistik": Nachbesserung nach externem Review –
+> #14 Messunsicherheit (opt-in), #15 konfigurierbares Mindest-N, expliziter
+> Overlap-Test. Details in `doc/session-045-changes.md`.
+
+- **#14 Messunsicherheit (konfigurierbar, opt-in):** Neuer Resolver
+  `feedback_helper::get_feedback_range_index_with_uncertainty` – ein
+  Feedbackbereich gilt nur als sicher erreicht, wenn das Konfidenzintervall
+  `Fähigkeit ± k·SE` vollständig in einem Bereich liegt; sonst neutrale
+  Übergangsrückmeldung (`feedbackrangeuncertain`). Steuerung über die neue
+  Admin-Einstellung `feedback_uncertainty_factor` (Default 0 = aus). In
+  `customscalefeedback` verdrahtet (SE aus `newdata['se']` an die Report-Skalen
+  gehängt).
+- **#15 Mindest-N konfigurierbar:** `comparetotestaverage::get_min_peers()` liest
+  die neue Admin-Einstellung `minpeersforcomparison` (Fallback `MIN_USERS`=3);
+  ersetzt die hartkodierte Konstante in der „genug Peers"-Entscheidung.
+- **#14 Overlap-Test:** expliziter PHPUnit-Test, dass eine überlappende
+  Bereichskonfiguration abgelehnt wird.
+- Tests `feedback_ranges_test` (+Unsicherheit, +Overlap) und
+  `peer_comparison_stats_test` (+Config) zahn-getestet erweitert.
+
+## 1.1.5 (interne Version 2026082013)
+
+> Strang „Diagramme+Feedback+Statistik": CI-Nacharbeit (phpcs-Warnungen,
+> Lang-Reihenfolge, PHPDoc, zwei Behat-Szenarien). Details in
+> `doc/session-044-changes.md`.
+
+- **phpcs:** Inline-Kommentar-Großschreibung in `questionssummary_counting_test`
+  und `statistics_snapshot_test`; Lang-Schlüsselreihenfolge (EN/DE) korrigiert.
+- **PHPDoc:** fehlende `@param`-Einträge ergänzt für die neuen Parameter
+  `order_attempts_by_timerange` (`perperson`, `rule`), `get_attempts_by_timerange`
+  (`perperson`) und `render_question_with_response::execute` (`questionattemptid`).
+- **Behat „invalid attempt":** Szenario nutzt jetzt konsistent
+  `catquiz_minquestions = 4`, damit deterministisch vier Fragen gespielt werden;
+  die „Infer lowest skill gap"-Strategie invalidiert bei `fraction >= 1` (alle
+  richtig) → alle Skalen ausgeschlossen → zentrale Meldung.
+- **Behat „autocomplete":** XPath trifft nicht mehr das leere
+  `form_autocomplete_selection-…-announcer`-`div`, sondern die echte
+  `role='listbox'`-Auswahl bzw. den selektierten Chip
+  (`span[@role='option' and @aria-selected='true']`). Kein Produktcode.
+
+## 1.1.5 (interne Version 2026082012)
+
+> Strang „Diagramme+Feedback+Statistik": Konsistenz Exporte = Anzeige-Regeln,
+> #16-Restpunkte (Personengewichtung, historische Teilnahme) sowie Nachbesserung
+> nach fachlichem Review (#10, #14, #16 Endtime). Details in
+> `doc/session-043-changes.md`.
+
+- **#10 Forced-Scale-Bug behoben:** In `inferlowestskillgap`/`infergreateststrength`
+  wurde im Forced-Scale-Pfad das Ability-**Array** statt der Scale-ID als Key
+  genutzt (illegaler Array-Offset). Jetzt `$relevantscale = $catscaleid` mit
+  Existenzprüfung.
+- **#10 Frühes Gating:** Bei ungültigem Ergebnis werden die nicht-essentiellen
+  Generatoren (Peer-Vergleich, Lernfortschritt …) gar nicht mehr **ausgeführt**;
+  der/die Lernende sieht nur den zentralen Hinweis. Teacher-Feedback von
+  `customscalefeedback` bleibt erhalten.
+- **#10 Behat-Invalidfall korrigiert:** „Infer lowest skill gap" erklärt
+  `fraction >= 1` (alle richtig) für ungültig – das Szenario beantwortet nun alle
+  Fragen richtig statt falsch.
+- **#16 Zeitraum = Abschlusszeit:** Charts **und** Export filtern jetzt nach
+  `endtime` (statt `timecreated` bzw. `starttime`).
+- **Geteilte Personen-Regel:** Neuer `feedback_helper::reduce_to_one_value_per_person`
+  (ein Wert je Person; `last`/`first`/`best`; 0.0 gültig, null verworfen).
+  `catquiz::get_snapshot_ability_per_person` (#16) setzt darauf auf (DRY).
+- **Kohortenverläufe personengewichtet:** `order_attempts_by_timerange` erhält
+  einen `perperson`-Modus (ein Wert je Person **und Zeitraum**, dann aggregieren)
+  und behält gültige 0.0 (`!== null` statt `empty()`). Aktiviert für Stack-Chart
+  und Vergleichsverlauf (`catquizstatistics`) sowie den Peer-Verlauf im
+  Studenten-Feedback (`learningprogress`). Der reine Attempt-Zähl-Chart bleibt
+  versuchsgewichtet (unterscheidbar).
+- **Historische Teilnahme (#16):** Statistiken und CSV-Export nutzen
+  `get_attempts(..., enrolled=false)` bzw. `get_sql_for_csv_export(..., false)` –
+  aktuelle Exmatrikulation verändert historische Kohorten nicht mehr, und der
+  Export folgt derselben Kohortenregel wie die Charts.
+- **Export = Anzeige-Regeln:** Der CSV-Export liest historische Snapshot-Werte
+  aus dem Versuchs-JSON (wie die Charts), nutzt denselben halboffenen
+  Range-Resolver (`get_range_of_value`, #14), dieselbe Enrolment-Regel und
+  denselben Abschlusszeit-Zeitraum.
+- **#14:** expliziter Overlap-Validierungstest ergänzt.
+- Tests: `person_weighting_test` (geteilte Regel + perperson), `feedback_gating_test`
+  (frühes Gating, ausführungsverfolgt), `feedback_ranges_test` (Overlap) – alle
+  zahn-getestet.
+
+## 1.1.5 (interne Version 2026082011)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #16 (historische
+> Lehrendenstatistiken auf Versuchssnapshots). Details in
+> `doc/session-042-changes.md`.
+
+- **#16 Historische Snapshots:** Die Lehrenden-Statistik (Histogramm in
+  `catquizstatistics`) baut jetzt auf `personability_after_attempt` (Wert **zum
+  Zeitpunkt des Versuchs**) statt auf `get_person_abilities` (aktueller
+  Parameter). Neuer geteilter Helfer `catquiz::get_snapshot_ability_per_person`.
+- **#16 Mehrfachversuche:** dokumentierte Auswahlregel (`last`/`first`/`best`),
+  **ein Wert je Person** (personengewichtet) — Personen mit mehreren Versuchen
+  werden einmal gewichtet.
+- **#16 Legacy:** Versuche ohne Snapshot werden ausgeschlossen.
+- Neuer Test `statistics_snapshot_test` (historische Werte, Mehrfachversuche,
+  Legacy-Ausschluss, zahn-getestet).
+
+## 1.1.5 (interne Version 2026082010)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #15 (Peer-Vergleich kontexttreu
+> und statistisch korrekt). Details in `doc/session-041-changes.md`.
+
+- **#15 Peer-Query-Service:** Neuer geteilter `catquiz::get_peer_comparison_stats`
+  mit **SQL-Aggregaten** (statt Vollabfrage nach PHP): gleicher Kontext + Skala,
+  **genau ein Wert je Person** (letzter personparam je Nutzer), **aktueller
+  Benutzer ausgeschlossen**; liefert `n`, Mittelwert, `lowercount`, `equalcount`.
+- **#15 Midrank-Perzentil:** `100 × (n_kleiner + 0,5 × n_gleich) / n_peers` –
+  Bindungen werden hälftig geteilt; der verglichene Nutzer ist nicht Teil von
+  `n_peers`.
+- **#15 Mindest-N** basiert nun auf eindeutigen Peers (`n`), Mittelwert schließt
+  den Nutzer aus.
+- **#15 Histogramm** filtert jetzt zusätzlich nach `contextid` (keine
+  kontextübergreifenden Peer-Daten mehr).
+- **#15 Nur gültige Ergebnisse (Ergebnis aus #10):** Der Peer-Service zählt nur
+  endliche, **nicht-gesättigte** Abilities (`ABS(ability) < MODEL_POS_INF`).
+  Divergierte Ergebnisse (u. a. die von #10 als ungültig erkannten Faelle
+  ‚alle richtig/falsch‘ mit Fraction 0/1) werden beim Speichern auf ±1000
+  geklemmt und damit als ungueltig aus der Bezugsgruppe ausgeschlossen.
+- Neuer Test `peer_comparison_stats_test` (Bezugsgruppe, Dedup, Midrank,
+  zahn-getestet).
+
+## 1.1.5 (interne Version 2026082008)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #14 (benutzerdefinierte
+> Feedbackbereiche überschneidungsfrei). Details in `doc/session-040-changes.md`.
+
+- **#14 Genau ein Bereich:** Neuer kanonischer, **halboffener** Resolver
+  `feedback_helper::get_feedback_range_index` ([a,b) je Bereich, oberster Bereich
+  [c,d] inklusive). Ein Score auf einer gemeinsamen Grenze gehört jetzt zu genau
+  einem Bereich. Genutzt in `customscalefeedback`, `get_range_of_value` sowie
+  `get_courses_to_enrol`/`get_groups_to_enrol` (konsistente Zuordnung, keine
+  Doppel-Einschreibung an Grenzen).
+- **#14 Präzedenz:** `if (!($data['customscalefeedback_abilities'] ?? false))`
+  korrekt geklammert.
+- **#14 Validierung:** Speicher-Validierung deckt jetzt auch den ersten Bereich
+  ab (aufsteigend, `upper_1 > lower_1`); Lücken/Überlappungen zwischen Bereichen
+  waren bereits über `upper_{j-1} == lower_j` erzwungen.
+- Neuer Test `feedback_ranges_test` (Grenzen/Lücken/Überlappungen, zahn-getestet).
+
+## 1.1.5 (interne Version 2026082007)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #13 (Fragenzusammenfassung
+> fachlich korrekt zählen). Details in `doc/session-039-changes.md`.
+
+- **#13 Zählung je Frage:** `catquiz::get_attempt_statistics` liefert jetzt genau
+  **eine Zeile je Frage** (letzter bewerteter Step je `questionattemptid`) statt
+  je Step – Mehrfach-Steps werden nicht mehr mehrfach gezählt.
+- **#13 Kategorien getrennt:** „unbeantwortet/übersprungen" ist eine eigene
+  Kategorie (`gradedunanswered`) und wird nicht mehr zu „falsch" addiert; neue
+  Zeile im Template + String `numberofanswersunanswered` (EN/DE).
+- **#13 Pilotausschluss:** Pilotitems werden über die Progress-Pilot-IDs aus den
+  Leistungszählern ausgeschlossen. Summe der Kategorien = Zahl relevanter
+  (nicht-Pilot) QUBA-Slots.
+- Neuer Test `questionssummary_counting_test` (Mehrfachsteps + Pilot,
+  zahn-getestet).
+
+## 1.1.5 (interne Version 2026082006)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #12 (Fragenmodal & Antwort-
+> darstellung reparieren). Details in `doc/session-038-changes.md`.
+
+- **#12 Fragenmodal (JS):** `graphicalsummary.js` schreibt den Inhalt jetzt in
+  den **eigenen** Modal-Body (`modal.getBody()`), nicht mehr über den globalen
+  Selektor `[data-id="modalbodyquestion"]` (der ab dem 2. Modal ins alte,
+  versteckte schrieb). `setRemoveOnClose(true)`; Build via grunt neu erzeugt.
+- **#12 Echter Slot:** `data-slot`/`data-questionattemptid` stammen jetzt aus dem
+  gespeicherten realen `qa.slot`/`questionattemptid` (SQL um `qa.slot` ergänzt);
+  Legacy-Fallback auf den Zeilenindex für Altdaten.
+- **#12 Endpoint (`render_question_with_response`):** `validate_context()`,
+  Eigentümer-/Review-Zugriffscheck (`local/catquiz:view_users_feedback`) **vor**
+  jeder Ausgabe → fremde Versuche für Participants nicht abrufbar; Slot- und
+  optionale Question-ID-Validierung; QUBA-HTML **unverändert** (kein
+  `format_text`), plus `render_question_head_html()`.
+- **#12 Antwort:** tatsächliche Antwort (`responsesummary`, escaped) in der
+  Antwortspalte.
+- Neuer Test `render_question_with_response_test` (Zugriff + Slotzuordnung,
+  zahn-getestet); neuer String `invalidquestionslot` (EN/DE).
+
+## 1.1.5 (interne Version 2026082005)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #11 (Lernfortschritt auf die
+> Globalskala beziehen). Details in `doc/session-037-changes.md`.
+
+- **#11 Lernfortschritt = Globalskala:** Die „Lernfortschritt"-Charts
+  (`render_chart_for_individual_user` und `render_chart_for_comparison`) folgen
+  jetzt der Globalskala (`catquiz_catscales`) statt der wechselnden Primary-Skala
+  des aktuellen Versuchs. `get_studentfeedback` übergibt die Globalskala an
+  `render_abilityprogress`.
+- **#11 Lücken & 0.0:** Versuche ohne Globalwert erzeugen eine **Lücke** (null)
+  statt übersprungen/ersetzt zu werden; ein Wert von exakt 0.0 wird korrekt
+  dargestellt (explizite Nullprüfung statt `empty()`, auch in
+  `find_non_nullable_value`). Werteextraktion in `extract_scale_progress_values`.
+- **#11 Required-Keys:** `primaryscale` aus `get_required_context_keys()`
+  entfernt (der Verlauf hängt nicht mehr an der Primary-Skala).
+- Neuer Test `learningprogress_globalscale_test` (zahn-getestet).
+
+## 1.1.5 (interne Version 2026082004)
+
+> Behat 001: Autocomplete-Assertion auf den realen DOM-State umgestellt und die
+> Race Condition beseitigt. Details in `doc/session-036-changes.md`.
+
+- **001 Behat-Step-Fix (nur `behat_catquiz.php`, keine Produktionsklasse):** Die
+  native-`<select>`-Assertion nutzt jetzt `evaluateScript` (`option.selected` +
+  `option.textContent`) statt Minks `getText()`, das auf dem versteckten
+  Moodle-Autocomplete-`<select>` leeren Text liefern und so falsch-negativ sein
+  konnte. Der Fill-Step wartet nach dem Suggestion-Klick auf Moodles **asynchrone**
+  native Selektion, bevor er ESC sendet (Race Condition behoben). Der JS-Hack
+  `ensure_native_select_option_selected()` wurde entfernt – der Test prüft wieder
+  Moodles echtes Verhalten. Fehlermeldungen enthalten jetzt einen vollständigen
+  Options-Dump (`value`/`text`/`selected`).
+
+## 1.1.5 (interne Version 2026082003)
+
+> Strang „Diagramme+Feedback+Statistik": Behat-Abnahme für Issue #10
+> (Feedbackansicht valide vs. ungültig). Details in `doc/session-035-changes.md`.
+
+- **#10 Behat:** Neues Feature `catquiz_feedback_validity.feature` mit zwei
+  Szenarien. Ungültiger Versuch (alle Antworten falsch → `fraction = 0`, alle
+  Skalen ausgeschlossen) → genau ein zentraler Hinweis („No valid test result
+  could be determined for this attempt."); valider Versuch (gemischte Antworten)
+  → Feedback ohne den zentralen Hinweis. Auswahl-neutraler Invalid-Hebel (keine
+  Änderung an SE-/nminscale-Auswahlparametern).
+
+## 1.1.5 (interne Version 2026082002)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #10 Folge-Inkrement
+> (Nebenwirkungs-Gating + Forced-Scale-Passthrough). Details in
+> `doc/session-034-changes.md`.
+
+- **#10 Einschreibungs-Gating:** `get_courses_to_enrol()` / `get_groups_to_enrol()`
+  wählen Kandidatenskalen jetzt über `feedback_helper::get_reportable_scales()`
+  (schließt `excluded`/`hidden` aus, nicht nur `toreport`). Ein ungültiges
+  Ergebnis löst damit **keine** automatische Kurs-/Gruppen-Einschreibung mehr aus.
+- **#10 Forced-Scale-Passthrough:** `feedbackgenerator::select_scales_for_report()`
+  reicht `forcedscaleid`/`feedbackonlyfordefinedscaleid` jetzt bis zur
+  Auswahlstrategie durch (Mapping auf deren `catscaleid`); neue Träger-Properties
+  `feedbacksettings::$forcedscaleid` / `$feedbackonlyfordefinedscaleid`
+  (Default 0/false → verhaltensbewahrend, wenn nicht gesetzt).
+- Neuer Testfall `attemptfeedback_test`: `toreport`-, aber `excluded`-Skala
+  schreibt nicht ein (zahn-getestet).
+
+## 1.1.5 (interne Version 2026082001)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #10 (Feedback an valide Ergebnisse
+> binden), Kern-Inkrement. Details in `doc/session-033-changes.md`.
+
+- **#10 Generator-Gating:** `feedbackgenerator::no_data()` liefert jetzt ein
+  leeres Ergebnis – Generatoren ohne Daten erzeugen keinen „nicht verfügbar"-Tab
+  mehr (die Assembly überspringt leere Ergebnisse).
+- **#10 Zentraler Hinweis:** Hat ein Versuch keine berichtbare Skala (`toreport`,
+  nicht `excluded`/`hidden`), zeigt die Feedbackansicht **genau einen** zentralen
+  Hinweis („Für diesen Versuch konnte kein valides Testergebnis bestimmt werden.")
+  inkl. Ablehnungsgrund statt verstreuter Skalen-/„nicht verfügbar"-Blöcke.
+- Validität und Ablehnungsgründe in `feedback_helper` zentralisiert
+  (`has_reportable_result`, `get_reportable_scales`, `get_exclusion_reason_string`);
+  `customscalefeedback` delegiert nun an den geteilten Helfer (DRY).
+- Neue Strings `feedbacknovalidresult(+heading)` (EN/DE). Neuer Test
+  `feedback_gating_test` (zahn-getestet).
+
+## 1.1.5 (interne Version 2026082000)
+
+> Strang „Diagramme+Feedback+Statistik": Behat-001 gefixt und #44 abgeschlossen.
+> Details in `doc/session-032-changes.md`.
+
+- **001 `catquiz_courses` (Behat):** Ursache über einen neuen PHPUnit-Roundtrip-
+  Test (`catquiz_courses_persistence_test`) auf die Browser-/Form-Interaktion
+  eingegrenzt (PHP/JSON-Persistenz ist nachweislich intakt). Der Autocomplete-
+  Behat-Step setzt jetzt zusätzlich das native `<select multiple>` verlässlich
+  (`option.selected` + `change`-Event, jQuery-Fallback) – das ist der tatsächlich
+  submittierte Formwert. Drei native-`<select>`-Kontrollpunkte (nach Auswahl,
+  nach Validierungsfehler, nach Save+Reload) lokalisieren jeden künftigen
+  Verlust punktgenau.
+- **#44 Nachberechnung:** Kern-Invariante zahn-getestet
+  (`incremental_keeps_context_test`): inkrementell **mit** neuen Responses behält
+  den aktiven Kontext (kein neuer Kontext, `catscale.contextid` unverändert,
+  Personparameter unangetastet); disruptiv versioniert in einen neuen Kontext
+  (Selbstvalidierung des Fixtures).
+- **Fix `model_item_param_list::confirmed()`:** griff die Item-ID (`get_id()`) als
+  Array-Key in die nach `componentid` gekeyte Liste – undefinierter Key und in
+  Produktion `null->get_status()` (Fatal) in der inkrementellen Schätzung. Jetzt
+  keying-robuste Iteration über die Werte. Dieser Bug blockierte die inkrementelle
+  Nachberechnung real; vom #44-Zahn-Test aufgedeckt.
+
 ## 1.1.4 (interne Version 2026081718)
 
 > CI-Fix: K2 zurückgenommen (K3 ist der Wurzelfix). Details in

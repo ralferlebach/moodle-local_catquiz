@@ -89,7 +89,7 @@ class customscalefeedback extends feedbackgenerator {
         $this->testid = $data['testid'];
         $this->mainscale = $data['catscaleid'];
 
-        if (!$data['customscalefeedback_abilities'] ?? false) {
+        if (!($data['customscalefeedback_abilities'] ?? false)) {
             return [];
         }
         $progress = $this->get_progress();
@@ -177,6 +177,17 @@ class customscalefeedback extends feedbackgenerator {
             $existingdata['teststrategy']
         );
 
+        // Issue #14: attach the per-scale standard error so the feedback range
+        // resolver can optionally apply measurement-uncertainty gating.
+        if (isset($newdata['se']) && is_array($newdata['se'])) {
+            foreach ($personabilitiesfeedbackeditor as $scaleid => &$abilityentry) {
+                if (is_array($abilityentry) && isset($newdata['se'][$scaleid])) {
+                    $abilityentry['se'] = (float) $newdata['se'][$scaleid];
+                }
+            }
+            unset($abilityentry);
+        }
+
         return [
             'personabilities' => $personabilities,
             'customscalefeedback_abilities' => $personabilitiesfeedbackeditor,
@@ -212,23 +223,53 @@ class customscalefeedback extends feedbackgenerator {
                 continue;
             }
             $relevantscalesfound = true;
-            for ($j = 1; $j <= $quizsettings['numberoffeedbackoptionsselect']; $j++) {
-                $lowerlimitprop = sprintf('feedback_scaleid_limit_lower_%d_%d', $catscaleid, $j);
-                $lowerlimit = floatval($quizsettings[$lowerlimitprop]);
-                $upperlimitprop = sprintf('feedback_scaleid_limit_upper_%d_%d', $catscaleid, $j);
-                $upperlimit = floatval($quizsettings[$upperlimitprop]);
-                if ($personability['value'] < $lowerlimit || $personability['value'] > $upperlimit) {
+            // Issue #14: a score is assigned to exactly one range (half-open
+            // intervals), instead of matching every range whose inclusive bounds
+            // contain the value and letting the last match overwrite the earlier.
+            // When measurement-uncertainty gating is enabled (factor > 0), the
+            // whole confidence interval ability +/- k*SE must fall into one range;
+            // otherwise the classification is uncertain and a neutral transition
+            // message is shown instead of a definite range feedback.
+            $uncertaintyfactor = (float) get_config('local_catquiz', 'feedback_uncertainty_factor');
+            if ($uncertaintyfactor > 0.0) {
+                $se = isset($personability['se']) ? (float) $personability['se'] : null;
+                $rangeindex = feedback_helper::get_feedback_range_index_with_uncertainty(
+                    $quizsettings,
+                    $catscaleid,
+                    (float) $personability['value'],
+                    $se,
+                    $uncertaintyfactor
+                );
+                if ($rangeindex === null) {
+                    // Only emit the neutral notice when the point value itself is
+                    // inside the configured ranges (i.e. the interval merely
+                    // straddles a boundary), not when the value is out of range.
+                    $pointindex = feedback_helper::get_feedback_range_index(
+                        $quizsettings,
+                        $catscaleid,
+                        (float) $personability['value']
+                    );
+                    if ($pointindex !== null) {
+                        $scalefeedback[$catscaleid] = get_string('feedbackrangeuncertain', 'local_catquiz');
+                    }
                     continue;
                 }
-
-                $feedback = $this->getfeedbackforrange($catscaleid, $j, $quizsettings);
-                // Do not display empty feedback messages.
-                if (!$feedback) {
-                    continue;
-                }
-
-                $scalefeedback[$catscaleid] = $feedback;
+            } else {
+                $rangeindex = feedback_helper::get_feedback_range_index(
+                    $quizsettings,
+                    $catscaleid,
+                    (float) $personability['value']
+                );
             }
+            if ($rangeindex === null) {
+                continue;
+            }
+            $feedback = $this->getfeedbackforrange($catscaleid, $rangeindex, $quizsettings);
+            // Do not display empty feedback messages.
+            if (!$feedback) {
+                continue;
+            }
+            $scalefeedback[$catscaleid] = $feedback;
         }
 
         if (!$scalefeedback) {
@@ -269,38 +310,7 @@ class customscalefeedback extends feedbackgenerator {
      *
      */
     private function get_exclusion_reason_string(array $personabilities): string {
-
-        foreach ($personabilities as $personability) {
-            if (!isset($personability['excluded'])) {
-                continue;
-            }
-            $errorcode = array_keys($personability['error'])[0];
-            $errorarray = $personability['error'][$errorcode];
-
-            switch ($errorcode) {
-                case "rootonly": // Uses default string because information might be to complicated for users.
-                    return get_string('error:rootonly', 'local_catquiz', $errorarray);
-                case "se": // Uses default string because information might be to complicated for users.
-                    if (isset($errorarray['semindefined'])) {
-                        return get_string('error:semin', 'local_catquiz', $errorarray);
-                    } else if (isset($errorarray['semaxdefined'])) {
-                        return get_string('error:semax', 'local_catquiz', $errorarray);
-                    }
-                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
-                case "nminscale":
-                    return get_string('error:nminscale', 'local_catquiz', $errorarray);
-                case "fraction":
-                    if ($errorarray['fraction'] == 1) {
-                        return get_string('error:fraction1', 'local_catquiz');
-                    } else if ($errorarray['fraction'] == 0) {
-                        return get_string('error:fraction0', 'local_catquiz');
-                    }
-                    return get_string('noscalesfound', 'local_catquiz', $errorarray);
-                default:
-                    return get_string('noscalesfound', 'local_catquiz');
-            }
-        }
-        return get_string('noscalesfound', 'local_catquiz');
+        return \local_catquiz\teststrategy\feedback_helper::get_exclusion_reason_string($personabilities);
     }
 
     /**
