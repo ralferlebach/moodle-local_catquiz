@@ -1,5 +1,51 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082104)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase D / Issue #9: versuchsspezifische
+> Skalenergebnisse (`local_catquiz_attemptscale`) + Persistenz im Finalizer.
+> Reine local_catquiz-Arbeit. Details in `doc/session-055-changes.md`.
+
+- **Neue Tabelle `local_catquiz_attemptscale`** (install.xml + additiver
+  upgrade-Schritt): eine Zeile je finalisiertem Versuch und erfolgreich
+  getesteter Skala. FK `catattemptid` → `local_catquiz_attempts.id` (nicht das
+  mehrdeutige `attemptid`); `UNIQUE(catattemptid, catscaleid)`. Felder: score,
+  standarderror, n, fraction, isprimary, isvalid, resultsource, validationstatus,
+  timecreated.
+- **`attemptscale_repository`** (`classes/local/result/`): `save_attempt_result()`
+  schreibt genau eine Zeile je **gemessener** Skala (Upsert über Unique-Key,
+  idempotent); Carryover-only-Skalen (N=0) werden nicht historisiert, damit
+  N/Fraction/SE nie über Versuche kumuliert werden. `get_latest_valid()` und
+  `get_last_primary()` als Carryover-/Priorisierungs-Abfragen.
+- **Finalizer live verdrahtet** (#7-Erweiterungspunkt gefüllt): `finalize()`
+  validiert zentral (`attempt_result_validator::validate`), persistiert die
+  attemptscale-Zeilen und aktualisiert den `personparams`-Snapshot **nur** für
+  valide, im aktuellen Versuch gemessene Skalen — alles in derselben Transaktion
+  (Running → Completed → Validated → Persisted atomar).
+- **Tests:** `attemptscale_repository_test` (4 Tests: eine Zeile je gemessener
+  Skala, Idempotenz-Upsert, Carryover-Abfragen, **Zahn-Test** „Carryover-only
+  nicht persistiert"); `attempt_finalizer_test` erweitert um Integrationstest
+  (attemptscale + personparams-Snapshot nach Finalisierung). Behat
+  `catquiz_attemptscale_history.feature` (non-blocking).
+
+## 1.1.5 (interne Version 2026082103)
+
+> Externer Patch: Behat-Fix (`catquiz_feedback_validity`, „Scenario 001") +
+> CI-Härtung (Load-Workflows, Diagnostik/Artefakte).
+
+- **Behat-Fix `catquiz_feedback_validity.feature`:** `catquiz_minquestions` von
+  4 auf 2 gesenkt und ein Settings-Form-Round-Trip vorgeschaltet (Lehrer öffnet
+  „Settings" und speichert). Grund: Der CAT-Settings-Generator legt nur die
+  initiale JSON-Struktur an; die adaptivequiz-Integration normalisiert/
+  reserialisiert sie erst über das Aktivitäts-Settingsformular. Ohne diesen
+  Round-Trip las der Adapter unvollständige Settings und beendete den Versuch
+  bereits nach Frage 1. Gleiches Setup wie das etablierte
+  `catscales_attempt_management`-Szenario.
+- **CI (`.github/workflows/`, export-ignored):** Load-Workflows
+  (`load-jmeter`, `load-k6`) gehärtet (`MOODLE_DIR`, `--moodle=…`, robuster
+  Server-Ready-Check); Dev-/Main-Pipeline: `upload-artifact@v4 → v7`,
+  Behat mit `--dump` und angepasster Faildump-Sammlung.
+
 ## 1.1.5 (interne Version 2026082102)
 
 > Strang „Abschluss+Ergebnisspeicherung", Phase C / Issue #7: zentraler

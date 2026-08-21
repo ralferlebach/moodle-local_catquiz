@@ -16,6 +16,10 @@
 
 namespace local_catquiz\local\attempt;
 
+use local_catquiz\catquiz;
+use local_catquiz\local\result\attempt_result_validator;
+use local_catquiz\local\result\attemptscale_repository;
+
 /**
  * Authoritative, idempotent finaliser for a CATquiz attempt (Issue #5).
  *
@@ -89,15 +93,38 @@ final class attempt_finalizer {
         $catattempt->timemodified = time();
         $DB->update_record('local_catquiz_attempts', $catattempt);
 
-        // Extension point for Issues #7, #9 and #8, intentionally empty in
-        // Phase A so the attempt lifecycle does not need rebuilding later.
-        // Issue #7 validates the result centrally
-        // ($result = attempt_result_validator::validate($adaptiveattemptid)).
-        // Issue #9 persists per-attempt, per-scale results and refreshes the
-        // personparams snapshot only after a valid finalisation
-        // (attemptscale_repository::save_attempt_result($result)).
-        // Issue #8 sets resultstatus/resultvalid on the adaptivequiz_attempt
-        // from the result and $stopreason.
+        // Issue #7 + #9: validate the attempt result centrally and persist one
+        // history row per successfully tested scale. This runs exactly once (the
+        // idempotency guard above prevents re-finalisation) and inside the same
+        // transaction as the end-time stamp, so the attempt becomes
+        // Completed -> Validated -> Persisted atomically.
+        $result = attempt_result_validator::validate($adaptiveattemptid);
+        $contextid = ($catattempt->contextid !== null) ? (int) $catattempt->contextid : null;
+        attemptscale_repository::save_attempt_result(
+            (int) $catattempt->id,
+            (int) $catattempt->userid,
+            $contextid,
+            $result
+        );
+
+        // Issue #9: refresh the personparams "latest known state" snapshot only
+        // now, and only for valid scales measured in this attempt - never from a
+        // mere carry-over or an intermediate estimate.
+        if ($contextid !== null) {
+            foreach ($result->get_scale_results() as $scaleresult) {
+                if ($scaleresult->valid && $scaleresult->score !== null) {
+                    catquiz::update_person_param(
+                        (int) $catattempt->userid,
+                        $contextid,
+                        $scaleresult->scaleid,
+                        (float) $scaleresult->score
+                    );
+                }
+            }
+        }
+
+        // Issue #8 will additionally set resultstatus/resultvalid on the
+        // adaptivequiz_attempt from $result and $stopreason.
         unset($stopreason);
 
         $transaction->allow_commit();

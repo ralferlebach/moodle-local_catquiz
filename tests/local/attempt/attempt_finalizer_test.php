@@ -110,6 +110,59 @@ final class attempt_finalizer_test extends advanced_testcase {
     }
 
     /**
+     * Issue #9: finalising an attempt whose stored data carries per-scale
+     * abilities persists one attemptscale row per measured scale and refreshes
+     * the personparams snapshot for the valid primary scale.
+     */
+    public function test_finalize_persists_scale_results(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $now = time();
+        $json = json_encode([
+            'personabilities_abilities' => [
+                5 => ['value' => 0.4, 'toreport' => true],
+                6 => ['value' => 0.2, 'toreport' => true, 'excluded' => true,
+                    'error' => ['nminscale' => ['nminscaledefined' => 5, 'nscalecurrent' => 1]]],
+            ],
+            'se' => [5 => 0.3, 6 => 0.9],
+        ]);
+        $adaptiveattemptid = $DB->insert_record('adaptivequiz_attempt', (object) [
+            'instance' => 1, 'userid' => 2, 'uniqueid' => 7777, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 6, 'difficultysum' => 0,
+            'standarderror' => 0.3, 'measure' => 0, 'timefinished' => null, 'timecreated' => $now, 'timemodified' => $now,
+        ]);
+        $catid = $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => 2, 'scaleid' => 5, 'contextid' => 9, 'attemptid' => $adaptiveattemptid,
+            'component' => 'mod_adaptivequiz', 'status' => 0, 'number_of_testitems_used' => 6,
+            'endtime' => null, 'json' => $json, 'timecreated' => $now, 'timemodified' => $now,
+        ]);
+
+        // Without progress data N per scale is unknown, so measuredincurrentattempt
+        // defaults to true and both reported scales are historised.
+        $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
+
+        $rows = $DB->get_records('local_catquiz_attemptscale', ['catattemptid' => $catid]);
+        $byscale = [];
+        foreach ($rows as $row) {
+            $byscale[(int) $row->catscaleid] = $row;
+        }
+        $this->assertArrayHasKey(5, $byscale);
+        $this->assertArrayHasKey(6, $byscale);
+        $this->assertEquals(1, $byscale[5]->isvalid);
+        $this->assertEquals(1, $byscale[5]->isprimary);
+        $this->assertEquals(0, $byscale[6]->isvalid);
+
+        // The personparams snapshot is refreshed for the valid primary scale.
+        $snapshot = $DB->get_record(
+            'local_catquiz_personparams',
+            ['userid' => 2, 'contextid' => 9, 'catscaleid' => 5]
+        );
+        $this->assertNotFalse($snapshot);
+        $this->assertEquals(0.4, (float) $snapshot->ability);
+    }
+
+    /**
      * Create a running adaptive quiz attempt together with its local CAT row
      * (endtime = null), returning [adaptivequiz_attempt.id, local attempt id].
      *

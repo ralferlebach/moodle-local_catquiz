@@ -1248,5 +1248,44 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026082100, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026082104) {
+        // Issue #9: per-attempt, per-scale result history. One row per finalised
+        // attempt and successfully tested scale; written only by the finaliser
+        // after validation. Additive and idempotent.
+        $table = new xmldb_table('local_catquiz_attemptscale');
+        if (!$dbman->table_exists($table)) {
+            $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+            $table->add_field('catattemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('contextid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+            $table->add_field('catscaleid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('score', XMLDB_TYPE_NUMBER, '10, 4', null, null, null, null);
+            $table->add_field('standarderror', XMLDB_TYPE_NUMBER, '10, 4', null, null, null, null);
+            $table->add_field('n', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+            $table->add_field('fraction', XMLDB_TYPE_NUMBER, '10, 4', null, null, null, null);
+            $table->add_field('isprimary', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('isvalid', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+            $table->add_field('resultsource', XMLDB_TYPE_CHAR, '20', null, null, null, null);
+            $table->add_field('validationstatus', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+            $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+
+            $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+            $table->add_key('catattemptid', XMLDB_KEY_FOREIGN, ['catattemptid'], 'local_catquiz_attempts', ['id']);
+            $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+            $table->add_key('catscaleid', XMLDB_KEY_FOREIGN, ['catscaleid'], 'local_catquiz_catscales', ['id']);
+            $table->add_key('contextid', XMLDB_KEY_FOREIGN, ['contextid'], 'local_catquiz_catcontext', ['id']);
+            $table->add_key('catattemptid_catscaleid', XMLDB_KEY_UNIQUE, ['catattemptid', 'catscaleid']);
+
+            $table->add_index('userid_contextid_catscaleid', XMLDB_INDEX_NOTUNIQUE, ['userid', 'contextid', 'catscaleid']);
+            $table->add_index('isvalid', XMLDB_INDEX_NOTUNIQUE, ['isvalid']);
+            $table->add_index('isprimary', XMLDB_INDEX_NOTUNIQUE, ['isprimary']);
+
+            $dbman->create_table($table);
+        }
+
+        // Catquiz savepoint reached.
+        upgrade_plugin_savepoint(true, 2026082104, 'local', 'catquiz');
+    }
+
     return true;
 }
