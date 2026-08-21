@@ -1,5 +1,24 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082009)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #15 (Peer-Vergleich kontexttreu
+> und statistisch korrekt). Details in `doc/session-041-changes.md`.
+
+- **#15 Peer-Query-Service:** Neuer geteilter `catquiz::get_peer_comparison_stats`
+  mit **SQL-Aggregaten** (statt Vollabfrage nach PHP): gleicher Kontext + Skala,
+  **genau ein Wert je Person** (letzter personparam je Nutzer), **aktueller
+  Benutzer ausgeschlossen**; liefert `n`, Mittelwert, `lowercount`, `equalcount`.
+- **#15 Midrank-Perzentil:** `100 × (n_kleiner + 0,5 × n_gleich) / n_peers` –
+  Bindungen werden hälftig geteilt; der verglichene Nutzer ist nicht Teil von
+  `n_peers`.
+- **#15 Mindest-N** basiert nun auf eindeutigen Peers (`n`), Mittelwert schließt
+  den Nutzer aus.
+- **#15 Histogramm** filtert jetzt zusätzlich nach `contextid` (keine
+  kontextübergreifenden Peer-Daten mehr).
+- Neuer Test `peer_comparison_stats_test` (Bezugsgruppe, Dedup, Midrank,
+  zahn-getestet).
+
 ## 1.1.5 (interne Version 2026082008)
 
 > Strang „Diagramme+Feedback+Statistik": Issue #14 (benutzerdefinierte

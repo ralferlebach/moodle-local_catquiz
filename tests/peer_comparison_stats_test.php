@@ -1,0 +1,138 @@
+<?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Issue #15: context-true, statistically sound peer comparison.
+ *
+ * @package    local_catquiz
+ * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+namespace local_catquiz;
+
+use advanced_testcase;
+
+/**
+ * Peer comparison reference group and midrank percentile (issue #15).
+ *
+ * @package    local_catquiz
+ * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \local_catquiz\catquiz::get_peer_comparison_stats
+ */
+final class peer_comparison_stats_test extends advanced_testcase {
+    /** @var int Scale id. */
+    private $scaleid = 7;
+    /** @var int Context id. */
+    private $contextid = 90;
+    /** @var int A different context (must not leak in). */
+    private $othercontext = 91;
+
+    /**
+     * Inserts a person parameter row.
+     *
+     * @param int $userid
+     * @param float $ability
+     * @param int $contextid
+     * @return void
+     */
+    private function pp(int $userid, float $ability, int $contextid): void {
+        global $DB;
+        $DB->insert_record('local_catquiz_personparams', (object) [
+            'userid' => $userid,
+            'catscaleid' => $this->scaleid,
+            'contextid' => $contextid,
+            'ability' => $ability,
+            'status' => 1,
+            'timecreated' => time(),
+            'timemodified' => time(),
+        ]);
+    }
+
+    /**
+     * Seeds a reference group and returns the compared user's id.
+     *
+     * Peers in context: u1=0.0, u2=1.0, u3=1.0, u4=2.0. The compared user u10
+     * has ability 1.0. u4 has an older, superseded row that must be ignored.
+     * Another context and another scale add noise that must not leak in.
+     *
+     * @return void
+     */
+    private function seed(): void {
+        // Peers.
+        $this->pp(1, 0.0, $this->contextid);
+        $this->pp(2, 1.0, $this->contextid);
+        $this->pp(3, 1.0, $this->contextid);
+        // User u4: an older row (5.0) then a newer row (2.0). Only the newer counts.
+        $this->pp(4, 5.0, $this->contextid);
+        $this->pp(4, 2.0, $this->contextid);
+        // The compared user is also in the table but must be excluded.
+        $this->pp(10, 1.0, $this->contextid);
+        // Cross-context noise (same scale, different context).
+        $this->pp(5, 1.0, $this->othercontext);
+        $this->pp(6, -3.0, $this->othercontext);
+    }
+
+    /**
+     * The reference group is context-true, one-per-person and excludes the user.
+     *
+     * @return void
+     */
+    public function test_reference_group_scoping(): void {
+        $this->resetAfterTest();
+        $this->seed();
+        $stats = catquiz::get_peer_comparison_stats($this->contextid, $this->scaleid, 1.0, 10);
+        // Distinct peers: u1, u2, u3, u4 -> 4 (u10 excluded, u4 counted once,
+        // other-context users ignored).
+        $this->assertSame(4, $stats->n);
+        // Mean of {0.0, 1.0, 1.0, 2.0} = 1.0.
+        $this->assertEqualsWithDelta(1.0, $stats->meanvalue, 0.0001);
+    }
+
+    /**
+     * The midrank percentile splits ties evenly.
+     *
+     * @return void
+     */
+    public function test_midrank_percentile(): void {
+        $this->resetAfterTest();
+        $this->seed();
+        $score = 1.0;
+        $stats = catquiz::get_peer_comparison_stats($this->contextid, $this->scaleid, $score, 10);
+        // Peers {0.0, 1.0, 1.0, 2.0}: lower = 1 (the 0.0), equal = 2 (both 1.0).
+        $this->assertSame(1, $stats->lowercount);
+        $this->assertSame(2, $stats->equalcount);
+        // Midrank percentile = 100 * (1 + 0.5 * 2) / 4 = 50.
+        $percentile = (($stats->lowercount + 0.5 * $stats->equalcount) / $stats->n) * 100;
+        $this->assertEqualsWithDelta(50.0, $percentile, 0.0001);
+    }
+
+    /**
+     * An empty reference group yields zero counts.
+     *
+     * @return void
+     */
+    public function test_empty_reference_group(): void {
+        $this->resetAfterTest();
+        // Only the compared user exists -> no peers.
+        $this->pp(10, 1.0, $this->contextid);
+        $stats = catquiz::get_peer_comparison_stats($this->contextid, $this->scaleid, 1.0, 10);
+        $this->assertSame(0, $stats->n);
+        $this->assertSame(0, $stats->lowercount);
+        $this->assertSame(0, $stats->equalcount);
+    }
+}

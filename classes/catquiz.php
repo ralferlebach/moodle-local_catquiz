@@ -1445,6 +1445,71 @@ class catquiz {
     }
 
     /**
+     * Returns aggregated peer-comparison statistics for one context and scale.
+     *
+     * Issue #15: the reference group is context-true and statistically sound.
+     * It comprises, within the given CAT context and scale, exactly one value per
+     * person (the latest personparam per user), excludes the compared user, and
+     * is aggregated in SQL rather than loading every row into PHP. The returned
+     * counts allow a midrank percentile:
+     *     100 * (lowercount + 0.5 * equalcount) / n
+     * where n is the number of distinct peers.
+     *
+     * @param int $contextid     CAT context the comparison is scoped to.
+     * @param int $catscaleid    Scale the comparison is scoped to.
+     * @param float $score       The compared person's ability (rounded to 4 dp).
+     * @param int $excludeuserid The user to exclude from the reference group.
+     *
+     * @return \stdClass Object with n, meanvalue, lowercount, equalcount.
+     */
+    public static function get_peer_comparison_stats(
+        int $contextid,
+        int $catscaleid,
+        float $score,
+        int $excludeuserid
+    ): \stdClass {
+        global $DB;
+        // Compare at the stored precision (4 decimals) so ties are detected.
+        $score = round($score, 4);
+        $sql = "
+            SELECT
+                COUNT(1) AS n,
+                AVG(peers.ability) AS meanvalue,
+                SUM(CASE WHEN peers.ability < :scorelt THEN 1 ELSE 0 END) AS lowercount,
+                SUM(CASE WHEN peers.ability = :scoreeq THEN 1 ELSE 0 END) AS equalcount
+            FROM (
+                SELECT pp.userid, pp.ability
+                FROM {local_catquiz_personparams} pp
+                WHERE pp.contextid = :contextid
+                  AND pp.catscaleid = :catscaleid
+                  AND pp.userid <> :excludeuserid
+                  AND pp.ability IS NOT NULL
+                  AND pp.id = (
+                      SELECT MAX(pp2.id)
+                      FROM {local_catquiz_personparams} pp2
+                      WHERE pp2.contextid = pp.contextid
+                        AND pp2.catscaleid = pp.catscaleid
+                        AND pp2.userid = pp.userid
+                        AND pp2.ability IS NOT NULL
+                  )
+            ) peers";
+        $params = [
+            'contextid' => $contextid,
+            'catscaleid' => $catscaleid,
+            'excludeuserid' => $excludeuserid,
+            'scorelt' => $score,
+            'scoreeq' => $score,
+        ];
+        $record = $DB->get_record_sql($sql, $params);
+        return (object) [
+            'n' => (int) ($record->n ?? 0),
+            'meanvalue' => $record->meanvalue !== null ? (float) $record->meanvalue : 0.0,
+            'lowercount' => (int) ($record->lowercount ?? 0),
+            'equalcount' => (int) ($record->equalcount ?? 0),
+        ];
+    }
+
+    /**
      * Get last user attemptid.
      *
      * @param int $userid
