@@ -352,12 +352,12 @@ class catquizstatistics {
         $models = model_strategy::get_installed_models();
         $fisherinfos = $feedbackhelper->get_fisherinfos_of_items($items, $models, $abilitysteps);
         $attempts = $this->get_attempts();
-        // Prepare data for scorecounter bars.
-        $userids = array_unique(array_map(fn ($attempt) => $attempt->userid, $attempts));
-        $abilityrecords = [];
-        if ($userids) {
-            $abilityrecords = catquiz::get_person_abilities($this->contextid, [$this->scaleid], $userids);
-        }
+        // Issue #16: build the histogram from the historical attempt snapshots
+        // (personability_after_attempt at the time of the attempt), not from the
+        // person's current parameter. Person-weighted: one value per person, the
+        // latest attempt in the selected period.
+        $historicalabilities = catquiz::get_snapshot_ability_per_person($attempts, 'last');
+        $abilityrecords = array_map(fn ($ability) => (object) ['ability' => $ability], $historicalabilities);
         $abilityseries = [];
         $quizsettings = reset($this->quizsettings); // TODO: check if the settings match for all tests.
         foreach ($abilitysteps as $as) {

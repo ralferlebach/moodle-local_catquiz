@@ -1,6 +1,23 @@
 # Changelog – local_catquiz
 
-## 1.1.5 (interne Version 2026082009)
+## 1.1.5 (interne Version 2026082011)
+
+> Strang „Diagramme+Feedback+Statistik": Issue #16 (historische
+> Lehrendenstatistiken auf Versuchssnapshots). Details in
+> `doc/session-042-changes.md`.
+
+- **#16 Historische Snapshots:** Die Lehrenden-Statistik (Histogramm in
+  `catquizstatistics`) baut jetzt auf `personability_after_attempt` (Wert **zum
+  Zeitpunkt des Versuchs**) statt auf `get_person_abilities` (aktueller
+  Parameter). Neuer geteilter Helfer `catquiz::get_snapshot_ability_per_person`.
+- **#16 Mehrfachversuche:** dokumentierte Auswahlregel (`last`/`first`/`best`),
+  **ein Wert je Person** (personengewichtet) — Personen mit mehreren Versuchen
+  werden einmal gewichtet.
+- **#16 Legacy:** Versuche ohne Snapshot werden ausgeschlossen.
+- Neuer Test `statistics_snapshot_test` (historische Werte, Mehrfachversuche,
+  Legacy-Ausschluss, zahn-getestet).
+
+## 1.1.5 (interne Version 2026082010)
 
 > Strang „Diagramme+Feedback+Statistik": Issue #15 (Peer-Vergleich kontexttreu
 > und statistisch korrekt). Details in `doc/session-041-changes.md`.
@@ -16,6 +33,11 @@
   den Nutzer aus.
 - **#15 Histogramm** filtert jetzt zusätzlich nach `contextid` (keine
   kontextübergreifenden Peer-Daten mehr).
+- **#15 Nur gültige Ergebnisse (Ergebnis aus #10):** Der Peer-Service zählt nur
+  endliche, **nicht-gesättigte** Abilities (`ABS(ability) < MODEL_POS_INF`).
+  Divergierte Ergebnisse (u. a. die von #10 als ungültig erkannten Faelle
+  ‚alle richtig/falsch‘ mit Fraction 0/1) werden beim Speichern auf ±1000
+  geklemmt und damit als ungueltig aus der Bezugsgruppe ausgeschlossen.
 - Neuer Test `peer_comparison_stats_test` (Bezugsgruppe, Dedup, Midrank,
   zahn-getestet).
 

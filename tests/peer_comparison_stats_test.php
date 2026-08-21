@@ -25,6 +25,7 @@
 namespace local_catquiz;
 
 use advanced_testcase;
+use local_catquiz\local\model\model_person_param;
 
 /**
  * Peer comparison reference group and midrank percentile (issue #15).
@@ -82,6 +83,10 @@ final class peer_comparison_stats_test extends advanced_testcase {
         $this->pp(4, 2.0, $this->contextid);
         // The compared user is also in the table but must be excluded.
         $this->pp(10, 1.0, $this->contextid);
+        // An invalid (diverged) result clamped to the saturation bound must not
+        // count as a peer (issue #10 / #15).
+        $this->pp(7, model_person_param::MODEL_POS_INF, $this->contextid);
+        $this->pp(8, -model_person_param::MODEL_POS_INF, $this->contextid);
         // Cross-context noise (same scale, different context).
         $this->pp(5, 1.0, $this->othercontext);
         $this->pp(6, -3.0, $this->othercontext);
@@ -134,5 +139,18 @@ final class peer_comparison_stats_test extends advanced_testcase {
         $this->assertSame(0, $stats->n);
         $this->assertSame(0, $stats->lowercount);
         $this->assertSame(0, $stats->equalcount);
+    }
+
+    /**
+     * Diverged (saturated) results do not count as valid peers.
+     *
+     * @return void
+     */
+    public function test_saturated_results_excluded(): void {
+        $this->resetAfterTest();
+        $this->seed();
+        // Peers with |ability| == MODEL_POS_INF (users 7, 8) must be ignored.
+        $stats = catquiz::get_peer_comparison_stats($this->contextid, $this->scaleid, 1.0, 10);
+        $this->assertSame(4, $stats->n, 'Saturated results must not be counted as peers.');
     }
 }

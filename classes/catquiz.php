@@ -26,6 +26,7 @@ namespace local_catquiz;
 
 use dml_exception;
 use local_catquiz\data\dataapi;
+use local_catquiz\local\model\model_person_param;
 use local_catquiz\event\usertocourse_enroled;
 use local_catquiz\event\usertogroup_enroled;
 use local_catquiz\local\status;
@@ -1445,6 +1446,58 @@ class catquiz {
     }
 
     /**
+     * Reduces attempt snapshots to one historical ability per person.
+     *
+     * Issue #16: historical statistics must use the ability recorded at the time
+     * of the attempt (personability_after_attempt), not the person's current
+     * parameter. For a person-weighted analysis exactly one value per person is
+     * used; the documented rule here is the latest attempt in the period (by
+     * endtime). Attempts without a stored snapshot (legacy) are excluded.
+     *
+     * @param array $attempts Attempt records with userid, endtime and
+     *                        personability_after_attempt.
+     * @param string $rule    Selection rule for multiple attempts: 'last',
+     *                        'first' or 'best'.
+     *
+     * @return array Map of userid => historical ability (float).
+     */
+    public static function get_snapshot_ability_per_person(array $attempts, string $rule = 'last'): array {
+        $byuser = [];
+        foreach ($attempts as $attempt) {
+            if (!isset($attempt->personability_after_attempt) || $attempt->personability_after_attempt === null) {
+                // Legacy attempt without a snapshot: excluded from historical stats.
+                continue;
+            }
+            $userid = (int) $attempt->userid;
+            $endtime = (int) ($attempt->endtime ?? 0);
+            $ability = (float) $attempt->personability_after_attempt;
+
+            if (!isset($byuser[$userid])) {
+                $byuser[$userid] = ['endtime' => $endtime, 'ability' => $ability];
+                continue;
+            }
+            $current = $byuser[$userid];
+            $take = false;
+            switch ($rule) {
+                case 'first':
+                    $take = $endtime < $current['endtime'];
+                    break;
+                case 'best':
+                    $take = $ability > $current['ability'];
+                    break;
+                case 'last':
+                default:
+                    $take = $endtime >= $current['endtime'];
+                    break;
+            }
+            if ($take) {
+                $byuser[$userid] = ['endtime' => $endtime, 'ability' => $ability];
+            }
+        }
+        return array_map(fn ($v) => $v['ability'], $byuser);
+    }
+
+    /**
      * Returns aggregated peer-comparison statistics for one context and scale.
      *
      * Issue #15: the reference group is context-true and statistically sound.
@@ -1471,6 +1524,11 @@ class catquiz {
         global $DB;
         // Compare at the stored precision (4 decimals) so ties are detected.
         $score = round($score, 4);
+        // Issue #15 + #10: only valid results count as peers. Invalid results
+        // (e.g. the "all correct" / "all wrong" case that #10 excludes from
+        // feedback) diverge and are stored clamped to the saturation bound
+        // ±MODEL_POS_INF; a valid ability is strictly inside that bound.
+        $inf = model_person_param::MODEL_POS_INF;
         $sql = "
             SELECT
                 COUNT(1) AS n,
@@ -1484,6 +1542,7 @@ class catquiz {
                   AND pp.catscaleid = :catscaleid
                   AND pp.userid <> :excludeuserid
                   AND pp.ability IS NOT NULL
+                  AND ABS(pp.ability) < :inf
                   AND pp.id = (
                       SELECT MAX(pp2.id)
                       FROM {local_catquiz_personparams} pp2
@@ -1491,6 +1550,7 @@ class catquiz {
                         AND pp2.catscaleid = pp.catscaleid
                         AND pp2.userid = pp.userid
                         AND pp2.ability IS NOT NULL
+                        AND ABS(pp2.ability) < :inf2
                   )
             ) peers";
         $params = [
@@ -1499,6 +1559,8 @@ class catquiz {
             'excludeuserid' => $excludeuserid,
             'scorelt' => $score,
             'scoreeq' => $score,
+            'inf' => $inf,
+            'inf2' => $inf,
         ];
         $record = $DB->get_record_sql($sql, $params);
         return (object) [
