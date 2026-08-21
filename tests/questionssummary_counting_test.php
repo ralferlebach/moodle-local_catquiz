@@ -97,7 +97,7 @@ final class questionssummary_counting_test extends advanced_testcase {
         $quba = question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
         $quba->set_preferred_behaviour('deferredfeedback');
 
-        // q1 correct, q2 wrong.
+        // Question q1 correct, question q2 wrong.
         foreach ([0 => true, 1 => false] as $i => $answercorrect) {
             $question = question_bank::load_question($questionids[$i]);
             $slot = $quba->add_question($question);
@@ -111,7 +111,7 @@ final class questionssummary_counting_test extends advanced_testcase {
         }
         $quba->finish_all_questions(time());
 
-        // q3 started but not answered -> no graded step -> unanswered.
+        // Question q3 started but not answered -> no graded step -> unanswered.
         $q3 = question_bank::load_question($questionids[2]);
         $slot3 = $quba->add_question($q3);
         $quba->start_question($slot3);
@@ -168,7 +168,7 @@ final class questionssummary_counting_test extends advanced_testcase {
         $rows = catquiz::get_attempt_statistics($attemptid);
         // Exactly one row per question (three questions), never per step.
         $this->assertCount(3, $rows, 'Each question must appear exactly once.');
-        // q1 must carry the fraction of its LAST graded step (the injected 0.5).
+        // Question q1 must carry the fraction of its LAST graded step (the injected 0.5).
         $q1row = array_values(array_filter($rows, fn($r) => (int) $r->questionid === $qids[0]))[0];
         $this->assertEqualsWithDelta(0.5, (float) $q1row->fraction, 0.0001);
     }
@@ -197,7 +197,7 @@ final class questionssummary_counting_test extends advanced_testcase {
         $data = $generator->load_data($attemptid, [], []);
         $summary = $data['questionssummary'];
 
-        // q1 correct -> right; q2 wrong but pilot -> excluded; q3 unanswered.
+        // Question q1 correct -> right; q2 wrong but pilot -> excluded; q3 unanswered.
         $this->assertSame(1, $summary['gradedright']);
         $this->assertSame(0, $summary['gradedwrong'], 'The wrong answer was a pilot and must be excluded.');
         $this->assertSame(1, $summary['gradedunanswered'], 'The started-but-unanswered question is unanswered, not wrong.');

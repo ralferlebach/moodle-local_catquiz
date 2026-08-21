@@ -74,7 +74,7 @@ final class statistics_snapshot_test extends advanced_testcase {
      */
     public function test_first_rule_uses_historical_value(): void {
         $result = catquiz::get_snapshot_ability_per_person($this->attempts(), 'first');
-        // u1's first attempt value is 0.2, not the later 0.8.
+        // User u1 first attempt value is 0.2, not the later 0.8.
         $this->assertEqualsWithDelta(0.2, $result[1], 0.0001);
     }
 

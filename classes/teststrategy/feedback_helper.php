@@ -465,6 +465,8 @@ class feedback_helper {
      * @param int $scaleid
      * @param int $timerange
      * @param bool $allowempty If set to yes, missing abilities are returned as null.
+     * @param bool $perperson If true, reduce to one value per person and period.
+     * @param string $rule Selection rule when reducing per person: last/first/best.
      *
      * @return array
      *

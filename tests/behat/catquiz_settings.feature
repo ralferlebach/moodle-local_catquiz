@@ -308,10 +308,13 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     ## Checkpoint C: after save + reload the native <select> must still hold the
     ## course (the value that persisted), checked before the visible chips.
     And the autocomplete number "2" for "fitem_id_catquiz_courses_" has "Course 1" natively selected
-    ## -direct xpath access
-    And I should see "Course 1" in the "(//div[contains(@id, 'fitem_id_catquiz_courses_')])[2]//div[contains(@id, 'form_autocomplete_selection-')]" "xpath_element"
-    ## -the data-attribute from form's custom 'div'-delimited group has been used
-    And I should see "Course 1" in the "//div[@data-name='feedback_scale_Simulation_range_2']//div[contains(@id, 'form_autocomplete_selection-')]" "xpath_element"
+    ## -direct xpath access; target the real selection listbox (role='listbox'),
+    ## not the sibling '-announcer' div whose id also contains
+    ## 'form_autocomplete_selection-' and which Moodle empties again.
+    And I should see "Course 1" in the "(//div[contains(@id, 'fitem_id_catquiz_courses_')])[2]//div[@role='listbox' and contains(concat(' ', normalize-space(@class), ' '), ' form-autocomplete-selection ')]" "xpath_element"
+    ## -the data-attribute from form's custom 'div'-delimited group has been used;
+    ## assert the selected chip directly (span role='option' aria-selected='true').
+    And I should see "Course 1" in the "//div[@data-name='feedback_scale_Simulation_range_2']//div[@role='listbox']//span[@role='option' and @aria-selected='true']" "xpath_element"
     ## -native selection does not work with autocomplete
     ##And the field "Subscription to a course" in the "//div[@data-name='feedback_scale_Simulation_range_2']" "xpath_element" matches value "Course 1"
 

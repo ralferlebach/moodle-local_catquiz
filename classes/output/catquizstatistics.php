@@ -745,6 +745,7 @@ class catquizstatistics {
      * Return attempts for the time range of this object
      *
      * @param bool $allowempty
+     * @param bool $perperson If true, reduce to one value per person and period.
      * @return array
      */
     private function get_attempts_by_timerange(bool $allowempty = false, bool $perperson = false): array {

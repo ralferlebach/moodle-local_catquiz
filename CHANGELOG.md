@@ -1,5 +1,25 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082013)
+
+> Strang „Diagramme+Feedback+Statistik": CI-Nacharbeit (phpcs-Warnungen,
+> Lang-Reihenfolge, PHPDoc, zwei Behat-Szenarien). Details in
+> `doc/session-044-changes.md`.
+
+- **phpcs:** Inline-Kommentar-Großschreibung in `questionssummary_counting_test`
+  und `statistics_snapshot_test`; Lang-Schlüsselreihenfolge (EN/DE) korrigiert.
+- **PHPDoc:** fehlende `@param`-Einträge ergänzt für die neuen Parameter
+  `order_attempts_by_timerange` (`perperson`, `rule`), `get_attempts_by_timerange`
+  (`perperson`) und `render_question_with_response::execute` (`questionattemptid`).
+- **Behat „invalid attempt":** Szenario nutzt jetzt konsistent
+  `catquiz_minquestions = 4`, damit deterministisch vier Fragen gespielt werden;
+  die „Infer lowest skill gap"-Strategie invalidiert bei `fraction >= 1` (alle
+  richtig) → alle Skalen ausgeschlossen → zentrale Meldung.
+- **Behat „autocomplete":** XPath trifft nicht mehr das leere
+  `form_autocomplete_selection-…-announcer`-`div`, sondern die echte
+  `role='listbox'`-Auswahl bzw. den selektierten Chip
+  (`span[@role='option' and @aria-selected='true']`). Kein Produktcode.
+
 ## 1.1.5 (interne Version 2026082012)
 
 > Strang „Diagramme+Feedback+Statistik": Konsistenz Exporte = Anzeige-Regeln,

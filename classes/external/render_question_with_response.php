@@ -75,6 +75,7 @@ class render_question_with_response extends external_api {
      *
      * @param int $slot
      * @param int $attemptid
+     * @param int $questionattemptid Optional question attempt id to verify the slot mapping.
      *
      * @return array
      */
