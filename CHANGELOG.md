@@ -1,5 +1,59 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082021)
+
+> Behat-Fix (CAT-Steuerung) + Härtungen aus externer Expertise; CI: phpmd/phpcpd
+> als eigenständiger Job. Details in `doc/session-050-changes.md`.
+
+- **Produktfix `filterbytestinfo`:** Die Hauptskala wird jetzt erst dann durch
+  Testinformation/SE deaktiviert, wenn die global konfigurierte Mindestfragenzahl
+  (`catquiz_minquestions`) erreicht ist – analog zu `filterbystandarderror`.
+  Behebt, dass Versuche mit `catquiz_minquestions = 4` bereits nach Frage 1 auf
+  `attemptfinished.php` landeten (Ursache der beiden roten Feedback-Behat-Szenarien).
+- **Regressionstest** `filterbytestinfo_minquestions_test`: Hauptskala bleibt bei
+  `minimumquestions=4` nach Frage 1–3 aktiv, darf ab Frage 4 deaktiviert werden;
+  ohne globales Minimum gilt weiter das alte Verhalten. Zahn-getestet.
+- **Generator-Härtung** (`tests/generator/lib.php`): optionale Settings nur bei
+  tatsächlicher Angabe überschreiben (kein Zerstören der Fixture-Defaults mit
+  `null` mehr, z. B. `catquiz_minquestionspersubscale`).
+- **Eventlog-Behat entflakt:** flakiger Import-Event-Assert („Testitem added")
+  entfernt (Pagination-abhängig); Emission jetzt deterministisch per PHPUnit
+  (`eventlog_testitemadded_test`) abgedeckt. Die deterministischen r1-Asserts
+  (Attempt-Completion) bleiben.
+- **Observer-Bugfix:** `strpos($classname, 'local_catquiz') >= 0` (immer wahr!) →
+  `str_contains(...)`; verhindert Cache-Invalidierung bei jedem Moodle-Event.
+- **CI (dev):** `phpmd`/`phpcpd` in einen eigenständigen, install-freien Job
+  `codeanalysis` (advisory, non-blocking) ausgelagert. `lint-php`
+  (phplint + codechecker) schaltet `phpunit`/`behat` nun sofort frei – phpmd/phpcpd
+  sind keine Voraussetzung mehr.
+
+## 1.1.5 (interne Version 2026082020)
+
+> CI-Beschleunigung: Composer-/npm-Caching; `phpmd`/`phpcpd` in den
+> install-freien `lint-php`-Job verschoben. Details in
+> `doc/session-049-changes.md`.
+
+- **Composer-Cache** (`actions/cache`, `~/.cache/composer`) in allen Install-Jobs
+  von dev + main sowie den Last-Test-Workflows; **npm-Cache** (`~/.npm`) in den
+  Grunt-Jobs. Spart bei catquiz besonders viel, da jeder Install sechs externe
+  Plugin-Abhängigkeiten zieht.
+- **`phpmd`/`phpcpd`** (non-blocking) von `quality` in `lint-php` verschoben:
+  beide laufen auf dem Quellcode ohne Moodle-Install und gehören damit zu den
+  install-freien PHP-Checks. `lint-php` bleibt ein valides Gate (beide
+  `continue-on-error`). `quality` ist jetzt schlank: `phpdoc`/`savepoints`/
+  `validate` (die den Moodle-Baum brauchen).
+
+## 1.1.5 (interne Version 2026082019)
+
+- **Dev-CI:** redundante `lint-jsamd`→`ci-complete`-Kante entfernt (transitiv über
+  `behat` abgedeckt).
+
+## 1.1.5 (interne Version 2026082018)
+
+- **phpcs-Fix:** Leerzeile vor der schließenden Klassen-`}` in
+  `feedback_ranges_test.php` entfernt
+  (`PSR2.Classes.ClassDeclaration.CloseBraceAfterBody`).
+
 ## 1.1.5 (interne Version 2026082017)
 
 > phpcs-Fix (Lang-Reihenfolge) + weitere Dev-Pipeline-Aufteilung. Details in

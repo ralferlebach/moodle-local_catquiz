@@ -6,9 +6,10 @@
 # suites; the slower quality checks run ALONGSIDE unit/behat instead of gating
 # them:
 #
-#     lint-php   (phplint, phpcs) ──┬─▶ phpunit ─┐
-#     lint-jsamd (grunt, mustache) ─┴─▶ behat  ──┤
-#     quality    (phpdoc, savepoints, validate)                 ── parallel ──┘
+#     lint-php     (phplint, phpcs) ──┬─▶ phpunit ─┐
+#     lint-jsamd   (grunt, mustache) ─┴─▶ behat  ──┤
+#     quality      (phpdoc, savepoints, validate)   ─── parallel to unit/behat ───┤
+#     codeanalysis (phpmd, phpcpd, advisory)        ─── parallel, non-blocking ──┘
 #
 # Each job tees its output into ci-logs/ and offers it as an "error summary" ZIP
 # artifact (always); the Behat job additionally offers the failure screenshots +
@@ -40,7 +41,7 @@ jobs:
 
   # ── PHP lint gate (no Moodle install - fast) ────────────────────────────
   lint-php:
-    name: "PHP lint (phplint + phpcs + phpmd + phpcpd)"
+    name: "PHP lint (phplint + phpcs)"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +78,56 @@ jobs:
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci codechecker plugin --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment 2>&1 | tee ci-logs/codechecker.log
 
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          { echo "job: lint-php"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs:"; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-summary-dev-lint-php
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # -- Advisory code analysis (no install, non-blocking, standalone) ------
+  # phpmd / phpcpd run on the source and are NOT a prerequisite of phpunit or
+  # behat: phplint + codechecker (lint-php) unlock those directly, so a slow or
+  # noisy analysis never delays the test suites. continue-on-error keeps them
+  # advisory; this job is intentionally not part of ci-complete.
+  codeanalysis:
+    name: "Code analysis (phpmd + phpcpd)"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+
       - name: PHP Mess Detector
         continue-on-error: true
         if: ${{ always() }}
@@ -90,14 +141,14 @@ jobs:
       - name: Collect error summary
         if: ${{ always() }}
         run: |
-          { echo "job: lint-php"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs:"; ls -1 ci-logs; } > ci-logs/summary.txt
+          { echo "job: codeanalysis"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs:"; ls -1 ci-logs; } > ci-logs/summary.txt
           cat ci-logs/summary.txt
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: error-summary-dev-lint-php
+          name: error-summary-dev-codeanalysis
           path: ci-logs
           retention-days: 7
           if-no-files-found: ignore
