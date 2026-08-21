@@ -32,15 +32,18 @@ Feature: Feedback output is bound to a valid CAT result.
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_minquestions | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 2                    | 4                    | 0.0                       | 1000.0                    | 2                       |
-    ## The generator above already persists the CAT settings. Do not round-trip
-    ## them through the activity form here: form persistence has its own Behat
-    ## coverage, while these scenarios must isolate feedback validity. Likewise,
-    ## standard-error/test-information stopping is deliberately made non-binding.
-    ## Keep catquiz_minquestions below catquiz_maxquestions because equal values
-    ## are rejected by the CAT settings form. With maxquestions = 4, the attempt
-    ## still ends deterministically after question 4. The invalid case below is
-    ## produced solely by the strategy-defined fraction = 1 rule for "Infer lowest
-    ## skill gap".
+    ## The CAT settings generator creates the initial JSON structure, but the
+    ## adaptivequiz integration normalises and reserialises it through the activity
+    ## settings form. This is the same setup used by the established multi-question
+    ## catscales_attempt_management Behat scenario. Without this round-trip the
+    ## adapter can read incomplete settings and finish the attempt after question 1.
+    ## Standard-error/test-information stopping is deliberately made non-binding;
+    ## maxquestions = 4 therefore determines the end of the attempt.
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I click on "Save and return to course" "button"
+    And I log out
 
   @javascript
   Scenario: An invalid attempt shows a single central notice, not per-scale feedback

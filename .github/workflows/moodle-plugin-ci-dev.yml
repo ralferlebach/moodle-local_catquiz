@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-lint-php
           path: ci-logs
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-codeanalysis
           path: ci-logs
@@ -234,7 +234,7 @@ jobs:
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-lint-jsamd
           path: ci-logs
@@ -317,7 +317,7 @@ jobs:
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-quality
           path: ci-logs
@@ -410,7 +410,7 @@ jobs:
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-phpunit-${{ matrix.php }}-${{ matrix.database }}
           path: ci-logs
@@ -476,21 +476,23 @@ jobs:
           MOODLE_BRANCH: MOODLE_405_STABLE
 
       - name: Behat features
+        id: behat
         if: ${{ always() }}
-        run: set -o pipefail; moodle-plugin-ci behat --profile chrome 2>&1 | tee ci-logs/behat.log
+        run: set -o pipefail; moodle-plugin-ci behat --profile chrome --dump 2>&1 | tee ci-logs/behat.log
 
       - name: Collect error summary and Behat dumps
         if: ${{ always() }}
         run: |
-          for d in moodle/behatfaildumps "$GITHUB_WORKSPACE/moodle/behatfaildumps" moodledata/behat/faildumps; do
-            [ -d "$d" ] && cp -a "$d" ci-logs/behatfaildumps 2>/dev/null || true
-          done
+          if [ -d "$GITHUB_WORKSPACE/moodledata/behat_dump" ]; then
+            mkdir -p ci-logs/behat_dump
+            cp -a "$GITHUB_WORKSPACE/moodledata/behat_dump/." ci-logs/behat_dump/
+          fi
           { echo "job: behat (PHP 8.2 / Chrome)"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs and dumps:"; ls -1 ci-logs; } > ci-logs/summary.txt
           cat ci-logs/summary.txt
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: error-summary-dev-behat
           path: ci-logs
@@ -498,15 +500,13 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload Behat screenshots (ZIP)
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        if: ${{ failure() && steps.behat.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
         with:
           name: behat-screenshots-dev
-          path: |
-            moodle/behatfaildumps
-            moodledata/behat/faildumps
+          path: ${{ github.workspace }}/moodledata/behat_dump
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
   ci-complete:
     name: CI complete

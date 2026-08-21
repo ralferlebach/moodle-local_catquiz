@@ -155,16 +155,18 @@ jobs:
         run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
 
       - name: Behat features
+        id: behat
         if: ${{ always() }}
-        run: set -o pipefail; moodle-plugin-ci behat --profile chrome 2>&1 | tee ci-logs/behat.log
+        run: set -o pipefail; moodle-plugin-ci behat --profile chrome --dump 2>&1 | tee ci-logs/behat.log
 
       # ── Diagnostics: error summary (+ behat dumps) ─────────────────────────
       - name: Collect error summary
         if: ${{ always() }}
         run: |
-          for d in moodle/behatfaildumps "$GITHUB_WORKSPACE/moodle/behatfaildumps" moodledata/behat/faildumps; do
-            [ -d "$d" ] && cp -a "$d" ci-logs/behatfaildumps 2>/dev/null || true
-          done
+          if [ -d "$GITHUB_WORKSPACE/moodledata/behat_dump" ]; then
+            mkdir -p ci-logs/behat_dump
+            cp -a "$GITHUB_WORKSPACE/moodledata/behat_dump/." ci-logs/behat_dump/
+          fi
           {
             echo "job:    ${{ github.job }} (${{ matrix.moodle-branch }} / PHP ${{ matrix.php }} / ${{ matrix.database }})"
             echo "status: ${{ job.status }}"
@@ -178,7 +180,7 @@ jobs:
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: error-summary-main-${{ matrix.php }}-${{ matrix.database }}
           path: ci-logs
@@ -186,15 +188,13 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload Behat screenshots (ZIP)
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        if: ${{ failure() && steps.behat.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
         with:
           name: behat-screenshots-main-${{ matrix.php }}-${{ matrix.database }}
-          path: |
-            moodle/behatfaildumps
-            moodledata/behat/faildumps
+          path: ${{ github.workspace }}/moodledata/behat_dump
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
   ci-complete:
     name: CI complete
