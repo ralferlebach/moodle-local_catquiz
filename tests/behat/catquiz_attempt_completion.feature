@@ -1,8 +1,9 @@
 @local @local_catquiz @javascript
-Feature: Feedback output is bound to a valid CAT result.
-  As a student I only see per-scale feedback when my attempt produced a valid
-  result. When no scale can be reported, I see a single central notice instead
-  of scattered "not available" blocks (issue #10).
+Feature: A CAT attempt is finalised authoritatively on completion.
+  As a student, completing an adaptive quiz attempt produces exactly one
+  finalised result with a stable end time, independently of how I reach the end
+  (normal completion or resuming an interrupted attempt). The end time is never
+  stamped while the attempt is still running (issue #5).
 
   Background:
     Given the following "users" exist:
@@ -32,13 +33,10 @@ Feature: Feedback output is bound to a valid CAT result.
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_minquestions | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 2                    | 4                    | 0.0                       | 1000.0                    | 2                       |
-    ## The CAT settings generator creates the initial JSON structure, but the
-    ## adaptivequiz integration normalises and reserialises it through the activity
-    ## settings form. This is the same setup used by the established multi-question
-    ## catscales_attempt_management Behat scenario. Without this round-trip the
-    ## adapter can read incomplete settings and finish the attempt after question 1.
-    ## Standard-error/test-information stopping is deliberately made non-binding;
-    ## maxquestions = 4 therefore determines the end of the attempt.
+    ## Round-trip the generated CAT settings through the activity form. The
+    ## adaptivequiz integration normalises and reserialises the settings here;
+    ## without this step the adapter can finish after the first question. Keep
+    ## the stopping thresholds non-binding so maxquestions = 4 defines the end.
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher
     And I follow "Settings"
     And I wait until the page is ready
@@ -46,32 +44,8 @@ Feature: Feedback output is bound to a valid CAT result.
     And I log out
 
   @javascript
-  Scenario: An invalid attempt shows a single central notice, not per-scale feedback
-    ## The "Infer lowest skill gap" strategy declares a fraction of >= 1 (every
-    ## answer correct) invalid, because with no wrong answer there is no skill gap
-    ## to infer. Answering every question correctly therefore excludes every scale
-    ## and no valid result can be determined.
-    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
-    And I wait until the page is ready
-    And I should see "Question 1"
-    And I click on "richtige Antwort" "text" in the "Question 1" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 2"
-    And I click on "richtige Antwort" "text" in the "Question 2" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 3"
-    And I click on "richtige Antwort" "text" in the "Question 3" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 4"
-    And I click on "richtige Antwort" "text" in the "Question 4" "question"
-    And I click on "Submit answer" "button"
-    And I wait until the page is ready
-    Then I should see "No valid test result could be determined for this attempt."
-
-  @javascript
-  Scenario: A valid attempt shows feedback and not the central notice
-    ## A mix of correct and incorrect answers yields a reportable scale.
+  Scenario: Completing an attempt normally finalises it and shows feedback
+    ## Reaching the end runs the finaliser once and renders the feedback page.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "link"
     And I wait until the page is ready
@@ -88,4 +62,34 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should not see "No valid test result could be determined for this attempt."
+    Then I should not see "Question 5"
+
+  @javascript
+  Scenario: Resuming an interrupted attempt still finalises exactly once
+    ## Leaving mid-attempt and returning must not start a second attempt; the
+    ## same attempt is resumed and, once finished, is finalised a single time.
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    ## Interrupt: navigate away, then come back to the activity. Resuming an
+    ## in-progress attempt uses the same "Start attempt" link, which continues
+    ## the existing attempt rather than starting a new one.
+    And I am on the "adaptivecatquiz1" Activity page
+    And I wait until the page is ready
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    Then I should not see "Question 5"

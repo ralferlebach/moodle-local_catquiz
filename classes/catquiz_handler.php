@@ -33,6 +33,7 @@ use coding_exception;
 use context_module;
 use context_system;
 use local_catquiz\feedback\feedbackclass;
+use local_catquiz\local\attempt\attempt_finalizer;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\output\attemptfeedback;
 use local_catquiz\teststrategy\info;
@@ -956,17 +957,24 @@ class catquiz_handler {
         mixed $cm,
         stdClass $attemptrecord
     ): string {
-        // Update the endtime and number of testitems used in the attempts table.
         global $DB, $COURSE;
-        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $id = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptrecord->id], 'id')->id;
-        $data = (object) [
-            'id' => $id,
-            'number_of_testitems_used' => $attemptrecord->questionsattempted,
-            'endtime' => $cache->get('endtime'),
-            'timemodified' => time(),
-        ];
-        $DB->update_record('local_catquiz_attempts', $data);
+
+        // Issue #5: finalisation is owned by attempt_finalizer and is normally
+        // triggered from the authoritative status change in
+        // adaptivequiz_complete_attempt(). Here we only call it again as an
+        // idempotent safety net (in case this render path is reached without the
+        // status-change hook having run) and then render the feedback. The end
+        // time comes from the attempt's immutable timefinished, never a cache.
+        $timefinished = (int) ($DB->get_field(
+            'adaptivequiz_attempt',
+            'timefinished',
+            ['id' => $attemptrecord->id]
+        ) ?: ($attemptrecord->timemodified ?? time()));
+        attempt_finalizer::finalize(
+            (int) $attemptrecord->id,
+            $timefinished,
+            (string) ($attemptrecord->attemptstopcriteria ?? '')
+        );
 
         // If there was an error before the quiz could be started, return that.
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');

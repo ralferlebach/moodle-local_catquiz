@@ -1,8 +1,8 @@
 @local @local_catquiz @javascript
-Feature: Feedback output is bound to a valid CAT result.
-  As a student I only see per-scale feedback when my attempt produced a valid
-  result. When no scale can be reported, I see a single central notice instead
-  of scattered "not available" blocks (issue #10).
+Feature: Reloading an unanswered item does not create a duplicate slot.
+  As a student, reloading or re-opening an unanswered question re-shows the same
+  item in the same question-usage slot rather than creating a second slot for it,
+  so the question usage and the CAT progress stay consistent (issue #6).
 
   Background:
     Given the following "users" exist:
@@ -32,13 +32,10 @@ Feature: Feedback output is bound to a valid CAT result.
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_minquestions | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions |
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 2                    | 4                    | 0.0                       | 1000.0                    | 2                       |
-    ## The CAT settings generator creates the initial JSON structure, but the
-    ## adaptivequiz integration normalises and reserialises it through the activity
-    ## settings form. This is the same setup used by the established multi-question
-    ## catscales_attempt_management Behat scenario. Without this round-trip the
-    ## adapter can read incomplete settings and finish the attempt after question 1.
-    ## Standard-error/test-information stopping is deliberately made non-binding;
-    ## maxquestions = 4 therefore determines the end of the attempt.
+    ## Round-trip the generated CAT settings through the activity form. The
+    ## adaptivequiz integration normalises and reserialises the settings here;
+    ## without this step the adapter can finish after the first question. Keep
+    ## the stopping thresholds non-binding so maxquestions = 4 defines the end.
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher
     And I follow "Settings"
     And I wait until the page is ready
@@ -46,11 +43,22 @@ Feature: Feedback output is bound to a valid CAT result.
     And I log out
 
   @javascript
-  Scenario: An invalid attempt shows a single central notice, not per-scale feedback
-    ## The "Infer lowest skill gap" strategy declares a fraction of >= 1 (every
-    ## answer correct) invalid, because with no wrong answer there is no skill gap
-    ## to infer. Answering every question correctly therefore excludes every scale
-    ## and no valid result can be determined.
+  Scenario: Reloading an unanswered question re-shows the same item
+    ## Without slot reuse the reload would add a second QUBA slot for the same
+    ## item; with it, the very same question is shown again.
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I reload the page
+    And I wait until the page is ready
+    Then I should see "Question 1"
+    And I should not see "Question 2"
+
+  @javascript
+  Scenario: Reloading mid-attempt still yields exactly the configured length
+    ## A reload before answering must not inflate the number of administered
+    ## items: the attempt still ends after the configured four questions.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "link"
     And I wait until the page is ready
@@ -58,26 +66,16 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 2"
-    And I click on "richtige Antwort" "text" in the "Question 2" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 3"
-    And I click on "richtige Antwort" "text" in the "Question 3" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 4"
-    And I click on "richtige Antwort" "text" in the "Question 4" "question"
-    And I click on "Submit answer" "button"
+    ## Re-enter the attempt through the activity (a GET) before reloading, so the
+    ## reload does not re-POST the previous answer - Moodle blocks such
+    ## out-of-sequence resubmission by design. Resuming re-renders Question 2.
+    And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    Then I should see "No valid test result could be determined for this attempt."
-
-  @javascript
-  Scenario: A valid attempt shows feedback and not the central notice
-    ## A mix of correct and incorrect answers yields a reportable scale.
-    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "link"
     And I wait until the page is ready
-    And I should see "Question 1"
-    And I click on "richtige Antwort" "text" in the "Question 1" "question"
-    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I reload the page
+    And I wait until the page is ready
     And I should see "Question 2"
     And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
     And I click on "Submit answer" "button"
@@ -88,4 +86,4 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should not see "No valid test result could be determined for this attempt."
+    Then I should not see "Question 5"

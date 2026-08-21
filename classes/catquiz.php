@@ -1859,7 +1859,11 @@ class catquiz {
         $data->personability_before_attempt = $attemptdata['ability_before_attempt'];
         $data->personability_after_attempt = $attemptdata['progress']->get_abilities()[$attemptdata['catscaleid']] ?? null;
         $data->starttime = $attemptdata['starttime'] ?? null;
-        $data->endtime = $attemptdata['endtime'] ?: time();
+        // Issue #5: never stamp an end time here. save_attempt_to_db() runs after
+        // every response (i.e. while the attempt is still running); the end time
+        // is set exactly once by attempt_finalizer at completion. On INSERT the
+        // running attempt gets endtime = null; on UPDATE the field is left
+        // untouched so a finalised end time is never clobbered.
 
         if (get_config('local_catquiz', 'store_debug_info')) {
             $data->debug_info = json_encode($attemptdata['debuginfo']);
@@ -1881,7 +1885,6 @@ class catquiz {
 
         $now = time();
         $data->timemodified = $now;
-        $data->timecreated = $now;
 
         $attemptdata['courseid'] = $courseandinstance['courseid'];
 
@@ -1896,9 +1899,17 @@ class catquiz {
         $existingrecord = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptdata['attemptid']]);
         if ($existingrecord) {
             $data->id = $existingrecord->id;
+            // Issue #5: preserve the original creation time and never touch the
+            // end time on update. The end time is owned by attempt_finalizer.
+            unset($data->timecreated);
+            unset($data->endtime);
             $DB->update_record('local_catquiz_attempts', $data);
             return $existingrecord->id;
         }
+
+        // INSERT: fresh (running) attempt. No end time yet.
+        $data->timecreated = $now;
+        $data->endtime = null;
 
         $id = $DB->insert_record('local_catquiz_attempts', (object) $data);
 

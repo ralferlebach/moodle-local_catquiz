@@ -1,5 +1,253 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082109)
+
+> #9-Restpunkt, Phase 2 (risikoarm): exakte Pre-Attempt-Wiederherstellung.
+
+- **`progress` erweitert:** Neues Feld `preattemptabilities` (backward-kompatibel
+  serialisiert) mit `capture_preattempt_abilities()` (idempotent) und
+  `get_preattempt_abilities()`.
+- **`personability_loader` (additiv):** erfasst beim ersten Item die geladenen
+  Vorwerte als Pre-Attempt-Zustand, bevor irgendein During-Attempt-Estimate
+  geschrieben wird. Der Estimation-Fluss bleibt unverändert.
+- **Finalizer-Reconciliation verfeinert:** eine in diesem Versuch **nicht**
+  valide gemessene Skala wird nun bevorzugt auf ihren **exakten Pre-Attempt-Wert**
+  zurückgesetzt (Phase 2); Fallback bleibt der letzte valide Historienwert
+  (Phase 1); ohne beides bleibt der Wert unverändert. Schließt die in Phase 1
+  offene Lücke „keine valide Historie vorhanden".
+- **Tests:** `progress_preattempt_test` (Capture-Idempotenz, Save/Reload-Round-
+  Trip, Backward-Compat) und `attempt_finalizer_test::test_finalize_restores_exact_preattempt_value`,
+  beide mit **Zahn-Test**. Regression grün (catcalc, learningprogress,
+  feedback_gating, attemptfeedback u. a.).
+
+## 1.1.5 (interne Version 2026082108)
+
+> Cross-Plugin Behat-Fixes (CI-Diagnose ausgewertet): drei rote Szenarien grün.
+
+- **mod_adaptivequiz (Produktion):** Das `debugging(DEBUG_DEVELOPER)` im
+  Dubletten-Guard von `cat_session` entfernt. Die Slot-Wiederverwendung beim
+  Reload eines unbeantworteten Items ist das **erwartete** Verhalten (#6), kein
+  Entwickler-Warnfall — die Meldung ließ jedes Reload-Szenario in Behat scheitern
+  („debugging() message/s found"). Verhalten (Wiederverwendung) unverändert.
+- **`catquiz_attempt_completion.feature` (#5):** Resume-Schritt korrigiert —
+  ein unterbrochener Versuch wird über denselben Link **„Start attempt"**
+  fortgesetzt (adaptivequiz hat keinen „Continue attempt"-Link).
+- **`catquiz_slot_reuse.feature` (#6):** Szenario 3 lud direkt nach einem Submit
+  neu → Re-POST → Moodle blockt das per „out of sequence" (by design). Jetzt
+  GET-Wiedereintritt über „Start attempt" **vor** dem Reload, sodass kein
+  Re-POST erfolgt.
+- Regression: gesamte adaptivequiz-Suite 151/151 (kein Test hing an der
+  entfernten debugging-Meldung).
+
+## 1.1.5 (interne Version 2026082107)
+
+> #9-Restpunkt, Phase 1 (risikoarm): personparams-Reconciliation im Finalizer.
+> Analyse + phasenweiser Plan in `doc/personparams-migration-plan.md`.
+
+- **Analyse**: personparams ist während des Versuchs der geteilte Fähigkeits-Bus
+  (jede Frage aus personparams geladen, von 8+ Tasks gelesen, Subskalen-Vererbung
+  via `filterbystandarderror`), nicht nur ein Snapshot. Eine vollständige
+  Entfernung der During-Attempt-Writes ist ein breiter Hotpath-Umbau (Phase 3,
+  separat + simulations-/bitgenau-verifiziert).
+- **Phase 1 umgesetzt (Finalizer, kein Hotpath-Eingriff):** Eine Skala, die in
+  diesem Versuch **nicht** valide gemessen wurde, hinterlässt keinen
+  Zwischen-/Invalid-Wert mehr als versuchsübergreifenden Zustand. Der Finalizer
+  setzt sie auf den letzten validen Historienwert
+  (`attemptscale_repository::get_latest_valid`) zurück; existiert keine valide
+  Historie, bleibt der Wert konservativ unverändert (exakter Pre-Attempt-Wert
+  folgt mit Phase 2). Schließt die eigentliche #9-Lücke (invalide/abgebrochene
+  Versuche) risikoarm.
+- **Tests:** `attempt_finalizer_test::test_finalize_reconciles_invalid_scale_to_last_valid`
+  (invalider Versuch → Snapshot auf letzten validen Wert) mit **Zahn-Test**
+  (Reconciliation entfernt → Zwischenwert bleibt → rot). Regression grün.
+
+## 1.1.5 (interne Version 2026082106)
+
+> Behat-Reparatur: derselbe Settings-Round-Trip-Fix wie bei
+> `catquiz_feedback_validity` (Version 2026082103) auf die beiden in #5/#6 neu
+> hinzugekommenen Features übertragen.
+
+- **`catquiz_attempt_completion.feature` (#5)** und
+  **`catquiz_slot_reuse.feature` (#6):** `catquiz_minquestions` 4→2 und ein
+  Settings-Form-Round-Trip im Background (Lehrer öffnet „Settings" und speichert),
+  damit der Adapter voll serialisierte CAT-Settings liest — sonst brach der
+  Versuch nach Frage 1 ab. Gleiche latente Ursache, gleicher Fix.
+
+## 1.1.5 (interne Version 2026082105)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase E / Issue #8: Aktivitäts-
+> Completion an ein **valides** CAT-Ergebnis koppeln — schließt den Strang.
+> Cross-Plugin (mod_adaptivequiz + Adapter + local_catquiz-Finalizer). Details
+> in `doc/session-056-changes.md`.
+
+- **Neue Completion-Regel `completionvalidresult`** (mod_adaptivequiz): ein
+  technisch abgeschlossener, aber **invalider** Versuch erfüllt die Regel nicht;
+  erst ein Versuch mit validem CAT-Ergebnis schließt die Aktivität ab. Die
+  bestehende Regel `completionattemptcompleted` bleibt unverändert (Abwärts-
+  kompatibilität). `custom_completion::get_state()` verzweigt auf die Regel und
+  prüft `adaptivequiz_attempt` (attemptstate=complete, resultvalid=1).
+- **Neue Felder:** `adaptivequiz.completionvalidresult` (Regel-Schalter der
+  Aktivität) sowie `adaptivequiz_attempt.resultstatus`/`resultvalid`
+  (Ergebnis-Verdikt je Versuch). Additive, idempotente Migration.
+- **Finalizer (local_catquiz)** setzt `resultvalid`/`resultstatus` auf
+  `adaptivequiz_attempt` aus dem zentralen Validator-Ergebnis — feld-existenz-
+  geschützt, damit local_catquiz auch mit älterem mod_adaptivequiz robust bleibt.
+  Da der Finalizer-Hook vor dem `attempt_completed`-Event läuft, sieht die
+  Completion-Neuberechnung `resultvalid` bereits gesetzt.
+- **Observer/Form/Backup:** `attempt_state_change_observers` berechnet Completion
+  auch bei aktiver `completionvalidresult`-Regel neu; `mod_form` bietet die
+  Checkbox; Backup/Restore/Duplicate übernehmen `completionvalidresult` sowie
+  `resultstatus`/`resultvalid`/`timefinished` der Versuche.
+- **Tests:** `custom_completion_test::test_completionvalidresult_requires_a_valid_result`
+  (invalide → nicht erfüllt; valide → erfüllt; Legacy-Regel unberührt);
+  `attempt_finalizer_test` prüft nun `resultvalid`/`resultstatus`. Gesamte
+  adaptivequiz-Suite 151/151. Behat `completion_valid_result.feature`
+  (non-blocking). Core-Analyse bestätigt: `update_state` wertet Custom-Regeln bei
+  automatischer Completion neu aus, der COMPLETE-Hint ist nur Early-Return-
+  Optimierung — „completed-but-invalid" ergibt korrekt INCOMPLETE.
+
+## 1.1.5 (interne Version 2026082104)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase D / Issue #9: versuchsspezifische
+> Skalenergebnisse (`local_catquiz_attemptscale`) + Persistenz im Finalizer.
+> Reine local_catquiz-Arbeit. Details in `doc/session-055-changes.md`.
+
+- **Neue Tabelle `local_catquiz_attemptscale`** (install.xml + additiver
+  upgrade-Schritt): eine Zeile je finalisiertem Versuch und erfolgreich
+  getesteter Skala. FK `catattemptid` → `local_catquiz_attempts.id` (nicht das
+  mehrdeutige `attemptid`); `UNIQUE(catattemptid, catscaleid)`. Felder: score,
+  standarderror, n, fraction, isprimary, isvalid, resultsource, validationstatus,
+  timecreated.
+- **`attemptscale_repository`** (`classes/local/result/`): `save_attempt_result()`
+  schreibt genau eine Zeile je **gemessener** Skala (Upsert über Unique-Key,
+  idempotent); Carryover-only-Skalen (N=0) werden nicht historisiert, damit
+  N/Fraction/SE nie über Versuche kumuliert werden. `get_latest_valid()` und
+  `get_last_primary()` als Carryover-/Priorisierungs-Abfragen.
+- **Finalizer live verdrahtet** (#7-Erweiterungspunkt gefüllt): `finalize()`
+  validiert zentral (`attempt_result_validator::validate`), persistiert die
+  attemptscale-Zeilen und aktualisiert den `personparams`-Snapshot **nur** für
+  valide, im aktuellen Versuch gemessene Skalen — alles in derselben Transaktion
+  (Running → Completed → Validated → Persisted atomar).
+- **Tests:** `attemptscale_repository_test` (4 Tests: eine Zeile je gemessener
+  Skala, Idempotenz-Upsert, Carryover-Abfragen, **Zahn-Test** „Carryover-only
+  nicht persistiert"); `attempt_finalizer_test` erweitert um Integrationstest
+  (attemptscale + personparams-Snapshot nach Finalisierung). Behat
+  `catquiz_attemptscale_history.feature` (non-blocking).
+
+## 1.1.5 (interne Version 2026082103)
+
+> Externer Patch: Behat-Fix (`catquiz_feedback_validity`, „Scenario 001") +
+> CI-Härtung (Load-Workflows, Diagnostik/Artefakte).
+
+- **Behat-Fix `catquiz_feedback_validity.feature`:** `catquiz_minquestions` von
+  4 auf 2 gesenkt und ein Settings-Form-Round-Trip vorgeschaltet (Lehrer öffnet
+  „Settings" und speichert). Grund: Der CAT-Settings-Generator legt nur die
+  initiale JSON-Struktur an; die adaptivequiz-Integration normalisiert/
+  reserialisiert sie erst über das Aktivitäts-Settingsformular. Ohne diesen
+  Round-Trip las der Adapter unvollständige Settings und beendete den Versuch
+  bereits nach Frage 1. Gleiches Setup wie das etablierte
+  `catscales_attempt_management`-Szenario.
+- **CI (`.github/workflows/`, export-ignored):** Load-Workflows
+  (`load-jmeter`, `load-k6`) gehärtet (`MOODLE_DIR`, `--moodle=…`, robuster
+  Server-Ready-Check); Dev-/Main-Pipeline: `upload-artifact@v4 → v7`,
+  Behat mit `--dump` und angepasster Faildump-Sammlung.
+
+## 1.1.5 (interne Version 2026082102)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase C / Issue #7: zentraler
+> `attempt_result_validator`. Reine local_catquiz-Arbeit; adaptivequiz
+> unverändert. Details in `doc/session-054-changes.md`.
+
+- **Zentraler Validator + DTOs** (`classes/local/result/`):
+  `attempt_result_validator`, `attempt_result`, `scale_result`. Ein einziger Ort
+  entscheidet die Ergebnisvalidität; alle Konsumenten nutzen dasselbe
+  Ergebnisobjekt. Ablehnungsgründe sind maschinenlesbar (Konstanten
+  `REASON_SE_MAX/SE_MIN/N_MIN/FRACTION/ROOTONLY/REPORTING_DISABLED/HIDDEN/
+  NOT_PRIMARY/NOT_MEASURED`).
+- **Entscheidung 8.1 (Reporting ≠ Validität):** `reportable` (Anzeige/Config)
+  und `statisticallyvalid` (Messqualität) sind getrennt modelliert. Ein
+  abgeschaltetes Reporting macht eine Skala nicht mehr statistisch invalide.
+  Ergebnisvalidität für Completion: `valid = primary && statisticallyvalid &&
+  measuredincurrentattempt` (ohne Reporting). Der historische Reportable-Satz
+  (`toreport && !excluded && !hidden`) wird von
+  `attempt_result::get_reportable_scale_ids()` **exakt** reproduziert.
+- **Gating zentralisiert:** `feedback_helper::get_reportable_scales()` und
+  `has_reportable_result()` routen jetzt durch den Validator — eine Definition
+  statt verstreuter Prüfungen; Verhalten unverändert (Regression grün).
+- **N ohne Pilots/Dubletten:** `validate($attemptid)` bezieht N je Skala aus
+  `progress::get_playedquestions(true, …)` (pilot-gefiltert; Dubletten durch #6
+  ausgeschlossen); `measuredincurrentattempt` = N > 0 (Vorwert-only ⇒ nicht
+  valide).
+- **Tests:** `attempt_result_validator_test` (8 Tests, 52 Assertions): saubere
+  Primary-Skala, SE/N/Fraction/Rootonly-Ablehnungen, Carryover-only,
+  Non-Primary, historischer Reportable-Satz, `validate()`-Integration, plus
+  **Zahn-Test** der 8.1-Entkopplung (verifiziert: Entkopplung entfernt → rot,
+  `feedback_gating` bleibt grün). Bestehende Feedback-Behat
+  (`catquiz_feedback_validity.feature`) deckt valide/invalide Ausgänge ab und
+  läuft nun durch den zentralen Validator.
+
+## 1.1.5 (interne Version 2026082101)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase B / Issue #6: Doppelte
+> Fragen-Slots bei Reload verhindern (Slot-Wiederverwendung + Attempt-Lock +
+> defensive Dubletten-Prüfung). Reine mod_adaptivequiz-/Adapter-Arbeit; kein
+> local_catquiz-Produktivcode geändert. Details in `doc/session-053-changes.md`.
+
+- **Adapter `adaptivequizcatmodel_catquiz` (Slot-Wiederverwendung):**
+  `catquiz_item_administration::evaluate_ability_to_administer_next_item()` gibt
+  jetzt bei noch aktivem (unbeantwortetem) Vorgänger-Slot
+  `next_item::from_quba_slot()` zurück, statt immer eine neue Frage zu wählen.
+  Ein Reload eines unbeantworteten Items erzeugt damit keinen zweiten QUBA-Slot
+  mehr; Question-Usage und CAT-Progress bleiben konsistent.
+- **mod_adaptivequiz (Locking + defensiver Guard):**
+  `cat_session::run_item_administration()` läuft unter einem Attempt-Lock
+  (Schlüssel: adaptivequiz-Instanz + User; deckt AJAX und normale Requests) und
+  serialisiert damit Doppelklick-/Parallel-Requests. Vor `add_question()` prüft
+  der neue Helfer `find_active_slot_for_question()`, ob bereits ein aktiver Slot
+  derselben Frage existiert, und verwendet diesen wieder (mit `debugging()`-Log)
+  statt einen Dublett-Slot anzulegen.
+- **Diagnose-CLI** `cli/diagnose_duplicate_slots.php` (read-only): identifiziert
+  historische Versuche mit mehreren Slots derselben Frage. Keine Auto-Reparatur
+  (divergierte QUBA-Zustände sind nicht immer eindeutig auflösbar).
+- **Tests:** Adapter-Slot-Reuse (`catquiz_item_administration_test`) und
+  defensiver Helfer (`cat_session_test::test_find_active_slot_for_question`),
+  beide mit **Zahn-Test** verifiziert (Guard entfernt → rot). Behat
+  `catquiz_slot_reuse.feature` (non-blocking). Gesamte adaptivequiz-Suite
+  150/150.
+
+## 1.1.5 (interne Version 2026082100)
+
+> Strang „Abschluss+Ergebnisspeicherung", Phase A / Issue #5: autoritativer,
+> idempotenter Versuchsabschluss und atomare Endzeit. Cross-Plugin
+> (local_catquiz + mod_adaptivequiz). Details in `doc/session-052-changes.md`.
+
+- **Neuer `attempt_finalizer`** (`classes/local/attempt/attempt_finalizer.php`):
+  der einzige, idempotente und transaktionale Weg, einen CATquiz-Versuch
+  abzuschließen. Setzt die Endzeit aus der autoritativen `timefinished` des
+  adaptivequiz-Versuchs (nicht mehr aus dem Session-Cache) und die finale
+  Anzahl genutzter Testitems. Mehrfacher Aufruf ist ein No-op. Enthält leere
+  Erweiterungspunkte für #7 (Validierung), #9 (Historie/Vorwerte) und #8
+  (resultstatus/resultvalid).
+- **`catquiz::save_attempt_to_db()` entkoppelt:** kein automatisches
+  `endtime = time()` mehr während des laufenden Versuchs. `endtime` und
+  `timecreated` werden nur noch bei INSERT gesetzt; bei UPDATE bleiben beide
+  erhalten (die Endzeit gehört ausschließlich dem Finalizer).
+- **`catquiz_handler::attempt_finished()`** liest die Endzeit nicht mehr aus dem
+  Cache, sondern delegiert idempotent an den Finalizer und rendert nur noch.
+- **DB-Härtung:** Unique-Index auf `local_catquiz_attempts.attemptid`
+  (höchstens ein CATquiz-Versuch je adaptivequiz-Versuch) inkl.
+  Dedup-Reparaturmigration für historische Dubletten.
+- **mod_adaptivequiz (Fork, Work-Package):** neues, unveränderliches Feld
+  `timefinished` in `adaptivequiz_attempt`; `adaptivequiz_complete_attempt()`
+  setzt es genau einmal beim Wechsel auf COMPLETED und löst den neuen
+  catmodel-Hook `post_complete_attempt_callback` aus (ruft den Finalizer,
+  unabhängig davon, ob die Abschlussseite erreicht wird). Fehlerhaften
+  `adaptivequiz_complete_attempt()`-Aufruf in `closeattempt.php` korrigiert.
+- **Tests:** `attempt_finalizer_test` (Endzeit-Quelle, No-op-Fälle,
+  Idempotenz-**Zahn-Test**); adaptivequiz-`timefinished`-Immutabilitätstest mit
+  Sentinel-**Zahn-Test**. Beide Zahn-Tests verifiziert (Guard entfernt → rot).
+  Behat `catquiz_attempt_completion.feature` (non-blocking).
+
 ## 1.1.5 (interne Version 2026082022)
 
 > phpcs-Fix im neuen Regressionstest + Dev-CI: Code Checker nach „Code analysis".

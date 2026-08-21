@@ -91,6 +91,11 @@ class personability_loader implements contextloaderinterface {
         $personparams = $this->load_saved_personparams($context);
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
         if ($this->progress->is_first_question()) {
+            // Issue #9 (Phase 2): capture the loaded priors as the pre-attempt
+            // state, before any during-attempt estimate is written, so the
+            // finaliser can restore a non-validly-measured scale exactly.
+            $this->progress->capture_preattempt_abilities($personparams);
+
             $cache->set('abilitybeforeattempt', $personparams[$context['catscaleid']]);
             // For the lowest skillgap teststrategy, we need at least the ability of the main scale.
             $this->progress->set_ability($personparams[$context['catscaleid']], $context['catscaleid']);
