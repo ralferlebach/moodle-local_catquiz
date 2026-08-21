@@ -130,6 +130,14 @@ class progress implements JsonSerializable {
     private array $abilities;
 
     /**
+     * @var array Holds the person abilities as they were BEFORE this attempt,
+     * indexed by catscale. Captured once at the first question from the loaded
+     * priors, so a scale not validly measured in this attempt can be restored to
+     * its pre-attempt state at finalisation (issue #9, Phase 2).
+     */
+    private array $preattemptabilities = [];
+
+    /**
      * If the user is forced to take a break, this holds the timestamp of the end of the break.
      *
      * If no break is enforced, it has a value of null.
@@ -331,6 +339,9 @@ class progress implements JsonSerializable {
             $instance->responses[$id] = (array) $val;
         }
         $instance->abilities = (array) $data->abilities;
+        $instance->preattemptabilities = property_exists($data, 'preattemptabilities')
+            ? (array) $data->preattemptabilities
+            : [];
         $instance->forcedbreakend = intval($data->forcedbreakend) ?: null;
         $instance->lockedscales = property_exists($data, 'lockedscales') ? (array) $data->lockedscales : [];
         $instance->usageid = $data->usageid;
@@ -394,6 +405,7 @@ class progress implements JsonSerializable {
         $instance->droppedscales = [];
         $instance->responses = [];
         $instance->abilities = [];
+        $instance->preattemptabilities = [];
         $instance->forcedbreakend = null;
         $instance->lockedscales = [];
         $instance->usageid = null;
@@ -424,6 +436,7 @@ class progress implements JsonSerializable {
             'contextid' => $this->contextid,
             'responses' => $this->responses,
             'abilities' => $this->abilities,
+            'preattemptabilities' => $this->preattemptabilities,
             'forcedbreakend' => $this->forcedbreakend,
             'lockedscales' => $this->lockedscales,
             'usageid' => $this->usageid,
@@ -819,6 +832,36 @@ class progress implements JsonSerializable {
         $this->abilities[$catscaleid] = $ability;
 
         return $this;
+    }
+
+    /**
+     * Captures the person abilities as they are BEFORE this attempt.
+     *
+     * Called once at the first question with the loaded priors, before any
+     * during-attempt estimate has been written. Only fills scales not captured
+     * yet, so repeated calls are safe (issue #9, Phase 2).
+     *
+     * @param array $abilities Map of catscaleid => ability.
+     * @return self
+     */
+    public function capture_preattempt_abilities(array $abilities): self {
+        foreach ($abilities as $catscaleid => $ability) {
+            if (!array_key_exists((int) $catscaleid, $this->preattemptabilities)) {
+                $this->preattemptabilities[(int) $catscaleid] = (float) $ability;
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Returns the person abilities as they were before this attempt, indexed by
+     * catscale (issue #9, Phase 2).
+     *
+     * @return array
+     */
+    public function get_preattempt_abilities(): array {
+        return $this->preattemptabilities;
     }
 
     /**

@@ -1,5 +1,25 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082109)
+
+> #9-Restpunkt, Phase 2 (risikoarm): exakte Pre-Attempt-Wiederherstellung.
+
+- **`progress` erweitert:** Neues Feld `preattemptabilities` (backward-kompatibel
+  serialisiert) mit `capture_preattempt_abilities()` (idempotent) und
+  `get_preattempt_abilities()`.
+- **`personability_loader` (additiv):** erfasst beim ersten Item die geladenen
+  Vorwerte als Pre-Attempt-Zustand, bevor irgendein During-Attempt-Estimate
+  geschrieben wird. Der Estimation-Fluss bleibt unverändert.
+- **Finalizer-Reconciliation verfeinert:** eine in diesem Versuch **nicht**
+  valide gemessene Skala wird nun bevorzugt auf ihren **exakten Pre-Attempt-Wert**
+  zurückgesetzt (Phase 2); Fallback bleibt der letzte valide Historienwert
+  (Phase 1); ohne beides bleibt der Wert unverändert. Schließt die in Phase 1
+  offene Lücke „keine valide Historie vorhanden".
+- **Tests:** `progress_preattempt_test` (Capture-Idempotenz, Save/Reload-Round-
+  Trip, Backward-Compat) und `attempt_finalizer_test::test_finalize_restores_exact_preattempt_value`,
+  beide mit **Zahn-Test**. Regression grün (catcalc, learningprogress,
+  feedback_gating, attemptfeedback u. a.).
+
 ## 1.1.5 (interne Version 2026082108)
 
 > Cross-Plugin Behat-Fixes (CI-Diagnose ausgewertet): drei rote Szenarien grün.

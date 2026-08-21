@@ -17,6 +17,7 @@
 namespace local_catquiz\local\attempt;
 
 use advanced_testcase;
+use local_catquiz\teststrategy\progress;
 use stdClass;
 
 /**
@@ -219,9 +220,65 @@ final class attempt_finalizer_test extends advanced_testcase {
 
         // The invalid scale's snapshot is reset to the last valid value (0.7),
         // not left at the intermediate 0.15.
-        $snapshot = $DB->get_record('local_catquiz_personparams',
-            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5]);
+        $snapshot = $DB->get_record(
+            'local_catquiz_personparams',
+            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5]
+        );
         $this->assertEquals(0.7, (float) $snapshot->ability);
+    }
+
+    /**
+     * Issue #9 (Phase 2): when a scale has no valid history but a pre-attempt
+     * value was captured, an invalid attempt restores that exact pre-attempt
+     * value (not the intermediate estimate, and not a default).
+     */
+    public function test_finalize_restores_exact_preattempt_value(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $userid = (int) $user->id;
+        $contextid = 9;
+        $now = time();
+
+        // Intermediate estimate currently in personparams (a during-attempt write).
+        $DB->insert_record('local_catquiz_personparams', (object) [
+            'userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5, 'ability' => 0.15,
+            'timecreated' => $now, 'timemodified' => $now,
+        ]);
+
+        $json = json_encode([
+            'personabilities_abilities' => [
+                5 => ['value' => 0.15, 'toreport' => true, 'excluded' => true,
+                    'error' => ['nminscale' => ['nminscaledefined' => 5, 'nscalecurrent' => 1]]],
+            ],
+            'se' => [5 => 0.9],
+        ]);
+        $adaptiveattemptid = $DB->insert_record('adaptivequiz_attempt', (object) [
+            'instance' => 1, 'userid' => $userid, 'uniqueid' => 9911, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 1, 'difficultysum' => 0,
+            'standarderror' => 0.9, 'measure' => 0, 'timecreated' => $now, 'timemodified' => $now,
+        ]);
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $userid, 'scaleid' => 5, 'contextid' => $contextid, 'attemptid' => $adaptiveattemptid,
+            'component' => 'mod_adaptivequiz', 'status' => 0, 'endtime' => null, 'json' => $json,
+            'timecreated' => $now, 'timemodified' => $now,
+        ]);
+
+        // Capture the pre-attempt value (0.55) on the attempt's progress. No
+        // valid attempt-scale history exists for the scale.
+        $progress = progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid, (object) []);
+        $progress->capture_preattempt_abilities([5 => 0.55]);
+        $progress->save();
+
+        $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
+
+        $snapshot = $DB->get_record(
+            'local_catquiz_personparams',
+            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5]
+        );
+        $this->assertEquals(0.55, (float) $snapshot->ability);
     }
 
     /**
