@@ -122,14 +122,24 @@ final class attempt_finalizer {
         // now, and only for valid scales measured in this attempt - never from a
         // mere carry-over or an intermediate estimate.
         if ($contextid !== null) {
+            $userid = (int) $catattempt->userid;
             foreach ($result->get_scale_results() as $scaleresult) {
                 if ($scaleresult->valid && $scaleresult->score !== null) {
-                    catquiz::update_person_param(
-                        (int) $catattempt->userid,
-                        $contextid,
-                        $scaleresult->scaleid,
-                        (float) $scaleresult->score
-                    );
+                    catquiz::update_person_param($userid, $contextid, $scaleresult->scaleid, (float) $scaleresult->score);
+                    continue;
+                }
+
+                // Phase 1 reconciliation: a scale that was NOT validly measured in
+                // this attempt must not leave an intermediate/invalid estimate as
+                // the cross-attempt "latest known state" (the during-attempt
+                // preselect tasks may have written one). Reset it to the last
+                // valid value from the attempt-scale history, if one exists.
+                // Conservative: when no valid history exists we leave the value
+                // untouched rather than guess a default (a pre-attempt snapshot
+                // would let us restore the exact prior - see the migration plan).
+                $lastvalid = attemptscale_repository::get_latest_valid($userid, $contextid, $scaleresult->scaleid);
+                if ($lastvalid !== null && $lastvalid->score !== null) {
+                    catquiz::update_person_param($userid, $contextid, $scaleresult->scaleid, (float) $lastvalid->score);
                 }
             }
         }

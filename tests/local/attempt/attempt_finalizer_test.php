@@ -168,6 +168,63 @@ final class attempt_finalizer_test extends advanced_testcase {
     }
 
     /**
+     * Issue #9 (Phase 1): finalising an attempt in which a scale was NOT validly
+     * measured resets that scale's personparams snapshot to the last valid value
+     * from the history, so an intermediate/invalid estimate does not survive as
+     * the cross-attempt state. When no valid history exists, the value is left
+     * untouched.
+     */
+    public function test_finalize_reconciles_invalid_scale_to_last_valid(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $userid = 2;
+        $contextid = 9;
+        $now = time();
+
+        // Prior valid history for scale 5 (score 0.7) from an earlier attempt,
+        // and an intermediate estimate currently sitting in personparams (0.15,
+        // as a during-attempt task would have written).
+        $DB->insert_record('local_catquiz_attemptscale', (object) [
+            'catattemptid' => 111, 'userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5,
+            'score' => 0.7, 'standarderror' => 0.2, 'n' => 8, 'fraction' => 0.6,
+            'isprimary' => 1, 'isvalid' => 1, 'resultsource' => 'current', 'validationstatus' => '',
+            'timecreated' => $now - 1000,
+        ]);
+        $DB->insert_record('local_catquiz_personparams', (object) [
+            'userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5, 'ability' => 0.15,
+            'timecreated' => $now, 'timemodified' => $now,
+        ]);
+
+        // Current attempt: scale 5 is measured but INVALID (N below minimum).
+        $json = json_encode([
+            'personabilities_abilities' => [
+                5 => ['value' => 0.15, 'toreport' => true, 'excluded' => true,
+                    'error' => ['nminscale' => ['nminscaledefined' => 5, 'nscalecurrent' => 1]]],
+            ],
+            'se' => [5 => 0.9],
+        ]);
+        $adaptiveattemptid = $DB->insert_record('adaptivequiz_attempt', (object) [
+            'instance' => 1, 'userid' => $userid, 'uniqueid' => 8888, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 1, 'difficultysum' => 0,
+            'standarderror' => 0.9, 'measure' => 0, 'timecreated' => $now, 'timemodified' => $now,
+        ]);
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $userid, 'scaleid' => 5, 'contextid' => $contextid, 'attemptid' => $adaptiveattemptid,
+            'component' => 'mod_adaptivequiz', 'status' => 0, 'endtime' => null, 'json' => $json,
+            'timecreated' => $now, 'timemodified' => $now,
+        ]);
+
+        $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
+
+        // The invalid scale's snapshot is reset to the last valid value (0.7),
+        // not left at the intermediate 0.15.
+        $snapshot = $DB->get_record('local_catquiz_personparams',
+            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5]);
+        $this->assertEquals(0.7, (float) $snapshot->ability);
+    }
+
+    /**
      * Create a running adaptive quiz attempt together with its local CAT row
      * (endtime = null), returning [adaptivequiz_attempt.id, local attempt id].
      *

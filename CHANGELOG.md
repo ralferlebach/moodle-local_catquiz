@@ -1,5 +1,58 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082108)
+
+> Cross-Plugin Behat-Fixes (CI-Diagnose ausgewertet): drei rote Szenarien grün.
+
+- **mod_adaptivequiz (Produktion):** Das `debugging(DEBUG_DEVELOPER)` im
+  Dubletten-Guard von `cat_session` entfernt. Die Slot-Wiederverwendung beim
+  Reload eines unbeantworteten Items ist das **erwartete** Verhalten (#6), kein
+  Entwickler-Warnfall — die Meldung ließ jedes Reload-Szenario in Behat scheitern
+  („debugging() message/s found"). Verhalten (Wiederverwendung) unverändert.
+- **`catquiz_attempt_completion.feature` (#5):** Resume-Schritt korrigiert —
+  ein unterbrochener Versuch wird über denselben Link **„Start attempt"**
+  fortgesetzt (adaptivequiz hat keinen „Continue attempt"-Link).
+- **`catquiz_slot_reuse.feature` (#6):** Szenario 3 lud direkt nach einem Submit
+  neu → Re-POST → Moodle blockt das per „out of sequence" (by design). Jetzt
+  GET-Wiedereintritt über „Start attempt" **vor** dem Reload, sodass kein
+  Re-POST erfolgt.
+- Regression: gesamte adaptivequiz-Suite 151/151 (kein Test hing an der
+  entfernten debugging-Meldung).
+
+## 1.1.5 (interne Version 2026082107)
+
+> #9-Restpunkt, Phase 1 (risikoarm): personparams-Reconciliation im Finalizer.
+> Analyse + phasenweiser Plan in `doc/personparams-migration-plan.md`.
+
+- **Analyse**: personparams ist während des Versuchs der geteilte Fähigkeits-Bus
+  (jede Frage aus personparams geladen, von 8+ Tasks gelesen, Subskalen-Vererbung
+  via `filterbystandarderror`), nicht nur ein Snapshot. Eine vollständige
+  Entfernung der During-Attempt-Writes ist ein breiter Hotpath-Umbau (Phase 3,
+  separat + simulations-/bitgenau-verifiziert).
+- **Phase 1 umgesetzt (Finalizer, kein Hotpath-Eingriff):** Eine Skala, die in
+  diesem Versuch **nicht** valide gemessen wurde, hinterlässt keinen
+  Zwischen-/Invalid-Wert mehr als versuchsübergreifenden Zustand. Der Finalizer
+  setzt sie auf den letzten validen Historienwert
+  (`attemptscale_repository::get_latest_valid`) zurück; existiert keine valide
+  Historie, bleibt der Wert konservativ unverändert (exakter Pre-Attempt-Wert
+  folgt mit Phase 2). Schließt die eigentliche #9-Lücke (invalide/abgebrochene
+  Versuche) risikoarm.
+- **Tests:** `attempt_finalizer_test::test_finalize_reconciles_invalid_scale_to_last_valid`
+  (invalider Versuch → Snapshot auf letzten validen Wert) mit **Zahn-Test**
+  (Reconciliation entfernt → Zwischenwert bleibt → rot). Regression grün.
+
+## 1.1.5 (interne Version 2026082106)
+
+> Behat-Reparatur: derselbe Settings-Round-Trip-Fix wie bei
+> `catquiz_feedback_validity` (Version 2026082103) auf die beiden in #5/#6 neu
+> hinzugekommenen Features übertragen.
+
+- **`catquiz_attempt_completion.feature` (#5)** und
+  **`catquiz_slot_reuse.feature` (#6):** `catquiz_minquestions` 4→2 und ein
+  Settings-Form-Round-Trip im Background (Lehrer öffnet „Settings" und speichert),
+  damit der Adapter voll serialisierte CAT-Settings liest — sonst brach der
+  Versuch nach Frage 1 ab. Gleiche latente Ursache, gleicher Fix.
+
 ## 1.1.5 (interne Version 2026082105)
 
 > Strang „Abschluss+Ergebnisspeicherung", Phase E / Issue #8: Aktivitäts-
