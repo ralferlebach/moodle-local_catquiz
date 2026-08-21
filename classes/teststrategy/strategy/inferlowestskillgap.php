@@ -142,9 +142,11 @@ class inferlowestskillgap extends strategy {
         // Exclude scales where standarderror is not in range.
         $personabilities = $feedbacksettings->filter_semax($personabilities, $feedbackdata);
 
-        if ($feedbackonlyfordefinedscaleid && !empty($catscaleid)) {
-            // Force selected scale. Will also be applied to excluded scales.
-            $relevantscale = $personabilities[$catscaleid];
+        if ($feedbackonlyfordefinedscaleid && !empty($catscaleid) && isset($personabilities[$catscaleid])) {
+            // Force the selected scale. Will also be applied to excluded scales.
+            // Issue #10: use the scale id itself as the key, not the ability
+            // record (which would be an illegal array offset).
+            $relevantscale = $catscaleid;
         } else {
             $filterabilities = [];
             foreach ($personabilities as $scaleid => $array) {

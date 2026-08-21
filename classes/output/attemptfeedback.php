@@ -603,12 +603,32 @@ class attemptfeedback implements renderable, templatable {
                 return 0;
             }
         });
+        // Issue #10: determine result validity BEFORE running the generators, so
+        // that for an invalid result no per-scale STUDENT feedback (peer
+        // comparison, learning progress, ...) is assembled at all - the student
+        // only ever sees the single central notice below. Teacher feedback is
+        // still produced so teachers can inspect the (invalid) details.
+        $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
+        $hasvalidresult = !(is_array($abilities) && !feedback_helper::has_reportable_result($abilities));
+
         $context = [];
         foreach ($generators as $generator) {
+            // Issue #10: for an invalid result, do not execute the non-essential
+            // student-facing generators at all (peer comparison, learning
+            // progress, ...) - "don't run peer comparison / recommendations on an
+            // invalid result". Only customscalefeedback runs, because it carries
+            // the exclusion reason that feeds the central notice / teacher view.
+            if (!$hasvalidresult && $generator->get_generatorname() !== $primaryfeedbackname) {
+                continue;
+            }
             $feedbacks = $generator->get_feedback($feedbackdata);
             // Loop over studentfeedback and teacherfeedback.
             foreach ($feedbacks as $fbtype => $feedback) {
                 if (!$feedback || !is_array($feedback)) {
+                    continue;
+                }
+                // For an invalid result, do not emit student-facing scale feedback.
+                if (!$hasvalidresult && $fbtype === 'studentfeedback') {
                     continue;
                 }
 
@@ -624,11 +644,10 @@ class attemptfeedback implements renderable, templatable {
 
         // Issue #10: bind the student feedback to a valid result. When the report
         // pipeline produced no reportable scale (toreport, not excluded/hidden),
-        // the attempt has no valid result: drop the per-scale feedback and show
-        // exactly one central notice that carries the rejection reason, instead
-        // of scattering "not available"/exclusion blocks across several tabs.
-        $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
-        if (is_array($abilities) && !feedback_helper::has_reportable_result($abilities)) {
+        // the attempt has no valid result: show exactly one central notice that
+        // carries the rejection reason, instead of scattering "not available"/
+        // exclusion blocks across several tabs.
+        if (!$hasvalidresult && is_array($abilities)) {
             $reason = feedback_helper::get_exclusion_reason_string($abilities);
             $content = get_string('feedbacknovalidresult', 'local_catquiz');
             if ($reason !== '') {

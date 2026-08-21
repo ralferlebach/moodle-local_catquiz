@@ -1,5 +1,47 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082012)
+
+> Strang „Diagramme+Feedback+Statistik": Konsistenz Exporte = Anzeige-Regeln,
+> #16-Restpunkte (Personengewichtung, historische Teilnahme) sowie Nachbesserung
+> nach fachlichem Review (#10, #14, #16 Endtime). Details in
+> `doc/session-043-changes.md`.
+
+- **#10 Forced-Scale-Bug behoben:** In `inferlowestskillgap`/`infergreateststrength`
+  wurde im Forced-Scale-Pfad das Ability-**Array** statt der Scale-ID als Key
+  genutzt (illegaler Array-Offset). Jetzt `$relevantscale = $catscaleid` mit
+  Existenzprüfung.
+- **#10 Frühes Gating:** Bei ungültigem Ergebnis werden die nicht-essentiellen
+  Generatoren (Peer-Vergleich, Lernfortschritt …) gar nicht mehr **ausgeführt**;
+  der/die Lernende sieht nur den zentralen Hinweis. Teacher-Feedback von
+  `customscalefeedback` bleibt erhalten.
+- **#10 Behat-Invalidfall korrigiert:** „Infer lowest skill gap" erklärt
+  `fraction >= 1` (alle richtig) für ungültig – das Szenario beantwortet nun alle
+  Fragen richtig statt falsch.
+- **#16 Zeitraum = Abschlusszeit:** Charts **und** Export filtern jetzt nach
+  `endtime` (statt `timecreated` bzw. `starttime`).
+- **Geteilte Personen-Regel:** Neuer `feedback_helper::reduce_to_one_value_per_person`
+  (ein Wert je Person; `last`/`first`/`best`; 0.0 gültig, null verworfen).
+  `catquiz::get_snapshot_ability_per_person` (#16) setzt darauf auf (DRY).
+- **Kohortenverläufe personengewichtet:** `order_attempts_by_timerange` erhält
+  einen `perperson`-Modus (ein Wert je Person **und Zeitraum**, dann aggregieren)
+  und behält gültige 0.0 (`!== null` statt `empty()`). Aktiviert für Stack-Chart
+  und Vergleichsverlauf (`catquizstatistics`) sowie den Peer-Verlauf im
+  Studenten-Feedback (`learningprogress`). Der reine Attempt-Zähl-Chart bleibt
+  versuchsgewichtet (unterscheidbar).
+- **Historische Teilnahme (#16):** Statistiken und CSV-Export nutzen
+  `get_attempts(..., enrolled=false)` bzw. `get_sql_for_csv_export(..., false)` –
+  aktuelle Exmatrikulation verändert historische Kohorten nicht mehr, und der
+  Export folgt derselben Kohortenregel wie die Charts.
+- **Export = Anzeige-Regeln:** Der CSV-Export liest historische Snapshot-Werte
+  aus dem Versuchs-JSON (wie die Charts), nutzt denselben halboffenen
+  Range-Resolver (`get_range_of_value`, #14), dieselbe Enrolment-Regel und
+  denselben Abschlusszeit-Zeitraum.
+- **#14:** expliziter Overlap-Validierungstest ergänzt.
+- Tests: `person_weighting_test` (geteilte Regel + perperson), `feedback_gating_test`
+  (frühes Gating, ausführungsverfolgt), `feedback_ranges_test` (Overlap) – alle
+  zahn-getestet.
+
 ## 1.1.5 (interne Version 2026082011)
 
 > Strang „Diagramme+Feedback+Statistik": Issue #16 (historische

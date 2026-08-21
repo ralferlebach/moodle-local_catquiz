@@ -51,6 +51,55 @@ class feedback_helper {
     const PRECISION = 2;
 
     /**
+     * Reduces per-attempt items to one value per person by a documented rule.
+     *
+     * Issue #16: person-weighted analyses (histograms, cohort trajectories) and
+     * the exports derived from them must use the same selection rule, so that a
+     * person with several attempts contributes exactly one value. Items with a
+     * null value are dropped. This is the single place that rule lives.
+     *
+     * @param array $items Each item is an object/array with keys/properties
+     *                     'userid', 'endtime' and 'value'.
+     * @param string $rule 'last' (latest by endtime, default), 'first' or 'best'.
+     *
+     * @return array Map of userid => value (float).
+     */
+    public static function reduce_to_one_value_per_person(array $items, string $rule = 'last'): array {
+        $byuser = [];
+        foreach ($items as $item) {
+            $item = (object) $item;
+            if (!isset($item->value) || $item->value === null) {
+                continue;
+            }
+            $userid = (int) $item->userid;
+            $endtime = (int) ($item->endtime ?? 0);
+            $value = (float) $item->value;
+
+            if (!isset($byuser[$userid])) {
+                $byuser[$userid] = ['endtime' => $endtime, 'value' => $value];
+                continue;
+            }
+            $current = $byuser[$userid];
+            switch ($rule) {
+                case 'first':
+                    $take = $endtime < $current['endtime'];
+                    break;
+                case 'best':
+                    $take = $value > $current['value'];
+                    break;
+                case 'last':
+                default:
+                    $take = $endtime >= $current['endtime'];
+                    break;
+            }
+            if ($take) {
+                $byuser[$userid] = ['endtime' => $endtime, 'value' => $value];
+            }
+        }
+        return array_map(fn ($v) => $v['value'], $byuser);
+    }
+
+    /**
      * Returns the reportable scales from a list of person abilities.
      *
      * A scale is reportable when it is flagged toreport and is neither excluded
@@ -424,9 +473,41 @@ class feedback_helper {
         array $attempts,
         int $scaleid,
         int $timerange,
-        bool $allowempty = false
+        bool $allowempty = false,
+        bool $perperson = false,
+        string $rule = 'last'
     ) {
         $attemptsbytimerange = [];
+
+        if ($perperson) {
+            // Issue #16: for cohort trajectories, determine exactly one value per
+            // person and period before aggregating, using the shared selection
+            // rule. Buckets collect (userid, endtime, value) items per period.
+            $itemsbytimerange = [];
+            foreach ($attempts as $attempt) {
+                if (empty($attempt->endtime)) {
+                    continue;
+                }
+                $data = json_decode($attempt->json);
+                // Issue #11/#16: keep a valid value of exactly 0.0 (null check).
+                $hasvalue = isset($data->personabilities->$scaleid) && $data->personabilities->$scaleid !== null;
+                if (!$hasvalue) {
+                    continue;
+                }
+                $datestring = self::return_datestring_label($timerange, $attempt->endtime);
+                $itemsbytimerange[$datestring][] = (object) [
+                    'userid' => (int) ($attempt->userid ?? 0),
+                    'endtime' => (int) $attempt->endtime,
+                    'value' => (float) $data->personabilities->$scaleid,
+                ];
+            }
+            foreach ($itemsbytimerange as $datestring => $items) {
+                $attemptsbytimerange[$datestring] = array_values(
+                    self::reduce_to_one_value_per_person($items, $rule)
+                );
+            }
+            return $attemptsbytimerange;
+        }
 
         // Create new array with endtime and sort. Create entry for each day.
         foreach ($attempts as $attempt) {
@@ -436,7 +517,8 @@ class feedback_helper {
             }
             $datestring = self::return_datestring_label($timerange, $attempt->endtime);
 
-            if (!empty($data->personabilities->$scaleid) || $allowempty) {
+            $hasvalue = isset($data->personabilities->$scaleid) && $data->personabilities->$scaleid !== null;
+            if ($hasvalue || $allowempty) {
                 if (!isset($attemptsbytimerange[$datestring])) {
                     $attemptsbytimerange[$datestring] = [];
                 }

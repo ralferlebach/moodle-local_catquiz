@@ -157,6 +157,22 @@ final class feedback_ranges_test extends advanced_testcase {
     }
 
     /**
+     * An overlap between two ranges is rejected.
+     *
+     * @return void
+     */
+    public function test_validation_rejects_overlap(): void {
+        $this->resetAfterTest();
+        [$data, $scaleid] = $this->validation_data();
+        // Overlap: range 2 starts below where range 1 ends (lower_2 < upper_1).
+        $data["feedback_scaleid_limit_lower_{$scaleid}_2"] = 0.5;
+        $errors = [];
+        feedbackclass::validation_range_limits_nogaps($errors, $data);
+        // The contiguity check (upper_1 == lower_2) rejects the overlap.
+        $this->assertArrayHasKey("feedback_scaleid_limit_lower_{$scaleid}_2", $errors);
+    }
+
+    /**
      * A non-ascending first range is rejected.
      *
      * @return void

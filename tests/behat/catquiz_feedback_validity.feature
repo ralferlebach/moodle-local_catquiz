@@ -41,22 +41,24 @@ Feature: Feedback output is bound to a valid CAT result.
 
   @javascript
   Scenario: An invalid attempt shows a single central notice, not per-scale feedback
-    ## Answering every question incorrectly yields an average fraction of 0, so
-    ## every scale is excluded and no valid result can be determined.
+    ## The "Infer lowest skill gap" strategy declares a fraction of >= 1 (every
+    ## answer correct) invalid, because with no wrong answer there is no skill gap
+    ## to infer. Answering every question correctly therefore excludes every scale
+    ## and no valid result can be determined.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "link"
     And I wait until the page is ready
     And I should see "Question 1"
-    And I click on "falsche Antwort 1" "text" in the "Question 1" "question"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 2"
-    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "richtige Antwort" "text" in the "Question 2" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 3"
-    And I click on "falsche Antwort 1" "text" in the "Question 3" "question"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 4"
-    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "richtige Antwort" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
     Then I should see "No valid test result could be determined for this attempt."

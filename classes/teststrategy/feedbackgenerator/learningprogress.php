@@ -475,9 +475,23 @@ class learningprogress extends feedbackgenerator {
         $chart = new chart_line();
         $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
 
-        $orderedattemptspeers = feedback_helper::order_attempts_by_timerange($attemptsofpeers, $scaleid, $timerange);
+        // Issue #16: peers are weighted once per person and period so a peer with
+        // several attempts does not dominate the comparison.
+        $orderedattemptspeers = feedback_helper::order_attempts_by_timerange(
+            $attemptsofpeers,
+            $scaleid,
+            $timerange,
+            false,
+            true
+        );
         $pa = $this->assign_average_result_to_timerange($orderedattemptspeers);
-        $orderedattemptsuser = feedback_helper::order_attempts_by_timerange($attemptsofuser, $scaleid, $timerange);
+        $orderedattemptsuser = feedback_helper::order_attempts_by_timerange(
+            $attemptsofuser,
+            $scaleid,
+            $timerange,
+            false,
+            true
+        );
         $ua = $this->assign_average_result_to_timerange($orderedattemptsuser);
 
         $alldates = feedback_helper::get_timerangekeys($timerange, $beginningandendofrange);

@@ -1462,39 +1462,19 @@ class catquiz {
      * @return array Map of userid => historical ability (float).
      */
     public static function get_snapshot_ability_per_person(array $attempts, string $rule = 'last'): array {
-        $byuser = [];
+        // Issue #16: build (userid, endtime, value) items from the attempt
+        // snapshots and reduce to one value per person via the shared rule, so
+        // charts, statistics and exports all apply the same selection.
+        $items = [];
         foreach ($attempts as $attempt) {
-            if (!isset($attempt->personability_after_attempt) || $attempt->personability_after_attempt === null) {
-                // Legacy attempt without a snapshot: excluded from historical stats.
-                continue;
-            }
-            $userid = (int) $attempt->userid;
-            $endtime = (int) ($attempt->endtime ?? 0);
-            $ability = (float) $attempt->personability_after_attempt;
-
-            if (!isset($byuser[$userid])) {
-                $byuser[$userid] = ['endtime' => $endtime, 'ability' => $ability];
-                continue;
-            }
-            $current = $byuser[$userid];
-            $take = false;
-            switch ($rule) {
-                case 'first':
-                    $take = $endtime < $current['endtime'];
-                    break;
-                case 'best':
-                    $take = $ability > $current['ability'];
-                    break;
-                case 'last':
-                default:
-                    $take = $endtime >= $current['endtime'];
-                    break;
-            }
-            if ($take) {
-                $byuser[$userid] = ['endtime' => $endtime, 'ability' => $ability];
-            }
+            $items[] = [
+                'userid' => (int) $attempt->userid,
+                'endtime' => (int) ($attempt->endtime ?? 0),
+                // A missing snapshot (legacy attempt) becomes null and is dropped.
+                'value' => $attempt->personability_after_attempt ?? null,
+            ];
         }
-        return array_map(fn ($v) => $v['ability'], $byuser);
+        return \local_catquiz\teststrategy\feedback_helper::reduce_to_one_value_per_person($items, $rule);
     }
 
     /**
@@ -2076,10 +2056,11 @@ class catquiz {
             $sql .= " AND contextid = :contextid";
         }
         if (!is_null($starttime)) {
-            $sql .= " AND a.timecreated >= :starttime";
+            // Issue #16: filter historical periods by actual completion time.
+            $sql .= " AND a.endtime >= :starttime";
         }
         if (!is_null($endtime)) {
-            $sql .= " AND a.timecreated <= :endtime";
+            $sql .= " AND a.endtime <= :endtime";
         }
         $sql .= " ORDER BY a.endtime";
         $params = [
@@ -2658,11 +2639,12 @@ class catquiz {
         }
 
         if ($starttime) {
-            $where .= " AND a.starttime >= :starttime";
+            // Issue #16: same completion-time period rule as the charts.
+            $where .= " AND a.endtime >= :starttime";
         }
 
         if ($endtime) {
-            $where .= " AND a.starttime <= :endtime";
+            $where .= " AND a.endtime <= :endtime";
         }
 
         $sql = "SELECT a.attemptid,

@@ -225,6 +225,108 @@ final class feedback_gating_test extends advanced_testcase {
     }
 
     /**
+     * For an invalid result, student-facing generators (peer comparison, learning
+     * progress, ...) contribute no student feedback at all: the student sees only
+     * the single central notice. This verifies the gating happens before, not
+     * after, the generator output is assembled.
+     *
+     * @return void
+     */
+    public function test_invalid_result_skips_student_generators(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // A tracker the peer generator flips when it is actually executed.
+        $executed = new \ArrayObject(['peer' => false]);
+        $settings = new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB);
+        $helper = new feedback_helper();
+        $peer = new class ($settings, $helper, $executed) extends feedbackgenerator {
+            /** @var \ArrayObject */
+            private $executed;
+            /**
+             * Constructor.
+             *
+             * @param feedbacksettings $settings
+             * @param feedback_helper $helper
+             * @param \ArrayObject $executed
+             */
+            public function __construct($settings, $helper, \ArrayObject $executed) {
+                parent::__construct($settings, $helper);
+                $this->executed = $executed;
+            }
+            /**
+             * Records execution and returns a would-be peer tab.
+             *
+             * @param array $data
+             * @return array
+             */
+            protected function get_studentfeedback(array $data): array {
+                $this->executed['peer'] = true;
+                return ['heading' => 'Peers', 'content' => 'Peer comparison'];
+            }
+            /**
+             * Returns empty teacher feedback.
+             *
+             * @param array $data
+             * @return array
+             */
+            protected function get_teacherfeedback(array $data): array {
+                return [];
+            }
+            /**
+             * Returns the declared required context keys.
+             *
+             * @return array
+             */
+            public function get_required_context_keys(): array {
+                return [];
+            }
+            /**
+             * Returns the generator heading.
+             *
+             * @return string
+             */
+            public function get_heading(): string {
+                return 'Peers';
+            }
+            /**
+             * Returns the generator name.
+             *
+             * @return string
+             */
+            public function get_generatorname(): string {
+                return 'comparetotestaverage';
+            }
+            /**
+             * Loads no data for the stub.
+             *
+             * @param int $attemptid
+             * @param array $existingdata
+             * @param array $newdata
+             * @return array|null
+             */
+            public function load_data(int $attemptid, array $existingdata, array $newdata): ?array {
+                return [];
+            }
+        };
+        $scale = $this->make_generator('customscalefeedback', ['heading' => 'Scale', 'content' => 'Scale feedback']);
+
+        $context = $this->assemble([$scale, $peer], [
+            'attemptid' => 0,
+            'contextid' => \context_system::instance()->id,
+            // No toreport scale -> invalid result.
+            'customscalefeedback_abilities' => [
+                '5' => ['excluded' => true, 'error' => ['nminscale' => ['nmin' => 3]]],
+            ],
+        ]);
+        $this->assertArrayHasKey('studentfeedback', $context);
+        // Only the notice, and the peer generator was never executed.
+        $this->assertCount(1, $context['studentfeedback'], 'Student generators must be skipped for an invalid result.');
+        $this->assertSame('novalidresult', $context['studentfeedback'][0]['generatorname']);
+        $this->assertFalse($executed['peer'], 'The peer comparison must not run on an invalid result.');
+    }
+
+    /**
      * A valid result keeps the generator feedback and shows no central notice.
      *
      * @return void
