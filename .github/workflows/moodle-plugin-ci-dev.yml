@@ -1,0 +1,348 @@
+##############################################################################
+# Moodle Plugin CI - development (accelerated) pipeline
+#
+# Runs on push / PR to every branch EXCEPT main. Splits the work into PARALLEL
+# jobs gated behind a fast static-analysis job:
+#
+#     static  ──┬─▶ phpunit (reduced matrix, in parallel)
+#               └─▶ behat   (single representative cell, in parallel)
+#
+# Every check tees its output into ci-logs/, offered as a downloadable "error
+# summary" ZIP per job (always). On a Behat failure the dev pipeline also offers
+# the Behat screenshots + HTML dumps as their own ZIP.
+##############################################################################
+
+name: Moodle Plugin CI Dev
+
+on:
+  push:
+    branches-ignore:
+      - main
+    tags:
+      - '[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: ci-dev-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  MUSTACHE_IGNORE_NAMES: 'feedbackform_collapsible_close.mustache,feedbackform_collapsible_open.mustache,catscaleshortcodetablechildren.mustache'
+
+jobs:
+
+  # ── Fast static analysis gate (one cell) ────────────────────────────────
+  static:
+    name: "Static (lint / phpcs / phpdoc / mustache / grunt)"
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      - name: Install Moodle, dependencies and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: pgsql
+          MOODLE_BRANCH: MOODLE_405_STABLE
+
+      - name: PHP Lint
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phplint 2>&1 | tee ci-logs/phplint.log
+
+      - name: PHP Copy/Paste Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phpcpd 2>&1 | tee ci-logs/phpcpd.log
+
+      - name: PHP Mess Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phpmd 2>&1 | tee ci-logs/phpmd.log
+
+      - name: Moodle Code Checker
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci codechecker --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment 2>&1 | tee ci-logs/codechecker.log
+
+      - name: Moodle PHPDoc Checker
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phpdoc --max-warnings 0 2>&1 | tee ci-logs/phpdoc.log
+
+      - name: Validating
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci validate 2>&1 | tee ci-logs/validate.log
+
+      - name: Check upgrade savepoints
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci savepoints 2>&1 | tee ci-logs/savepoints.log
+
+      - name: Mustache Lint
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci mustache 2>&1 | tee ci-logs/mustache.log
+
+      - name: Grunt
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci grunt --max-lint-warnings 0 2>&1 | tee ci-logs/grunt.log
+
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "job:    static"
+            echo "status: ${{ job.status }}"
+            echo "commit: ${{ github.sha }}"
+            echo "ref:    ${{ github.ref }}"
+            echo ""
+            echo "Collected logs (a non-empty *.log for a failing step holds the error):"
+            ls -1 ci-logs
+          } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-summary-dev-static
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── PHPUnit (reduced, representative matrix - parallel) ──────────────────
+  phpunit:
+    name: "PHPUnit / PHP ${{ matrix.php }} / ${{ matrix.database }}"
+    runs-on: ubuntu-22.04
+    needs: [static]
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+      mariadb:
+        image: mariadb:10.8
+        env:
+          MYSQL_USER: 'root'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: '8.1', database: pgsql }
+          - { php: '8.2', database: mariadb }
+          - { php: '8.3', database: pgsql }
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      - name: Install Moodle, dependencies and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: ${{ matrix.database }}
+          MOODLE_BRANCH: MOODLE_405_STABLE
+
+      - name: PHPUnit tests
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "job:    phpunit (PHP ${{ matrix.php }} / ${{ matrix.database }})"
+            echo "status: ${{ job.status }}"
+            echo "commit: ${{ github.sha }}"
+            echo "ref:    ${{ github.ref }}"
+            echo ""
+            echo "Collected logs:"
+            ls -1 ci-logs
+          } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-summary-dev-phpunit-${{ matrix.php }}-${{ matrix.database }}
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── Behat (single representative cell - parallel to phpunit) ─────────────
+  behat:
+    name: "Behat / PHP 8.2 / Chrome"
+    runs-on: ubuntu-22.04
+    needs: [static]
+
+    services:
+      mariadb:
+        image: mariadb:10.8
+        env:
+          MYSQL_USER: 'root'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      - name: Install Moodle, dependencies and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: mariadb
+          MOODLE_BRANCH: MOODLE_405_STABLE
+
+      - name: Behat features
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci behat --profile chrome 2>&1 | tee ci-logs/behat.log
+
+      - name: Collect error summary and Behat dumps
+        if: ${{ always() }}
+        run: |
+          for d in moodle/behatfaildumps "$GITHUB_WORKSPACE/moodle/behatfaildumps" moodledata/behat/faildumps; do
+            [ -d "$d" ] && cp -a "$d" ci-logs/behatfaildumps 2>/dev/null || true
+          done
+          {
+            echo "job:    behat (PHP 8.2 / Chrome)"
+            echo "status: ${{ job.status }}"
+            echo "commit: ${{ github.sha }}"
+            echo "ref:    ${{ github.ref }}"
+            echo ""
+            echo "Collected logs and dumps:"
+            ls -1 ci-logs
+          } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-summary-dev-behat
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Behat screenshots (ZIP)
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: behat-screenshots-dev
+          path: |
+            moodle/behatfaildumps
+            moodledata/behat/faildumps
+          retention-days: 7
+          if-no-files-found: ignore
+
+  ci-complete:
+    name: CI complete
+    needs: [static, phpunit, behat]
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - name: All dev jobs must have succeeded
+        run: |
+          result="${{ needs.static.result }}-${{ needs.phpunit.result }}-${{ needs.behat.result }}"
+          if [[ "$result" == "success-success-success" ]]; then
+            echo "All dev CI jobs passed."
+          else
+            echo "CI result: $result - one or more jobs failed or were cancelled."
+            exit 1
+          fi

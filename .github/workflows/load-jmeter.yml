@@ -1,0 +1,140 @@
+##############################################################################
+# JMeter read-endpoint load test – local_catquiz
+#
+# Runs on pull requests and merges to main (and on demand). Builds a
+# self-contained Moodle 4.5 site with the plugin and its dependencies, seeds a
+# large CAT-manager/statistics profile and load-tests the read pages with
+# Apache JMeter.
+#
+# NOTE: exercises a live site (login + heavy pages) outside the static
+# moodle-plugin-ci pipeline. The plan tests/load/catquiz-read-endpoints.jmx and
+# its assertions are an initial baseline; tune after the first real run.
+##############################################################################
+
+name: Load test (JMeter)
+
+on:
+  workflow_dispatch:
+    inputs:
+      threads:
+        description: Concurrent virtual users (plateau)
+        default: '25'
+      rampup:
+        description: Ramp-up seconds
+        default: '10'
+      duration:
+        description: Plateau duration seconds
+        default: '90'
+      users:
+        description: Seeded persons
+        default: '2000'
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: load-jmeter-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jmeter:
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+
+    env:
+      DB: pgsql
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      LOAD_ADMIN_PASS: 'Admin!23'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+
+      - name: Build Moodle, dependencies and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+
+      - name: Serve the site
+        run: |
+          echo "MOODLE_DIR=$MOODLE_DIR" >> "$GITHUB_ENV"
+          php -S localhost:8000 -t "$MOODLE_DIR" >/tmp/moodle-server.log 2>&1 &
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+              http://localhost:8000/login/index.php || true)
+            [ "$code" = "200" ] && break
+            sleep 3
+          done
+
+      - name: Seed a large profile
+        run: |
+          php "$MOODLE_DIR/local/catquiz/tests/load/seed_large.php" \
+            --users='${{ github.event.inputs.users || 2000 }}' > /tmp/seed.env
+          cat /tmp/seed.env
+          sed -n "s/^export \([A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/seed.env >> "$GITHUB_ENV"
+
+      - name: Set up JMeter
+        run: |
+          curl -sSL https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz -o jmeter.tgz
+          tar xzf jmeter.tgz
+
+      - name: Run JMeter plan
+        run: |
+          apache-jmeter-5.6.3/bin/jmeter -n \
+            -t plugin/tests/load/catquiz-read-endpoints.jmx \
+            -Jbase_url="$BASE_URL" \
+            -Jusername="$ADMIN_USER" \
+            -Jpassword="$ADMIN_PASS" \
+            -Jscaleid="$SCALEID" \
+            -Jcontextid="$CONTEXTID" \
+            -Jthreads='${{ github.event.inputs.threads || 25 }}' \
+            -Jrampup='${{ github.event.inputs.rampup || 10 }}' \
+            -Jduration='${{ github.event.inputs.duration || 90 }}' \
+            -l results.jtl -e -o jmeter-report
+
+      - name: Show Moodle server log on failure
+        if: failure()
+        run: tail -100 /tmp/moodle-server.log || true
+
+      - name: Upload JMeter results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-results
+          path: |
+            results.jtl
+            jmeter-report
+          retention-days: 7
+          if-no-files-found: ignore

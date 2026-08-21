@@ -1,5 +1,41 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082016)
+
+> CI-Diagnostik: herunterladbare Error-Summary (ZIP) in beiden CI-Pipelines,
+> Behat-Screenshots (ZIP) im Dev-Branch bei Behat-Fehlern. Details in
+> `doc/session-047-changes.md`.
+
+- **Error-Summary (beide Pipelines):** jeder Check schreibt seine Ausgabe per
+  `tee` nach `ci-logs/` (mit `pipefail`, Exit-Code bleibt erhalten). Ein
+  `always()`-Schritt sammelt die Logs + eine `summary.txt` und lädt sie als
+  Artefakt `error-summary-*` hoch (GitHub bietet Artefakte als ZIP-Download an).
+- **Behat-Screenshots (Dev, bei Fehler):** der Dev-Behat-Job lädt die
+  Behat-Faildumps (Screenshots + HTML) bei `failure()` als Artefakt
+  `behat-screenshots-dev` hoch. In der main-Pipeline analog `behat-screenshots-main-*`.
+- Artefaktnamen je Job/Matrix eindeutig (Pflicht bei `upload-artifact@v4`).
+
+## 1.1.5 (interne Version 2026082015)
+
+> CI-Umbau nach vimipad-Vorbild: schnelle parallele Pipeline für Dev-Branches,
+> sequenzielle Pipeline nur für main, plus JMeter- und k6-Last-Tests für
+> main-Pulls/Merges. Details in `doc/session-046-changes.md`.
+
+- **Dev-Pipeline** (`moodle-plugin-ci-dev.yml`, `branches-ignore: main`):
+  parallel — schneller `static`-Gate-Job (phplint, phpcpd, phpmd, codechecker,
+  phpdoc, validate, savepoints, mustache, grunt), danach `phpunit` (reduzierte
+  3-Zellen-Matrix) und `behat` (eine Zelle) parallel; `ci-complete`-Gate.
+- **Main-Pipeline** (`moodle-plugin-ci-main.yml`, nur `main`): unverändert
+  sequenziell über die volle 6-Zellen-Matrix (lint → phpunit → behat je Zelle);
+  `ci-complete`-Gate für Branch Protection.
+- **Last-Tests** (`load-k6.yml`, `load-jmeter.yml`, Trigger: Pull/Push auf
+  `main` + manuell): self-contained Site (Moodle 4.5 + Abhängigkeiten) via
+  moodle-plugin-ci, großes Profil via `tests/load/seed_large.php`, Read-Last auf
+  CAT-Manager/Statistik. Neue Assets unter `tests/load/`
+  (`seed_large.php`, `catquiz-read-endpoints.js`, `catquiz-read-endpoints.jmx`).
+- Alte `moodle-plugin-ci-push.yml` / `moodle-plugin-ci-pullreq.yml` entfernt
+  (durch dev/main ersetzt); `erpnext.yml` unverändert.
+
 ## 1.1.5 (interne Version 2026082014)
 
 > Strang „Diagramme+Feedback+Statistik": Nachbesserung nach externem Review –
