@@ -8,7 +8,7 @@
 #
 #     lint-php   (phplint, phpcs) ──┬─▶ phpunit ─┐
 #     lint-jsamd (grunt, mustache) ─┴─▶ behat  ──┤
-#     quality    (phpdoc, phpmd, phpcpd, savepoints, validate)  ── parallel ──┘
+#     quality    (phpdoc, savepoints, validate)                 ── parallel ──┘
 #
 # Each job tees its output into ci-logs/ and offers it as an "error summary" ZIP
 # artifact (always); the Behat job additionally offers the failure screenshots +
@@ -40,7 +40,7 @@ jobs:
 
   # ── PHP lint gate (no Moodle install - fast) ────────────────────────────
   lint-php:
-    name: "PHP lint (phplint + phpcs)"
+    name: "PHP lint (phplint + phpcs + phpmd + phpcpd)"
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +56,13 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
       - name: Initialise moodle-plugin-ci
         run: |
           composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
@@ -69,6 +76,16 @@ jobs:
       - name: Moodle Code Checker
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci codechecker plugin --max-warnings 0 --exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment 2>&1 | tee ci-logs/codechecker.log
+
+      - name: PHP Mess Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phpmd plugin 2>&1 | tee ci-logs/phpmd.log
+
+      - name: PHP Copy/Paste Detector
+        continue-on-error: true
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phpcpd plugin 2>&1 | tee ci-logs/phpcpd.log
 
       - name: Collect error summary
         if: ${{ always() }}
@@ -114,6 +131,13 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
       - name: Initialise moodle-plugin-ci
         run: |
           composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
@@ -134,6 +158,13 @@ jobs:
         env:
           DB: pgsql
           MOODLE_BRANCH: MOODLE_405_STABLE
+
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ github.sha }}
+          restore-keys: npm-${{ runner.os }}-
 
       - name: Grunt (JS / AMD / CSS)
         if: ${{ always() }}
@@ -160,7 +191,7 @@ jobs:
 
   # ── Quality checks (parallel to phpunit / behat, non-gating) ────────────
   quality:
-    name: "Quality (phpdoc / phpmd / phpcpd / savepoints / validate)"
+    name: "Quality (phpdoc / savepoints / validate)"
     runs-on: ubuntu-22.04
 
     services:
@@ -187,6 +218,13 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
       - name: Initialise moodle-plugin-ci
         run: |
           composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
@@ -210,16 +248,6 @@ jobs:
       - name: Moodle PHPDoc Checker
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci phpdoc --max-warnings 0 2>&1 | tee ci-logs/phpdoc.log
-
-      - name: PHP Mess Detector
-        continue-on-error: true
-        if: ${{ always() }}
-        run: set -o pipefail; moodle-plugin-ci phpmd 2>&1 | tee ci-logs/phpmd.log
-
-      - name: PHP Copy/Paste Detector
-        continue-on-error: true
-        if: ${{ always() }}
-        run: set -o pipefail; moodle-plugin-ci phpcpd 2>&1 | tee ci-logs/phpcpd.log
 
       - name: Check upgrade savepoints
         if: ${{ always() }}
@@ -289,6 +317,13 @@ jobs:
           php-version: ${{ matrix.php }}
           ini-values: max_input_vars=5000
           coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
 
       - name: Initialise moodle-plugin-ci
         run: |
@@ -360,6 +395,13 @@ jobs:
           ini-values: max_input_vars=5000
           coverage: none
 
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
       - name: Initialise moodle-plugin-ci
         run: |
           composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
@@ -416,14 +458,18 @@ jobs:
 
   ci-complete:
     name: CI complete
-    needs: [lint-php, lint-jsamd, quality, phpunit, behat]
+    # lint-jsamd is intentionally NOT listed here: it is already a prerequisite
+    # of behat (needs: [lint-php, lint-jsamd]), so a lint-jsamd failure skips
+    # behat and is caught below via behat's non-success result. Listing it again
+    # would be a redundant edge.
+    needs: [lint-php, quality, phpunit, behat]
     runs-on: ubuntu-22.04
     if: always()
     steps:
       - name: All dev jobs must have succeeded
         run: |
-          result="${{ needs.lint-php.result }}-${{ needs.lint-jsamd.result }}-${{ needs.quality.result }}-${{ needs.phpunit.result }}-${{ needs.behat.result }}"
-          if [[ "$result" == "success-success-success-success-success" ]]; then
+          result="${{ needs.lint-php.result }}-${{ needs.quality.result }}-${{ needs.phpunit.result }}-${{ needs.behat.result }}"
+          if [[ "$result" == "success-success-success-success" ]]; then
             echo "All dev CI jobs passed."
           else
             echo "CI result: $result - one or more jobs failed or were cancelled."
