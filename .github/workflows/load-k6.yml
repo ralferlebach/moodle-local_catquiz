@@ -1,7 +1,8 @@
 ##############################################################################
 # k6 read-endpoint load test – local_catquiz
 #
-# Runs on pull requests and merges to main (and on demand). It builds a
+# Runs after merges/pushes to main (and on demand). Pull requests are covered
+# by Moodle Plugin CI Main, avoiding duplicate load-test executions. It builds a
 # self-contained Moodle 4.5 site with the plugin and its dependencies, seeds a
 # large CAT-manager/statistics profile and load-tests the read pages with k6.
 #
@@ -25,9 +26,6 @@ on:
       users:
         description: Seeded persons
         default: '2000'
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
@@ -57,7 +55,7 @@ jobs:
       LOAD_ADMIN_PASS: 'Admin!23'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           path: plugin
 
@@ -69,7 +67,7 @@ jobs:
           coverage: none
 
       - name: Cache Composer downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/composer
           key: composer-${{ runner.os }}-${{ github.sha }}
@@ -90,17 +88,33 @@ jobs:
           moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
-          moodle-plugin-ci install --plugin ./plugin --moodle="$MOODLE_DIR" --db-host=127.0.0.1
+          # Load tests need a normal live Moodle site, not PHPUnit/Behat databases.
+          moodle-plugin-ci install --plugin ./plugin --moodle="$MOODLE_DIR" --db-host=127.0.0.1 --no-init
+
+      - name: Install live Moodle site
+        run: |
+          test -f "$MOODLE_DIR/config.php"
+          # moodle-plugin-ci defaults the normal wwwroot to http://localhost/moodle.
+          # This workflow serves Moodle directly from its document root on port 8000.
+          moodle-plugin-ci add-config '$CFG->wwwroot = "http://localhost:8000";'
+          php "$MOODLE_DIR/admin/cli/install_database.php" \
+            --agree-license \
+            --fullname='CATquiz load test' \
+            --shortname='CATquiz load' \
+            --adminuser='admin' \
+            --adminpass="$LOAD_ADMIN_PASS" \
+            --adminemail='admin@example.com'
+          # Fail here, with a useful message, if the normal site schema was not installed.
+          php -r 'define("CLI_SCRIPT", true); require getenv("MOODLE_DIR") . "/config.php"; if (!$DB->get_manager()->table_exists("context") || !$DB->get_manager()->table_exists("local_catquiz_catcontext")) { fwrite(STDERR, "Live Moodle/CATquiz schema missing\n"); exit(1); }'
 
       - name: Serve the site
         run: |
-          test -f "$MOODLE_DIR/config.php"
           php -S localhost:8000 -t "$MOODLE_DIR" >/tmp/moodle-server.log 2>&1 &
           ready=0
           for i in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
-              http://localhost:8000/login/index.php || true)
-            if [ "$code" = "200" ]; then
+            if curl -fsS --max-time 20 http://localhost:8000/login/index.php \
+              -o /tmp/moodle-login.html \
+              && grep -q 'name="logintoken"' /tmp/moodle-login.html; then
               ready=1
               break
             fi
@@ -108,6 +122,7 @@ jobs:
           done
           if [ "$ready" -ne 1 ]; then
             cat /tmp/moodle-server.log || true
+            cat /tmp/moodle-login.html || true
             exit 1
           fi
 
@@ -142,7 +157,7 @@ jobs:
 
       - name: Upload k6 summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: k6-summary
           path: k6-summary.json

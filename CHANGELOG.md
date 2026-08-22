@@ -1,5 +1,29 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082110)
+
+> Verifikationslücke geschlossen: End-to-End-Trajektorien-Wächter reaktiviert
+> (test-only). Entblockt spätere Estimation-Hotpath-Umbauten (u. a. #9 Phase 3).
+
+- **Neuer Wächter** `strategy_test::test_all_wrong_attempt_drives_ability_down`:
+  ersetzt den brittle-gepinnten, übersprungenen
+  `test_strategy_returns_expected_questions` durch einen toleranz-/invarianten-
+  basierten Test. Fährt einen ganzen Attempt über `fetch_question_id()` mit
+  All-falsch-Antworten und prüft **deterministisch**, dass die aus personparams
+  gelesene Fähigkeit monoton und deutlich sinkt (Pilots = flache Schritte
+  erlaubt). Deckt den vollen `fetch → Preselect-Pipeline → Schätzung →
+  personparams`-Fluss ab, den der estimator-only catcalc-Simulationstest nicht
+  sieht.
+- **Zahn-getestet:** entfernt man den During-Attempt-`update_person_param` in
+  `updatepersonability` (genau der Phase-3-Eingriff), bleibt die Fähigkeit bei 0
+  → Wächter rot.
+- **Befund** (im Plan dokumentiert): der geladene `person_ability` ist nur der
+  Newton-Startwert; die Schätzung konvergiert zur MLE unabhängig davon. Das
+  senkt das Phase-3-Risiko (Startwert-Umleitung ist risikoarm; die
+  Write-Entfernung ist nun bewacht).
+- Der alte gepinnte Test bleibt bewusst `markTestSkipped` (dokumentiert die
+  Pinning-Historie). Reine Testarbeit, kein Produktionscode geändert.
+
 ## 1.1.5 (interne Version 2026082109)
 
 > #9-Restpunkt, Phase 2 (risikoarm): exakte Pre-Attempt-Wiederherstellung.
