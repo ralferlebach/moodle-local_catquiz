@@ -64,7 +64,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: '8.3'
           extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
           ini-values: max_input_vars=5000
           coverage: none
@@ -94,40 +94,93 @@ jobs:
           # Load tests need a normal live Moodle site, not PHPUnit/Behat databases.
           moodle-plugin-ci install --plugin ./plugin --moodle="$MOODLE_DIR" --db-host=127.0.0.1 --no-init
 
-      - name: Install live Moodle site
+      - name: Install clean live Moodle site
         run: |
-          test -f "$MOODLE_DIR/config.php"
-          # moodle-plugin-ci defaults the normal wwwroot to http://localhost/moodle.
-          # This workflow serves Moodle directly from its document root on port 8000.
-          moodle-plugin-ci add-config '$CFG->wwwroot = "http://localhost:8000";'
-          php "$MOODLE_DIR/admin/cli/install_database.php" \
+          set -euo pipefail
+
+          # moodle-plugin-ci is used above to assemble the exact Moodle checkout
+          # plus CATquiz and all required plugins. Its generated config.php is
+          # intentionally a CI/test configuration (PHPUnit/Behat). Do not turn
+          # that configuration into the site used by the load test.
+          rm -f "$MOODLE_DIR/config.php"
+          rm -rf "${{ github.workspace }}/moodledata-live"
+
+          # Recreate the normal Moodle database from scratch.
+          dropdb --if-exists --host=127.0.0.1 --username=postgres moodle
+          createdb --host=127.0.0.1 --username=postgres moodle
+
+          # Let Moodle create its own production-style config.php and install
+          # core plus every plugin already assembled in the Moodle tree.
+          php "$MOODLE_DIR/admin/cli/install.php" \
+            --non-interactive \
             --agree-license \
+            --wwwroot='http://127.0.0.1:8000' \
+            --dataroot='${{ github.workspace }}/moodledata-live' \
+            --dbtype=pgsql \
+            --dbhost=127.0.0.1 \
+            --dbport=5432 \
+            --dbname=moodle \
+            --dbuser=postgres \
+            --prefix=mdl_ \
             --fullname='CATquiz load test' \
             --shortname='CATquiz load' \
-            --adminuser='admin' \
+            --adminuser=admin \
             --adminpass="$LOAD_ADMIN_PASS" \
             --adminemail='admin@example.com'
-          # Fail here, with a useful message, if the normal site schema was not installed.
-          php -r 'define("CLI_SCRIPT", true); require getenv("MOODLE_DIR") . "/config.php"; if (!$DB->get_manager()->table_exists("context") || !$DB->get_manager()->table_exists("local_catquiz_catcontext")) { fwrite(STDERR, "Live Moodle/CATquiz schema missing\n"); exit(1); }'
+
+          # Ensure there is no pending plugin upgrade and no stale install cache.
+          php "$MOODLE_DIR/admin/cli/upgrade.php" --non-interactive
+          php "$MOODLE_DIR/admin/cli/purge_caches.php"
+
+          # Verify the actual live schema, not just that config.php exists.
+          php -r 'define("CLI_SCRIPT", true); require getenv("MOODLE_DIR") . "/config.php"; $manager = $DB->get_manager(); if (!$manager->table_exists("config") || !$manager->table_exists("context") || !$manager->table_exists("local_catquiz_catcontext")) { fwrite(STDERR, "Live Moodle/CATquiz schema missing\n"); exit(1); } echo "Live Moodle schema OK\n";'
 
       - name: Serve the site
         run: |
-          php -S localhost:8000 -t "$MOODLE_DIR" >/tmp/moodle-server.log 2>&1 &
+          set -euo pipefail
+          rm -f /tmp/moodle-server.log /tmp/moodle-login.html
+
+          # A single PHP CLI server is single-threaded and would invalidate a
+          # concurrency load test. Use several built-in workers for this CI
+          # smoke/load baseline.
+          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$MOODLE_DIR" \
+            >/tmp/moodle-server.log 2>&1 &
+          serverpid=$!
+          echo "MOODLE_SERVER_PID=$serverpid" >> "$GITHUB_ENV"
+
           ready=0
+          lastcode=000
           for i in $(seq 1 40); do
-            if curl -fsS --max-time 20 http://localhost:8000/login/index.php \
+            if ! kill -0 "$serverpid" 2>/dev/null; then
+              echo "Moodle PHP server exited before becoming ready." >&2
+              break
+            fi
+
+            # Do not use curl -f here: on an HTTP 500 we explicitly want to
+            # retain Moodle's response body for diagnosis.
+            lastcode=$(curl -sS --max-time 20 \
               -o /tmp/moodle-login.html \
+              -w '%{http_code}' \
+              http://127.0.0.1:8000/login/index.php || true)
+
+            if [ "$lastcode" = "200" ] \
               && grep -q 'name="logintoken"' /tmp/moodle-login.html; then
               ready=1
               break
             fi
             sleep 3
           done
+
           if [ "$ready" -ne 1 ]; then
-            cat /tmp/moodle-server.log || true
-            cat /tmp/moodle-login.html || true
+            echo "Moodle did not become ready; last HTTP status: $lastcode" >&2
+            echo "--- PHP server log ---" >&2
+            cat /tmp/moodle-server.log >&2 || true
+            echo "--- HTTP response ---" >&2
+            cat /tmp/moodle-login.html >&2 || true
             exit 1
           fi
+
+          echo "Moodle live site is ready (HTTP 200 with login token)."
 
       - name: Seed a large profile
         run: |
@@ -155,9 +208,24 @@ jobs:
             -Jduration='${{ github.event.inputs.duration || 90 }}' \
             -l results.jtl -e -o jmeter-report
 
-      - name: Show Moodle server log on failure
+      - name: Show Moodle diagnostics on failure
         if: failure()
-        run: tail -100 /tmp/moodle-server.log || true
+        run: |
+          echo "--- PHP server log ---"
+          cat /tmp/moodle-server.log || true
+          echo "--- Last HTTP response ---"
+          cat /tmp/moodle-login.html || true
+
+      - name: Upload Moodle diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jmeter-moodle-diagnostics
+          path: |
+            /tmp/moodle-server.log
+            /tmp/moodle-login.html
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload JMeter results
         if: always()
