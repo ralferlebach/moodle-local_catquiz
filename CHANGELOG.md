@@ -1,5 +1,41 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082112)
+
+> Aufräumung als Vorbereitung des „vermuteter Wert"-Features (8.3): korrekte
+> MAP-Terminologie und Entfernung einer toten Legacy-Krücke.
+
+- **Rename `fneapestimator` → `fnmapestimator`** (inkl. `…derivative1st`,
+  interner `eapgradient` → `mapgradient`, Doc/Meldungen EAP → MAP) in `mathcat`
+  (`newton_raphson_multi_stable`, `gradient_ascent`). Was der Schätzer rechnet,
+  ist ein Posterior-**Modus** (MAP) mit Gauss-Prior, keine EAP-Quadratur — die
+  Benennung ist jetzt konsistent. Reine Umbenennung, byte-identisch verifiziert;
+  der Hook bleibt (wie bisher) ungenutzt.
+- **`fallback_ability_update()` entfernt** (`updatepersonability`): toter Code
+  (0 Aufrufer, kein dynamischer Aufruf, keine Test-Referenz) — eine sehr frühe
+  Legacy-Lösung (`±5·fraction`-Halbschritt) des Degeneriert-Falls, längst durch
+  den TR-regularisierten `maybe_change_to_alternative_ability`-Pfad ersetzt.
+- Bestätigt (kein Codeänderungsbedarf): der aktive MAP-Prior N(ParentScore,
+  ParentSE) läuft bereits über die Trusted-Region-Terme; alle drei
+  `estimate_person_ability`-Aufrufstellen speisen `parentability`/`parentse`.
+- Regression grün: mathcat 15/15, catcalc 8/8, updatepersonability 7/7,
+  Trajektorien-Wächter.
+
+## 1.1.5 (interne Version 2026082111)
+
+> Load-Test-CI (jMeter/k6) repariert – Patch unverändert übernommen. CI grün.
+> Betrifft nur `.github/` (per `.gitattributes export-ignore` nicht im Release-ZIP).
+
+- **`.github/workflows/load-jmeter.yml`, `load-k6.yml`:** Load-Tests installieren
+  jetzt eine **echte Live-Moodle-Site** (`moodle-plugin-ci … --no-init`, dann
+  `admin/cli/install.php` + `upgrade.php` + `purge_caches.php` + Schema-
+  Verifikation) statt der PHPUnit/Behat-Konfiguration; **Multi-Worker-PHP-Server**
+  (`PHP_CLI_SERVER_WORKERS=8`), damit Concurrency-Messungen valide sind;
+  robusterer Readiness-Check (HTTP 200 **und** Login-Token, Server-Prozess-Check);
+  Diagnose-Artefakte bei Fehler. Trigger nur noch auf Push/Merge zu `main`
+  (PRs deckt „Moodle Plugin CI Main" ab, keine Doppelläufe). Action-/PHP-Anhebung:
+  `checkout@v6`, `cache@v5`, `upload-artifact@v7`, PHP `8.3`.
+
 ## 1.1.5 (interne Version 2026082110)
 
 > Verifikationslücke geschlossen: End-to-End-Trajektorien-Wächter reaktiviert

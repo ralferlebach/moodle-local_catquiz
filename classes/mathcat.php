@@ -148,8 +148,8 @@ class mathcat {
      * @param int $precision Accuracy in decimal places used as convergence threshold.
      * @param int $maxiterations Maximum number of iterations.
      * @param callable|null $fnparameterrestrictions Optional projection to the trusted parameter region.
-     * @param callable|null $fneapestimator Optional additive EAP objective term.
-     * @param callable|null $fneapestimatorderivative1st Optional gradient of the EAP objective term.
+     * @param callable|null $fnmapestimator Optional additive MAP objective term.
+     * @param callable|null $fnmapestimatorderivative1st Optional gradient of the MAP objective term.
      * @return array Optimised parameters in the same structure as $parameterstart.
      */
     public static function bfgs(
@@ -159,11 +159,11 @@ class mathcat {
         int $precision = 6,
         int $maxiterations = 100,
         ?callable $fnparameterrestrictions = null,
-        ?callable $fneapestimator = null,
-        ?callable $fneapestimatorderivative1st = null
+        ?callable $fnmapestimator = null,
+        ?callable $fnmapestimatorderivative1st = null
     ): array {
-        if (($fneapestimator === null) !== ($fneapestimatorderivative1st === null)) {
-            throw new \InvalidArgumentException('EAP objective and derivative must either both be provided or both be null.');
+        if (($fnmapestimator === null) !== ($fnmapestimatorderivative1st === null)) {
+            throw new \InvalidArgumentException('MAP objective and derivative must either both be provided or both be null.');
         }
 
         $parameter = $parameterstart;
@@ -180,33 +180,33 @@ class mathcat {
             $fnfunction,
             $fnderivative,
             $parameterstructure,
-            $fneapestimator,
-            $fneapestimatorderivative1st
+            $fnmapestimator,
+            $fnmapestimatorderivative1st
         ): array {
             $structured = self::vector_to_array($vector, $parameterstructure);
             $value = (float) $fnfunction($structured);
             $gradient = $fnderivative($structured);
 
-            if ($fneapestimator !== null) {
-                $value += (float) $fneapestimator($structured);
-                $eapgradient = $fneapestimatorderivative1st($structured);
+            if ($fnmapestimator !== null) {
+                $value += (float) $fnmapestimator($structured);
+                $mapgradient = $fnmapestimatorderivative1st($structured);
             } else {
-                $eapgradient = null;
+                $mapgradient = null;
             }
 
             $gradientvector = $gradient;
             self::array_to_vector($gradientvector);
             $gradientvector = array_values($gradientvector);
 
-            if ($eapgradient !== null) {
-                $eapgradientvector = $eapgradient;
-                self::array_to_vector($eapgradientvector);
-                $eapgradientvector = array_values($eapgradientvector);
-                if (count($eapgradientvector) !== count($gradientvector)) {
-                    throw new \InvalidArgumentException('EAP gradient dimension does not match objective gradient dimension.');
+            if ($mapgradient !== null) {
+                $mapgradientvector = $mapgradient;
+                self::array_to_vector($mapgradientvector);
+                $mapgradientvector = array_values($mapgradientvector);
+                if (count($mapgradientvector) !== count($gradientvector)) {
+                    throw new \InvalidArgumentException('MAP gradient dimension does not match objective gradient dimension.');
                 }
                 foreach ($gradientvector as $index => $gradientvalue) {
-                    $gradientvector[$index] = $gradientvalue + $eapgradientvector[$index];
+                    $gradientvector[$index] = $gradientvalue + $mapgradientvector[$index];
                 }
             }
 
@@ -449,8 +449,8 @@ class mathcat {
      * @param int $precision Accuracy in decimal places used as convergence threshold.
      * @param int $maxiterations Maximum number of iterations.
      * @param callable|null $fnparameterrestrictions Optional projection to the trusted parameter region.
-     * @param callable|null $fneapestimator Optional additive EAP objective term.
-     * @param callable|null $fneapestimatorderivative1st Optional gradient of the EAP objective term.
+     * @param callable|null $fnmapestimator Optional additive MAP objective term.
+     * @param callable|null $fnmapestimatorderivative1st Optional gradient of the MAP objective term.
      * @return array Optimised parameters in the same structure as $parameterstart.
      */
     public static function gradient_ascent(
@@ -460,11 +460,11 @@ class mathcat {
         int $precision = 6,
         int $maxiterations = 50,
         ?callable $fnparameterrestrictions = null,
-        ?callable $fneapestimator = null,
-        ?callable $fneapestimatorderivative1st = null
+        ?callable $fnmapestimator = null,
+        ?callable $fnmapestimatorderivative1st = null
     ): array {
-        if (($fneapestimator === null) !== ($fneapestimatorderivative1st === null)) {
-            throw new \InvalidArgumentException('EAP objective and derivative must either both be provided or both be null.');
+        if (($fnmapestimator === null) !== ($fnmapestimatorderivative1st === null)) {
+            throw new \InvalidArgumentException('MAP objective and derivative must either both be provided or both be null.');
         }
 
         $parameter = $parameterstart;
@@ -480,31 +480,31 @@ class mathcat {
             $fnfunction,
             $fnderivative,
             $parameterstructure,
-            $fneapestimator,
-            $fneapestimatorderivative1st
+            $fnmapestimator,
+            $fnmapestimatorderivative1st
         ): array {
             $structured = self::vector_to_array($vector, $parameterstructure);
             $value = (float) $fnfunction($structured);
             $gradient = $fnderivative($structured);
-            if ($fneapestimator !== null) {
-                $value += (float) $fneapestimator($structured);
-                $eapgradient = $fneapestimatorderivative1st($structured);
+            if ($fnmapestimator !== null) {
+                $value += (float) $fnmapestimator($structured);
+                $mapgradient = $fnmapestimatorderivative1st($structured);
             } else {
-                $eapgradient = null;
+                $mapgradient = null;
             }
 
             $gradientvector = $gradient;
             self::array_to_vector($gradientvector);
             $gradientvector = array_values($gradientvector);
-            if ($eapgradient !== null) {
-                $eapgradientvector = $eapgradient;
-                self::array_to_vector($eapgradientvector);
-                $eapgradientvector = array_values($eapgradientvector);
-                if (count($eapgradientvector) !== count($gradientvector)) {
-                    throw new \InvalidArgumentException('EAP gradient dimension does not match objective gradient dimension.');
+            if ($mapgradient !== null) {
+                $mapgradientvector = $mapgradient;
+                self::array_to_vector($mapgradientvector);
+                $mapgradientvector = array_values($mapgradientvector);
+                if (count($mapgradientvector) !== count($gradientvector)) {
+                    throw new \InvalidArgumentException('MAP gradient dimension does not match objective gradient dimension.');
                 }
                 foreach ($gradientvector as $index => $gradientvalue) {
-                    $gradientvector[$index] = $gradientvalue + $eapgradientvector[$index];
+                    $gradientvector[$index] = $gradientvalue + $mapgradientvector[$index];
                 }
             }
             return [$value, $gradientvector];

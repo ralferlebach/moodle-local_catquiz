@@ -413,28 +413,6 @@ class updatepersonability extends preselect_task {
     }
 
     /**
-     * If the last answer was correct, increase the ability to the halfway point
-     * between the current ability and the maximum value.
-     * If the last question is partly correct, e.g. the fraction is 0.6, then
-     * the change of the person ability is multiplied by that value.
-     *
-     * For incorrect answers, the change will update the ability towards the
-     * minimum value.
-     *
-     * @param mixed $catscaleid
-     *
-     * @return mixed
-     *
-     */
-    public function fallback_ability_update($catscaleid) {
-        $fraction = $this->userresponses->get_last_response($this->context['attemptid'])->get_response();
-        $max = ($fraction < 0.5)
-            ? -5 * (1 - $fraction)
-            : 5 * $fraction;
-        return ($this->context['person_ability'][$catscaleid] + $max) / 2;
-    }
-
-    /**
      * Returns the mean value that is used for the ability estimation.
      *
      * @return float
