@@ -1,10 +1,8 @@
 ##############################################################################
 # Moodle Plugin CI - main (release) pipeline
 #
-# Runs as the full pull-request gate for changes targeting main and can also be
-# started manually. It intentionally does NOT run again on the merge push to main,
-# avoiding duplicate PR + push executions. Full, SEQUENTIAL pipeline: every check
-# runs in order inside
+# Runs ONLY on push / PR to main and provides the "CI complete" status check for
+# branch protection. Full, SEQUENTIAL pipeline: every check runs in order inside
 # each matrix cell (lint -> phpunit -> behat), across the full Moodle x PHP x DB
 # matrix. The fast, parallelised pipeline in moodle-plugin-ci-dev.yml is used for
 # development branches.
@@ -17,10 +15,12 @@
 name: Moodle Plugin CI Main
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 concurrency:
   group: ci-main-${{ github.event.pull_request.number || github.ref }}

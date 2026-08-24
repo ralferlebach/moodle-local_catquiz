@@ -1,5 +1,24 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082117)
+
+> Teil J vervollständigt: Jest-Tests (Modal) + Behat-Feature (End-to-End).
+
+- **Jest-Tests** für den „Frage anzeigen"-Modal-Handler
+  (`tests/jest/graphicalsummary.test.js`, 3 Tests, grün): erfolgreiches AJAX
+  öffnet das Modal und entfernt den Spinner; eine AJAX-Rejection entfernt den
+  Spinner **und** meldet den Fehler via `core/notification` (kein Dauerspinner)
+  und öffnet kein Modal; ein Doppelklick startet keine parallelen Requests. Ein
+  plugin-lokales Jest-Setup wurde ergänzt (`package.json`, `babel.config.js`,
+  Mocks für die Core-AMD-Module unter `tests/jest/mocks/`), da Moodle 4.5 kein
+  eigenes Jest-Framework mitbringt. `package.json`/`babel.config.js` sind
+  export-ignore (nicht im Release-ZIP).
+- **Behat-Feature** (`tests/behat/catquiz_graphicalsummary_modal.feature`):
+  vollständiges Szenario – Attempt starten, Fragen beantworten, abschließen,
+  Quizverlauf öffnen, „Gegebene Antwort" prüfen, Lupe klicken, Modal öffnet,
+  schließen, zweite Frage öffnen. An das funktionierende `catquiz_slot_reuse`-
+  Feature modelliert; Ausführung erfolgt browserbasiert in der CI.
+
 ## 1.1.5 (interne Version 2026082116)
 
 > Tests für „Frage anzeigen" (Expertise Teil J) + Chartdaten-Verifikation (I).
