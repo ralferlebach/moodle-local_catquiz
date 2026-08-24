@@ -150,6 +150,12 @@ jobs:
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci grunt --max-lint-warnings 0 2>&1 | tee ci-logs/grunt.log
 
+      - name: Jest (plugin JS unit tests)
+        if: ${{ always() }}
+        run: |
+          set -o pipefail
+          ( cd plugin && npm install --no-audit --no-fund && npm test ) 2>&1 | tee ci-logs/jest.log
+
       - name: PHPUnit tests
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log

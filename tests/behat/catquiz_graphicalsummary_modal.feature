@@ -63,7 +63,12 @@ Feature: The quiz progress summary shows readable question and answer data and
     ## Open the quiz progress summary tab that carries the answered-question table.
     When I click on "Quiz progress summary" "link"
     And I wait until the page is ready
-    Then I should see "Given answer:"
+    ## Secure the graphical-summary data mapping end to end: the responsive result
+    ## table is rendered, the answer is clearly labelled as the given answer, and
+    ## the actually chosen answer value is shown in that table.
+    Then ".catquiz-graphicalsummary-table" "css_element" should exist
+    And I should see "Given answer:"
+    And I should see "richtige Antwort" in the ".catquiz-graphicalsummary-table" "css_element"
     ## The magnifier is a real button carrying the "Show question" aria-label.
     When I click on "Show question" "button"
     And I wait until the page is ready

@@ -1,5 +1,26 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082119)
+
+> Jest-Tests in die CI-Pipeline integriert; Quizverlauf-Datenabbildung über
+> Behat abgesichert.
+
+- **Jest in der CI-Pipeline** (`.github/workflows/moodle-plugin-ci-main.yml` und
+  `-dev.yml`): Ein neuer Schritt „Jest (plugin JS unit tests)" führt nach dem
+  Grunt-Schritt `npm install && npm test` im Plugin-Verzeichnis aus und tee-t die
+  Ausgabe nach `ci-logs/jest.log` (Teil der Error-Summary-ZIP). In `main.yml` im
+  sequenziellen `test`-Job vor PHPUnit; in `dev.yml` im `lint-jsamd`-Job (den das
+  `ci-complete`-Gate bereits voraussetzt). Basis sind die verifizierten
+  Workflow-Dateien aus dem Repository, nicht die lokale Arbeitskopie. Der
+  CI-äquivalente Ablauf (`npm install && npm test`) wurde lokal grün verifiziert.
+- **Quizverlauf-Datenabbildung abgesichert**
+  (`tests/behat/catquiz_graphicalsummary_modal.feature`): Das Szenario prüft nun
+  zusätzlich, dass die responsive Ergebnistabelle
+  (`.catquiz-graphicalsummary-table`) gerendert wird und der tatsächlich gegebene
+  Antwortwert dort erscheint. Damit ist die Feld-/Datenabbildung, die sich im
+  reinen PHPUnit-Harness nicht auslösen ließ (Feedback-Pipeline hängt am vollen
+  Preselect-/Response-Flow), end-to-end im echten Browser-Flow abgedeckt.
+
 ## 1.1.5 (interne Version 2026082118)
 
 > Audit + Fix von `get_last_response_for_attempt` (Expertise Teil C).
