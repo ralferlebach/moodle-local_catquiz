@@ -634,41 +634,43 @@ class catquiz {
             'unfinishedstates'
         );
 
+        // Audit (Expertise part C): the previous query keyed on
+        // max(questionattemptid) - the question attempt with the highest id, i.e.
+        // the last ADDED question. That is not the same as the last ANSWERED
+        // question: if the most recently added item had not been answered yet,
+        // the finished-state filter matched nothing and the whole lookup returned
+        // null although earlier items were answered; it also assumed attempt-id
+        // order equals administration order. Instead take the highest slot (the
+        // administration order) that has a finished answer step, and within it the
+        // final step, so questionattemptid, slot, questionid, fraction and
+        // responsesummary always belong to one and the same answered question.
         $sql = <<<SQL
         SELECT
             qs.id,
-            questionattemptid,
+            qs.questionattemptid,
             qa.slot,
-            state,
-            fraction originalfraction,
-            ROUND(fraction, 3) fraction,
-            timecreated,
-            userid,
-            questionusageid,
-            questionid,
-            questionsummary,
-            rightanswer,
-            responsesummary,
-            timemodified
+            qs.state,
+            qs.fraction originalfraction,
+            ROUND(qs.fraction, 3) fraction,
+            qs.timecreated,
+            qs.userid,
+            qa.questionusageid,
+            qa.questionid,
+            qa.questionsummary,
+            qa.rightanswer,
+            qa.responsesummary,
+            qa.timemodified
         FROM {question_attempt_steps} qs
         JOIN {question_attempts} qa ON qs.questionattemptid = qa.id
-        AND qa.id = (
-            SELECT max(questionattemptid) maxwithresponse
-            FROM {question_attempt_steps} qs
-                     JOIN (SELECT *
-                           FROM {question_attempts}
-                           WHERE questionusageid = :questionusageid
-            ) sub1 ON qs.questionattemptid = sub1.id
-            GROUP BY questionusageid
-        ) AND state NOT $unfinishedstatessql
+        WHERE qa.questionusageid = :questionusageid
+          AND qs.state NOT $unfinishedstatessql
+        ORDER BY qa.slot DESC, qs.sequencenumber DESC, qs.id DESC
         SQL;
 
         $params = $unfinishedstatesparams;
         $params['questionusageid'] = $questionusageid;
-        return $DB->get_record_sql(
-            $sql,
-            $params
-        );
+        $records = $DB->get_records_sql($sql, $params, 0, 1);
+        return $records ? reset($records) : false;
     }
 
     /**

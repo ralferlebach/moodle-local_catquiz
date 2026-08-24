@@ -557,9 +557,41 @@ final class strategy_test extends advanced_testcase {
     }
 
     /**
-     * Data provider to test that the expected questions are returned.
+     * get_last_response_for_attempt must return the last ANSWERED question, not
+     * the last ADDED one: after two answered items and a third that was shown but
+     * not answered, it returns the second item (the highest answered slot) with
+     * all fields belonging to that same question - never null and never the
+     * unanswered slot. This is the case the previous max(questionattemptid) query
+     * got wrong (Expertise part C).
      *
-     * @return array
+     * @covers \local_catquiz\catquiz::get_last_response_for_attempt
+     */
+    public function test_get_last_response_uses_last_answered_not_last_added(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $questions = array_values($DB->get_records('question', null, 'id', 'id'));
+
+        // Answer two questions (slots 1 and 2 in administration order).
+        $this->createresponse(question_bank::load_question($questions[0]->id), true);
+        $this->createresponse(question_bank::load_question($questions[1]->id), false);
+
+        // Add a third question but do NOT answer it (it stays in an unfinished
+        // state and must be ignored by the "last answered" lookup).
+        $slot3 = $this->quba->add_question(question_bank::load_question($questions[2]->id));
+        $this->quba->start_question($slot3);
+        question_engine::save_questions_usage_by_activity($this->quba);
+
+        $last = catquiz::get_last_response_for_attempt($this->quba->get_id());
+
+        $this->assertNotFalse($last, 'The last answered question must be found.');
+        $this->assertEquals(2, (int) $last->slot, 'The highest answered slot is returned, not the unanswered one.');
+        $this->assertEquals((int) $questions[1]->id, (int) $last->questionid);
+        // questionattemptid, slot and questionid must all be the same answered item.
+        $qa = $this->quba->get_question_attempt(2);
+        $this->assertEquals((int) $qa->get_database_id(), (int) $last->questionattemptid);
+    }
+
+    /**
      */
     public static function strategy_returns_expected_questions_provider(): array {
         return [

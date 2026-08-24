@@ -1,5 +1,26 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082118)
+
+> Audit + Fix von `get_last_response_for_attempt` (Expertise Teil C).
+
+- **`catquiz::get_last_response_for_attempt` korrigiert**: Die Abfrage keyte
+  bisher auf `max(questionattemptid)` — das question_attempt mit der höchsten ID,
+  also die zuletzt **hinzugefügte** Frage. Das ist nicht die zuletzt
+  **beantwortete** Frage: war das zuletzt hinzugefügte Item noch unbeantwortet,
+  filterte der Finished-State-Filter alles weg und die Abfrage lieferte `null`,
+  obwohl frühere Items beantwortet waren; zudem wurde angenommen, die
+  Attempt-ID-Reihenfolge entspreche der Administrationsreihenfolge. Die Abfrage
+  nutzt nun eine belastbare **slot-/schrittbasierte** Ordnung: der höchste Slot
+  mit einem abgeschlossenen Antwortschritt und darin der finale Schritt — so
+  gehören `questionattemptid`, `slot`, `questionid`, `fraction` und
+  `responsesummary` immer zur **selben** beantworteten Frage.
+- **Zahn-getesteter Regressionstest**
+  (`test_get_last_response_uses_last_answered_not_last_added`): zwei beantwortete
+  Items plus ein hinzugefügtes, aber unbeantwortetes; erwartet den höchsten
+  beantworteten Slot statt `null`. Mit der alten `max(questionattemptid)`-Logik
+  wird der Test rot (verifiziert).
+
 ## 1.1.5 (interne Version 2026082117)
 
 > Teil J vervollständigt: Jest-Tests (Modal) + Behat-Feature (End-to-End).
