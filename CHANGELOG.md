@@ -1,5 +1,34 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082114)
+
+> Flip-Heuristik korrigiert (schwierigste/leichteste Frage, trennschärfen-
+> standardisiert, Monotonie-Guard); fester Export-Tab; Durchschnitts-Text bei
+> zu wenigen Peers korrigiert.
+
+- **Personenschätzung – Flip-Heuristik überarbeitet** (`updatepersonability`):
+  - Flip-Ziel ist nun die **schwierigste** (All-correct) bzw. **leichteste**
+    (All-wrong) beantwortete Frage der Skala statt der zufällig zuletzt
+    administrierten. Das entfernt den Cross-Step-Jitter, der den berichteten
+    Fähigkeitseinbruch (z. B. 2.82→2.42) verursachte.
+  - Das Flip-Probe-Item wird **trennschärfen-standardisiert** (Diskrimination = 1,
+    Schwierigkeit erhalten; bei polytomen Modellen bleiben die übrigen Parameter
+    erhalten). Damit hängt der Alternativwert nicht mehr von der (teils gedeckelten)
+    Diskrimination des Extremitems ab – nachgewiesen konstant statt Spanne ~0.4.
+  - **Monotonie-Guard** für Degeneriertmuster: All-correct senkt den gespeicherten
+    Wert nie unter den Vorschritt, All-wrong hebt ihn nie darüber.
+  - Absicherung durch `ability_monotonicity_test` (unverändert grün).
+- **Fester Export-Tab** (`debuginfo`/`exportattempt`): Der Export ist jetzt für
+  Nutzer mit Feedback-Berechtigung **immer** verfügbar (Haupt-Export
+  `export_feedback_csv.php`), nicht mehr nur bei aktiviertem Debug-Speicher. Die
+  Debug-Exporte (Roh-Dump, Debug-CSV, PDF) erscheinen nur zusätzlich, wenn
+  `store_debug_info` aktiv ist. DE/EN-Strings ergänzt.
+- **Durchschnitts-Vergleich bei zu wenigen Peers** (`comparetotestaverage`): Der
+  Fließtext behauptete auch ohne genügend Vergleichsdaten „…beträgt 0.00". Bei
+  `has_enough_peers = false` wird nun ein eigener Text
+  (`feedbackcomparetoaverage_nopeers`, DE/EN) verwendet, der keinen Schein-
+  Durchschnitt nennt. Das Vergleichs-Dreieck war bereits korrekt ausgeblendet.
+
 ## 1.1.5 (interne Version 2026082113)
 
 > Aufräumung + Monotonie-Absicherung der Personenschätzung.

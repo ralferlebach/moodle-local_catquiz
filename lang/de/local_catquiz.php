@@ -264,6 +264,10 @@ $string['dateparseformat'] = 'Format des Datums';
 $string['dateparseformat_help'] = 'Bitte Datum so wie es im CSV definiert wurde verwenden. Hilfe unter <a href="http://php.net/manual/en/function.date.php">Datumsdokumentation</a> für diese Einstellung.';
 $string['daysago'] = 'Vor {$a} Tagen';
 $string['debuginfo_desc'] = 'Hier können Sie als Nutzer mit Berechtigung zum Download eines Exports den Versuchsverlauf als CSV-Datei exportieren.';
+$string['exportattemptcsv'] = 'Versuch exportieren (CSV)';
+$string['exportattemptdebugcsv'] = 'Debug-Verlauf exportieren (CSV)';
+$string['exportdebuginfopdf'] = 'Debug-Info exportieren (PDF)';
+$string['viewrawdebuginfo'] = 'Rohe Debug-Info anzeigen';
 $string['debuginfo_desc_title'] = 'Export des Testversuchs Nr. {$a}';
 $string['defaultcontext'] = 'Neuer Standard Einsatz-Kontext für Skala';
 $string['defaultcontextdescription'] = 'Beinhaltet alle Testitems';
@@ -375,6 +379,12 @@ durchschnittliche Fähigkeits-Wert aller Teilnehmenden an dem Test beträgt {$a-
 <p>Die folgende Graﬁk stellt Ihren Fähigkeitswert (obere Markierung) und den aktuellen
 Durchschnitt (untere Markierung) dar:</p>';
 $string['feedbackcomparison_betterthan'] = 'Mit Ihrem Ergebnis sind Sie momentan <b>besser als {$a->quantile}% aller anderen Test-Teilnehmenden</b>.';
+$string['feedbackcomparetoaverage_nopeers'] = '<p>Der Test misst Ihr Wissen und Können in „{$a->quotedscale}“ in Form eines Fähigkeits-Wertes zwischen
+{$a->scale_min} und {$a->scale_max}. Je höher Ihr Fähigkeits-Wert ausfällt, desto besser ist Ihr Wissen und Ihr
+Können in der Skala.</p>
+<p>Ihr erreichter Fähigkeits-Wert ist <b>{$a->ability_global}</b> (mit einem Standardfehler von ±{$a->se_global}).</p>
+<p>Es liegen noch nicht genügend Vergleichsergebnisse vor, um einen Durchschnitt für diesen Test anzuzeigen.</p>
+<p>Die folgende Graﬁk stellt Ihren Fähigkeitswert dar:</p>';
 $string['feedbackcompletedentirely'] = 'Alle Feedbacks für diese CAT-Skala hinterlegt.';
 $string['feedbackcompletedpartially'] = '{$a} Feedbacks für diese Skala hinterlegt.';
 $string['feedbacklegend'] = 'Beschreibung der Fähigkeits-Stufe';

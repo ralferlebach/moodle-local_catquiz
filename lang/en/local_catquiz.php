@@ -266,6 +266,10 @@ $string['dateparseformat'] = 'Date parse format';
 $string['dateparseformat_help'] = 'Please use the date format like specified in your CSV file (j.n.Y H:i:s). More information at <a href="http://php.net/manual/en/function.date.php">that resource</a>.';
 $string['daysago'] = '{$a} days ago';
 $string['debuginfo_desc'] = 'As a user with permission to export attempts, you can download the attempt as CSV file here';
+$string['exportattemptcsv'] = 'Export attempt (CSV)';
+$string['exportattemptdebugcsv'] = 'Export debug trace (CSV)';
+$string['exportdebuginfopdf'] = 'Export debug info (PDF)';
+$string['viewrawdebuginfo'] = 'View raw debug info';
 $string['debuginfo_desc_title'] = 'Export attempt # {$a}';
 $string['defaultcontext'] = 'New default context for scale';
 $string['defaultcontextdescription'] = 'Includes all test items';
@@ -365,6 +369,11 @@ $string['feedbackcomparetoaverage'] = '<p>The test measures your ability in {$a-
 <p>You reached a score of {$a->ability_global} (with a standard error of ± {$a->se_global}). The average score of all participants is {$a->average_ability}. {$a->betterthan}</p>
 <p>The following chart displays your personal score (upper mark) and the current average score (lower mark):</p>';
 $string['feedbackcomparison_betterthan'] = 'Your score is better than {$a->quantile}% of all other participants.';
+$string['feedbackcomparetoaverage_nopeers'] = '<p>The test measures your ability in {$a->quotedscale} by calculating an ability score in the range between
+{$a->scale_min} and {$a->scale_max}. A higher value indicates a better ability.</p>
+<p>You reached a score of {$a->ability_global} (with a standard error of ± {$a->se_global}).</p>
+<p>There are not yet enough comparison results to show an average score for this test.</p>
+<p>The following chart displays your personal score:</p>';
 $string['feedbackcompletedentirely'] = 'All feedbacks completed for this scale.';
 $string['feedbackcompletedpartially'] = '{$a} feedbacks of this scale completed.';
 $string['feedbacklegend'] = 'Feedback to be displayed in color bar legend';

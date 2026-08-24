@@ -95,13 +95,14 @@ class debuginfo extends feedbackgenerator {
     protected function get_teacherfeedback(array $data): array {
         global $OUTPUT, $DB, $CFG;
 
-        // Note: Has to be redone as well.
-        if (!get_config('local_catquiz', 'store_debug_info')) {
-            return [];
-        }
+        // The export tab is always available to users with the feedback
+        // permission. The raw debug exports below are added only when debug
+        // storage is enabled for the plugin.
+        $debugenabled = (bool) get_config('local_catquiz', 'store_debug_info');
+
         $csvstring = "";
 
-        foreach ($data['debuginfo'] as $row) {
+        foreach (($data['debuginfo'] ?? []) as $row) {
             $newrow = $this->convert($row);
             $csvstring .= $this
                 ->set_row_data($newrow)
@@ -142,8 +143,9 @@ class debuginfo extends feedbackgenerator {
                 'description' => $description,
                 'debuginfo_raw' => rawurlencode(nl2br(str_replace(" ", "&nbsp;", var_export($data, true)))),
                 'cfg->root' => $CFG->wwwroot,
-                'isteacher' => true, // Hier auf has_capability mit 'local/catquiz:view_users_feedback' und $contextid testen!
-                'iscatmanager' => has_capability(
+                'isteacher' => true,
+                'debugenabled' => $debugenabled,
+                'iscatmanager' => $debugenabled && has_capability(
                     'local/catquiz:canmanage',
                     context_system::instance()
                 ),

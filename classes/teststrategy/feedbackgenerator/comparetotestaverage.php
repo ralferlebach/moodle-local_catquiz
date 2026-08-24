@@ -305,8 +305,9 @@ class comparetotestaverage extends feedbackgenerator {
             $betterthan = get_string('feedbackcomparison_betterthan', 'local_catquiz', ['quantile' => round($quantile, 0)]);
         }
 
+        $hasenoughpeers = $npeers >= self::get_min_peers();
         $text = get_string(
-            'feedbackcomparetoaverage',
+            $hasenoughpeers ? 'feedbackcomparetoaverage' : 'feedbackcomparetoaverage_nopeers',
             'local_catquiz',
             [
                 'betterthan' => $betterthan,
@@ -338,7 +339,7 @@ class comparetotestaverage extends feedbackgenerator {
             'upperscalelimit' => $abilityrange['maxscalevalue'],
             'middle' => $middle,
             'comparetotestaverage_has_worse' => (int) $stats->lowercount > 0,
-            'comparetotestaverage_has_enough_peers' => $npeers >= self::get_min_peers(),
+            'comparetotestaverage_has_enough_peers' => $hasenoughpeers,
             'personabilities_abilities' => $this->get_restructured_abilities($existingdata, $newdata),
         ];
     }
