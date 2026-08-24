@@ -197,7 +197,7 @@ class catcalc {
             $usetrfactor
         );
 
-        $result = mathcat::newton_raphson_multi_stable(
+        $result = mathcat::newton_raphson(
             $jacobian,
             $hessian,
             ['ability' => $startvalue],
@@ -262,7 +262,7 @@ class catcalc {
         );
 
         // Estimate item parameters via Newton-Raphson algorithm.
-        $resultvector = mathcat::newton_raphson_multi_stable(
+        $resultvector = mathcat::newton_raphson(
             $jacobianvec,
             $hessianvec,
             $z0,

@@ -328,7 +328,7 @@ class mathcat {
      * @return array
      *
      */
-    public static function newton_raphson_multi_stable(
+    public static function newton_raphson(
         callable $fnfunction,
         callable $fnderivative,
         array $parameterstart,

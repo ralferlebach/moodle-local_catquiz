@@ -1,5 +1,19 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082113)
+
+> Aufräumung + Monotonie-Absicherung der Personenschätzung.
+
+- **`newton_raphson_multi_stable` → `newton_raphson`** umbenannt (mathcat:
+  `newton_raphson`, `gradient_ascent`; catcalc-Aufrufer nachgezogen). Keine
+  weiteren/alten Newton-Verfahren vorhanden.
+- **Neuer Regressionstest `ability_monotonicity_test`**: sichert, dass die
+  Basis-Schätzung `estimate_person_ability` auf **ausschließlich realen
+  Responses** psychometrisch monoton ist — All-correct erhöht nie die Fähigkeit
+  nicht (1PL/2PL/3PL), All-wrong senkt sie nie nicht (90 Assertions). Grundlage
+  für die Ursachenanalyse des berichteten Fähigkeitseinbruchs.
+- Workbench bereinigt (verwaiste leere Verzeichnisse entfernt).
+
 ## 1.1.5 (interne Version 2026082112)
 
 > Aufräumung als Vorbereitung des „vermuteter Wert"-Features (8.3): korrekte
