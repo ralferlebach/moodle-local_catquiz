@@ -32,6 +32,7 @@ use core_question\local\bank\question_edit_contexts;
 use local_catquiz\importer\testitemimporter;
 use local_catquiz\local\model\model_person_param_list;
 use local_catquiz\local\model\model_strategy;
+use local_catquiz\external\render_question_with_response;
 use mod_adaptivequiz\local\attempt;
 use local_catquiz\local\question\question_answer_evaluation;
 use question_bank;
@@ -480,6 +481,78 @@ final class strategy_test extends advanced_testcase {
                 $abilities[$k],
                 'The ability must not rise after a wrong answer (step ' . $k . ').'
             );
+        }
+    }
+
+    /**
+     * The render_question_with_response external function renders a valid slot,
+     * and rejects a wrong slot or a mismatched question attempt id with a
+     * controlled invalidquestionslot error rather than failing silently (which is
+     * what left the "show question" modal spinner hanging). Expertise part C/J.
+     *
+     * @covers \local_catquiz\external\render_question_with_response
+     */
+    public function test_render_question_with_response_external(): void {
+        global $DB, $USER, $PAGE, $OUTPUT;
+        $this->createtestenvironment(LOCAL_CATQUIZ_STRATEGY_FASTEST, [])->save_or_update();
+        // The external function resolves the settings by the attempt's instance
+        // id; point the just-saved test settings at this adaptivequiz instance.
+        $DB->set_field(
+            'local_catquiz_tests',
+            'componentid',
+            $this->adaptivequiz->id,
+            ['component' => 'mod_adaptivequiz']
+        );
+        catquiz_handler::prepare_attempt_caches();
+        $this->preventResetByRollback();
+
+        // Add and start one imported question in the usage, then persist it.
+        $questionid = (int) array_key_first($DB->get_records('question', null, 'id', 'id'));
+        $question = question_bank::load_question($questionid);
+        $slot = $this->quba->add_question($question);
+        $this->quba->start_question($slot);
+        $this->quba->finish_all_questions();
+        question_engine::save_questions_usage_by_activity($this->quba);
+        $qaid = (int) $this->quba->get_question_attempt($slot)->get_database_id();
+
+        // Link an adaptivequiz attempt to this question usage.
+        $attempt = new attempt($this->adaptivequiz, $USER->id);
+        $attemptid = (int) $attempt->get_attempt()->id;
+        $attempt->set_quba_id($this->quba->get_id());
+
+        // The external function calls $OUTPUT->header(), which may only run once
+        // per page; reset $PAGE/$OUTPUT before each call so the three scenarios do
+        // not fail with a spurious "header already printed" coding error.
+        $callexecute = function (int $s, int $a, int $q) use (&$PAGE, &$OUTPUT) {
+            $PAGE = new \moodle_page();
+            $OUTPUT = $PAGE->get_renderer('core');
+            ob_start();
+            try {
+                return render_question_with_response::execute($s, $a, $q);
+            } finally {
+                ob_end_clean();
+            }
+        };
+
+        // Valid slot and question attempt id: the question is rendered.
+        $result = $callexecute($slot, $attemptid, $qaid);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('questionhtml', $result);
+
+        // Wrong slot: controlled invalidquestionslot error.
+        try {
+            $callexecute(999, $attemptid, 0);
+            $this->fail('A wrong slot must raise invalidquestionslot.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('invalidquestionslot', $e->errorcode);
+        }
+
+        // Valid slot but mismatched question attempt id: controlled error.
+        try {
+            $callexecute($slot, $attemptid, $qaid + 100000);
+            $this->fail('A mismatched question attempt id must raise invalidquestionslot.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('invalidquestionslot', $e->errorcode);
         }
     }
 
@@ -2447,6 +2520,14 @@ final class strategy_test extends advanced_testcase {
             $jsondata->$propertyname = true;
         }
         $jsondata->componentid = '1';
+        // Needed for the render_question_with_response external function tests:
+        // showing the answered question in the feedback must be enabled.
+        $jsondata->catquiz_showquestion = true;
+        $jsondata->catquiz_questionfeedbacksettings = (object) [
+            'catquiz_showquestionresponse' => 1,
+            'catquiz_showquestioncorrectresponse' => 0,
+            'catquiz_showquestionfeedback' => 0,
+        ];
         $jsondata->component = 'mod_adaptivequiz';
         $jsondata->catquiz_selectteststrategy = $strategyid;
         $jsondata->maxquestionsgroup->catquiz_maxquestions = $settings['maxquestions'] ?? 25;

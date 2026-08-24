@@ -1,5 +1,51 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082116)
+
+> Tests für „Frage anzeigen" (Expertise Teil J) + Chartdaten-Verifikation (I).
+
+- **External-API-Test** (`render_question_with_response`): gültiger Slot rendert
+  die Frage; falscher Slot bzw. nicht passende Question-Attempt-ID lösen einen
+  kontrollierten `invalidquestionslot`-Fehler aus (statt stillem Fehlschlag, der
+  den Modal-Spinner hängen ließ). Test in `strategy_test`, nutzt einen echten
+  Question-Usage-Attempt; die Testumgebung aktiviert dafür `catquiz_showquestion`
+  und `catquiz_questionfeedbacksettings`.
+- **Teil I (Chartdaten = Globalskala) verifiziert**: `personability_after` wird
+  aus `person_ability[catscaleid]` gebildet, wobei `catscaleid` in
+  `attemptfeedback` auf `catquiz_catscales` (die konfigurierte Globalskala des
+  Tests) gesetzt wird – nicht auf die zuletzt beantwortete Subskala.
+
+## 1.1.5 (interne Version 2026082115)
+
+> Quizverlauf-Tabelle & „Frage anzeigen"-Modal (Expertise Teil B–H, L).
+
+- **„Frage anzeigen"-Modal robust** (`amd/src/graphicalsummary.js`): der
+  Click-Handler ist in try/catch/finally gekapselt; der Ladespinner wird im
+  `finally` **immer** aufgelöst (nie mehr Dauerspinner bei AJAX-Fehlern),
+  Fehler werden über `core/notification` sichtbar gemeldet, Mehrfachklicks
+  während eines laufenden Requests werden verhindert und `aria-busy` gesetzt/
+  entfernt. AMD-Build via grunt regeneriert.
+- **Echter Fragentitel statt CAT-Label** (`graphicalsummary`): die Tabelle zeigt
+  den Moodle-Fragentitel als Primärtext und das technische CAT-Item-Label als
+  Sekundärinfo. Legacy-Zeilen fallen sauber auf das Label zurück.
+- **Antwortspalte eindeutig** – „Gegebene Antwort": die Antwort wird als solche
+  gekennzeichnet und über `format_text` mit aktiven Filtern gerendert, sodass
+  TeX/STACK-Formeln korrekt erscheinen statt roh (`[\dfrac…]`); `format_text`
+  bereinigt zugleich das HTML (kein XSS aus Nutzereingaben).
+- **Sichere HTML-Erzeugung**: klickbarer Fragenname und Lupe über `html_writer`
+  mit Attribut-Arrays statt roher `sprintf`-Interpolation; die Lupe ist ein
+  echtes `<button type="button">` mit `aria-label`/`title`.
+- **Zuverlässige Slot-/Question-Attempt-Auflösung**: Legacy-Zeilen ohne
+  gespeicherten Slot werden **einmalig** über die Question-Usage aufgelöst
+  (question_id → Slot/Question-Attempt/Titel je Occurrence) statt über den
+  Zeilenindex (`$index + 1`). Keine N+1-Abfragen.
+- **Responsive Ergebnistabelle**: eigene Klasse
+  `catquiz-graphicalsummary-table` in einem `table-responsive`-Wrapper, mit
+  semantischen Spaltenklassen (`catquiz-col-*`); schmale Spalten (Nr., Wert,
+  Aktion) `nowrap`, keine globalen `table`-Regeln. Kein Umbruch mitten im Wort.
+- Entwicklungshistorische `Issue #12:`-Kommentare in fachliche Kommentare
+  überführt; DE/EN-Strings ergänzt (`feedback_table_givenanswer`).
+
 ## 1.1.5 (interne Version 2026082114)
 
 > Flip-Heuristik korrigiert (schwierigste/leichteste Frage, trennschärfen-

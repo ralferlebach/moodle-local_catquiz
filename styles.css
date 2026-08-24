@@ -177,6 +177,36 @@ div[contenteditable="false"] {
     text-align: center;
 }
 
+/* Result table: readable and responsive without breaking words mid-character. */
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table {
+    width: 100%;
+    min-width: 55rem;
+    table-layout: auto;
+}
+
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table th,
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table td {
+    vertical-align: top;
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table .catquiz-col-number,
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table .catquiz-col-ability,
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table .catquiz-col-action {
+    width: 1%;
+    white-space: nowrap;
+}
+
+#feedbackcontent-graphicalsummary .catquiz-question-label {
+    font-size: 0.85em;
+}
+
 #lcq_model_override_form .param-group .felement > .w-100 > .d-flex {
     display: grid;
     grid-template-columns: auto 1fr auto;

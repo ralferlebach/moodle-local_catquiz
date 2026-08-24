@@ -220,8 +220,12 @@ class graphicalsummary extends feedbackgenerator {
         $new = [];
         $new['id'] = $lastquestion->id;
         $new['questionname'] = $lastquestion->label;
+        // The technical CAT item label (questionname) is kept for backward
+        // compatibility; questiontitle carries the real Moodle question title so
+        // the table can show the title as primary and the label as secondary.
+        $new['questiontitle'] = $this->get_question_title((int) $lastquestion->id, (string) $lastquestion->label);
         $new['lastresponse'] = round($lastresponse['fraction'], self::PRECISION);
-        // Issue #12: store the real QUBA slot and question attempt id so the
+        // store the real QUBA slot and question attempt id so the
         // "show question" modal fetches exactly this question attempt instead of
         // reconstructing the slot from the table row index (which is wrong after
         // reloads, duplicate slots or missing rows). responsesummary carries the
@@ -334,6 +338,17 @@ class graphicalsummary extends feedbackgenerator {
         }
 
         $table = new html_table();
+        $table->attributes['class'] = 'generaltable catquiz-graphicalsummary-table';
+        $table->colclasses = [
+            'catquiz-col-number',
+            'catquiz-col-question',
+            'catquiz-col-response',
+            'catquiz-col-scale',
+            'catquiz-col-ability',
+        ];
+        if ($viewquestion) {
+            $table->colclasses[] = 'catquiz-col-action';
+        }
         $table->head = [
             get_string('feedback_table_questionnumber', 'local_catquiz'),
             get_string('question'),
@@ -347,11 +362,33 @@ class graphicalsummary extends feedbackgenerator {
         }
 
         $tabledata = [];
+        $filtercontext = \context_system::instance();
+        // resolve legacy rows (stored before the slot/question attempt
+        // id were persisted) against the real question usage instead of guessing
+        // the slot from the row index. Built once for the whole table.
+        $slotmap = $this->build_slot_map_from_quba();
+        $occurrences = [];
         foreach ($data as $index => $values) {
-            // Issue #12: prefer the stored real slot; fall back to the row index
-            // for legacy attempts saved before the slot was persisted.
-            $slot = $values['slot'] ?? ($index + 1);
-            $questionattemptid = $values['questionattemptid'] ?? 0;
+            $slot = $values['slot'] ?? null;
+            $questionattemptid = $values['questionattemptid'] ?? null;
+            $resolvedtitle = $values['questiontitle'] ?? null;
+            $questionid = isset($values['id']) ? (int) $values['id'] : null;
+            if ($questionid !== null && ($slot === null || $questionattemptid === null)) {
+                $occurrence = $occurrences[$questionid] ?? 0;
+                if (isset($slotmap[$questionid][$occurrence])) {
+                    $resolved = $slotmap[$questionid][$occurrence];
+                    $slot = $slot ?? $resolved['slot'];
+                    $questionattemptid = $questionattemptid ?? $resolved['questionattemptid'];
+                    $resolvedtitle = $resolvedtitle ?? $resolved['name'];
+                }
+            }
+            if ($questionid !== null) {
+                $occurrences[$questionid] = ($occurrences[$questionid] ?? 0) + 1;
+            }
+            // Only if the usage could not resolve the row at all (e.g. the usage
+            // has been purged) do we fall back to the row index / zero.
+            $slot = $slot ?? ($index + 1);
+            $questionattemptid = $questionattemptid ?? 0;
             $responsestring = get_string(
                 'feedback_table_answerincorrect',
                 'local_catquiz'
@@ -368,52 +405,131 @@ class graphicalsummary extends feedbackgenerator {
                 );
             }
 
-            // Issue #12: show the actually given answer (responsesummary) escaped,
-            // in addition to the correct/incorrect verdict, instead of only a
-            // verdict or technical identifiers.
+            // Answer column: the verdict plus the actually given answer, clearly
+            // labelled as such. The response summary can contain TeX/STACK markup,
+            // so it is rendered via format_text with the active filters (MathJax)
+            // enabled; format_text also cleans the HTML, so user input cannot
+            // introduce XSS.
+            $responsecell = html_writer::tag('span', $responsestring, ['class' => 'catquiz-response-verdict']);
             $responsesummary = $values['responsesummary'] ?? null;
-            $responsecell = $responsestring;
             if ($responsesummary !== null && $responsesummary !== '') {
+                $answerhtml = format_text(
+                    $responsesummary,
+                    FORMAT_HTML,
+                    ['filter' => true, 'context' => $filtercontext]
+                );
                 $responsecell .= html_writer::empty_tag('br')
-                    . html_writer::tag('span', s($responsesummary), ['class' => 'catquiz-responsesummary']);
+                    . html_writer::tag(
+                        'span',
+                        get_string('feedback_table_givenanswer', 'local_catquiz') . ' ',
+                        ['class' => 'catquiz-response-answerlabel']
+                    )
+                    . html_writer::tag('span', $answerhtml, ['class' => 'catquiz-responsesummary']);
             }
 
-            $questionname = $viewquestion
-                ? sprintf(
-                    '<span class="clickable" data-name="%s" data-attemptid="%d" data-slot="%d"'
-                        . ' data-questionattemptid="%d">%s</span>',
-                    $values['questionname'],
-                    $this->get_progress()->get_attemptid(),
-                    $slot,
-                    $questionattemptid,
-                    $values['questionname']
-                )
-                : $values['questionname'];
+            // Question column: the real Moodle question title as primary text and
+            // the technical CAT item label as secondary information. Legacy rows
+            // without a stored title fall back to the label.
+            $title = (string) ($resolvedtitle ?? $values['questionname']);
+            $itemlabel = (string) $values['questionname'];
+            $questionhtml = html_writer::tag('span', s($title), ['class' => 'catquiz-question-title']);
+            if ($itemlabel !== '' && $itemlabel !== $title) {
+                $questionhtml .= html_writer::empty_tag('br')
+                    . html_writer::tag('span', s($itemlabel), ['class' => 'catquiz-question-label text-muted']);
+            }
+            $dataattributes = [
+                'data-name' => $title,
+                'data-attemptid' => $this->get_progress()->get_attemptid(),
+                'data-slot' => $slot,
+                'data-questionattemptid' => $questionattemptid,
+            ];
+            $questioncell = $viewquestion
+                ? html_writer::tag('span', $questionhtml, ['class' => 'clickable'] + $dataattributes)
+                : $questionhtml;
             $newrow = [
                 $index + 1,
-                $questionname,
+                $questioncell,
                 $responsecell,
                 $values['questionscale_name'],
                 sprintf('%.2f', $values['personability_after']),
             ];
 
             if ($viewquestion) {
-                $searchcol = new html_table_cell(
-                    sprintf(
-                        '<i class="fa fa-search clickable questionbutton" data-name="%s" data-attemptid = "%d"'
-                            . ' data-slot="%d" data-questionattemptid="%d"></i>',
-                        $values['questionname'],
-                        $this->get_progress()->get_attemptid(),
-                        $slot,
-                        $questionattemptid
-                    ),
+                // Real interactive button (not a bare icon) so it works inside a
+                // form and is reachable for assistive technology.
+                $button = html_writer::tag(
+                    'button',
+                    html_writer::tag('i', '', ['class' => 'fa fa-search', 'aria-hidden' => 'true']),
+                    [
+                        'type' => 'button',
+                        'class' => 'btn btn-link p-0 questionbutton clickable',
+                        'aria-label' => get_string('showquestion', 'local_catquiz'),
+                        'title' => get_string('showquestion', 'local_catquiz'),
+                    ] + $dataattributes
                 );
-                $searchcol->attributes = ['class' => 'questionbutton'];
+                $searchcol = new html_table_cell($button);
+                $searchcol->attributes = ['class' => 'questionbutton catquiz-col-action'];
                 $newrow[] = $searchcol;
             }
             $tabledata[] = $newrow;
         }
         $table->data = $tabledata;
-        return html_writer::table($table);
+        return html_writer::div(
+            html_writer::table($table),
+            'table-responsive catquiz-graphicalsummary-table-wrapper'
+        );
+    }
+
+    /**
+     * Returns the real Moodle question title for a question id, falling back to
+     * the CAT item label if the question can no longer be loaded.
+     *
+     * @param int $questionid
+     * @param string $fallback
+     * @return string
+     */
+    private function get_question_title(int $questionid, string $fallback): string {
+        try {
+            $question = \question_bank::load_question($questionid);
+            $name = $question->name ?? '';
+            return $name !== '' ? $name : $fallback;
+        } catch (\Throwable $e) {
+            return $fallback;
+        }
+    }
+
+    /**
+     * Builds a map from question id to its occurrences in this attempt's question
+     * usage, each carrying the real slot, question attempt id and title. Legacy
+     * graphical-summary rows stored before the slot and question attempt id were
+     * persisted are resolved through this map by question id and occurrence,
+     * rather than by guessing the slot from the table row index. Loaded once per
+     * table, so no N+1 usage/DB lookups are issued per row.
+     *
+     * @return array<int, array<int, array{slot: int, questionattemptid: int, name: string}>>
+     */
+    private function build_slot_map_from_quba(): array {
+        global $DB;
+        $map = [];
+        try {
+            $attemptid = $this->get_progress()->get_attemptid();
+            $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], 'uniqueid', IGNORE_MISSING);
+            if (!$attempt) {
+                return $map;
+            }
+            $quba = \question_engine::load_questions_usage_by_activity($attempt->uniqueid);
+            foreach ($quba->get_slots() as $slot) {
+                $qa = $quba->get_question_attempt($slot);
+                $question = $qa->get_question();
+                $map[(int) $question->id][] = [
+                    'slot' => (int) $slot,
+                    'questionattemptid' => (int) $qa->get_database_id(),
+                    'name' => (string) $question->name,
+                ];
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+        return $map;
     }
 }
