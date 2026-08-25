@@ -492,6 +492,25 @@ jobs:
         # in-browser triage. The rest of the suite gates.
         run: set -o pipefail; moodle-plugin-ci behat --profile chrome --dump --tags '@local_catquiz&&~@catquiz_wip_resume' 2>&1 | tee ci-logs/behat.log
 
+      # Diagnostic (non-blocking): run ONLY the resume/reload scenarios with the
+      # temporary resume trace active (classes/local/debugtrace.php writes to
+      # /tmp/catquiz_resume_trace.log while Behat runs) and fold the trace into the
+      # uploaded artifact. This never gates the pipeline (continue-on-error) and is
+      # purely to capture the played-question bookkeeping across a resume.
+      - name: Behat resume diagnostic (@catquiz_wip_resume)
+        if: ${{ always() }}
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          rm -f /tmp/catquiz_resume_trace.log
+          moodle-plugin-ci behat --profile chrome --dump --tags '@local_catquiz&&@catquiz_wip_resume' 2>&1 | tee ci-logs/behat-resume.log || true
+          if [ -f /tmp/catquiz_resume_trace.log ]; then
+            cp /tmp/catquiz_resume_trace.log ci-logs/catquiz_resume_trace.log
+          else
+            echo "NO TRACE FILE PRODUCED (scenarios may not have run)" > ci-logs/catquiz_resume_trace.log
+          fi
+          echo "--- resume trace ---"; cat ci-logs/catquiz_resume_trace.log
+
       - name: Collect error summary and Behat dumps
         if: ${{ always() }}
         run: |

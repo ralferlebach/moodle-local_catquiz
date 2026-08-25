@@ -68,6 +68,16 @@ final class maximumquestionscheck extends preselect_task {
             $attempted = max($attempted, $played);
         }
 
+        \local_catquiz\local\debugtrace::resume(sprintf(
+            'MAXCHECK qattempted=%s progress_n=%s effective=%d max=%d -> %s',
+            $context['questionsattempted'] ?? 'null',
+            (isset($context['progress']) && $context['progress'] instanceof progress)
+                ? $context['progress']->without_pilots()->get_num_playedquestions() : 'null',
+            $attempted,
+            $maxquestions,
+            ($attempted >= $maxquestions) ? 'ABORT' : 'continue'
+        ));
+
         if ($attempted >= $maxquestions) {
             return result::err(status::ERROR_REACHED_MAXIMUM_QUESTIONS);
         }

@@ -1,5 +1,29 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082123) — DIAGNOSE-BUILD (temporär)
+
+> Nur zur Resume-Triage: fügt eine Behat-only-Instrumentierung und einen
+> nicht-blockierenden CI-Diagnoseschritt hinzu, die den Fragen-Zählverlauf über
+> einen Resume/Reload aufzeichnen. Nach Auswertung wieder zu entfernen.
+
+- **`classes/local/debugtrace.php`** (neu, temporär): `debugtrace::resume()`
+  schreibt Trace-Zeilen nach `sys_get_temp_dir()/catquiz_resume_trace.log` –
+  aber **nur wenn `BEHAT_SITE_RUNNING` gesetzt ist**. In Produktion und in normalen
+  PHPUnit-Läufen komplett inert (verifiziert: kein Dateizugriff im PHPUnit-Lauf).
+- **Trace-Punkte**: `progress::load()` (welcher Zweig – answered/gaveup/
+  reload-remove – plus `playedquestions`-IDs vor/nach dem Reload-Filter, der die
+  zuletzt gezeigte unbeantwortete Frage entfernt), `progress::add_playedquestion()`
+  (hinzugefügte ID + laufende Zahl) und `maximumquestionscheck::run()`
+  (`questionsattempted`, progress-Zähler, effektiver Wert, max, Entscheidung).
+- **CI-Diagnoseschritt** in `moodle-plugin-ci-dev.yml` (nach dem regulären
+  Behat-Schritt, `continue-on-error`): führt **nur** die
+  `@catquiz_wip_resume`-Szenarien mit aktiver Instrumentierung aus und legt
+  `catquiz_resume_trace.log` + `behat-resume.log` in die hochgeladene
+  `error-summary-dev-behat`-Artefaktsammlung. Blockiert die Pipeline nicht; das
+  reguläre Gate (ohne die Resume-Szenarien) bleibt unverändert grün.
+- Fachlogik unverändert (der `max()`-Guard in `maximumquestionscheck` bleibt wie
+  in 2026082121/2026082122); `maximumquestionscheck_test` weiterhin 3/3 grün.
+
 ## 1.1.5 (interne Version 2026082122)
 
 > codeanalysis-Warning behoben; verschachtelte `.git`-Verzeichnisse aus dem
