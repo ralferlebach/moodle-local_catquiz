@@ -36,7 +36,7 @@ use question_engine;
  * answers keep coming - is therefore a bug in the layer that ASSEMBLES the
  * estimator's input: progress::update_cached_responses(), which adds the last
  * answered response and de-duplicates by question id. Both existing "trajectory"
- * tests bypass this layer (one @covers estimate_person_ability directly, the other
+ * tests bypass this layer (one covers estimate_person_ability directly, the other
  * stubs progress::get_user_responses), so the accumulation was never guarded.
  *
  * This drives the REAL accumulation against a real question usage, answering and

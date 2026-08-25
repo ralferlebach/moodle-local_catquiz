@@ -1,5 +1,47 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082129)
+
+> CI-Fix (Quality-Job): ungültiger Inline-PHPDoc-Tag im Regressionstest behoben.
+> Zusätzlich diagnostiziert: die verbleibenden Behat-Fails liegen in der
+> Abhängigkeit `mod_adaptivequiz` (separater Patch beigelegt).
+
+- **PHPDoc-Fehler behoben** (`tests/teststrategy/progress_response_accumulation_test.php`):
+  Der Moodle-PHPDoc-Checker meldete in Zeile 39 `Invalid inline phpdocs tag
+  @covers found`. Ursache war das Wort `@covers` **im Fließtext** des
+  Klassen-Docblocks (Beschreibung der bestehenden Trajektorien-Tests) – der
+  Checker wertet jedes `@…` in einem Docblock als Tag. Das `@` im Prosatext
+  entfernt (`one @covers …` → `one covers …`); der legitime `@covers`-Tag auf der
+  eigenen Zeile bleibt unverändert und wirksam.
+  - Reproduziert mit `local_moodlecheck` (exakt derselbe Checker wie der
+    CI-Quality-Job): vorher 1 `<error>`, nachher 0. **Zahn-getestet**: `@covers`
+    reinjiziert → Fehler kehrt zurück; entfernt → grün. phpcs Exit 0; die Suite
+    selbst läuft weiter grün (1 Test, 12 Assertions – der echte `@covers`-Tag ist
+    intakt). Plugin-weiter PHPDoc-Scan: 0 Fehler.
+
+- **Behat-Fails eindeutig zugeordnet (Fix in `mod_adaptivequiz`, nicht hier):**
+  - **`.catquiz-graphicalsummary-table` fehlt** (`catquiz_graphicalsummary_modal`):
+    `mod_adaptivequiz/renderer.php` gab das Attempt-Feedback über
+    `html_writer::tag('p', s($attemptfeedback), …)` aus. `s()` escaped die
+    CATquiz-Feedback-Tabelle zu sichtbarem `&lt;table&gt;`-Text und das `<p>`
+    strippt Block-Elemente → das Diagramm-/Tabellen-Markup existiert nicht als DOM.
+    Fix: als vertrauenswürdiges `format_text(…, FORMAT_HTML, ['para' => false])`
+    in einem `<div>` rendern. Beigelegt als
+    `adaptivequiz-feedback-html-fix.patch` (git-anwendbar; im Änderungsbereich
+    phpcs-sauber).
+  - **2× „Question 5"** (`catquiz_attempt_completion` Resume,
+    `catquiz_slot_reuse` Reload): Der HTML-Dump belegt `id="question-…-5"` /
+    `qno 5` → „Question 5" ist die **quba-Slot-Nummer**, nicht die CAT-Fragenzahl.
+    Der Duplicate-Slot-Guard (`find_any_active_slot`) ist im aktuellen
+    `mod_adaptivequiz`-Branch `v-3.0` (Commit `d755697`) bereits vorhanden und
+    korrekt; die schrittweise Durchsicht der Resume-Sequenz ergibt mit diesem
+    Guard Slots 1–4 und Stopp bei `maxquestions=4`. Da `v-3.0` ein **beweglicher
+    Branch** ist und Guard-Commit und CI-Lauf zeitlich dicht liegen, ist der rote
+    Lauf am plausibelsten ein Checkout-vor-Push-Race. Empfehlung: CI erneut gegen
+    den aktuellen `v-3.0`-Tip; bei weiterhin rot ist browserbasierte Reproduktion
+    nötig (im CLI-Container ohne Chrome/Selenium nicht möglich). Kein spekulativer
+    Zusatz-Fix hier.
+
 ## 1.1.5 (interne Version 2026082128)
 
 > Fähigkeitsschätzung: gezielte Regressionsabdeckung für die eingefrorene
