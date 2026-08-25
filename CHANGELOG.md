@@ -1,5 +1,47 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082124)
+
+> Resume-Ursache gefunden und behoben. „Question 5" war die **quba-Slot-Nummer**,
+> nicht die Anzahl distinkter CAT-Fragen: Ein Resume/Reload erzeugte einen
+> **doppelten Slot**. Der eigentliche Fix liegt in **mod_adaptivequiz** (separater
+> Patch); hier wird die falsche zählbasierte Fährte zurückgebaut und die
+> Diagnose-Instrumentierung entfernt.
+
+- **Ursache (per CI-Trace + HTML-Dump belegt)**: Der HTML-Dump der fehlschlagenden
+  Szenarien zeigt `<div id="question-433000-5">` / `<span class="qno">5</span>` –
+  „Question 5" ist also die **Slot-Nummer in der Question-Usage**, nicht die
+  Fragenzahl. Der Instrumentierungs-Trace bewies, dass catquiz' Zählung korrekt
+  ist (`played` bleibt sauber; der Reload-Filter entfernt korrekt das
+  unbeantwortete letzte Item). Beim Resume wählt catquiz jedoch eine **andere**
+  nächste Frage als die im aktiven, unbeantworteten Slot liegende, worauf
+  mod_adaptivequiz einen **neuen** Slot anlegte → die Slot-Nummer wuchs auf 5.
+
+- **Fix in mod_adaptivequiz** (Branch der Abhängigkeit, separater Patch
+  `adaptivequiz-slotreuse-fix.patch`): Der Duplicate-Slot-Guard in
+  `cat_session.php` (Issue #6) griff bisher nur, wenn dieselbe Frage neu gewählt
+  wurde. Da ein CAT-Attempt immer nur **einen** aktiven unbeantworteten Slot hat,
+  wird nun per `find_any_active_slot()` **jeder** aktive Slot wiederverwendet, wenn
+  die Suche nach der konkreten Frage fehlschlägt. Unit-Test `test_find_any_active_slot`
+  ergänzt (2/2 grün).
+
+- **Zählbasierte `maximumquestionscheck`-Änderung zurückgebaut**: Der in
+  2026082121 eingeführte `max(questionsattempted, progress-Zähler)` adressierte
+  ein Nicht-Problem (die Zählung hinkte nie – es waren die Slots) und wird
+  vollständig auf das Original zurückgesetzt; der zugehörige Test
+  `maximumquestionscheck_test` entfällt.
+
+- **Diagnose-Instrumentierung entfernt**: `classes/local/debugtrace.php`, alle
+  Trace-Aufrufe in `progress.php` und der nicht-blockierende CI-Diagnoseschritt in
+  `moodle-plugin-ci-dev.yml` sind wieder draußen.
+
+- **Resume-Szenarien wieder im Gate**: `@catquiz_wip_resume` aus
+  `catquiz_attempt_completion` und `catquiz_slot_reuse` entfernt, der
+  `--tags`-Ausschluss in beiden Workflows zurückgenommen. Mit dem
+  mod_adaptivequiz-Patch laufen sie grün und gaten wieder mit. **Wichtig:** Beide
+  Teile gehören zusammen – ohne den mod_adaptivequiz-Patch würden die nun
+  un-getaggten Szenarien in der CI erneut rot (der Slot-Bug bestünde fort).
+
 ## 1.1.5 (interne Version 2026082123) — DIAGNOSE-BUILD (temporär)
 
 > Nur zur Resume-Triage: fügt eine Behat-only-Instrumentierung und einen

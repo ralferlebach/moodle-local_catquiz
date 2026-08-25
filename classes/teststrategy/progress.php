@@ -227,20 +227,10 @@ class progress implements JsonSerializable {
 
         $lastresponse = $instance->get_last_response_for_attempt();
 
-        \local_catquiz\local\debugtrace::resume(sprintf(
-            'LOAD attempt=%d lastq=%s lastresp=%s played_before=[%s]',
-            $attemptid,
-            $instance->lastquestion->id ?? 'null',
-            ($lastresponse && isset($lastresponse->questionid)) ? $lastresponse->questionid : 'null',
-            implode(',', array_keys($instance->playedquestions))
-        ));
-
         // This is the expected default behaviour: the user answered the last
         // question and now we'll return the next one.
         if ($lastresponse && $lastresponse->questionid === $instance->lastquestion->id) {
             $instance->hasnewresponse = true;
-            \local_catquiz\local\debugtrace::resume('LOAD branch=answered played=[' .
-                implode(',', array_keys($instance->playedquestions)) . ']');
             return $instance;
         }
 
@@ -250,8 +240,6 @@ class progress implements JsonSerializable {
             $instance->mark_lastquestion_failed();
             $instance->hasnewresponse = true;
 
-            \local_catquiz\local\debugtrace::resume('LOAD branch=gaveup played=[' .
-                implode(',', array_keys($instance->playedquestions)) . ']');
             return $instance;
         }
 
@@ -271,12 +259,6 @@ class progress implements JsonSerializable {
                 unset($instance->playedquestionsbyscale[$scaleid]);
             }
         }
-
-        \local_catquiz\local\debugtrace::resume(sprintf(
-            'LOAD branch=reload-remove removed_lastq=%s played_after=[%s]',
-            $instance->lastquestion->id ?? 'null',
-            implode(',', array_keys($instance->playedquestions))
-        ));
 
         return $instance;
     }
@@ -638,14 +620,6 @@ class progress implements JsonSerializable {
         $q->userlastattempttime = $now;
 
         $this->playedquestions[$q->id] = $q;
-
-        \local_catquiz\local\debugtrace::resume(sprintf(
-            'ADD attempt=%s qid=%s -> n=%d played=[%s]',
-            method_exists($this, 'get_usage_id') ? $this->get_usage_id() : '?',
-            $q->id,
-            count($this->playedquestions),
-            implode(',', array_keys($this->playedquestions))
-        ));
         // Keep track of questions played per scale.
         $affectedscales = [
             $q->catscaleid,

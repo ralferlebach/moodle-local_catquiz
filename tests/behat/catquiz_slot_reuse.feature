@@ -56,7 +56,6 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     And I should not see "Question 2"
 
   @javascript
-  @catquiz_wip_resume
   Scenario: Reloading mid-attempt still yields exactly the configured length
     ## A reload before answering must not inflate the number of administered
     ## items: the attempt still ends after the configured four questions.
