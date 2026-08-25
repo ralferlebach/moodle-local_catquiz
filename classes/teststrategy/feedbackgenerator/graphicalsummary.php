@@ -225,7 +225,7 @@ class graphicalsummary extends feedbackgenerator {
         // the table can show the title as primary and the label as secondary.
         $new['questiontitle'] = $this->get_question_title((int) $lastquestion->id, (string) $lastquestion->label);
         $new['lastresponse'] = round($lastresponse['fraction'], self::PRECISION);
-        // store the real QUBA slot and question attempt id so the
+        // Store the real QUBA slot and question attempt id so the
         // "show question" modal fetches exactly this question attempt instead of
         // reconstructing the slot from the table row index (which is wrong after
         // reloads, duplicate slots or missing rows). responsesummary carries the
@@ -363,7 +363,7 @@ class graphicalsummary extends feedbackgenerator {
 
         $tabledata = [];
         $filtercontext = \context_system::instance();
-        // resolve legacy rows (stored before the slot/question attempt
+        // Resolve legacy rows (stored before the slot/question attempt
         // id were persisted) against the real question usage instead of guessing
         // the slot from the row index. Built once for the whole table.
         $slotmap = $this->build_slot_map_from_quba();

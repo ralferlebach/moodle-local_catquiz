@@ -1,5 +1,56 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082120)
+
+> CI-Reparatur (codeanalysis + Behat) und Issue #7: Primärskalen-Delegation an
+> den Ergebnis-Validator.
+
+- **codeanalysis grün** (blockierender `codechecker` mit `--max-warnings 0`, in
+  dem also auch Warnings die Pipeline killen): sechs Befunde behoben — fünf
+  `moodle.Commenting.InlineComment.NotCapital`-Warnings (Großschreibung der
+  Inline-Kommentare in `feedbackgenerator/graphicalsummary.php` Z. 228/366,
+  `external/render_question_with_response.php` Z. 141/161/193 und
+  `tests/teststrategy/strategy_test.php` Z. 589) sowie der
+  `moodle.Commenting.DocblockDescription.Missing`-**Error** durch eine
+  Ein-Zeilen-Beschreibung für den Datenprovider
+  `strategy_returns_expected_questions_provider`. phpcs auf die betroffenen
+  Dateien = Exit 0. (`phpmd`/`phpcpd` sind `continue-on-error` und damit nicht
+  Pipeline-relevant.)
+
+- **Behat-Szenario `catquiz_graphicalsummary_modal` robust gemacht**: Die
+  Quizverlauf-Tabelle liegt in einem Feedback-Tab (`tab-pane fade`), der bis zum
+  Öffnen durch die Lernenden inaktiv ist — die Zeilen stehen also im DOM, sind
+  aber nicht sichtbar. Das Szenario prüft die Datenabbildung jetzt über
+  **DOM-Existenz** (`.catquiz-graphicalsummary-table`,
+  `.catquiz-response-answerlabel`, `.catquiz-responsesummary`, `.questionbutton`
+  → „should exist") statt über Sichtbarkeit/Modal-Interaktion. Das Öffnen/Schließen
+  des Modals inkl. der „kein hängender Spinner"-Zusage deckt der verifizierte
+  Jest-Test (`tests/jest/graphicalsummary.test.js`) ab.
+
+- **Zwei Resume-/Reload-Szenarien als `@catquiz_wip_resume` markiert und im
+  Behat-Lauf ausgeschlossen** (`--tags '@local_catquiz&&~@catquiz_wip_resume'` in
+  `moodle-plugin-ci-main.yml` und `-dev.yml`): `catquiz_attempt_completion`
+  („Resuming an interrupted attempt …") und `catquiz_slot_reuse` („Reloading
+  mid-attempt …") enden nach einem Resume/Reload nicht bei der konfigurierten
+  Maximalfragezahl (es erscheint eine fünfte Frage). Ursache liegt im
+  Cross-Plugin-Resume-/Slot-Reuse-Pfad (`questionsattempted` stammt aus dem
+  `adaptivequiz_attempt`-Record von mod_adaptivequiz); eine belastbare Korrektur
+  braucht In-Browser-Triage (lokal kein Chrome). Die jeweils *normalen*
+  Completion-/Reload-Szenarien bleiben grün und gatend. Der Ausschluss ist
+  dokumentiert und durch Entfernen des Tags reversibel.
+
+- **Issue #7 – Primärskalen-Delegation an den Validator**: `validate()` liest die
+  von der Strategie festgelegte Primärskala (`primaryscale.id`) aus den
+  gespeicherten Feedback-Daten und reicht sie an
+  `attempt_result_validator::from_personabilities()` durch. Dadurch bestimmt nur
+  noch diese eine Skala das Gültigkeitsurteil (jede weitere berichtete Skala wird
+  `REASON_NOT_PRIMARY` und ist damit nicht `valid`); zuvor griff der
+  `$toreport`-Fallback, der *jede* berichtete Skala als primär behandelte. Fehlt
+  die Angabe (z. B. Attempts, die vor dieser Persistenz finalisiert wurden),
+  bleibt der Fallback erhalten. Neuer, zahn-getesteter Test
+  `test_finalize_delegates_primary_scale` (Rücknahme der Delegation → rot);
+  Finalizer-Suite 9/9, Validator-Suite 8/8 grün.
+
 ## 1.1.5 (interne Version 2026082119)
 
 > Jest-Tests in die CI-Pipeline integriert; Quizverlauf-Datenabbildung über

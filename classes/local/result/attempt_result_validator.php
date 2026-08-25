@@ -193,6 +193,15 @@ final class attempt_result_validator {
             }
         }
 
-        return self::from_personabilities($personabilities, $sebyscale, $nbyscale);
+        // Issue #7: the strategy records its designated primary scale in the
+        // stored feedback data. Delegate its id so only that scale drives the
+        // completion verdict (from_personabilities marks every other reported
+        // scale REASON_NOT_PRIMARY). Absent - e.g. attempts finalised before this
+        // was persisted - keeps the historic $toreport fallback.
+        $primaryscaleid = isset($data['primaryscale']['id'])
+            ? (int) $data['primaryscale']['id']
+            : null;
+
+        return self::from_personabilities($personabilities, $sebyscale, $nbyscale, [], $primaryscaleid);
     }
 }

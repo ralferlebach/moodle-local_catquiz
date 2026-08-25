@@ -586,12 +586,15 @@ final class strategy_test extends advanced_testcase {
         $this->assertNotFalse($last, 'The last answered question must be found.');
         $this->assertEquals(2, (int) $last->slot, 'The highest answered slot is returned, not the unanswered one.');
         $this->assertEquals((int) $questions[1]->id, (int) $last->questionid);
-        // questionattemptid, slot and questionid must all be the same answered item.
+        // Questionattemptid, slot and questionid must all be the same answered item.
         $qa = $this->quba->get_question_attempt(2);
         $this->assertEquals((int) $qa->get_database_id(), (int) $last->questionattemptid);
     }
 
     /**
+     * Data provider: settings variants and the questions each variant should yield.
+     *
+     * @return array
      */
     public static function strategy_returns_expected_questions_provider(): array {
         return [
