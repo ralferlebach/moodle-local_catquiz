@@ -1,5 +1,32 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082125)
+
+> Import-/Kalibrier-Warnungen: Der CSV-Import weist jetzt auf degenerierte oder
+> gedeckelte Item-Parameter hin.
+
+- **Kalibrierungs-Warnungen beim Testitem-Import**: `model_item_param_list::
+  save_or_update_testitem_in_db()` prüft die importierten Parameter über den neuen
+  Helfer `calibration_warnings()` und meldet advisorische Warnungen (das Item wird
+  weiterhin importiert, `success => 2` über den bestehenden Warnkanal – wie bei den
+  vorhandenen Import-Warnungen im Ergebnis sichtbar):
+  - **Nicht-positive Trennschärfe** (`a ≤ 0`): degeneriert für jedes Modell mit
+    Steigung – die ALiSe-Piloten tragen `a = 0.00`.
+  - **Gedeckelte Trennschärfe** (`a ≥ 5.0`, Default `trusted_region_max_b`): sehr
+    wahrscheinlich ein geklemmter Schätzwert.
+  - **Gedeckelte Schwierigkeit** (`|b| ≥ 10.0`, catcalc-Trait-Grenze): dito.
+  - Die Grenzen liegen als Konstanten `CALIBRATION_DISCRIMINATION_CAP` (5.0) und
+    `CALIBRATION_DIFFICULTY_ABS_CAP` (10.0) in der Klasse und spiegeln die
+    Modell-Defaults.
+- **Lang-Strings** (en + de) ergänzt: `import_warning_nonpositive_discrimination`,
+  `import_warning_capped_discrimination`, `import_warning_capped_difficulty`
+  (alphabetisch korrekt einsortiert; phpcs/Lang-Ordering = Exit 0).
+- **Tests**: Neuer `test_calibration_warnings` (Reflection, 13 Assertions – alle
+  Schwellen, Kombination, leere/fehlende Werte, Meldungsinhalt; zahn-getestet).
+  Der bestehende Import-Datensatz (`raschbirnbaum`, disc `5.92`) erwartet nun
+  ehrlich `success => 2`, da 5.92 die 5.0-Grenze überschreitet und korrekt gewarnt
+  wird. `model_item_param_list_test`: 3/3 grün.
+
 ## 1.1.5 (interne Version 2026082124)
 
 > Resume-Ursache gefunden und behoben. „Question 5" war die **quba-Slot-Nummer**,
