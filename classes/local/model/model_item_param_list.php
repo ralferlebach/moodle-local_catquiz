@@ -567,7 +567,7 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
         $warnings = [];
         $id = $newrecord['label'] ?? ($newrecord['componentid'] ?? '?');
 
-        if (isset($newrecord['discrimination']) && $newrecord['discrimination'] !== '') {
+        if (isset($newrecord['discrimination']) && is_numeric($newrecord['discrimination'])) {
             $discrimination = (float) $newrecord['discrimination'];
             if ($discrimination <= 0.0) {
                 $warnings[] = get_string('import_warning_nonpositive_discrimination', 'local_catquiz', [
@@ -583,7 +583,7 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
             }
         }
 
-        if (isset($newrecord['difficulty']) && $newrecord['difficulty'] !== '') {
+        if (isset($newrecord['difficulty']) && is_numeric($newrecord['difficulty'])) {
             $difficulty = (float) $newrecord['difficulty'];
             if (abs($difficulty) >= self::CALIBRATION_DIFFICULTY_ABS_CAP) {
                 $warnings[] = get_string('import_warning_capped_difficulty', 'local_catquiz', [

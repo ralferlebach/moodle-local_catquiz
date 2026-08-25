@@ -1,5 +1,47 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082128)
+
+> Fähigkeitsschätzung: gezielte Regressionsabdeckung für die eingefrorene
+> Trajektorie; Ursache diagnostiziert und im aktuellen Code verifiziert behoben.
+
+- **Ursache der eingefrorenen Quizverlauf-Kurve** (Attempt 207): Nicht die
+  Schätz-Mathematik, sondern ihre **Eingabe** fror ein. `progress::update_cached_responses()`
+  ergänzt die Response-Menge aus dem gecachten `get_last_response_for_attempt()`
+  und dedupliziert per `questionid`; lieferte der Lookup eine stale Response,
+  wuchs `$this->responses` nicht und `catcalc::estimate_person_ability()` bekam
+  Frage um Frage dieselbe Eingabe → bit-identische Kurve, bis die Menge extern neu
+  aufgebaut wurde. Der Attempt lief auf `2026082110`; der `…19`-Fix an
+  `catquiz::get_last_response_for_attempt` (höchster beantworteter Slot statt
+  `max(questionattemptid)`) behebt das im aktuellen Code.
+- **Warum die vorhandene Abdeckung das nicht fing**: `ability_monotonicity_test`
+  ist `@covers catcalc::estimate_person_ability` (handgebaute, korrekt wachsende
+  Menge direkt in den Schätzer), `updatepersonability_test` **stubt** `progress`
+  und liefert `get_user_responses()` als festes Array – beide umgehen genau die
+  Akkumulations-Schicht mit dem Fehler.
+- **Neuer Regressionstest** `progress_response_accumulation_test`: fährt die
+  **echte** Akkumulation gegen eine reale Question-Usage, beantwortet und gradet
+  Frage für Frage und prüft, dass die Response-Menge **streng um eins wächst** und
+  stets auf der gerade beantworteten Frage endet – kann also nicht mehr
+  unbemerkt einfrieren. Grün gegen den aktuellen Code; zahn-getestet (Akkumulation
+  deaktiviert → sofort rot). Schließt die Testlücke exakt auf der betroffenen Ebene.
+
+## 1.1.5 (interne Version 2026082127)
+
+> CI-Fix: Import-/Kalibrier-Warnung robust gemacht (polytome Array-Werte + Tests).
+
+- **`calibration_warnings()` bricht nicht mehr bei polytomen Modellen**: difficulty
+  ist dort ein Array von Schwellen; die Wertprüfung nutzt jetzt `is_numeric()`
+  statt `!== ''` und überspringt Array-/nicht-numerische Werte (vorher
+  „Array to string conversion"). Eine skalare Trennschärfe wird auch bei polytomen
+  Items weiterhin geprüft.
+- **Import-Tests korrigiert**: `count($result['errors'])` zählte auch die unter
+  `result['errors']['warnings']` verschachtelten Warnungen mit. Da Warnungen keine
+  Fehler sind (Items werden importiert), prüfen `testitemimporter_test` und
+  `strategy_test` jetzt nur echte Fehler (`array_diff_key(..., ['warnings' => 1])`).
+- Neue Testfälle in `test_calibration_warnings` für Array-/nicht-numerische Werte.
+  model/importer-Suiten grün.
+
 ## 1.1.5 (interne Version 2026082126)
 
 > Quizverlauf-Tabelle: „Antwort"-Spalte entfernt (siehe Nutzer-Feedback). Weitere

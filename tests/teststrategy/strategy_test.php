@@ -203,7 +203,10 @@ final class strategy_test extends advanced_testcase {
         }
 
         // Check that there are no errors.
-        $this->assertEquals(0, count($result['errors']), implode(', ', $result['errors']));
+        // Warnings (e.g. out-of-bounds calibration values) are nested under
+        // 'warnings' and are not import errors; assert only on real errors.
+        $realerrors = array_diff_key($result['errors'], ['warnings' => 1]);
+        $this->assertEquals(0, count($realerrors), var_export($realerrors, true));
     }
 
     /**
@@ -231,7 +234,10 @@ final class strategy_test extends advanced_testcase {
      */
     public function test_import_csv_with_polytomous_model(): void {
         $result = $this->import_itemparams("simulation_multiparam.csv");
-        $this->assertEquals(0, count($result['errors']), implode(', ', $result['errors']));
+        // Warnings (e.g. out-of-bounds calibration values) are nested under
+        // 'warnings' and are not import errors; assert only on real errors.
+        $realerrors = array_diff_key($result['errors'], ['warnings' => 1]);
+        $this->assertEquals(0, count($realerrors), var_export($realerrors, true));
     }
 
     /**

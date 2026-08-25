@@ -159,6 +159,14 @@ final class model_item_param_list_test extends advanced_testcase {
         self::assertCount(0, $warn(['componentid' => 1]));
         self::assertCount(0, $warn(['componentid' => 1, 'discrimination' => '', 'difficulty' => '']));
 
+        // Polytomous difficulty is an array of thresholds; it must be skipped,
+        // not cast (casting used to raise an "Array to string conversion").
+        self::assertCount(0, $warn(['componentid' => 1, 'difficulty' => [1.0, 2.0, 3.0]]));
+        // A non-numeric discrimination is likewise ignored.
+        self::assertCount(0, $warn(['componentid' => 1, 'discrimination' => 'n/a']));
+        // A scalar discrimination on a polytomous item is still checked.
+        self::assertCount(1, $warn(['componentid' => 1, 'discrimination' => 0.0, 'difficulty' => [1.0, 2.0]]));
+
         // The message carries the item identifier and the offending value.
         $messages = $warn(['componentid' => 42, 'discrimination' => 0.0]);
         self::assertStringContainsString('42', $messages[0]);
