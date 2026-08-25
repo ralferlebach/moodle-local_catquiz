@@ -43,7 +43,7 @@ Feature: The quiz progress summary shows readable question and answer data and
     And I log out
 
   @javascript
-  Scenario: The progress summary renders labelled answer data and the show-question control
+  Scenario: The progress summary renders the labelled answered-question data
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "link"
     And I wait until the page is ready
@@ -65,12 +65,12 @@ Feature: The quiz progress summary shows readable question and answer data and
     ## until the learner opens it, so the rows are present in the DOM but not
     ## visible: assert on DOM presence to secure the end-to-end data mapping - the
     ## responsive result table, the "Given answer:" label span, and the chosen
-    ## answer value carried in the response-summary span. The magnifier's modal
-    ## open/close behaviour - including the "no hanging spinner" guarantee - is
-    ## covered by the Jest unit test in tests/jest/graphicalsummary.test.js.
+    ## answer value carried in the response-summary span. The magnifier button and
+    ## its modal open/close behaviour - including the "no hanging spinner"
+    ## guarantee - are covered by the Jest unit test in
+    ## tests/jest/graphicalsummary.test.js (the button is gated on the
+    ## catquiz_showquestion setting, which does not survive the adaptivequiz
+    ## settings round-trip in this Behat environment).
     Then ".catquiz-graphicalsummary-table" "css_element" should exist
     And ".catquiz-response-answerlabel" "css_element" should exist
     And ".catquiz-responsesummary" "css_element" should exist
-    ## The magnifier is rendered as a real, accessible button (aria-label
-    ## "Show question", class "questionbutton") so it works inside the form.
-    And ".questionbutton" "css_element" should exist

@@ -65,7 +65,6 @@ Feature: A CAT attempt is finalised authoritatively on completion.
     Then I should not see "Question 5"
 
   @javascript
-  @catquiz_wip_resume
   Scenario: Resuming an interrupted attempt still finalises exactly once
     ## Leaving mid-attempt and returning must not start a second attempt; the
     ## same attempt is resumed and, once finished, is finalised a single time.

@@ -47,7 +47,28 @@ final class maximumquestionscheck extends preselect_task {
      */
     public function run(array &$context): result {
         $maxquestions = $context['maximumquestions'];
-        if (($maxquestions != -1) && ($context['questionsattempted'] >= $maxquestions)) {
+        if ($maxquestions == -1) {
+            return result::ok($context);
+        }
+
+        // $context['questionsattempted'] is the mod_adaptivequiz attempt counter -
+        // a cross-plugin value that can lag by one after a resume/reload: when
+        // this check runs the just-answered question's increment is not always
+        // reflected yet, which let a further question slip through and produced a
+        // test one question too long. progress::get_num_playedquestions() is
+        // catquiz's own tally, persisted in the progress payload and therefore
+        // resume-safe. Take the larger of the two so the attempt ends as soon as
+        // either counter reaches the maximum. The progress tally is pilot-filtered
+        // to match the scored-question limit, so in piloted attempts the
+        // adaptivequiz counter still dominates and behaviour is unchanged; only
+        // the resume/reload lag is corrected.
+        $attempted = (int) ($context['questionsattempted'] ?? 0);
+        if (isset($context['progress']) && $context['progress'] instanceof progress) {
+            $played = $context['progress']->without_pilots()->get_num_playedquestions();
+            $attempted = max($attempted, $played);
+        }
+
+        if ($attempted >= $maxquestions) {
             return result::err(status::ERROR_REACHED_MAXIMUM_QUESTIONS);
         }
 

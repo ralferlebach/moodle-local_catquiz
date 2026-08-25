@@ -1,5 +1,43 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082121)
+
+> Resume-Triage: Maximalfragen-Abbruch nutzt jetzt den resume-sicheren
+> progress-Zähler; Behat-graphicalsummary vollends grün; die zwei Resume-/Reload-
+> Szenarien wieder ins Gate genommen.
+
+- **Issue #5 / Resume-Abbruch – Ursache und Fix**: Die beiden Szenarien
+  `catquiz_attempt_completion` („Resuming an interrupted attempt …") und
+  `catquiz_slot_reuse` („Reloading mid-attempt …") endeten nach einem
+  Resume/Reload nicht bei `catquiz_maxquestions` (eine fünfte Frage erschien).
+  Ursache: `maximumquestionscheck` prüfte allein `$context['questionsattempted']`,
+  den Zähler aus dem `adaptivequiz_attempt`-Record von mod_adaptivequiz. Dieser
+  Cross-Plugin-Zähler kann nach einem Resume/Reload um eins nachhinken (der
+  gerade beantworteten Frage ist beim Lauf des Checks noch nicht angerechnet), im
+  linearen Ablauf tritt das nicht auf. Fix: Der Check nimmt jetzt das **Maximum**
+  aus diesem Zähler und `progress::get_num_playedquestions()` – catquiz' eigene,
+  im progress-Payload persistierte und damit resume-sichere Zählung der gespielten
+  Fragen. Der progress-Zähler ist pilotgefiltert (`without_pilots()`), sodass in
+  piloten Attempts weiterhin der adaptivequiz-Zähler dominiert und sich das
+  Verhalten nur im Resume-/Reload-Fall ändert. Neuer, zahn-getesteter Test
+  `maximumquestionscheck_test` (drei Fälle inkl. „Zähler hinkt nach → trotzdem
+  Abbruch"; Rücknahme des `max()` → rot).
+
+- **`@catquiz_wip_resume` entfernt**: Die zwei Resume-/Reload-Szenarien sind
+  wieder untagged und der `--tags`-Ausschluss in beiden Workflows
+  (`moodle-plugin-ci-main.yml`, `-dev.yml`) ist zurückgenommen – der obige Fix
+  wird damit von der CI end-to-end verifiziert, statt hinter dem WIP-Tag verdeckt
+  zu bleiben.
+
+- **Behat `catquiz_graphicalsummary_modal` – letzte fragile Assertion entfernt**:
+  Die `.questionbutton`-„should exist"-Assertion hing am Setting
+  `catquiz_showquestion`, das den adaptivequiz-Settings-Round-trip in der
+  Behat-Umgebung nicht überlebt (der Button rendert dann nicht). Das Szenario
+  prüft die Datenabbildung jetzt über die drei stabilen DOM-Assertions
+  (`.catquiz-graphicalsummary-table`, `.catquiz-response-answerlabel`,
+  `.catquiz-responsesummary`); Button und Modalverhalten sind durch den
+  Jest-Test abgedeckt. Szenariotitel entsprechend angepasst.
+
 ## 1.1.5 (interne Version 2026082120)
 
 > CI-Reparatur (codeanalysis + Behat) und Issue #7: Primärskalen-Delegation an
