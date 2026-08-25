@@ -1,5 +1,16 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082126)
+
+> Quizverlauf-Tabelle: „Antwort"-Spalte entfernt (siehe Nutzer-Feedback). Weitere
+> gemeldete Punkte (Zeit-Abbruch, Farb-Schwelle, Modal, Detail-Tabelle) sind
+> diagnostiziert und werden separat verifiziert nachgezogen.
+
+- **„Antwort"-Spalte aus der Quizverlauf-Tabelle entfernt**
+  (`graphicalsummary.php`): Spaltenklasse `catquiz-col-response`, Kopf
+  `get_string('response')` und die Antwort-Zelle je Zeile sind raus. Die übrigen
+  Spalten (Nr., Frage, Skala, Fähigkeits-Wert, optional Frage-anzeigen) bleiben.
+
 ## 1.1.5 (interne Version 2026082125)
 
 > Import-/Kalibrier-Warnungen: Der CSV-Import weist jetzt auf degenerierte oder

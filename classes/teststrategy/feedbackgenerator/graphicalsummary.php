@@ -342,7 +342,6 @@ class graphicalsummary extends feedbackgenerator {
         $table->colclasses = [
             'catquiz-col-number',
             'catquiz-col-question',
-            'catquiz-col-response',
             'catquiz-col-scale',
             'catquiz-col-ability',
         ];
@@ -352,7 +351,6 @@ class graphicalsummary extends feedbackgenerator {
         $table->head = [
             get_string('feedback_table_questionnumber', 'local_catquiz'),
             get_string('question'),
-            get_string('response', 'local_catquiz'),
             get_string('catscale', 'local_catquiz'),
             get_string('personability', 'local_catquiz'),
         ];
@@ -449,7 +447,6 @@ class graphicalsummary extends feedbackgenerator {
             $newrow = [
                 $index + 1,
                 $questioncell,
-                $responsecell,
                 $values['questionscale_name'],
                 sprintf('%.2f', $values['personability_after']),
             ];
