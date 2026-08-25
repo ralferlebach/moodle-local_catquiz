@@ -51,9 +51,9 @@ final class maximumquestionscheck extends preselect_task {
             return result::ok($context);
         }
 
-        // $context['questionsattempted'] is the mod_adaptivequiz attempt counter -
-        // a cross-plugin value that can lag by one after a resume/reload: when
-        // this check runs the just-answered question's increment is not always
+        // The $context['questionsattempted'] value is the mod_adaptivequiz attempt
+        // counter - a cross-plugin value that can lag by one after a resume/reload:
+        // when this check runs the just-answered question's increment is not always
         // reflected yet, which let a further question slip through and produced a
         // test one question too long. progress::get_num_playedquestions() is
         // catquiz's own tally, persisted in the progress payload and therefore

@@ -45,6 +45,11 @@ Auslieferung:
   .gitattributes export-ignore: ohne .github/, doc/, Tooling) und „-<version>.zip"
   (volles Arbeitspaket inkl. doc/). Nach /mnt/user-data/outputs kopieren und
   present_files. Abschlussbericht ehrlich, inkl. verbleibender Übergangszustände.
+  Ausgelieferte ZIPs dürfen KEIN .git-Verzeichnis enthalten (auch keine
+  verschachtelten wie catquizcentralhub/*/.git): Voll-Paket nach `cp -a` mit
+  `find <ziel> -type d -name .git -prune -exec rm -rf {} +` bereinigen; Kontrolle
+  `unzip -l … | grep -c '/.git/'` = 0. Verschachtelte Fremd-.git auch im Workspace
+  löschen.
 
 Abhängigkeiten/CI: mod_adaptivequiz (Branch alise_adaptivequiz, 2024123107 –
 bündelt die Bridge adaptivequizcatmodel_catquiz 1.0.3 unter catmodel/catquiz;

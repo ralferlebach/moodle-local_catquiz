@@ -195,6 +195,17 @@ stellt, nicht nur „kein Absturz".
   - `…-<version>.zip`: das volle Arbeitspaket inkl. Tooling und `doc/`.
 - Vor jeder Auslieferung die Checkliste in §7 abarbeiten.
 
+**Keine `.git`-Verzeichnisse ausliefern (verbindlich).** Ausgelieferte ZIPs
+dürfen **kein** `.git`-Verzeichnis enthalten – auch keine verschachtelten (z. B.
+`catquizcentralhub/client/.git`, `.../host/.git`). Eingespielte Fremd-`.git`
+bringen das Git auf der Empfängerseite durcheinander. Das `…-release.zip` (via
+`git archive`) ist per se frei davon; das volle Arbeitspaket wird per `cp -a`
+gebaut und **muss** danach mit `find <ziel> -type d -name .git -prune -exec rm -rf
+{} +` von **allen** `.git` befreit werden (nicht nur dem obersten). Ebenso im
+Workspace: verschachtelte Fremd-Repos (`catquizcentralhub/*/.git`) gehören
+gelöscht – sie beeinflussen die Arbeit nicht und leaken sonst in Deliverables.
+Der Ausschluss ist Teil der Auslieferungs-Checkliste (§7).
+
 **Version-Bump erzwingt Schema-Rebuild (verbindlich).** Moodle wendet Änderungen
 an `db/install.xml`/`db/upgrade.php` **nur** an, wenn `$plugin->version` steigt.
 Bleibt die Version gleich, sieht Moodle „schon installiert" und lässt das alte
@@ -253,6 +264,8 @@ von phpcs als überflüssig moniert und ist zu entfernen.
 5. Neue Fixes/Guards zahn-getestet (Rücknahme → rot).
 6. phpcs plugin-weit Exit 0.
 7. Interne Version erhöht; CHANGELOG + Session-Doku aktualisiert.
-8. Beide ZIPs gebaut, Datei-/Ausschlusszahlen geprüft, präsentiert.
+8. Beide ZIPs gebaut, Datei-/Ausschlusszahlen geprüft, präsentiert. Dabei
+   sichergestellt, dass **kein** `.git`-Verzeichnis (auch kein verschachteltes)
+   im Paket liegt: `unzip -l … | grep -c '/\.git/'` muss `0` sein.
 9. Ehrlicher Abschlussbericht inkl. verbleibender Übergangszustände
    (z. B. Behat non-blocking, warum).

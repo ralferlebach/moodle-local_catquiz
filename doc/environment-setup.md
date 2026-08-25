@@ -276,6 +276,13 @@ vendor/bin/phpunit local/catquiz/catmodel/<modell>/tests/<modell>_test.php
   veraltete Datenprovider.
 - **`max_input_vars`** fehlt → PHPUnit-Init bricht mit Moodle-Umgebungscheck ab.
 - **CLI-Harness weg:** Wegwerf-Skripte im Spiegel werden vom `cp -a` gelöscht.
+- **Verschachtelte `.git`-Verzeichnisse:** `cp -a` kopiert auch Fremd-`.git` (z. B.
+  `catquizcentralhub/client/.git`, `.../host/.git`) in den Spiegel und ins volle
+  Arbeitspaket-ZIP – das bringt das Git auf der Empfängerseite durcheinander.
+  Solche verschachtelten Repos im Workspace löschen und das Voll-Paket nach
+  `cp -a` mit `find <ziel> -type d -name .git -prune -exec rm -rf {} +` von **allen**
+  `.git` befreien (nicht nur dem obersten). Kontrolle: `unzip -l … | grep -c
+  '/\.git/'` = 0. (Siehe engineering-guide §5/§7.)
 - **Docblock-Falle:** Neue Methode vor einer privaten Methode eingefügt →
   verwaister Docblock → phpcs „Missing docblock". Nach Einfügungen phpcs laufen.
 - **Benannte vs. `#N`-Datensätze:** Manche PHPUnit-Datenprovider hier sind
