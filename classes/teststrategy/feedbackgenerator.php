@@ -409,10 +409,16 @@ abstract class feedbackgenerator {
 
         $personabilities = [];
         $selectedscaleid = null;
+        /* Issue #7 DoD 2: the display gate comes from the central result object,
+           not from the raw `excluded` flag. That flag conflates a measurement
+           problem (SE below the minimum) with a pure display decision (reporting
+           checkbox off), so every consumer had to know which combination meant
+           what. is_displayable() asks the same object the validator uses. */
+        $attemptresult = feedback_helper::build_attempt_result($personabilitiesfeedbackeditor, $newdata);
         // Ability range is the same for all scales with same root scale.
         $abiltiyrange = $this->feedbackhelper->get_ability_range(array_key_first($catscales));
         foreach ($personabilitiesfeedbackeditor as $catscale => $personability) {
-            if (isset($personability['excluded']) && $personability['excluded']) {
+            if (!feedback_helper::is_displayable($attemptresult, (int) $catscale)) {
                 continue;
             }
             if (isset($personability['primary'])) {

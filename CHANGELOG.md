@@ -1,5 +1,42 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082144)
+
+> Issue **#7 DoD 2/3**: Der Feedback-Pfad urteilt jetzt über das zentrale
+> Ergebnisobjekt statt über die mehrdeutigen Rohflags.
+
+- **Das Problem: `excluded` bedeutete zweierlei.** `feedbacksettings` setzt das
+  Flag sowohl für ein **Messproblem** (SE unter dem Minimum, zu wenige Items) als
+  auch für eine reine **Anzeigeentscheidung** (Reporting-Checkbox aus). Jeder
+  Konsument musste wissen, welche Kombination was bedeutet – und die Anzeige
+  konnte von der Validität abdriften, sobald sich die Regeln ändern.
+- **Neu: ein Gate für alle.**
+  - `feedback_helper::build_attempt_result()` baut aus den Feedback-Daten das
+    `attempt_result`-DTO – dieselbe Quelle, die auch der Validator nutzt.
+  - `feedback_helper::is_displayable()` entscheidet über die Anzeige:
+    `reportable && statisticallyvalid`.
+  - `feedbackgenerator` und `customscalefeedback` filtern nicht mehr selbst über
+    `toreport`/`excluded`/`hidden`, sondern fragen dieses Gate.
+- **Ablehnungsgründe kommen aus `rejectionreasons`.**
+  `feedback_helper::get_rejection_reason_string()` leitet die Meldung aus den
+  maschinenlesbaren Gründen ab; die interpolierten Detailwerte (Schwellen,
+  Ist-Werte) stammen weiterhin aus dem `error`-Array derselben Skala, weil die
+  Sprachstrings sie brauchen.
+  - **Verhaltensverbesserung**: Die alte Implementierung meldete den Grund der
+    **ersten** ausgeschlossenen Skala, die ihr begegnete. Lag dort ein reines
+    Anzeigeproblem vor, wurde die generische Meldung „keine Skalen gefunden"
+    gezeigt und das echte Messproblem einer anderen Skala nie sichtbar. Jetzt
+    überspringen anzeigebezogene Gründe und das Messproblem gewinnt.
+- **Äquivalenz abgesichert**: `feedback_result_gate_test` (6 Tests) prüft das neue
+  Gate über **alle** Flag-Kombinationen gegen den historischen Filter
+  (`toreport && !excluded && !hidden`), belegt die Trennung von Anzeige und
+  Validität und pinnt die Verhaltensverbesserung samt Gegenprobe gegen den alten
+  Helfer. **Zahn-getestet**: lässt man in `is_displayable()` die statistische
+  Validität weg, divergiert das Gate beim Fall „SE unter Minimum".
+- phpcs Exit 0, PHPDoc 0 Fehler; Feedback-, Validator-, Carryover-, Finalizer- und
+  Kernsuiten grün, ebenso der vollständige Attempt-Durchlauf
+  (`test_all_wrong_attempt_drives_ability_down`, 55 Assertions).
+
 ## 1.1.5 (interne Version 2026082143)
 
 > Issue **#9**: Der Live-Carryover ist verdrahtet. Vorwerte kommen jetzt aus der

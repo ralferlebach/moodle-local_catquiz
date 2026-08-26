@@ -30,6 +30,8 @@ use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
+use local_catquiz\local\result\attempt_result;
+use local_catquiz\local\result\scale_result;
 use local_catquiz\local\result\attempt_result_validator;
 use local_catquiz\output\attemptfeedback;
 use LogicException;
@@ -133,6 +135,116 @@ class feedback_helper {
      */
     public static function has_reportable_result(array $personabilities): bool {
         return attempt_result_validator::from_personabilities($personabilities)->has_reportable_result();
+    }
+
+    /**
+     * Builds the authoritative attempt result for the feedback path.
+     *
+     * Issue #7 DoD 2: every feedback generator must judge a scale by the SAME
+     * result object instead of re-implementing the gate over the raw flags
+     * `toreport` / `excluded` / `hidden`. Those flags are ambiguous - notably
+     * `excluded` is set both for a measurement problem (SE below the minimum) and
+     * for a pure display decision (reporting checkbox off) - so every consumer had
+     * to know which combination meant what.
+     *
+     * @param array $personabilities The per-scale abilities including error/flags.
+     * @param array $feedbackdata The surrounding feedback data, used for the SE.
+     *
+     * @return attempt_result
+     */
+    public static function build_attempt_result(array $personabilities, array $feedbackdata = []): attempt_result {
+        $sebyscale = [];
+        foreach (($feedbackdata['se'] ?? []) as $scaleid => $se) {
+            if (is_numeric($se)) {
+                $sebyscale[(int) $scaleid] = (float) $se;
+            }
+        }
+
+        $primaryscaleid = null;
+        foreach ($personabilities as $scaleid => $entry) {
+            if (is_array($entry) && !empty($entry['primary'])) {
+                $primaryscaleid = (int) $scaleid;
+                break;
+            }
+        }
+
+        return attempt_result_validator::from_personabilities(
+            $personabilities,
+            $sebyscale,
+            [],
+            [],
+            $primaryscaleid
+        );
+    }
+
+    /**
+     * Shows whether a scale may be displayed in the feedback.
+     *
+     * A scale is displayed when it is meant to be reported AND its measurement is
+     * statistically sound. Both conditions come from the central result object, so
+     * display and validity stay in step (issue #7).
+     *
+     * @param attempt_result $result
+     * @param int $scaleid
+     *
+     * @return bool
+     */
+    public static function is_displayable(attempt_result $result, int $scaleid): bool {
+        $scale = $result->get_scale_result($scaleid);
+        if ($scale === null) {
+            return false;
+        }
+        return $scale->reportable && $scale->statisticallyvalid;
+    }
+
+    /**
+     * Turns the machine readable rejection reasons into a user facing message.
+     *
+     * Issue #7 DoD 3: the displayed reason is derived from
+     * scale_result::$rejectionreasons rather than from the legacy `error` arrays.
+     * The interpolated detail values (thresholds, current values) still come from
+     * the error array of the same scale, because the language strings use them.
+     *
+     * @param attempt_result $result
+     * @param array $personabilities Used only for the interpolated detail values.
+     *
+     * @return string
+     */
+    public static function get_rejection_reason_string(attempt_result $result, array $personabilities): string {
+        foreach ($result->get_scale_results() as $scaleid => $scale) {
+            if ($scale->rejectionreasons === []) {
+                continue;
+            }
+            $error = $personabilities[$scaleid]['error'] ?? [];
+
+            foreach ($scale->rejectionreasons as $reason) {
+                switch ($reason) {
+                    case scale_result::REASON_ROOTONLY:
+                        return get_string('error:rootonly', 'local_catquiz', $error['rootonly'] ?? null);
+                    case scale_result::REASON_SE_MIN:
+                        return get_string('error:semin', 'local_catquiz', $error['se'] ?? null);
+                    case scale_result::REASON_SE_MAX:
+                        return get_string('error:semax', 'local_catquiz', $error['se'] ?? null);
+                    case scale_result::REASON_N_MIN:
+                        return get_string('error:nminscale', 'local_catquiz', $error['nminscale'] ?? null);
+                    case scale_result::REASON_FRACTION:
+                        $fraction = $error['fraction']['fraction'] ?? null;
+                        if ((string) $fraction === '1') {
+                            return get_string('error:fraction1', 'local_catquiz');
+                        }
+                        if ((string) $fraction === '0') {
+                            return get_string('error:fraction0', 'local_catquiz');
+                        }
+                        return get_string('noscalesfound', 'local_catquiz');
+                    default:
+                        // Reporting disabled, hidden, not primary and not measured
+                        // are not measurement problems; keep looking for one.
+                        continue 2;
+                }
+            }
+        }
+
+        return get_string('noscalesfound', 'local_catquiz');
     }
 
     /**
