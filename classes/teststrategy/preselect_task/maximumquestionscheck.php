@@ -46,7 +46,26 @@ final class maximumquestionscheck extends preselect_task {
      */
     public function run(array &$context): result {
         $maxquestions = $context['maximumquestions'];
-        if (($maxquestions != -1) && ($context['questionsattempted'] >= $maxquestions)) {
+        if ($maxquestions == -1) {
+            return result::ok($context);
+        }
+
+        // Count the questions this attempt has actually played, taken from our own
+        // progress record rather than from the externally maintained
+        // `questionsattempted` counter on the adaptivequiz attempt. That counter can
+        // drift when an attempt is resumed (the pending item is re-rendered without
+        // being counted again), and the drift let the test administer one item more
+        // than configured - the known "does not stop at the maximum" defect.
+        // Pilot items do not count towards the productive test length either.
+        $played = $context['questionsattempted'];
+        if (isset($context['progress'])) {
+            $played = max(
+                $played,
+                count($context['progress']->without_pilots()->get_playedquestions())
+            );
+        }
+
+        if ($played >= $maxquestions) {
             return result::err(status::ERROR_REACHED_MAXIMUM_QUESTIONS);
         }
 

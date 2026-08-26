@@ -1,5 +1,38 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082135)
+
+> Die verbleibenden zwei Behat-Fails („Question 5") liegen **nicht** in
+> `mod_adaptivequiz`, sondern in der Abbruchlogik von `local_catquiz`.
+> Damit ist die im Dokumentationsplan vermerkte Altlast „Test bricht nicht bei
+> Maximalfragezahl ab" behoben.
+
+- **Korrektur einer früheren Fehleinschätzung.** Ich hatte die „Question 5"-Fails
+  dem Slot-Reuse in `mod_adaptivequiz` zugeschrieben. Der aktuelle Lauf widerlegt
+  das: nach dem Resume erscheint korrekt „Question 2", alle Zwischenschritte
+  bestehen – der Slot-Reuse **funktioniert**. Es scheitert erst daran, dass nach
+  **vier beantworteten Fragen** eine fünfte ausgeliefert wird, obwohl
+  `catquiz_maxquestions = 4` konfiguriert ist.
+- **Ursache**: `maximumquestionscheck` prüfte ausschließlich gegen den extern von
+  `mod_adaptivequiz` gepflegten Zähler `questionsattempted`. Dieser kann beim
+  Wiederaufnehmen eines Versuchs driften (das offene Item wird erneut gerendert,
+  ohne erneut gezählt zu werden) – und ein um eins zu niedriger Zähler lässt
+  genau ein Item zu viel zu.
+- **Fix**: Die Prüfung stützt sich jetzt zusätzlich auf die **eigene**
+  Fortschrittszählung (`progress->without_pilots()->get_playedquestions()`) und
+  nimmt das Maximum aus beiden Quellen. Diese Zählung ist driftfest, weil
+  `add_playedquestion()` beim Ausliefern greift und nach Fragen-ID indiziert ist –
+  ein beim Resume erneut ausgeliefertes Item wird also nicht doppelt gezählt.
+  Pilotitems zählen nicht zur produktiven Testlänge. Fehlt `progress` im Kontext,
+  gilt weiterhin der bisherige Zähler.
+- **Regressionstest** `maximumquestionscheck_test` (4 Tests): Stopp bei
+  erreichtem Maximum, **Stopp auch bei driftendem externem Zähler**, Weiterlaufen
+  unterhalb des Maximums, `-1` = unbegrenzt sowie Fallback ohne `progress`.
+  **Zahn-getestet**: alte Logik reinjiziert → der Drift-Test fällt.
+- **CI-Stand**: `codeanalysis` ist **success**. Behat ist von 3 auf 2 Fails
+  gesunken – der `graphicalsummary`-Fail (`.catquiz-response-answerlabel`) ist
+  durch 2026082134 behoben. phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler.
+
 ## 1.1.5 (interne Version 2026082134)
 
 > Quizverlauf-Tabelle: Breite, Korrektheits-Indikator und Modal-Ladefehler.
