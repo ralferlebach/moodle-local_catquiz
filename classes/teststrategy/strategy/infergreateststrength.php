@@ -155,7 +155,14 @@ class infergreateststrength extends strategy {
         } else {
             $filterabilities = [];
             foreach ($personabilities as $scaleid => $array) {
-                if (!isset($array['error']) && !isset($array['excluded'])) {
+                /* 'excluded' now covers only measurement problems; a scale whose
+                   reporting is switched off carries FIELD_NOTREPORTED. Both must stay
+                   out of the primary-scale selection, as before the split. */
+                if (
+                    !isset($array['error'])
+                    && !isset($array['excluded'])
+                    && !isset($array[feedbacksettings::FIELD_NOTREPORTED])
+                ) {
                     $filterabilities[$scaleid] = $array['value'];
                 }
             }

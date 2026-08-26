@@ -1,10 +1,9 @@
 @local @local_catquiz @javascript
-Feature: Consecutive attempts are historised per scale.
-  As a student, each finalised attempt records its own per-scale result, so a
-  second attempt does not overwrite the first (issue #9). The carry-over of prior
-  values as start values and the prioritised re-testing of the last primary scale
-  are covered separately once the live selection wiring lands; these scenarios
-  assert the persistence half that is wired here.
+Feature: Completing an attempt is authoritative on every path.
+  Whether a student finishes an attempt in the browser or a teacher closes it
+  administratively, the attempt must be finalised exactly once through the same
+  path: the completion time is stamped once and the CAT model's finaliser stores
+  the result (issues #5 and #8).
 
   Background:
     Given the following "users" exist:
@@ -43,7 +42,10 @@ Feature: Consecutive attempts are historised per scale.
     And I log out
 
   @javascript
-  Scenario: Two consecutive attempts each finish and are finalised
+  Scenario: A teacher closing an attempt finalises it like a normal completion
+    ## Issue #5 DoD 3/7: administrative closing must not be a second completion
+    ## mechanism. The attempt is left unfinished by the student and then closed by
+    ## the teacher; afterwards it must be reported as finished, not as in progress.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "link"
     And I wait until the page is ready
@@ -51,66 +53,43 @@ Feature: Consecutive attempts are historised per scale.
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 2"
-    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 3"
-    And I click on "richtige Antwort" "text" in the "Question 3" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 4"
-    And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
-    And I click on "Submit answer" "button"
+    ## Leave the attempt unfinished.
+    And I log out
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
+    And I follow "Reports"
     And I wait until the page is ready
-    And I should not see "Question 5"
-    ## Second attempt on the same activity.
-    And I am on the "adaptivecatquiz1" Activity page
+    And I follow "Student1 Test"
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I follow "Close attempt"
     And I wait until the page is ready
-    And I should see "Question 1"
-    And I click on "richtige Antwort" "text" in the "Question 1" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 2"
-    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 3"
-    And I click on "richtige Antwort" "text" in the "Question 3" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 4"
-    And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
-    And I click on "Submit answer" "button"
+    And I press "Continue"
     And I wait until the page is ready
-    Then I should not see "Question 5"
+    ## The attempt is now closed; re-opening the activity as the student offers a
+    ## new attempt rather than resuming the old one.
+    Then I should not see "In progress"
 
   @javascript
-  Scenario: A second attempt starts from the carried-over result, not from scratch
-    ## Issue #9: the start value of a following attempt comes from the finalised
-    ## result of the previous one, not from the living personparams row that is
-    ## written during an attempt. A student who answered everything wrong in the
-    ## first attempt must therefore be offered an easier item at the start of the
-    ## second attempt than at the very first start.
+  Scenario: A completed attempt is not finalised twice
+    ## Issue #5 DoD 4: finalisation is idempotent. Revisiting the finished attempt
+    ## must neither change nor duplicate its result.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "link"
     And I wait until the page is ready
     And I should see "Question 1"
-    And I click on "falsche Antwort 1" "text" in the "Question 1" "question"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 2"
     And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 3"
-    And I click on "falsche Antwort 1" "text" in the "Question 3" "question"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 4"
-    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
     And I should not see "Question 5"
-    ## Second attempt: it must start and run normally on the carried-over value.
+    ## Re-open the finished attempt.
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
-    And I wait until the page is ready
-    Then I should see "Question 1"
-    And I click on "falsche Antwort 1" "text" in the "Question 1" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 2"
+    Then I should not see "Question 5"

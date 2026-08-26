@@ -37,6 +37,7 @@
 namespace local_catquiz\teststrategy;
 
 use advanced_testcase;
+use local_catquiz\teststrategy\feedbacksettings;
 
 /**
  * Guards the central display gate of the feedback path.
@@ -235,5 +236,78 @@ final class feedback_result_gate_test extends advanced_testcase {
             get_string('noscalesfound', 'local_catquiz'),
             feedback_helper::get_exclusion_reason_string($personabilities)
         );
+    }
+
+    /**
+     * The split flag: reporting off is signalled by FIELD_NOTREPORTED, without
+     * abusing 'excluded' (which now means "the measurement is unusable").
+     *
+     * @return void
+     */
+    public function test_split_flag_marks_reporting_without_claiming_a_measurement_problem(): void {
+        $this->resetAfterTest(true);
+
+        $personabilities = [
+            7 => [
+                'value' => 0.5,
+                'toreport' => true,
+                'primary' => true,
+                feedbacksettings::FIELD_NOTREPORTED => true,
+                'error' => ['checkbox' => ['scalereportcheckboxinquizsettings' => false]],
+            ],
+        ];
+        $result = feedback_helper::build_attempt_result($personabilities);
+        $scale = $result->get_scale_result(7);
+
+        $this->assertFalse($scale->reportable, 'Reporting is switched off.');
+        $this->assertTrue($scale->statisticallyvalid, 'But nothing is wrong with the measurement.');
+        $this->assertFalse(feedback_helper::is_displayable($result, 7));
+        $this->assertContains(\local_catquiz\local\result\scale_result::REASON_REPORTING_DISABLED, $scale->rejectionreasons);
+    }
+
+    /**
+     * 'excluded' on its own still means the measurement is unusable.
+     *
+     * @return void
+     */
+    public function test_excluded_alone_still_means_unusable(): void {
+        $this->resetAfterTest(true);
+
+        $personabilities = [
+            7 => [
+                'value' => 0.5,
+                'toreport' => true,
+                'excluded' => true,
+                'error' => ['se' => ['semindefined' => 0.35, 'securrent' => 0.1]],
+            ],
+        ];
+        $result = feedback_helper::build_attempt_result($personabilities);
+        $scale = $result->get_scale_result(7);
+
+        $this->assertFalse($scale->statisticallyvalid);
+        $this->assertFalse(feedback_helper::is_displayable($result, 7));
+    }
+
+    /**
+     * Legacy data written before the split marked the reporting case as
+     * 'excluded' as well; such a result must not become invalid retroactively.
+     *
+     * @return void
+     */
+    public function test_legacy_reporting_flag_stays_statistically_valid(): void {
+        $this->resetAfterTest(true);
+
+        $personabilities = [
+            7 => [
+                'value' => 0.5,
+                'toreport' => true,
+                'excluded' => true,
+                'error' => ['checkbox' => ['scalereportcheckboxinquizsettings' => false]],
+            ],
+        ];
+        $result = feedback_helper::build_attempt_result($personabilities);
+
+        $this->assertTrue($result->get_scale_result(7)->statisticallyvalid);
+        $this->assertFalse($result->get_scale_result(7)->reportable);
     }
 }

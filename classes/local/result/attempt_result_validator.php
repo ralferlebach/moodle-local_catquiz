@@ -16,6 +16,7 @@
 
 namespace local_catquiz\local\result;
 
+use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\teststrategy\progress;
 
 /**
@@ -89,19 +90,28 @@ final class attempt_result_validator {
                 $reasons[] = scale_result::REASON_ROOTONLY;
             }
 
-            $hascheckbox = isset($error['checkbox']);
+            /* 'excluded' now means exactly one thing: the measurement is unusable.
+               The display decision "reporting switched off" arrives as its own flag
+               (feedbacksettings::FIELD_NOTREPORTED), so the statistical check no
+               longer has to compensate for a conflated flag by inspecting the error
+               array. The checkbox error entry is still read for backwards
+               compatibility with data written before the split. */
+            $notreported = !empty($entry[feedbacksettings::FIELD_NOTREPORTED]) || isset($error['checkbox']);
             $excluded = !empty($entry['excluded']);
             $hidden = !empty($entry['hidden']);
             $toreport = !empty($entry['toreport']);
 
-            // Statistical validity: no measurement-quality reason, and not
-            // excluded for any non-reporting reason. Reporting being disabled
-            // (checkbox) does not make a result statistically invalid.
-            $statisticallyvalid = ($reasons === []) && !($excluded && !$hascheckbox);
+            /* Statistical validity: no measurement-quality reason and not excluded.
+               Reporting being switched off never makes a result invalid. Data
+               written BEFORE the flag split marks the reporting case as 'excluded'
+               too, so an excluded scale that is only not-reported still counts as
+               statistically valid - otherwise stored results would retroactively
+               become invalid. */
+            $statisticallyvalid = ($reasons === []) && !($excluded && !$notreported);
 
             // Reporting / display gate.
-            $reportable = $toreport && !$hidden && !$hascheckbox;
-            if ($hascheckbox) {
+            $reportable = $toreport && !$hidden && !$notreported;
+            if ($notreported) {
                 $reasons[] = scale_result::REASON_REPORTING_DISABLED;
             }
             if ($hidden) {

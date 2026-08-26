@@ -1,5 +1,45 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082147)
+
+> Das doppeldeutige `excluded`-Flag ist aufgetrennt, und die Behat-Abdeckung für
+> #5–#9 ist vollständig geschrieben.
+
+- **`excluded` bedeutet jetzt genau eine Sache: die Messung ist unbrauchbar.**
+  Die Anzeigeentscheidung „Reporting abgeschaltet" trägt ein eigenes Flag
+  `feedbacksettings::FIELD_NOTREPORTED`. Bisher setzte `filter_excluded_scales()`
+  dafür ebenfalls `excluded`, weshalb jeder Konsument zusätzlich das
+  `error`-Array inspizieren musste, um „unbrauchbar" von „soll nicht angezeigt
+  werden" zu unterscheiden.
+  - `attempt_result_validator` braucht die Kompensation über `$hascheckbox` nicht
+    mehr; `reportable` und `statisticallyvalid` lesen sich direkt aus den Flags.
+  - `inferlowestskillgap` und `infergreateststrength` schließen weiterhin **beide**
+    Fälle aus der Primary-Auswahl aus – die Auswahl verhält sich unverändert.
+  - `feedback_helper::get_exclusion_reason_string()` erkennt beide Flags.
+- **Rückwärtskompatibel.** Daten, die **vor** der Auftrennung geschrieben wurden,
+  markieren den Reporting-Fall zusätzlich als `excluded`. Damit solche Ergebnisse
+  nicht nachträglich ungültig werden, gilt weiterhin: ein ausgeschlossener, aber
+  nur nicht-berichteter Wert bleibt statistisch valide. Das ist getestet
+  (`test_legacy_reporting_flag_stays_statistically_valid`) und zahn-geprüft.
+- **Verifikation**: `feedback_result_gate_test` auf 9 Tests erweitert (neue und
+  alte Datenform, `excluded` allein bedeutet weiterhin unbrauchbar). Die
+  vollständige CAT-Simulationsmatrix läuft unverändert grün
+  (35 Tests / 2537 Assertions), die Selektionslogik ist also nicht betroffen.
+  phpcs Exit 0, PHPDoc 0 Fehler.
+- **Behat-Abdeckung vervollständigt** (6 neue Szenarien, insgesamt 20):
+  - **#6**: Zurück/Vorwärts im Browser erzeugt keinen Doppel-Slot; wiederholtes
+    Wiederbetreten eines unbeantworteten Items behält einen Slot.
+  - **#7**: Eine Skala mit abgeschaltetem Reporting wird nicht angezeigt, der
+    Versuch aber normal finalisiert – der zentrale „kein valides Ergebnis"-Hinweis
+    bleibt echten Messproblemen vorbehalten.
+  - **#5/#8**: neue Datei `catquiz_attempt_finalisation.feature` – administratives
+    Schließen finalisiert wie ein normaler Abschluss (verifiziert: auch
+    `closeattempt.php` nutzt `adaptivequiz_complete_attempt()`), und ein
+    abgeschlossener Versuch wird nicht doppelt finalisiert.
+  - **#9**: Ein zweiter Versuch startet auf dem übernommenen Ergebnis.
+  Alle Feature-Dateien folgen dem bewährten Muster der bestehenden Szenarien
+  (Settings-Round-Trip über das Aktivitätsformular) und sind strukturell geprüft.
+
 ## 1.1.5 (interne Version 2026082146)
 
 > Die übersprungene CAT-Simulationsmatrix läuft wieder – und prüft wieder etwas.

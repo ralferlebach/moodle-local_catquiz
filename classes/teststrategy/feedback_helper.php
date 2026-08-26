@@ -25,6 +25,7 @@
 namespace local_catquiz\teststrategy;
 
 use context_course;
+use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
@@ -258,7 +259,9 @@ class feedback_helper {
      */
     public static function get_exclusion_reason_string(array $personabilities): string {
         foreach ($personabilities as $personability) {
-            if (!is_array($personability) || !isset($personability['excluded']) || !isset($personability['error'])) {
+            $isexcluded = isset($personability['excluded'])
+                || isset($personability[feedbacksettings::FIELD_NOTREPORTED]);
+            if (!is_array($personability) || !$isexcluded || !isset($personability['error'])) {
                 continue;
             }
             $errorcode = array_keys($personability['error'])[0];
