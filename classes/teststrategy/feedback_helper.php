@@ -291,13 +291,41 @@ class feedback_helper {
     }
 
     /**
-     * Write information about colorgradient for colorbar.
+     * Locale-robust parse of a configured feedback range limit.
+     *
+     * The limits may arrive as native numbers (JSON) or as localised strings.
+     * A German decimal comma ("1,5") must NOT be truncated by floatval()/(float)
+     * to 1.0 - that shifted the colour bands and mis-coloured abilities (an
+     * ability of 1.10 fell into the green band because the yellow/green boundary
+     * had collapsed from 1.5 to 1). This helper normalises a decimal comma to a
+     * dot before casting, so "1,5", "1.5" and the numeric 1.5 all yield 1.5.
+     *
+     * @param mixed $value
+     * @return float
+     */
+    public static function parse_range_limit($value): float {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+        $string = trim((string) $value);
+        if ($string === '') {
+            return 0.0;
+        }
+        // A decimal comma is only a decimal separator when there is no dot too.
+        if (strpos($string, ',') !== false && strpos($string, '.') === false) {
+            $string = str_replace(',', '.', $string);
+        }
+        return (float) $string;
+    }
+
+    /**
+     * Returns the color for a given person ability.
      *
      * @param array $quizsettings
      * @param float $personability
      * @param int $catscaleid
-     * @return string
      *
+     * @return string
      */
     public function get_color_for_personability(array $quizsettings, float $personability, int $catscaleid): string {
         $default = LOCAL_CATQUIZ_DEFAULT_GREY;
@@ -316,8 +344,8 @@ class feedback_helper {
         for ($i = 1; $i <= $numberoffeedbackoptions; $i++) {
             $rangestartkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_" . $i;
             $rangeendkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $i;
-            $rangestart = floatval($quizsettings[$rangestartkey]);
-            $rangeend = floatval($quizsettings[$rangeendkey]);
+            $rangestart = self::parse_range_limit($quizsettings[$rangestartkey]);
+            $rangeend = self::parse_range_limit($quizsettings[$rangeendkey]);
 
             if ($personability >= $rangestart && $personability <= $rangeend) {
                 $colorkey = 'wb_colourpicker_' . $catscaleid . '_' . $i;
@@ -666,8 +694,8 @@ class feedback_helper {
             if (!isset($settings[$lowerkey]) || !isset($settings[$upperkey])) {
                 continue;
             }
-            $lower = (float) $settings[$lowerkey];
-            $upper = (float) $settings[$upperkey];
+            $lower = self::parse_range_limit($settings[$lowerkey]);
+            $upper = self::parse_range_limit($settings[$upperkey]);
             if ($value < $lower) {
                 continue;
             }

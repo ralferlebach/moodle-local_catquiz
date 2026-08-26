@@ -785,9 +785,24 @@ class catquiz_handler {
                     $standardvalues[$feedbackvaluekey] = $values[$keyname] ?? null;
                     continue;
                 }
+                // The range limit fields carry localised numbers taken raw from
+                // getSubmitValues(). A German decimal comma ("1,5") must be parsed
+                // with unformat_float() here; a plain (float)/floatval() would
+                // truncate it to 1.0 and silently corrupt the stored yellow/green
+                // boundary for every copied-to subscale (Issue: mis-coloured
+                // feedback because 1,5 collapsed to 1).
+                $islimitkey = ($feedbackvaluekey === 'feedback_scaleid_limit_lower_'
+                    || $feedbackvaluekey === 'feedback_scaleid_limit_upper_');
                 for ($j = 1; $j <= $nfeedbackoptions; $j++) {
                     $keyname = $feedbackvaluekey . $scaleidofcopyvalue . '_' . $j;
-                    $standardvalues[$feedbackvaluekey][$j] = $values[$keyname] ?? null;
+                    $rawvalue = $values[$keyname] ?? null;
+                    if ($islimitkey && is_string($rawvalue) && trim($rawvalue) !== '') {
+                        $parsed = unformat_float($rawvalue, true);
+                        if ($parsed !== false && $parsed !== null) {
+                            $rawvalue = $parsed;
+                        }
+                    }
+                    $standardvalues[$feedbackvaluekey][$j] = $rawvalue;
                 }
             }
 

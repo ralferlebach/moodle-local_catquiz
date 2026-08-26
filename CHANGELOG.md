@@ -1,5 +1,109 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082132)
+
+> **Root Cause der genullten negativen Difficulties gefunden und behoben.**
+> Reproduziert mit der echten `ALiSe_Mathematik.csv`: vorher 0 negative
+> Difficulties nach dem Parsen, nachher 326 – bei unveränderter Discrimination.
+
+- **Ursache: Moodles Formel-Escaping schlägt auf den Zahlwert durch.**
+  `csv_import_reader::load_csv_content()` legt die geparsten Zeilen über
+  `csv_export_writer::print_array()` in einer Zwischendatei ab; dessen
+  `add_data()` wendet `\core\dataformat::escape_spreadsheet_formula()` an. Dieser
+  Helfer stellt jedem Wert, der mit `=`, `+`, `-` oder `@` beginnt, ein
+  **Apostroph** voran, damit Tabellenkalkulationen ihn nicht als Formel lesen.
+  Eine negative IRT-Schwierigkeit kommt im Importer damit als `'-5.81` an – und
+  `floatval("'-5.81")` ist **0.0**. Positive Werte und die Discrimination sind
+  nicht betroffen, weil sie nicht mit einem Formelzeichen beginnen. Das erklärt
+  den Fingerabdruck exakt: *alle* negativen Difficulties → 0.0000, alle
+  nicht-negativen und alle Discriminations korrekt.
+  - Die CSV selbst ist sauber: 0 Apostrophe in der Datei (byteweise geprüft),
+    das Apostroph entsteht ausschließlich im Import-Pfad.
+  - Weder Spaltentyp (`decimal(10,4)` signed, kein UNSIGNED), noch
+    `enforce_min_max_range()`, noch die Kontext-Duplizierung sind beteiligt.
+- **Fix**: neuer Helfer `fileparser::strip_formula_escape()` entfernt das
+  Schutz-Apostroph, bevor der Wert zur Zahl wird – angewandt sowohl im
+  Float-Konvertierungspfad als auch in `cast_string_to_float()`. Ein echtes
+  Apostroph in Text bleibt unangetastet (nur `'` gefolgt von `=`/`+`/`-`/`@`
+  wird entfernt).
+- **Verifikation**: echter Parserlauf gegen die Originaldatei – 805 Zeilen,
+  **326 negative** Difficulties (vorher 0), erste Zeile `MA.v1.A01-01` jetzt
+  `b=-5.81, a=0.4` (vorher `b=0.0`). Regressionstest
+  `test_formula_escape_guard_is_stripped`, **zahn-getestet** (Guard entfernt →
+  rot). phpcs Exit 0; Importer-Suiten grün.
+
+## 1.1.5 (interne Version 2026082131)
+
+> Modell-Vertrag für Itemparameter + aktiver Itemparam. Simulation mit echten
+> ALiSe-Kennwerten belegt: der Schätzer ist gesund; das Einfrieren kam von
+> stummen Items (discrimination = 0) und vom falsch gewählten Itemparameter.
+
+- **`set_active_itemparam()` wählte den unkalibrierten Parameter.** Der Kommentar
+  versprach „highest status", der Code sortierte aufsteigend und nahm Element 0 –
+  also den **niedrigsten** Status. Bei Items mit Parametern für mehrere Modelle
+  wurde damit der stale/All-Zero-Datensatz aktiv und im Test gespielt (die
+  Test-Query joint korrekt über `lci.activeparamid`). Fix: absteigend sortieren.
+- **Modell-Vertrag (neu).** Ursprüngliche Regel bleibt: kein Itemparameter-Eintrag
+  = Pilotitem. Neu: Parameter, die für ihr Modell unbrauchbar sind, gelten wie
+  fehlende – das Item wird Pilot statt produktiv gespielt.
+  - `model_model::validate_parameters()` (Basis: difficulty = signed float,
+    endlich; b = 0 und negative b sind gültig), überschreibbar je Modell.
+  - 2PL: `discrimination` > 0. 3PL: zusätzlich `guessing` in [0, 1). 1PL: eine
+    gespeicherte 0 in discrimination bleibt folgenlos.
+  - `model_strategy::validate_item_parameters()` als gemeinsamer Einstiegspunkt
+    für **Import und Testdurchführung**.
+- **Import**: Vertragsverletzung → Import als Pilot (Status `NOT_CALCULATED`)
+  statt produktiv, mit Warnung inkl. Label, Modell und Grund (de+en).
+- **Testdurchführung**: `ispilot()` wendet denselben Guard an; bei aktivem
+  CATQUIZ-Debug (`store_debug_info`) wird Item-ID, Modell und Grund in
+  `$context['invaliditemparams']` gesammelt und per `debugging()` ausgegeben.
+- **Belegt durch Simulation**: discrimination = 0 im 2PL ergibt θ-Änderung exakt
+  +0,0000 (P = 0,5 für jedes θ, Fisher-Information 0) – reproduziert das
+  Einfrieren bitgenau. b = 0 allein friert **nicht** ein. Dieselben Items als 1PL
+  bewegen θ normal.
+- **Verifikation**: `item_parameter_contract_test` (6 Tests, 19 Assertions),
+  zahn-getestet (Sortierung zurückgedreht → rot; discrimination-Guard entfernt →
+  rot). phpcs Exit 0; raschbirnbaum (348) und rasch (347) grün.
+
+## 1.1.5 (interne Version 2026082130)
+
+> Feedback-Farben: Skala-Grenzen mit deutschem Dezimalkomma wurden abgeschnitten
+> (1,5 → 1), wodurch Fähigkeiten fälschlich grün statt gelb eingefärbt wurden.
+> Ursache (Attempt 208) belegt aus dem Settings-Export und Schätz-Trace.
+
+- **Ursache – `floatval`/`(float)` schneidet „1,5" zu 1 ab.** Der
+  Settings-Export zeigt: die nicht angefassten Skalen (Global 22, Report-AUS)
+  tragen die Gelb/Grün-Grenze korrekt bei **1,5**; alle **konfigurierten**
+  Report-Skalen (u. a. Ma-D01=141, Ma-C04=133) tragen **1**. Der Feedback-Text
+  dieser Skalen sagt selbst „höher als 1,5" – die Absicht war 1,5. Beim
+  **Kopieren der Werte auf die Subskalen** (`catquiz_handler::set_data_after_definition`)
+  werden die rohen, lokalisierten `getSubmitValues()`-Strings verarbeitet; „1,5"
+  wurde dort zu 1 abgeschnitten. Der direkte Formular-Speicherpfad ist sauber
+  (`float`-mform-Element nutzt `unformat_float`), daher blieben die unberührten
+  Skalen korrekt.
+- **Sichtbares Symptom.** Der Differenz-/Personabilities-Chart färbt die
+  Subskalen-Balken über deren **eigene** (korrumpierte) Grenze `1`, während die
+  Legende aus der **Globalskala 22** (Grenze `1,5`) gerendert wird → Fähigkeit
+  1,10/1,32 lag ≥ 1 → **grün**, obwohl die Legende Gelb bis 1,5 zeigt.
+
+- **Fix Schreibseite:** Der Copy-Pfad normalisiert die Grenz-Felder jetzt per
+  `unformat_float()` statt sie roh durchzureichen – „1,5" wird 1.5.
+- **Fix Leseseite (Härtung):** Neuer kommasicherer Parser
+  `feedback_helper::parse_range_limit()`, eingesetzt in `get_color_for_personability`
+  und `get_feedback_range_index`. Selbst ein je gespeicherter Komma-String wird
+  nun korrekt interpretiert statt abgeschnitten.
+- **Regressionstest** `feedback_range_locale_test` (DB-frei): „1,5" → 1.5;
+  Fähigkeit 1,10/1,32 → **gelb** (Range-Index 2), 1,60 → grün, −1,0 → rot.
+  **Zahn-getestet**: truncating cast reinjiziert → 1,10 wird grün (Index 3) und
+  der Test fällt; Fix restauriert → grün. phpcs Exit 0.
+- **Datenreparatur mitgeliefert:** `fix_feedback_limits.py` hebt in einem
+  Settings-Export jede an `upper_*_2`/`lower_*_3` abgeschnittene `1` auf den
+  Elternskalen-Sollwert `1,5` an (Attempt-208-Export: **68** Grenzen über 34
+  Skalen). Das korrigierte JSON liegt bei.
+- **Offener Folgepunkt (dokumentiert):** Der Differenz-Chart sollte Farbe **und**
+  Legende aus derselben Skala speisen; mit dem korrigierten JSON stimmen beide
+  wieder überein, die Skala-Divergenz bleibt als Härtung offen.
+
 ## 1.1.5 (interne Version 2026082129)
 
 > CI-Fix (Quality-Job): ungültiger Inline-PHPDoc-Tag im Regressionstest behoben.

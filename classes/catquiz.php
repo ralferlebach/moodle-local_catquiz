@@ -2707,9 +2707,13 @@ class catquiz {
 
         // If no itemparamid is given, select the one with the highest status.
         if (!$activeparamid) {
-            // Find the itemparam that should be selected.
+            // Sort DESCENDING by status so that index 0 really is the highest status.
+            // This used to sort ascending and then take element 0, which selected the
+            // LEAST calibrated parameter - for an item carrying parameters for several
+            // models that meant the stale/uncalibrated row (often an all-zero default)
+            // became the active one and was played during the test.
             $sortfun = function ($a, $b) {
-                return $a->status - $b->status;
+                return $b->status <=> $a->status;
             };
             usort($itemparams, $sortfun);
             $activeparamid = $itemparams[0]->id;

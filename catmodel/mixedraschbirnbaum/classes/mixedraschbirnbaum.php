@@ -45,6 +45,37 @@ class mixedraschbirnbaum extends model_raschmodel {
      * @param stdClass $record
      * @return array
      */
+    /**
+     * Validates the item parameters for the 3PL model.
+     *
+     * A 3PL item needs a strictly positive discrimination (see 2PL) and a guessing
+     * parameter in [0, 1). A guessing value of 1 or above would make the item
+     * answerable with certainty regardless of ability; a negative one is meaningless.
+     *
+     * @param stdClass $record The raw item parameter record.
+     * @return string[] Reasons the parameters are invalid; empty array if valid.
+     */
+    public static function validate_parameters(stdClass $record): array {
+        $reasons = parent::validate_parameters($record);
+
+        if (!self::is_valid_positive_float($record->discrimination ?? null)) {
+            $reasons[] = 'discrimination must be a number greater than 0';
+        }
+
+        $guessing = $record->guessing ?? null;
+        if (!self::is_valid_float($guessing) || (float) $guessing < 0.0 || (float) $guessing >= 1.0) {
+            $reasons[] = 'guessing must be a number in the range [0, 1)';
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * Returns the parameters as associative array, where the key is the parameter name.
+     *
+     * @param stdClass $record
+     * @return array
+     */
     public static function get_parameters_from_record(stdClass $record): array {
         return [
             'difficulty' => $record->difficulty,
