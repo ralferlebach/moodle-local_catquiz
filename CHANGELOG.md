@@ -1,5 +1,82 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082137)
+
+> Root Cause der beiden „Question 5"-Behat-Fails: ein **veralteter
+> Last-Response-Cache**. Die Zählgröße aus 2026082136 war richtig – sie bekam
+> nach einem Resume nur veraltete Daten geliefert.
+
+- **Ursache: der Cache-Key war nicht monoton.** `progress` cachte die letzte
+  Antwort unter `lastresponse_<usageid>_<numplayedquestions>`. Dieser Key setzt
+  voraus, dass die Zahl der gespielten Fragen ein **monoton wachsender**
+  Versionsindikator der Antwort-Historie ist. Genau das verletzt `load()`: ist die
+  zuletzt ausgelieferte Frage noch unbeantwortet, wird sie aus `playedquestions`
+  entfernt – der Zähler geht **2 → 1** und wieder auf **2**, sobald das Item
+  beantwortet ist. Beim zweiten Treffer auf Key `..._2` liefert der Cache die
+  **alte** Antwort (die von vor dem offenen Item). Die frisch gegebene Antwort
+  erreicht die Response-Akkumulation nie, `responses` hinkt um eins hinterher, und
+  der Test administriert ein Item über das Maximum hinaus.
+- **Fix**: Der Cache in `progress::get_last_response_for_attempt()` ist
+  **entfernt**; die letzte Antwort wird immer frisch gelesen. Die Query ist eine
+  gezielte Einzelzeile (`LIMIT 1`) und läuft pro Versuch höchstens einige Dutzend
+  Mal – Korrektheit schlägt hier die eingesparte Abfrage deutlich. Zudem müsste
+  man für eine korrekte Invalidierung ohnehin die QUBA-Historie kennen, also genau
+  das, was die Abfrage liefert.
+- **Regressionstest** `progress_lastresponse_cache_test`: ein vorab gesetzter
+  Cache-Eintrag unter dem alten Key darf den echten Wert **nicht** verdecken.
+  **Zahn-getestet**: Cache reinjiziert → Test fällt (`111 is not equal to 111`).
+- **Bewusst NICHT geändert**: der Löschblock in `progress::load()`, der die offene
+  Frage aus `playedquestions` entfernt. Ohne den Cache hängt die Korrektheit nicht
+  mehr an der Monotonie dieses Zählers, und ein Eingriff hätte breite
+  Auswirkungen – `filterbystandarderror` und `filterbytestinfo` vergleichen
+  `count(playedquestions)` gegen `minimumquestions`, die Mindestfragezahl wäre
+  also eine Frage früher erreicht. Die saubere Trennung
+  „administriert / offen / beantwortet" bleibt als eigener Schritt offen.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler; Kern- und Feedback-Suiten
+  grün (catcalc, model_item_param_list, Importer, progress-Suiten,
+  maximumquestionscheck, item_parameter_contract).
+
+## 1.1.5 (interne Version 2026082136)
+
+> Zwei Befunde mit derselben Wurzel wie schon beim Import: ein locale-unsicherer
+> Zahlparser. Dazu die richtige Zählgröße für die Testlänge.
+
+- **Obergrenzen im Feedback-Formular wurden am Komma abgeschnitten.**
+  `feedbackclass` las die Grenzwerte per
+  `optional_param(..., PARAM_FLOAT)`. Moodles `PARAM_FLOAT` ist ein **reiner
+  Cast**: `clean_param('1,5', PARAM_FLOAT)` ergibt **1.0**, `'-0,5'` ergibt
+  `-0.0`. Eine eingegebene Obergrenze „1,5" landete deshalb als „1" im Feld,
+  während die nächste Untergrenze weiterhin 1,5 zeigte - daraus entstand die
+  Validierungsmeldung „Keine Lücken in Personenfähigkeitsspanne erlaubt".
+  - Fix: neuer locale-sicherer Leser `feedbackclass::optional_limit_param()`
+    (`PARAM_RAW` + `unformat_float()`, mit Punkt-/Komma-Fallback), eingesetzt für
+    **Ober- und Untergrenze**. Die Untergrenze war nur deshalb unauffällig, weil
+    ihr Wert meist aus den gespeicherten Defaults kam, nicht aus dem Request.
+  - Verifiziert: `"1,5"` → 1.5 (vorher 1.0), `"-0,5"` → -0.5 (vorher -0.0);
+    Punkt-Notation unverändert korrekt.
+- **Behat „Question 5": die Zählgröße war falsch, nicht nur der Zähler.**
+  Die Prüfung in `maximumquestionscheck` stützte sich zuletzt auf
+  `max(questionsattempted, playedquestions)`. Beide sind **nicht autoritativ**:
+  `questionsattempted` wird außerhalb des Plugins gepflegt und driftet beim
+  Resume, und `playedquestions` zählt **angezeigte** Items - `progress::load()`
+  entfernt dort beim Resume sogar die noch offene letzte Frage.
+  - Fix: neue autoritative Methode
+    `progress::get_num_answered_productive_questions()` zählt **beantwortete**
+    Items (über das `responses`-Array) ohne Pilotitems. `maximumquestionscheck`
+    nutzt ausschließlich diese Größe; `questionsattempted` bleibt reiner
+    Legacy-Fallback, wenn kein `progress` im Kontext liegt.
+  - Damit gilt exakt: angezeigt-aber-unbeantwortet zählt **nicht**, ein Resume
+    ändert die Zählung **nicht**, und nach der vierten Antwort ist Schluss.
+- **Tests neu geschnitten** (`maximumquestionscheck_test`, 5 Tests): Stopp bei
+  erreichter Antwortzahl, offenes Item zählt nicht, **vollständiger
+  Resume-Lifecycle** (Q1 beantwortet → Q2 offen → Resume → Q2–Q4 beantwortet →
+  Stopp), Pilotantworten zählen nicht, `-1` unbegrenzt, Fallback ohne progress.
+  **Zahn-getestet gegen beide alten Zählgrößen**: zurück auf `questionsattempted`
+  → 2 Failures; zurück auf `playedquestions` → 4 Errors.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler, übrige Suiten grün.
+- **CI-Stand**: `codeanalysis` success; Behat von 3 auf 2 Fails gesunken (der
+  `graphicalsummary`-Fail ist seit 2026082134 behoben).
+
 ## 1.1.5 (interne Version 2026082135)
 
 > Die verbleibenden zwei Behat-Fails („Question 5") liegen **nicht** in

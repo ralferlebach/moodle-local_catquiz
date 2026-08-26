@@ -45,27 +45,27 @@ final class maximumquestionscheck extends preselect_task {
      *
      */
     public function run(array &$context): result {
-        $maxquestions = $context['maximumquestions'];
-        if ($maxquestions == -1) {
+        $maxquestions = (int) $context['maximumquestions'];
+        if ($maxquestions === -1) {
             return result::ok($context);
         }
 
-        // Count the questions this attempt has actually played, taken from our own
-        // progress record rather than from the externally maintained
-        // `questionsattempted` counter on the adaptivequiz attempt. That counter can
-        // drift when an attempt is resumed (the pending item is re-rendered without
-        // being counted again), and the drift let the test administer one item more
-        // than configured - the known "does not stop at the maximum" defect.
-        // Pilot items do not count towards the productive test length either.
-        $played = $context['questionsattempted'];
+        /* The configured test length means ANSWERED productive items. Neither of
+           the two counters used before is authoritative for that:
+           - `questionsattempted` lives on the adaptivequiz attempt record and can
+             drift across a resume (the pending item is re-rendered uncounted);
+           - `playedquestions` counts displayed items, and progress::load() removes
+             the still unanswered last question from it on a resume.
+           Counting the responses avoids both special cases, so the attempt stops
+           after exactly the configured number of answers - never one item later. */
         if (isset($context['progress'])) {
-            $played = max(
-                $played,
-                count($context['progress']->without_pilots()->get_playedquestions())
-            );
+            $answered = $context['progress']->get_num_answered_productive_questions();
+        } else {
+            // Legacy fallback for contexts that carry no progress.
+            $answered = (int) $context['questionsattempted'];
         }
 
-        if ($played >= $maxquestions) {
+        if ($answered >= $maxquestions) {
             return result::err(status::ERROR_REACHED_MAXIMUM_QUESTIONS);
         }
 

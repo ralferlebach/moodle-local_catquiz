@@ -17,13 +17,14 @@
 /**
  * Regression test for the maximum questions stop condition.
  *
- * The check used to rely solely on the `questionsattempted` counter kept on the
- * adaptivequiz attempt record. That counter can drift when an attempt is resumed
- * (the pending item is re-rendered without being counted again), and the drift
- * let the test administer one item MORE than configured - the Behat scenarios
- * "Resuming an interrupted attempt still finalises exactly once" and "Reloading
- * mid-attempt still yields exactly the configured length" both failed with a
- * fifth question at a configured maximum of four.
+ * The configured test length means ANSWERED productive items. Two earlier
+ * attempts at this check counted the wrong thing:
+ *  - `questionsattempted` on the adaptivequiz attempt record drifts across a
+ *    resume, which let the test administer one item too many;
+ *  - `playedquestions` counts *displayed* items, and progress::load() removes the
+ *    still unanswered last question from it on a resume - so it is neither a
+ *    stable administered-count nor an answered-count.
+ * Counting the responses removes both special cases.
  *
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
@@ -44,58 +45,88 @@ use stdClass;
  */
 final class maximumquestionscheck_test extends advanced_testcase {
     /**
-     * Builds a duck-typed progress stub that reports a number of played questions.
+     * Builds a duck-typed progress stub.
      *
-     * @param int $played Number of productive (non pilot) questions played.
+     * @param int $displayed Number of items displayed to the user.
+     * @param int $answered Number of those items that carry a response.
+     * @param int $pilotsanswered How many of the answers belong to pilot items.
+     *
      * @return object
      */
-    private function progress_stub(int $played) {
-        $questions = [];
-        for ($i = 0; $i < $played; $i++) {
+    private function progress_stub(int $displayed, int $answered, int $pilotsanswered = 0) {
+        $played = [];
+        $responses = [];
+        for ($i = 1; $i <= $displayed; $i++) {
             $q = new stdClass();
-            $q->is_pilot = false;
-            $questions[] = $q;
+            $q->id = $i;
+            $q->is_pilot = ($i <= $pilotsanswered);
+            $played[$i] = $q;
+            if ($i <= $answered) {
+                $responses[$i] = ['fraction' => 1.0];
+            }
         }
-        return new class ($questions) {
-            /** @var array */
-            private array $questions;
+        return new class ($played, $responses) {
+            /** @var array Displayed questions, keyed by question id. */
+            private array $played;
+            /** @var array Responses, keyed by question id. */
+            private array $responses;
+
             /**
              * Constructor.
-             * @param array $questions
+             *
+             * @param array $played
+             * @param array $responses
              */
-            public function __construct(array $questions) {
-                $this->questions = $questions;
+            public function __construct(array $played, array $responses) {
+                $this->played = $played;
+                $this->responses = $responses;
             }
+
             /**
-             * Returns itself, pilots are already excluded in the stub.
-             * @return object
+             * Mirrors progress::get_num_answered_productive_questions().
+             *
+             * @return int
              */
-            public function without_pilots() {
-                return $this;
+            public function get_num_answered_productive_questions(): int {
+                $count = 0;
+                foreach (array_keys($this->responses) as $qid) {
+                    $q = $this->played[$qid] ?? null;
+                    if ($q !== null && !empty($q->is_pilot)) {
+                        continue;
+                    }
+                    $count++;
+                }
+                return $count;
             }
+
             /**
-             * Returns the played questions.
-             * @return array
+             * Simulates a resume: progress::load() drops the pending item.
+             *
+             * @return void
              */
-            public function get_playedquestions() {
-                return $this->questions;
+            public function simulate_resume(): void {
+                foreach ($this->played as $qid => $q) {
+                    if (!isset($this->responses[$qid])) {
+                        unset($this->played[$qid]);
+                    }
+                }
             }
         };
     }
 
     /**
-     * The attempt must stop as soon as the configured maximum is reached.
+     * Stops exactly when the configured number of answers is reached.
      *
      * @return void
      */
-    public function test_stops_when_maximum_reached(): void {
+    public function test_stops_when_configured_answers_reached(): void {
         $this->resetAfterTest(true);
 
         $task = new maximumquestionscheck();
         $context = [
             'maximumquestions' => 4,
             'questionsattempted' => 4,
-            'progress' => $this->progress_stub(4),
+            'progress' => $this->progress_stub(4, 4),
         ];
         $result = $task->run($context);
         $this->assertTrue($result->iserr());
@@ -103,43 +134,72 @@ final class maximumquestionscheck_test extends advanced_testcase {
     }
 
     /**
-     * The stop must also trigger when the external counter lags behind the real
-     * progress - exactly what happens after a resume.
+     * A displayed but not yet answered item must NOT count towards the length.
      *
      * @return void
      */
-    public function test_stops_even_when_external_counter_lags_behind(): void {
+    public function test_pending_item_does_not_count(): void {
         $this->resetAfterTest(true);
 
         $task = new maximumquestionscheck();
         $context = [
             'maximumquestions' => 4,
-            // Counter drifted by one during the resume ...
             'questionsattempted' => 3,
-            // ... but four questions have really been played.
-            'progress' => $this->progress_stub(4),
+            'progress' => $this->progress_stub(4, 3),
         ];
-        $result = $task->run($context);
-        $this->assertTrue(
-            $result->iserr(),
-            'A drifting questionsattempted counter must not allow a fifth question.'
+        $this->assertFalse(
+            $task->run($context)->iserr(),
+            'A pending item must not end the attempt early.'
         );
     }
 
     /**
-     * Below the maximum the attempt continues.
+     * The full resume lifecycle must end after exactly four answers.
+     *
+     * Q1 answered, Q2 displayed, resume (the pending Q2 is dropped from the
+     * displayed items), Q2..Q4 answered -> stop, and never a fifth item.
      *
      * @return void
      */
-    public function test_continues_below_maximum(): void {
+    public function test_resume_lifecycle_stops_after_configured_answers(): void {
+        $this->resetAfterTest(true);
+
+        $task = new maximumquestionscheck();
+
+        $progress = $this->progress_stub(2, 1);
+        $progress->simulate_resume();
+        $context = [
+            'maximumquestions' => 4,
+            'questionsattempted' => 1,
+            'progress' => $progress,
+        ];
+        $this->assertFalse($task->run($context)->iserr(), 'Only one answer so far.');
+
+        $context['progress'] = $this->progress_stub(4, 4);
+        $context['questionsattempted'] = 3;
+        $this->assertTrue(
+            $task->run($context)->iserr(),
+            'After four answers the attempt must stop, even if the external counter lags.'
+        );
+    }
+
+    /**
+     * Answered pilot items do not count towards the productive test length.
+     *
+     * @return void
+     */
+    public function test_pilot_answers_do_not_count(): void {
         $this->resetAfterTest(true);
 
         $task = new maximumquestionscheck();
         $context = [
             'maximumquestions' => 4,
-            'questionsattempted' => 3,
-            'progress' => $this->progress_stub(3),
+            'questionsattempted' => 5,
+            'progress' => $this->progress_stub(5, 5, 1),
         ];
+        $this->assertTrue($task->run($context)->iserr());
+
+        $context['progress'] = $this->progress_stub(4, 4, 1);
         $this->assertFalse($task->run($context)->iserr());
     }
 
