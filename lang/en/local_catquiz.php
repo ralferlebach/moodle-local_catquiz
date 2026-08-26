@@ -353,8 +353,10 @@ $string['feedback_details_description'] = 'Following table lists all aspects
     (scales) of {$a}, for which a reliable result could be calculated.';
 $string['feedback_details_heading'] = 'Details of your result';
 $string['feedback_details_lowestskill'] = 'Scale {$a->name} with an ability
-    score of {$a->value} (± {$a->se}) was found to be the scale with the
-    largest deficit.';
+    score of {$a->value} (± {$a->se}) was found to be your <b>weakest tested
+    area</b>. This does not necessarily mean that you are weak there: it is the
+    area in which you scored lowest compared to the other tested areas, and
+    therefore the most promising one to keep working on.';
 $string['feedback_tab_clicked'] = 'Click on feedback tab';
 $string['feedback_tab_clicked_description'] = 'User {$a->userid} clicked the “{$a->feedback_translated}” tab in {$a->attemptlink}';
 $string['feedback_table_answercorrect'] = 'correct';
@@ -413,8 +415,8 @@ $string['functiondoesntexist'] = 'The requested function does not exist.';
 $string['genericsubmit'] = 'Confirm';
 $string['global_scale'] = 'Global scale';
 $string['graphicalsummary_description'] = 'During an attempt your ability is recalculated after each response. The following chart shows how your estimated ability in “{$a}” changed';
-$string['graphicalsummary_description_lowest'] = 'In addition, the development of your ability score with regard to the scale,
-    which has been identified as a shortcoming:';
+$string['graphicalsummary_description_lowest'] = 'In addition, the development of your ability score with regard to your
+    weakest tested area {$a} is shown:';
 $string['greateststrenght:tooltiptitle'] = 'your strongest scale {$a}';
 $string['groupenrolementstring'] = '“{$a->groupname}” in course “<a href="{$a->courseurl}">{$a->coursename}</a>”';
 $string['groupenrolmenthelptext'] = 'Please enter exact name(s) of existing group like (i.e. “group1,group2” or “group3”).';

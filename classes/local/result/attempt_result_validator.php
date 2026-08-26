@@ -179,14 +179,18 @@ final class attempt_result_validator {
 
         $sebyscale = (isset($data['se']) && is_array($data['se'])) ? $data['se'] : [];
 
-        // Per-scale item counts from the progress (pilot-filtered), so N never
-        // includes pilot or unanswered items (Issue #7 / #6).
+        /* Per-scale N must be the number of ANSWERED, non-pilot items of that scale.
+           This used to call get_playedquestions(), which counts DISPLAYED items - so
+           N could include a still unanswered pending item as well as pilot items,
+           and an attempt could be declared valid on a too optimistic N. The comment
+           here claimed the value was pilot-filtered while the code was not; the
+           authoritative counter on progress now enforces both filters (Issue #7). */
         $nbyscale = [];
         if (!empty($catattempt->contextid)) {
             try {
                 $progress = progress::load($adaptiveattemptid, 'mod_adaptivequiz', (int) $catattempt->contextid);
                 foreach (array_keys($personabilities) as $scaleid) {
-                    $nbyscale[(int) $scaleid] = count($progress->get_playedquestions(true, (int) $scaleid));
+                    $nbyscale[(int) $scaleid] = $progress->get_num_answered_productive_questions((int) $scaleid);
                 }
             } catch (\Throwable $e) {
                 $nbyscale = [];

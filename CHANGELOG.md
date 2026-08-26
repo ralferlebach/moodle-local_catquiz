@@ -1,5 +1,71 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082139)
+
+> DoD-Gegenprüfung der Issues #5–#9 am Code. Die Kritik ist in den überprüfbaren
+> Punkten berechtigt; ein belegter Fehler ist behoben, der Rest ist als
+> Arbeitsplan festgehalten.
+
+- **#7 DoD 4 behoben: `N` enthielt Pilot- und unbeantwortete Items.** Der
+  `attempt_result_validator` bildete die per-Skala-Anzahl über
+  `count($progress->get_playedquestions(true, $scaleid))` – also über
+  **angezeigte** Fragen –, während der Kommentar daneben „pilot-filtered"
+  behauptete. Damit konnte `N` ein noch offenes Item und Pilotitems enthalten und
+  ein Versuch auf zu optimistischer Basis als valide gelten.
+  - `progress::get_num_answered_productive_questions()` erhält eine
+    **per-Skala-Variante**: gezählt wird nur, was eine Response hat, kein Pilotitem
+    ist und der Zielskala zugeordnet ist.
+  - Der Validator nutzt ausschließlich diese Größe; der irreführende Kommentar ist
+    ersetzt.
+  - Test `progress_answered_count_test` (2 Tests, 6 Assertions) inkl. dem direkten
+    Nachweis, dass sich „angezeigt" von „beantwortet" unterscheidet.
+    **Zahn-getestet**: Pilot-/Skalenfilter deaktiviert → rot. Bestehende
+    Validator-Suite unverändert grün (8 Tests, 52 Assertions).
+- **Gegenprüfung dokumentiert** in `doc/issues/strang-c-dod-review.md`: je
+  Behauptung die Fundstelle im Code und die Bewertung, dazu der Arbeitsplan in der
+  Reihenfolge #5 → #6 → #7(Rest) → #9 → #8 samt Cross-Plugin-Vorbehalten.
+  Bestätigt als echte Fehler: Cron umgeht den Finalizer (#5), Finalizer erfindet
+  bei fehlendem `timefinished` eine Endzeit (#5), `customscalefeedback` filtert
+  weiterhin selbst (#7.2). Als **bewusst zurückgestellt** (und in der Doku auch so
+  benannt): Live-Carryover und `get_last_primary()` (#9).
+- **Korrektur einer eigenen Fehlaussage**: Die in Session 072 als offen notierte
+  „Bevorzugung defizitärer Skalen" existiert bereits als `scaleterm` im
+  IF-modifizierenden Score (`strategydeficitscore`), verifiziert und in der Doku
+  richtiggestellt. Kein Handlungsbedarf.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler.
+
+## 1.1.5 (interne Version 2026082138)
+
+> Nacharbeiten nach grüner CI: Chart/Legende auf eine Bezugsgröße, Debug-Warnungen
+> im PDF, Kommunikation zum „schwächsten Teilbereich" geschärft.
+
+- **Differenz-Chart: Balkenwert, Farbe und Legende beziehen sich jetzt auf
+  dieselbe Größe.** Zuvor mischte der Chart drei Bezugspunkte: der Balken zeigte
+  die **Differenz** zur Globalskala, gefärbt wurde nach der **absoluten**
+  Subskalen-Fähigkeit gegen die **Subskalen**-Ranges, und die Legende darunter
+  wurde für die **Globalskala** gerendert. Ein Lernender konnte so einen grünen
+  Balken unter einer Legende sehen, deren grünes Band weit rechts von diesem
+  Balkenwert beginnt. Jetzt wird die Differenz gegen die Ranges der Globalskala
+  eingefärbt – dieselbe Größe und dieselbe Skala wie Balken und Legende.
+- **Debug-Warnungen zu unbrauchbaren Itemparametern erscheinen im
+  Attempt-Debug-Output (CSV/PDF).** `pilotquestions_loader` sammelte sie bereits
+  im Kontext (`invaliditemparams`), sie wurden aber nirgends dargestellt. Neue
+  Spalte `invaliditemparams` in `debuginfo` mit Item-ID, Label, Modell und
+  konkretem Grund – ein stummes Item (z. B. 2PL mit `discrimination = 0`) ist
+  damit aus dem Export heraus nachvollziehbar.
+- **Kommunikation statt Technik beim „lowestskill".** Die Auswahl der Teilskala
+  bleibt bewusst unverändert (niedrigste gemessene Subskala). Die Texte sprachen
+  aber von „größtes Defizit" bzw. „als Defizit identifizierte Skala", obwohl die
+  Skala über dem Gesamtwert liegen kann. Neu: „**schwächster getesteter
+  Teilbereich**" mit einer Einordnung, dass dies kein Defizit bedeuten muss,
+  sondern der Bereich mit dem größten Lernpotenzial ist (de + en).
+- **Issue-Entwurf** `doc/issues/backend-invalid-itemparams.md`: Sichtbarkeit
+  unbrauchbarer Itemparameter im CAT-Manager (Anzeige, Grund, serverseitiges
+  Filtern/Sortieren, aggregierte Übersicht, Performance, Tests) – im Format von
+  Issue #53.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler, Feedback- und Kernsuiten
+  grün. Die neuen Lang-Schlüssel liegen in **de und en**.
+
 ## 1.1.5 (interne Version 2026082137)
 
 > Root Cause der beiden „Question 5"-Behat-Fails: ein **veralteter

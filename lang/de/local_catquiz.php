@@ -360,8 +360,11 @@ $string['feedback_details_highestskill'] = 'Teilbereich (Skala) „<b>{$a->name}
     persönlichen Fähigkeits-Wert von {$a->value} (± {$a->se}) als Ihre größte
     Stärke ermittelt.';
 $string['feedback_details_lowestskill'] = 'Teilbereich (Skala) „<b>{$a->name}</b>“ wurde mit einem
-    persönlichen Fähigkeits-Wert von {$a->value} (± {$a->se}) als Ihr größtes
-    Defizit ermittelt.';
+    persönlichen Fähigkeits-Wert von {$a->value} (± {$a->se}) als Ihr <b>schwächster
+    getesteter Teilbereich</b> ermittelt. Das bedeutet nicht zwingend, dass Sie dort
+    schwach sind – es ist der Bereich, in dem Sie im Vergleich zu den übrigen
+    getesteten Bereichen am wenigsten Punkte erreicht haben und der sich deshalb zum
+    Weiterlernen am ehesten anbietet.';
 $string['feedback_tab_clicked'] = 'Klick auf Feedback Tab';
 $string['feedback_tab_clicked_description'] = 'Nutzer {$a->userid} hat auf Feedback {$a->feedback_translated} in {$a->attemptlink} geklickt';
 $string['feedback_table_answercorrect'] = 'Richtig';
@@ -427,8 +430,8 @@ berechnet und aktualisiert. Die folgende Grafik zeigt Ihnen, wie sich die Einsch
 Ihres Fähigkeits-Wertes in „{$a}“ über den Verlauf des Testversuchs hinweg
 verändert hat.';
 $string['graphicalsummary_description_lowest'] = 'Zusätzlich ist auch die
-    Entwicklung Ihres Fähigkeits-Wertes bezüglich der als Defizit
-    identifizierten Skala {$a} dargestellt:';
+    Entwicklung Ihres Fähigkeits-Wertes bezüglich Ihres schwächsten getesteten
+    Teilbereichs {$a} dargestellt:';
 $string['greateststrenght:tooltiptitle'] = 'Ihre stärkste Skala „{$a}„';
 $string['groupenrolementstring'] = '„{$a->groupname}“ in Kurs <a href={$a->courseurl}>{$a->coursename}</a>“';
 $string['groupenrolmenthelptext'] = 'Bitte geben Sie den/die genauen Namen existierender Gruppe/n ein (z.B.: „Gruppe1,Gruppe2“ oder „Gruppe3“).';

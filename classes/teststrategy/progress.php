@@ -573,20 +573,45 @@ class progress implements JsonSerializable {
      * deliberately based on the responses: the played questions only record which
      * items were displayed, and the questionsattempted counter on the adaptivequiz
      * attempt is maintained outside this plugin and can drift across a resume.
-     * Pilot items never count towards the productive test length.
+     * Pilot items never count towards the productive test length. Passing a scale
+     * id restricts the count to the answers attributed to that scale, which is the
+     * per-scale N used by the result validator.
+     *
+     * @param ?int $scaleid Restrict the count to this scale, or null for the whole attempt.
      *
      * @return int
      */
-    public function get_num_answered_productive_questions(): int {
+    public function get_num_answered_productive_questions(?int $scaleid = null): int {
         $count = 0;
         foreach (array_keys($this->responses) as $questionid) {
             $question = $this->playedquestions[$questionid] ?? null;
             if ($question !== null && !empty($question->is_pilot)) {
                 continue;
             }
+            if ($scaleid !== null && !$this->question_belongs_to_scale($questionid, $scaleid)) {
+                continue;
+            }
             $count++;
         }
         return $count;
+    }
+
+    /**
+     * Shows whether an answered question was counted towards the given scale.
+     *
+     * @param int $questionid
+     * @param int $scaleid
+     *
+     * @return bool
+     */
+    private function question_belongs_to_scale(int $questionid, int $scaleid): bool {
+        $inscale = $this->playedquestionsbyscale[$scaleid] ?? [];
+        foreach ($inscale as $question) {
+            if ((int) ($question->id ?? 0) === $questionid) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
