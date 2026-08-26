@@ -76,6 +76,12 @@ final class filterbytestinfo_minquestions_test extends advanced_testcase {
         $progress->method('get_playedquestions')->willReturnCallback(
             fn (bool $byscale = false, ?int $scaleid = null) => $records
         );
+        /* filterbytestinfo now counts ANSWERED productive items instead of
+           displayed ones (issue #6), so the stub has to provide that number too -
+           in this fixture every played item is answered and productive. */
+        $progress->method('get_num_answered_productive_questions')->willReturnCallback(
+            fn (?int $scaleid = null) => $played
+        );
 
         // The heart of the assertion: deactivate_scale must (not) be called.
         $progress->expects($mayexclude ? $this->once() : $this->never())

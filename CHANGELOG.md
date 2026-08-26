@@ -1,5 +1,66 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082146)
+
+> Die übersprungene CAT-Simulationsmatrix läuft wieder – und prüft wieder etwas.
+> 35 Tests, 2537 Assertions statt 26 übersprungener Datensätze.
+
+- **Befund zuerst, dann der Umbau.** Ich habe den Skip entfernt und alle Datensätze
+  mit Diagnoseausgabe gegen die gepinnte Referenz gemessen. Ergebnis: **7 von 13**
+  Datensätzen treffen die Referenz nur zu 3–43 % (Labels teils 2 %), dazu **11
+  Errors** vom Typ `Exception: Should not be 0`. Letzteres heißt: Der CAT war
+  bereits fertig, während die Referenz weiterlaufen wollte.
+  - Das ist **keine** numerische Verschiebung, sondern die direkte Folge der
+    korrekten #6-Fixes: Der Versuch stoppt jetzt nach der konfigurierten Zahl
+    **beantworteter** statt angezeigter Items, und Pilot-/Vertragsitems werden
+    anders behandelt. Die Referenz ist damit **konstruktionsbedingt veraltet**.
+- **Warum weder Re-Pinning noch Aggregat.** Ein aggregierter Vergleich
+  (Engineering-Guide §2.5) würde hier Veralterung messen statt Korrektheit – eine
+  Schwelle, die 3 % durchlässt, ist wertlos. Ein frisches Neupinnen würde
+  zementieren, was der Code heute tut, inklusive eventuell verbliebener Fehler.
+- **Stattdessen referenzfreie Invarianten**, die für **jeden** korrekten CAT-Lauf
+  gelten und nicht vom diskreten Newton-Zweig abhängen:
+  - Der Versuch terminiert von selbst; ein früheres Ende als in der Referenz ist
+    legitim und keine Exception mehr.
+  - Jede Schätzung bleibt endlich und im Trust-Range.
+  - Die Trajektorie folgt dem Antwortmuster: mindestens vier Fünftel falsch →
+    Endwert unter dem Startwert, mindestens vier Fünftel richtig → darüber.
+  Das Antwortmuster der Referenz bleibt als Treiber nutzbar, ihre Labels nicht.
+- **Verifikation**: 35 Tests / 2537 Assertions grün (Laufzeit ~7:40).
+  **Zahn-getestet**: Trajektorie um 100 verschoben → Trust-Range-Invariante fällt;
+  Trajektorie gespiegelt → Richtungsinvariante fällt („16 wrong out of 19 must end
+  below its starting ability"). Die erste Fassung der Richtungsprüfung
+  (strikt all-wrong/all-right) feuerte bei keinem Datensatz – erkannt und auf eine
+  Mehrheitsbedingung umgestellt, was 13 zusätzliche Assertions bringt.
+- phpcs Exit 0, PHPDoc 0 Fehler.
+
+## 1.1.5 (interne Version 2026082145)
+
+> PHPUnit-Fix: Der Umbau der Mindestfragen-Zählung (2026082140) hatte einen
+> Mock-Test nicht mitgezogen.
+
+- **`filterbytestinfo_minquestions_test` repariert** (2 Failures, beide Datensätze
+  desselben Tests). Der Test mockt `progress` und stubbte nur
+  `get_playedquestions()`. Seit der Umstellung auf **beantwortete** statt
+  **angezeigte** Items fragt `filterbytestinfo` jedoch
+  `get_num_answered_productive_questions()` – ungestubbt lieferte der Mock dort 0,
+  die Ausschlussbedingung wurde nie erreicht und das erwartete
+  `deactivate_scale()` blieb aus.
+  - Der Stub liefert die Zahl jetzt ebenfalls; in dieser Fixture ist jedes
+    gespielte Item beantwortet und produktiv, die Erwartungen bleiben also
+    unverändert.
+  - Gegenprüfung: Alle weiteren Tests, die `progress` mocken und
+    `get_playedquestions()` stubben, wurden gesichtet – nur
+    `mayberemovescale_test` tut das noch, ist aber von der Umstellung nicht
+    betroffen (grün).
+- **Hinweis zur Simulationsmatrix**: `strategy_test::test_strategy_returns_expected_questions`
+  ist in der CI mit allen 26 Datensätzen **übersprungen**, und zwar als
+  dokumentierter Vorbestand („CAT trajectory pinned to pre-refactor estimator").
+  Sie sichert die Umbauten dieser Sitzung also **nicht** ab – das Re-Pinning aus
+  einem frischen Simulationslauf bleibt offen.
+- phpcs Exit 0, PHPDoc 0 Fehler; Filter-, Feedback-, Ergebnis-, Attempt- und
+  Kernsuiten grün.
+
 ## 1.1.5 (interne Version 2026082144)
 
 > Issue **#7 DoD 2/3**: Der Feedback-Pfad urteilt jetzt über das zentrale
