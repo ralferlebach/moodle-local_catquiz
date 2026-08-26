@@ -1,5 +1,32 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082143)
+
+> Issue **#9**: Der Live-Carryover ist verdrahtet. Vorwerte kommen jetzt aus der
+> Versuchshistorie statt aus dem lebenden Zwischenstand.
+
+- **`personability_loader` nutzt die Versuchshistorie als Vorwert.** Bisher las er
+  ausschließlich `local_catquiz_personparams`. Diese Tabelle wird jedoch
+  **während** eines Versuchs fortgeschrieben (`updatepersonability`,
+  `filterbystandarderror`) – sie ist damit ein lebender Zwischenstand und keine
+  Historie abgeschlossener Versuche. Als Prior gelesen konnte sie eine
+  halbfertige Schätzung in den Folgeversuch tragen.
+  - Neu wird je Zielskala zuerst `attemptscale_repository::get_latest_valid()`
+    befragt. Diese Zeilen entstehen **einmalig bei der Finalisierung** und nur für
+    valide gemessene Skalen. `personparams` bleibt der Fallback für Skalen ohne
+    solche Zeile (ältere Versuche, nie gemessen).
+  - Gilt für **alle** Zielskalen (Hauptskala und ausgewählte Subskalen), nicht nur
+    die Hauptskala.
+- **Tests** `personability_loader_carryover_test` (3 Tests): abgeschlossener
+  Versuch schlägt den lebenden Personparameter; ohne Historie bleibt der
+  Personparameter der Fallback; ein **invalides** Ergebnis wird nicht übernommen.
+  **Zahn-getestet**: Carryover-Vorrang entfernt → der Loader liefert wieder den
+  Zwischenstand (2.5 statt 0.8) und der Test fällt.
+- **Nebenbefund**: Die Spalte heißt `score`, nicht `ability` – beim Verdrahten
+  aufgefallen und korrigiert.
+- phpcs Exit 0, PHPDoc 0 Fehler; Loader-, Repository-, Finalizer-, Preattempt- und
+  Weighting-Suiten grün.
+
 ## 1.1.5 (interne Version 2026082142)
 
 > Gegenprüfung gegen `mod_adaptivequiz` **3.0.0** (2026082500): Mehrere
