@@ -96,18 +96,30 @@ final class attempt_finalizer_test extends advanced_testcase {
     }
 
     /**
-     * A missing/zero timefinished never results in an empty stored end time.
+     * Issue #5: the end time is authoritative, so finalisation refuses to run
+     * without one instead of inventing a timestamp.
+     *
+     * The previous behaviour fell back to time() and persisted a fabricated end
+     * time, which silently produced a finalised attempt whose completion time was
+     * never stamped by the authoritative completion path.
      */
-    public function test_finalize_falls_back_when_timefinished_missing(): void {
+    public function test_finalize_refuses_without_authoritative_end_time(): void {
         global $DB;
         $this->resetAfterTest();
 
         [$adaptiveattemptid, $catid] = $this->create_running_attempt(2);
 
-        $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, 0, ''));
+        $this->assertDebuggingNotCalled();
+        $this->assertFalse(
+            attempt_finalizer::finalize($adaptiveattemptid, 0, ''),
+            'Finalisation must refuse a missing end time.'
+        );
+        $this->assertDebuggingCalled();
 
+        // Nothing was written: the attempt stays open rather than carrying a
+        // fabricated completion time.
         $catattempt = $DB->get_record('local_catquiz_attempts', ['id' => $catid]);
-        $this->assertNotEmpty($catattempt->endtime);
+        $this->assertEmpty($catattempt->endtime);
     }
 
     /**

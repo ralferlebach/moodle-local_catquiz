@@ -122,8 +122,8 @@ class filterbytestinfo extends preselect_task {
             // leaving no active scale and aborting the whole attempt with
             // 'attemptnofirstquestion'. Require at least one played question (and
             // the configured minimum) before a scale may be excluded.
-            $playedinscale = count($this->progress->get_playedquestions(true, $scaleid));
-            $playedintest = count($this->progress->get_playedquestions());
+            $playedinscale = $this->progress->get_num_answered_productive_questions($scaleid);
+            $playedintest = $this->progress->get_num_answered_productive_questions();
             $minimumperscale = max(1, (int) $this->context['min_attempts_per_scale']);
             $ismainscale = $scaleid === (int) $this->context['catscaleid'];
             // The main scale may only be excluded once the globally configured

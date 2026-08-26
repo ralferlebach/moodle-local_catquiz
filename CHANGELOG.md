@@ -1,5 +1,112 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082142)
+
+> Gegenprüfung gegen `mod_adaptivequiz` **3.0.0** (2026082500): Mehrere
+> Cross-Plugin-Punkte sind fremdseitig bereits erledigt, und eine Kritik am
+> Validator erweist sich als nicht zutreffend.
+
+- **#6 ist implementierungsseitig vollständig – auf beiden Seiten.** Am Code der
+  gelieferten Version verifiziert:
+  - Der **Adapter** (`catquiz_item_administration`) gibt bei aktivem
+    `$previousquestionslot` bereits `next_item::from_quba_slot()` zurück, und zwar
+    **vor** der CAT-Selektion – genau die zuvor empfohlene Änderung.
+  - `cat_session` hält einen **Lock** (`lock_config`, Key je Quiz+User), sucht
+    **innerhalb** des Locks nach einem bestehenden aktiven Slot
+    (`find_active_slot_for_question()` mit Fallback `find_any_active_slot()`) und
+    ruft erst danach `add_question()`.
+  - Es verbleiben damit nur noch die **Tests** (QUBA-Slotanzahl explizit prüfen,
+    Concurrency, Back/Forward, Multi-Click).
+- **Korrektur einer Review-Aussage zu #7.** Der Vorwurf, der
+  `attempt_result_validator` vermische Validität und Reporting, trifft **nicht**
+  zu: `$statisticallyvalid = ($reasons === []) && !($excluded && !$hascheckbox);`
+  nimmt den Checkbox-Fall ausdrücklich von der statistischen Validität aus, und
+  beide Zustände sind testgesichert
+  (`test_reporting_disabled_is_display_only_not_statistical`,
+  `test_reporting_disabled_scale_stays_statistically_valid_contract`).
+- **Berechtigt bleibt** der Kern von #7 DoD 2/3: `customscalefeedback` filtert die
+  Anzeige selbst und die Fehlerausgabe nutzt die alten `error`-Arrays statt
+  `rejectionreasons`. Das ist jedoch **Refactoring-Schuld**, kein Rechenfehler:
+  Das `attempt_result`-DTO wird im Feedback-Pfad derzeit gar nicht bereitgestellt.
+  Zusätzlich dokumentiert: `feedbacksettings` setzt `excluded` für zwei fachlich
+  verschiedene Sachverhalte (SE unter Minimum vs. Reporting aus); der Validator
+  kompensiert das, sauberer wäre ein eigenes Flag – das berührt aber auch
+  `inferlowestskillgap`/`infergreateststrength` und gehört in denselben Schritt.
+- Aktualisiert: `doc/issues/strang-c-dod-review.md` mit der Gegenprüfung gegen
+  3.0.0 und den korrigierten Bewertungen.
+
+## 1.1.5 (interne Version 2026082141)
+
+> Issue **#5** abgearbeitet: Der Cron schließt Versuche jetzt über denselben
+> autoritativen Pfad wie ein normaler Abschluss, und der Finalizer erfindet keine
+> Endzeit mehr. Geprüft gegen `mod_adaptivequiz` **3.0.0** (2026082500).
+
+- **Cron umging den Finalizer.** `cancel_expired_attempts` rief
+  `local_catquiz\local\attempt\attempt::complete()`. Diese Methode setzt nur
+  `attemptstate` und `attemptstopcriteria` – sie stempelt **kein** `timefinished`
+  und ruft **nicht** den CAT-Model-Callback. Ein per Cron geschlossener Versuch
+  übersprang damit `attempt_finalizer::finalize()` vollständig: weder Endzeit noch
+  Ergebnis (und damit `resultvalid`) wurden persistiert.
+  - Der Task nutzt jetzt `adaptivequiz_complete_attempt()`. Die Funktion ist in
+    `mod_adaptivequiz` 3.0.0 vorhanden, setzt `timefinished` **genau einmal**
+    (`if (empty($attempt->timefinished))`) und ruft
+    `post_complete_attempt_callback` – Browser-, Admin- und Cron-Abschluss
+    erzeugen damit konsistente Daten.
+- **Finalizer erfindet keine Endzeit mehr.** `if ($finishedat <= 0) { $finishedat
+  = time(); }` persistierte einen fabrizierten Zeitstempel – genau das, was eine
+  **autoritative** Endzeit nie sein darf. Stattdessen wird die Finalisierung
+  abgelehnt und die Bedingung per `debugging()` sichtbar gemacht; der Versuch
+  bleibt offen, statt mit erfundener Abschlusszeit dazustehen.
+- **Tests**: neuer `cancel_expired_attempts_path_test` (3 Tests) schließt die vom
+  Review benannte Lücke, dass nur die Timeout-**Erkennung** geprüft war: Der Task
+  darf keinen zweiten Completion-Mechanismus besitzen, die autoritative Funktion
+  muss den Catmodel-Callback erreichen, und der Finalizer darf keine Endzeit
+  fabrizieren. Der bestehende `test_finalize_falls_back_when_timefinished_missing`
+  schrieb das alte Verhalten fest und ist durch
+  `test_finalize_refuses_without_authoritative_end_time` ersetzt (prüft zusätzlich,
+  dass **nichts** geschrieben wird).
+  **Zahn-getestet**: Cron zurück auf `attempt->complete()` → rot;
+  `time()`-Fallback zurück → rot.
+- phpcs Exit 0, PHPDoc 0 Fehler; Finalizer-, Validator-, Repository-, Cron- und
+  progress-Suiten grün.
+
+## 1.1.5 (interne Version 2026082140)
+
+> #6: Das State-Modell von `progress` ist bereinigt. „Angezeigt", „offen" und
+> „beantwortet" sind jetzt sauber getrennt – und zwar geschlossen, samt aller
+> Stellen, die bisher die falsche Größe gezählt haben.
+
+- **Mindestfragezahlen zählen jetzt beantwortete statt angezeigter Items.**
+  `filterbystandarderror`, `filterbytestinfo` und `filterbyquestionsperscale`
+  verglichen `count(playedquestions)` gegen `minimumquestions` bzw.
+  `min_attempts_per_scale` – also **angezeigte** Fragen. Damit galt eine
+  Mindestzahl bereits als erreicht, während die letzte Frage noch offen war, und
+  die Zählung war zudem nicht pilot-gefiltert. Alle drei nutzen jetzt
+  `progress::get_num_answered_productive_questions()` bzw. dessen
+  per-Skala-Variante – dieselbe Größe, die schon `maximumquestionscheck` und der
+  Ergebnisvalidator verwenden. „Mindestens N Fragen" und „höchstens N Fragen"
+  meinen damit endlich dasselbe.
+- **`progress::load()` entfernt die offene Frage nicht mehr aus
+  `playedquestions`.** Der Block widersprach dem eigenen Datenmodell
+  (`playedquestions` = „bereits angezeigte Fragen"): `lastquestion` zeigte auf
+  eine Frage, die laut `playedquestions` nie gespielt worden war, und
+  `get_num_playedquestions()` war nicht monoton. Die fehlende Response
+  identifiziert das Item jetzt als offen. Nebeneffekt: Das offene Item kann nicht
+  mehr wie eine neue Frage erneut ausgewählt werden (zahlt auf #6 ein).
+  - Möglich wurde das erst durch die Umstellung oben – vorher hätte das Behalten
+    der offenen Frage die Mindestfragezahl eine Frage zu früh erfüllt.
+- **Verifikation**: Neben den gezielten Suiten wurde
+  `test_all_wrong_attempt_drives_ability_down` gefahren, das einen vollständigen
+  Attempt-Durchlauf abbildet (55 Assertions, grün), ebenso
+  `test_legacy_selectfirstquestion_does_not_break_attempt`,
+  `test_get_last_response_uses_last_answered_not_last_added`,
+  `firstquestion_testinfo`, `ability_monotonicity`, `attempt_result_validator`,
+  `progress_*` und `feedback_gating`. phpcs Exit 0, PHPDoc 0 Fehler.
+- **Issue-Anpassung dokumentiert**: `doc/issues/issue-7-validity-vs-reporting.md`
+  – Vorschlag, „Reporting aktiviert" aus den Validitätsbedingungen von #7 zu
+  entfernen und Validität/Anzeige getrennt zu führen (nur Textänderung am Issue,
+  das Verhalten ist bereits so implementiert).
+
 ## 1.1.5 (interne Version 2026082139)
 
 > DoD-Gegenprüfung der Issues #5–#9 am Code. Die Kritik ist in den überprüfbaren

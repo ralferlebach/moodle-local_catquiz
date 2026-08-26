@@ -243,23 +243,17 @@ class progress implements JsonSerializable {
             return $instance;
         }
 
-        // If there is no response for the last question that was shown to the
-        // user, do not count that question as part of the attempt and remove it
-        // from the progress. This can happen if a page is reloaded.
-        $instance->playedquestions = array_filter(
-            $instance->playedquestions,
-            fn($q) => $q->id != $instance->lastquestion->id
-        );
-        foreach ($instance->playedquestionsbyscale as $scaleid => $qps) {
-            $instance->playedquestionsbyscale[$scaleid] = array_filter(
-                $qps,
-                fn($q) => $q->id != $instance->lastquestion->id
-            );
-            if (count($instance->playedquestionsbyscale[$scaleid]) === 0) {
-                unset($instance->playedquestionsbyscale[$scaleid]);
-            }
-        }
-
+        /* The last administered question is still unanswered - typically after a
+           reload or a resume. It STAYS in playedquestions: it was displayed to the
+           user, and playedquestions is documented as exactly that ("the questions
+           that were already displayed"). Removing it made the structure contradict
+           itself, because lastquestion then pointed at a question that had
+           supposedly never been played, and it made get_num_playedquestions()
+           non-monotonic. The missing response identifies the item as pending, and
+           every place that needs "how many questions were ANSWERED" now asks
+           get_num_answered_productive_questions() instead of counting this array
+           (Issue #6). Keeping it also prevents the pending item from being selected
+           again as if it were a new question. */
         return $instance;
     }
 

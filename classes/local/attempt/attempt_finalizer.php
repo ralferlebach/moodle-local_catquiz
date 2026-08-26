@@ -70,10 +70,22 @@ final class attempt_finalizer {
             return false;
         }
 
-        // Defensive fallback: finalisation must never stamp an empty end time.
-        // In the normal flow $finishedat is the immutable timefinished (> 0).
+        /* Issue #5: the end time is AUTHORITATIVE. In the normal flow $finishedat
+           is the immutable timefinished stamped by adaptivequiz_complete_attempt().
+           A missing or non-positive value means the caller reached finalisation
+           without a completed attempt - previously this silently invented time()
+           and persisted a fabricated end time, which is exactly what an
+           authoritative timestamp must never be. Refuse to finalise instead and
+           make the condition visible to developers. */
         if ($finishedat <= 0) {
-            $finishedat = time();
+            debugging(
+                sprintf(
+                    'local_catquiz: refusing to finalise attempt %d without an authoritative end time.',
+                    $adaptiveattemptid
+                ),
+                DEBUG_DEVELOPER
+            );
+            return false;
         }
 
         $transaction = $DB->start_delegated_transaction();
