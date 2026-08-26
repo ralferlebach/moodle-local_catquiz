@@ -184,8 +184,11 @@ div[contenteditable="false"] {
 }
 
 #feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table {
+    /* Never exceed the container. A min-width here (previously 55rem) forced the
+       table wider than its parent and pushed the whole feedback tab into a
+       horizontal scroll. */
     width: 100%;
-    min-width: 55rem;
+    max-width: 100%;
     table-layout: auto;
 }
 
@@ -197,10 +200,15 @@ div[contenteditable="false"] {
 }
 
 #feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table .catquiz-col-number,
+#feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table .catquiz-col-correctness,
 #feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table .catquiz-col-ability,
 #feedbackcontent-graphicalsummary .catquiz-graphicalsummary-table .catquiz-col-action {
     width: 1%;
     white-space: nowrap;
+}
+
+#feedbackcontent-graphicalsummary .catquiz-response-icon {
+    font-size: 1.1em;
 }
 
 #feedbackcontent-graphicalsummary .catquiz-question-label {

@@ -358,6 +358,7 @@ $string['feedback_details_lowestskill'] = 'Scale {$a->name} with an ability
 $string['feedback_tab_clicked'] = 'Click on feedback tab';
 $string['feedback_tab_clicked_description'] = 'User {$a->userid} clicked the “{$a->feedback_translated}” tab in {$a->attemptlink}';
 $string['feedback_table_answercorrect'] = 'correct';
+$string['feedback_table_correctness'] = 'Result';
 $string['feedback_table_givenanswer'] = 'Given answer:';
 $string['feedback_table_answerincorrect'] = 'incorrect';
 $string['feedback_table_answerpartlycorrect'] = 'partly correct';

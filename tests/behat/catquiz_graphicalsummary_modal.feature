@@ -32,8 +32,8 @@ Feature: The quiz progress summary shows readable question and answer data and
       | activity     | name             | course | section | idnumber         | intro               |
       | adaptivequiz | My Adaptive Quiz | C1     | 1       | adaptivecatquiz1 | Adaptive Quiz Intro |
     And the following "local_catquiz > testsettings" exist:
-      | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_minquestions | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions | catquiz_showquestion |
-      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 2                    | 4                    | 0.0                       | 1000.0                    | 2                       | 1                    |
+      | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy         | catquiz_selectfirstquestion | catquiz_minquestions | catquiz_maxquestions | catquiz_standarderror_min | catquiz_standarderror_max | numberoffeedbackoptions | catquiz_showquestion | catquiz_showquestionresponse |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer lowest skill gap | -2                          | 2                    | 4                    | 0.0                       | 1000.0                    | 2                       | 1                    | 1                            |
     ## Round-trip the generated CAT settings through the activity form so the
     ## adaptivequiz integration normalises and reserialises them.
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher
@@ -74,3 +74,7 @@ Feature: The quiz progress summary shows readable question and answer data and
     Then ".catquiz-graphicalsummary-table" "css_element" should exist
     And ".catquiz-response-answerlabel" "css_element" should exist
     And ".catquiz-responsesummary" "css_element" should exist
+    ## The correctness indicator is gated on catquiz_showquestionresponse and is
+    ## rendered as an icon in the column right after the question number.
+    And ".catquiz-col-correctness" "css_element" should exist
+    And ".catquiz-response-icon" "css_element" should exist

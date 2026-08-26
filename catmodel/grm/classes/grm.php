@@ -834,7 +834,7 @@ class grm extends model_multiparam {
      *
      * @return string
      */
-    protected function get_multi_param_name(): string {
+    protected static function get_multi_param_name(): string {
         return 'difficulties';
     }
 

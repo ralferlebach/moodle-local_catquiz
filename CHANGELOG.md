@@ -1,5 +1,78 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082134)
+
+> Quizverlauf-Tabelle: Breite, Korrektheits-Indikator und Modal-Ladefehler.
+> Der neue Behat-Fail (`.catquiz-response-answerlabel` fehlt) hatte dieselbe
+> Ursache wie die fehlende Korrektheitsangabe.
+
+- **Korrektheitsangabe fehlte – toter Code.** `render_table()` baute die Zelle
+  `$responsecell` (Verdikt + gegebene Antwort) vollständig auf, fügte sie aber
+  **nie in `$newrow` ein**. Die Spalte fehlte deshalb komplett in der Ausgabe –
+  und der Behat-Test fand folgerichtig weder `.catquiz-response-answerlabel`
+  noch `.catquiz-responsesummary`.
+  - Neu: eigene Spalte **direkt nach der Fragenzahl**, als Icon –
+    `fa-solid fa-circle-check` (grün) für richtig,
+    `fa-solid fa-circle-xmark` (rot) für falsch,
+    `fa-solid fa-triangle-exclamation` (gelb) für teilweise richtig.
+  - Die Spalte erscheint **nur**, wenn „Indikator zur Korrektheit der gegebenen
+    Antwort anzeigen" (`catquiz_showquestionresponse`) aktiv ist.
+  - Barrierefrei: Icon mit `title` und `aria-hidden`, Verdikt zusätzlich als
+    `sr-only`-Text – die Aussage hängt nicht an Farbe/Form allein.
+- **Tabelle zu breit.** Die CSS-Regel `min-width: 55rem` zwang die Tabelle über
+  die Containerbreite hinaus und schob den ganzen Feedback-Tab in horizontales
+  Scrollen. Ersetzt durch `max-width: 100%`; die neue Korrektheitsspalte ist wie
+  Nummer/Fähigkeit/Aktion schmal gehalten (`width: 1%`).
+- **Modal-Ladefehler „Cannot call moodle_page::add_body_class after output has
+  been started".** `render_question_with_response::execute()` rief
+  `$OUTPUT->header()` – das **startet die Ausgabe**. Alles, was das anschließende
+  Question-Rendering an der Seite tut (Fragetypen und die Question-Engine rufen
+  `$PAGE->add_body_class()`), lief danach in den Coding-Error. Der Renderer wird
+  jetzt ohne Ausgabe initialisiert (`set_pagelayout('embedded')` +
+  `$OUTPUT->doctype()`).
+- **Testbarkeit**: `catquiz_showquestionresponse` (und `catquiz_showquestion`)
+  sind jetzt über den Behat-Generator setzbar; die Fixture
+  `testenvironmentdummy.json` enthält die `catquiz_questionfeedbacksettings`.
+  Das Feature setzt die Option explizit und prüft zusätzlich
+  `.catquiz-col-correctness` und `.catquiz-response-icon`.
+- **CI**: Der Quality-Fail des letzten Laufs (`pilot_classification_test::question
+  has incomplete parameters list`) war bereits in 2026082133 behoben – die CI lief
+  auf dem älteren Commit `2be3037`. Plugin-weiter PHPDoc-Check: 0 Fehler.
+  Die zwei verbleibenden Behat-Fails („Question 5") liegen unverändert in
+  `mod_adaptivequiz` (Slot-Reuse) und sind hier nicht behebbar.
+
+## 1.1.5 (interne Version 2026082133)
+
+> Der Modell-Vertrag galt bisher nur für die Birnbaum-Modelle. Jetzt deckt er
+> **alle sieben** Modelle ab, und kein Modell kann künftig vergessen werden.
+
+- **Lücke geschlossen: polytome Modelle hatten keinen eigenen Vertrag.** GRM,
+  GGRM, PCM und GPCM erbten nur die Basisprüfung auf die skalare
+  `difficulty`-Spalte – die bei polytomen Modellen aber nur einen **abgeleiteten
+  Mittelwert** enthält. Die echten Parameter (Thresholds bzw. Intercepts) liegen
+  im `json`-Feld. Ein Item mit fehlendem oder kaputtem json wäre also
+  durchgewinkt worden und erst später bei der Schätzung explodiert.
+  - Neu: `model_multiparam::validate_parameters()` prüft die **json-Nutzlast** –
+    vorhanden, korrekter Schlüssel (`difficulties` bzw. `intercepts`), nicht
+    leer, alle Einträge endliche Zahlen.
+  - `get_multi_param_name()` wurde dafür von einer Instanz- zu einer statischen
+    Methode (die beiden bestehenden `$this->`-Aufrufe bleiben gültig).
+- **GGRM und GPCM verlangen jetzt `discrimination` > 0.** Beide nutzen eine
+  Trennschärfe; bei 0 hängen die Kategoriewahrscheinlichkeiten nicht mehr von der
+  Fähigkeit ab – dasselbe stumme Item wie im 2PL-Fall. GRM und PCM nutzen keine
+  Trennschärfe, dort bleibt eine gespeicherte 0 folgenlos.
+- **`method_exists()`-Krücke entfernt.** Alle Modelle leiten von `model_model` ab,
+  das `validate_parameters()` definiert – der Vertrag ist strukturell garantiert
+  und braucht keine defensive Laufzeitprüfung mehr.
+- **Neuer Wächtertest** `test_every_installed_model_implements_the_contract`
+  stellt sicher, dass jedes installierte Modell den Vertrag erfüllt; ein künftig
+  hinzugefügtes Modell ohne Vertrag lässt den Test fallen.
+- **Verifikation**: `item_parameter_contract_test` 9 Tests / 37 Assertions grün,
+  beide neuen Guards **zahn-getestet** (polytome Validierung neutralisiert → rot;
+  GGRM-Trennschärfe-Guard entfernt → rot). Alle 7 Modell-Suiten unverändert grün.
+  phpcs Exit 0; plugin-weiter PHPDoc-Check 0 Fehler (zwei durch die Einfügungen
+  verwaiste Docblocks repariert – die bekannte Falle aus Engineering-Guide §4).
+
 ## 1.1.5 (interne Version 2026082132)
 
 > **Root Cause der genullten negativen Difficulties gefunden und behoben.**

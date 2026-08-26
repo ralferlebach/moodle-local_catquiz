@@ -659,10 +659,9 @@ class model_strategy {
             return [sprintf('unknown model "%s"', $modelname)];
         }
 
+        // Every model derives from model_model, which defines validate_parameters(),
+        // so the contract is guaranteed - no defensive method_exists() needed.
         $class = $models[$modelname];
-        if (!method_exists($class, 'validate_parameters')) {
-            return [];
-        }
 
         return $class::validate_parameters($record);
     }

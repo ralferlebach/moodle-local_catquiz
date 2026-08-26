@@ -91,8 +91,16 @@ class render_question_with_response extends external_api {
         $PAGE->set_context(context_system::instance());
         $PAGE->set_url('/local/catquiz/external/render_question_with_response.php');
 
-        // Hack alert: Forcing bootstrap_renderer to initiate moodle page.
-        $OUTPUT->header();
+        // The renderer has to be initialised before the question is rendered, but
+        // $OUTPUT->header() actually STARTS the output. Anything the question
+        // rendering does afterwards that touches the page - most notably
+        // $PAGE->add_body_class(), which several question types and the question
+        // engine call - then dies with "Cannot call moodle_page::add_body_class
+        // after output has been started". Force the theme/renderer to initialise
+        // without emitting anything instead.
+        $PAGE->set_pagelayout('embedded');
+        $OUTPUT->doctype();
+
         $PAGE->start_collecting_javascript_requirements();
         $questionhtml = self::render_question($slot, $attemptid, $questionattemptid);
         $jsfooter = $PAGE->requires->get_end_code();

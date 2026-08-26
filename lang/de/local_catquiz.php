@@ -365,6 +365,7 @@ $string['feedback_details_lowestskill'] = 'Teilbereich (Skala) „<b>{$a->name}<
 $string['feedback_tab_clicked'] = 'Klick auf Feedback Tab';
 $string['feedback_tab_clicked_description'] = 'Nutzer {$a->userid} hat auf Feedback {$a->feedback_translated} in {$a->attemptlink} geklickt';
 $string['feedback_table_answercorrect'] = 'Richtig';
+$string['feedback_table_correctness'] = 'Ergebnis';
 $string['feedback_table_givenanswer'] = 'Gegebene Antwort:';
 $string['feedback_table_answerincorrect'] = 'Falsch';
 $string['feedback_table_answerpartlycorrect'] = 'Teilweise richtig';

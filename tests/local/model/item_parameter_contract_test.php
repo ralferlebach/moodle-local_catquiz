@@ -207,4 +207,86 @@ final class item_parameter_contract_test extends advanced_testcase {
         );
         $this->assertNotEquals($stale, $active);
     }
+
+    /**
+     * Polytomous models are judged on their json payload, not on the derived
+     * scalar difficulty column.
+     *
+     * @return void
+     */
+    public function test_polytomous_models_validate_their_json_payload(): void {
+        $this->resetAfterTest(true);
+
+        // Valid GRM/GGRM payload (thresholds) and PCM/GPCM payload (intercepts).
+        $grm = $this->record('grm', 0.0);
+        $grm->json = json_encode(['difficulties' => [-1.5, 0.2, 1.1]]);
+        $this->assertSame([], model_strategy::validate_item_parameters($grm));
+
+        $pcm = $this->record('pcm', 0.0);
+        $pcm->json = json_encode(['intercepts' => [-0.8, 0.4]]);
+        $this->assertSame([], model_strategy::validate_item_parameters($pcm));
+
+        // A missing json payload must be rejected even though the scalar
+        // difficulty column looks perfectly fine.
+        $nojson = $this->record('grm', 0.0);
+        $nojson->json = '';
+        $this->assertNotEmpty(model_strategy::validate_item_parameters($nojson));
+
+        // Wrong key, empty array and non-numeric entries are all invalid.
+        $wrongkey = $this->record('grm', 0.0);
+        $wrongkey->json = json_encode(['intercepts' => [1.0]]);
+        $this->assertNotEmpty(model_strategy::validate_item_parameters($wrongkey));
+
+        $empty = $this->record('pcm', 0.0);
+        $empty->json = json_encode(['intercepts' => []]);
+        $this->assertNotEmpty(model_strategy::validate_item_parameters($empty));
+
+        $nonnumeric = $this->record('pcm', 0.0);
+        $nonnumeric->json = json_encode(['intercepts' => [0.5, 'abc']]);
+        $this->assertNotEmpty(model_strategy::validate_item_parameters($nonnumeric));
+    }
+
+    /**
+     * The generalized polytomous models additionally require a positive slope.
+     *
+     * @return void
+     */
+    public function test_generalized_polytomous_models_require_positive_discrimination(): void {
+        $this->resetAfterTest(true);
+
+        $ok = $this->record('grmgeneralized', 0.0, 1.4);
+        $ok->json = json_encode(['difficulties' => [-1.0, 0.5]]);
+        $this->assertSame([], model_strategy::validate_item_parameters($ok));
+
+        $mute = $this->record('grmgeneralized', 0.0, 0.0);
+        $mute->json = json_encode(['difficulties' => [-1.0, 0.5]]);
+        $this->assertNotEmpty(model_strategy::validate_item_parameters($mute));
+
+        $mutegpcm = $this->record('pcmgeneralized', 0.0, -1.0);
+        $mutegpcm->json = json_encode(['intercepts' => [-1.0, 0.5]]);
+        $this->assertNotEmpty(model_strategy::validate_item_parameters($mutegpcm));
+
+        // The non-generalized variants do not use a discrimination at all.
+        $pcm = $this->record('pcm', 0.0, 0.0);
+        $pcm->json = json_encode(['intercepts' => [-1.0, 0.5]]);
+        $this->assertSame([], model_strategy::validate_item_parameters($pcm));
+    }
+
+    /**
+     * Every installed model must implement the contract - no model may be missed.
+     *
+     * @return void
+     */
+    public function test_every_installed_model_implements_the_contract(): void {
+        $this->resetAfterTest(true);
+
+        $models = model_strategy::get_installed_models();
+        $this->assertNotEmpty($models);
+        foreach ($models as $name => $class) {
+            $this->assertTrue(
+                method_exists($class, 'validate_parameters'),
+                sprintf('Model "%s" does not implement validate_parameters().', $name)
+            );
+        }
+    }
 }

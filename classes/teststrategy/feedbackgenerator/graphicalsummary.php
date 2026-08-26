@@ -339,21 +339,41 @@ class graphicalsummary extends feedbackgenerator {
 
         $table = new html_table();
         $table->attributes['class'] = 'generaltable catquiz-graphicalsummary-table';
+
+        // The correctness indicator is only shown when the test is configured to
+        // reveal whether the given answer was right ("Indikator zur Korrektheit
+        // der gegebenen Antwort anzeigen").
+        $showresponse = (bool) (
+            $this->get_progress()->get_quiz_settings()
+                ->catquiz_questionfeedbacksettings
+                ->catquiz_showquestionresponse ?? false
+        );
+
         $table->colclasses = [
             'catquiz-col-number',
+        ];
+        if ($showresponse) {
+            $table->colclasses[] = 'catquiz-col-correctness';
+        }
+        $table->colclasses = array_merge($table->colclasses, [
             'catquiz-col-question',
             'catquiz-col-scale',
             'catquiz-col-ability',
-        ];
+        ]);
         if ($viewquestion) {
             $table->colclasses[] = 'catquiz-col-action';
         }
         $table->head = [
             get_string('feedback_table_questionnumber', 'local_catquiz'),
+        ];
+        if ($showresponse) {
+            $table->head[] = get_string('feedback_table_correctness', 'local_catquiz');
+        }
+        $table->head = array_merge($table->head, [
             get_string('question'),
             get_string('catscale', 'local_catquiz'),
             get_string('personability', 'local_catquiz'),
-        ];
+        ]);
 
         if ($viewquestion) {
             $table->head[] = get_string('showquestion', 'local_catquiz');
@@ -387,42 +407,54 @@ class graphicalsummary extends feedbackgenerator {
             // has been purged) do we fall back to the row index / zero.
             $slot = $slot ?? ($index + 1);
             $questionattemptid = $questionattemptid ?? 0;
-            $responsestring = get_string(
-                'feedback_table_answerincorrect',
-                'local_catquiz'
-            );
+            // Correctness indicator: icon plus a screen-reader accessible text, so
+            // the verdict is not conveyed by colour/shape alone. The given answer
+            // stays available as a tooltip; the response summary can contain
+            // TeX/STACK markup, so it goes through format_text with the active
+            // filters (MathJax). format_text also cleans the HTML.
+            $responsestring = get_string('feedback_table_answerincorrect', 'local_catquiz');
+            $iconclass = 'fa-solid fa-circle-xmark text-danger';
             if ($values['lastresponse'] == 1) {
-                $responsestring = get_string(
-                    'feedback_table_answercorrect',
-                    'local_catquiz'
-                );
+                $responsestring = get_string('feedback_table_answercorrect', 'local_catquiz');
+                $iconclass = 'fa-solid fa-circle-check text-success';
             } else if ($values['lastresponse'] > 0) {
-                $responsestring = get_string(
-                    'feedback_table_answerpartlycorrect',
-                    'local_catquiz'
-                );
+                $responsestring = get_string('feedback_table_answerpartlycorrect', 'local_catquiz');
+                $iconclass = 'fa-solid fa-triangle-exclamation text-warning';
             }
 
-            // Answer column: the verdict plus the actually given answer, clearly
-            // labelled as such. The response summary can contain TeX/STACK markup,
-            // so it is rendered via format_text with the active filters (MathJax)
-            // enabled; format_text also cleans the HTML, so user input cannot
-            // introduce XSS.
-            $responsecell = html_writer::tag('span', $responsestring, ['class' => 'catquiz-response-verdict']);
-            $responsesummary = $values['responsesummary'] ?? null;
-            if ($responsesummary !== null && $responsesummary !== '') {
-                $answerhtml = format_text(
-                    $responsesummary,
-                    FORMAT_HTML,
-                    ['filter' => true, 'context' => $filtercontext]
+            $correctnesscell = null;
+            if ($showresponse) {
+                $icon = html_writer::tag('i', '', [
+                    'class' => $iconclass . ' catquiz-response-icon',
+                    'aria-hidden' => 'true',
+                    'title' => $responsestring,
+                ]);
+                $correctnesshtml = $icon . html_writer::tag(
+                    'span',
+                    $responsestring,
+                    ['class' => 'sr-only catquiz-response-verdict']
                 );
-                $responsecell .= html_writer::empty_tag('br')
-                    . html_writer::tag(
+
+                $responsesummary = $values['responsesummary'] ?? null;
+                if ($responsesummary !== null && $responsesummary !== '') {
+                    $answerhtml = format_text(
+                        $responsesummary,
+                        FORMAT_HTML,
+                        ['filter' => true, 'context' => $filtercontext]
+                    );
+                    $correctnesshtml .= html_writer::tag(
                         'span',
                         get_string('feedback_table_givenanswer', 'local_catquiz') . ' ',
-                        ['class' => 'catquiz-response-answerlabel']
-                    )
-                    . html_writer::tag('span', $answerhtml, ['class' => 'catquiz-responsesummary']);
+                        ['class' => 'sr-only catquiz-response-answerlabel']
+                    ) . html_writer::tag(
+                        'span',
+                        $answerhtml,
+                        ['class' => 'sr-only catquiz-responsesummary']
+                    );
+                }
+
+                $correctnesscell = new html_table_cell($correctnesshtml);
+                $correctnesscell->attributes = ['class' => 'catquiz-col-correctness text-center'];
             }
 
             // Question column: the real Moodle question title as primary text and
@@ -446,10 +478,15 @@ class graphicalsummary extends feedbackgenerator {
                 : $questionhtml;
             $newrow = [
                 $index + 1,
+            ];
+            if ($correctnesscell !== null) {
+                $newrow[] = $correctnesscell;
+            }
+            $newrow = array_merge($newrow, [
                 $questioncell,
                 $values['questionscale_name'],
                 sprintf('%.2f', $values['personability_after']),
-            ];
+            ]);
 
             if ($viewquestion) {
                 // Real interactive button (not a bare icon) so it works inside a

@@ -49,6 +49,7 @@ final class pilot_classification_test extends advanced_testcase {
      * @param mixed $difficulty The difficulty value.
      * @param int $status The calibration status.
      * @param int $attempts The number of attempts.
+     * @param string $model The model name the parameters belong to.
      * @return stdClass
      */
     private function question($difficulty, int $status, int $attempts = 0, string $model = 'rasch'): stdClass {
