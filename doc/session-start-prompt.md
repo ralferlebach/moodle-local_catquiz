@@ -40,18 +40,28 @@ Verbindliche Disziplinen (Details in doc/engineering-guide.md):
   schleifenlokal reassignten Variable halten – in eigenen Funktions-Scope kapseln.
 
 Auslieferung:
-- $plugin->release bleibt fix (1.1.4); nur $plugin->version je Auslieferung erhöhen.
+- $plugin->release bleibt fix (1.1.5); nur $plugin->version je Auslieferung erhöhen.
 - Zwei ZIPs, Top-Ordner catquiz/: „-release.zip" via `git archive` (respektiert
   .gitattributes export-ignore: ohne .github/, doc/, Tooling) und „-<version>.zip"
   (volles Arbeitspaket inkl. doc/). Nach /mnt/user-data/outputs kopieren und
   present_files. Abschlussbericht ehrlich, inkl. verbleibender Übergangszustände.
+  Ausgelieferte ZIPs dürfen KEIN .git-Verzeichnis enthalten (auch keine
+  verschachtelten wie catquizcentralhub/*/.git): Voll-Paket nach `cp -a` mit
+  `find <ziel> -type d -name .git -prune -exec rm -rf {} +` bereinigen; Kontrolle
+  `unzip -l … | grep -c '/.git/'` = 0. Verschachtelte Fremd-.git auch im Workspace
+  löschen.
 
-Abhängigkeiten/CI: mod_adaptivequiz (Branch alise_adaptivequiz, 2024123107 –
-bündelt die Bridge adaptivequizcatmodel_catquiz 1.0.3 unter catmodel/catquiz;
-trägt weiterhin den attemptfeedbackeditor-Bug, Workaround per CI-Patch
-.github/ci/patch_adaptivequiz_generator.php), local_wunderbyte_table (>=2024040200,
-inst. 3.3.0), filter_shortcodes (1.1.3, empfohlen). Behat bewusst non-blocking,
-solange die adaptivequiz-Integration am Dependency-Bug hängt.
+Abhängigkeiten/CI: mod_adaptivequiz 3.0.0 (ralferlebach, Branch v-3.0) – bündelt
+den Adapter adaptivequizcatmodel_catquiz unter catmodel/catquiz, dieser hat
+inzwischen ein eigenes Repo MIT eigener CI (dev + main, nur lint-php + phpunit);
+local_wunderbyte_table (main), filter_shortcodes (master),
+catquizcentralhub_{host,client}. Behat ist blockierend und grün (19 Szenarien);
+lokal mangels Chrome nicht lauffähig – neue Szenarien lassen sich nur schreiben,
+verifiziert werden sie erst im CI-Lauf.
+
+Cross-Plugin-Achtung: Repo-Stand und die in mod_adaptivequiz gebündelte Kopie des
+Adapters können auseinanderlaufen. Gebaut wird aus dem Repo – Befunde also immer
+dort verifizieren, nicht an der gebündelten Kopie (Lehre aus session-084).
 
 Moodle-4.5-Hinweis: Webservice-Klassen unter classes/external/ nutzen den
 core_external\-Namespace (globale external_api ist in 4.5 entfernt). Bei
@@ -60,14 +70,31 @@ wird das Schema nicht neu gebaut.
 
 Dokumentation (doc/): engineering-guide.md (Lehren), environment-setup.md (Setup),
 alise-documentation-plan.md (geplante Doks für die Arbeitsstränge A–H),
-session-00X-changes.md (Historie), README.md (Doc-Index).
+session-0XX-changes.md (Historie), README.md (Doc-Index inkl. Themenübersicht
+065–084), issues/ (Issue-Entwürfe und der DoD-Review-Abgleich zu #5–#9).
 
 Vor jeder Änderung: die relevanten SKILL.md und doc/engineering-guide.md
 berücksichtigen. Vor Auslieferung die Checkliste in engineering-guide.md §7.
 
-Aktueller Stand / Aufgabe:
-<hier den konkreten Auftrag bzw. den letzten Stand einsetzen; falls unklar,
-zuerst git-Status/CHANGELOG und die jüngste session-00X-changes.md sichten>
+Aktueller Stand (Ende Aug 2026, Release 1.1.5, interne Version 2026082151):
+CI ist grün – local_catquiz (lint, codeanalysis, quality, phpunit, behat) ebenso
+wie der Adapter mit seiner neuen eigenen CI. Strang C (#5–#9) ist inhaltlich
+abgearbeitet; der Abgleich gegen die DoDs steht in doc/issues/strang-c-dod-review.md.
+
+Bekannte Restpunkte:
+- test_given_responses_lead_to_expected_abilities ist markTestIncomplete: Die
+  Harness fälscht den Attempt-Record; sobald der CAT endet, stirbt der
+  Feedback-Pfad. Braucht eine Neufassung mit echtem Versuch, keinen Fix.
+- Zwei Behat-Fälle sind bewusst NICHT abgedeckt (Begründung als Kommentar in der
+  jeweiligen Feature-Datei): die Reporting-Checkbox ist per Label nicht
+  adressierbar (advcheckbox rendert zwei gleichnamige Inputs) – dafür deckt
+  feedback_result_gate_test den Sachverhalt am Gate ab.
+- Aufräumarbeit ohne Dringlichkeit: get_exclusion_reason_string() wird noch vom
+  Hinweis aus Issue #10 genutzt.
+
+Aufgabe:
+<hier den konkreten Auftrag einsetzen; falls unklar, zuerst git-Status/CHANGELOG
+und die jüngste session-0XX-changes.md sichten>
 ```
 
 ---

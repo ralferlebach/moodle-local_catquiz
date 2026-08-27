@@ -11,3 +11,5 @@
 /.gitattributes         export-ignore
 /erpnext.yml            export-ignore
 /cli/	export-ignore
+package.json export-ignore
+babel.config.js export-ignore

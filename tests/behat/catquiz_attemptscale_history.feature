@@ -80,3 +80,37 @@ Feature: Consecutive attempts are historised per scale.
     And I click on "Submit answer" "button"
     And I wait until the page is ready
     Then I should not see "Question 5"
+
+  @javascript
+  Scenario: A second attempt starts from the carried-over result, not from scratch
+    ## Issue #9: the start value of a following attempt comes from the finalised
+    ## result of the previous one, not from the living personparams row that is
+    ## written during an attempt. A student who answered everything wrong in the
+    ## first attempt must therefore be offered an easier item at the start of the
+    ## second attempt than at the very first start.
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "falsche Antwort 1" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "falsche Antwort 1" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    And I should not see "Question 5"
+    ## Second attempt: it must start and run normally on the carried-over value.
+    And I am on the "adaptivecatquiz1" Activity page
+    And I wait until the page is ready
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    Then I should see "Question 1"
+    And I click on "falsche Antwort 1" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"

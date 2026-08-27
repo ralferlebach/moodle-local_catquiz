@@ -266,6 +266,10 @@ $string['dateparseformat'] = 'Date parse format';
 $string['dateparseformat_help'] = 'Please use the date format like specified in your CSV file (j.n.Y H:i:s). More information at <a href="http://php.net/manual/en/function.date.php">that resource</a>.';
 $string['daysago'] = '{$a} days ago';
 $string['debuginfo_desc'] = 'As a user with permission to export attempts, you can download the attempt as CSV file here';
+$string['exportattemptcsv'] = 'Export attempt (CSV)';
+$string['exportattemptdebugcsv'] = 'Export debug trace (CSV)';
+$string['exportdebuginfopdf'] = 'Export debug info (PDF)';
+$string['viewrawdebuginfo'] = 'View raw debug info';
 $string['debuginfo_desc_title'] = 'Export attempt # {$a}';
 $string['defaultcontext'] = 'New default context for scale';
 $string['defaultcontextdescription'] = 'Includes all test items';
@@ -316,6 +320,7 @@ $string['error:fraction1'] = 'Congratulations, you have answered all the questio
 $string['error:minmaxrangeequal'] = 'There is an error in the database entry: The minimum and maximum scale limits are the same.
     Please report this problem to the CAT Manager, specifying the test you are using and asking them to correct the information
     on the scale limits.';
+$string['error:notestenvironmentsettings'] = 'No CAT quiz settings are stored for {$a->component} instance {$a->componentid}. The activity has probably not been configured as a CAT quiz yet.';
 $string['error:nminscale'] = 'Unfortunately, we were unable to determine a result as not enough questions were answered during the test attempt.
     Please make sure you answer all the questions in your next attempt to get a correct result.';
 $string['error:noscalestoreport'] = 'Unfortunately, with the current number of questions asked in the areas tested,
@@ -349,11 +354,15 @@ $string['feedback_details_description'] = 'Following table lists all aspects
     (scales) of {$a}, for which a reliable result could be calculated.';
 $string['feedback_details_heading'] = 'Details of your result';
 $string['feedback_details_lowestskill'] = 'Scale {$a->name} with an ability
-    score of {$a->value} (± {$a->se}) was found to be the scale with the
-    largest deficit.';
+    score of {$a->value} (± {$a->se}) was found to be your <b>weakest tested
+    area</b>. This does not necessarily mean that you are weak there: it is the
+    area in which you scored lowest compared to the other tested areas, and
+    therefore the most promising one to keep working on.';
 $string['feedback_tab_clicked'] = 'Click on feedback tab';
 $string['feedback_tab_clicked_description'] = 'User {$a->userid} clicked the “{$a->feedback_translated}” tab in {$a->attemptlink}';
 $string['feedback_table_answercorrect'] = 'correct';
+$string['feedback_table_correctness'] = 'Result';
+$string['feedback_table_givenanswer'] = 'Given answer:';
 $string['feedback_table_answerincorrect'] = 'incorrect';
 $string['feedback_table_answerpartlycorrect'] = 'partly correct';
 $string['feedback_table_questionnumber'] = '#';
@@ -365,6 +374,11 @@ $string['feedbackcomparetoaverage'] = '<p>The test measures your ability in {$a-
 <p>You reached a score of {$a->ability_global} (with a standard error of ± {$a->se_global}). The average score of all participants is {$a->average_ability}. {$a->betterthan}</p>
 <p>The following chart displays your personal score (upper mark) and the current average score (lower mark):</p>';
 $string['feedbackcomparison_betterthan'] = 'Your score is better than {$a->quantile}% of all other participants.';
+$string['feedbackcomparetoaverage_nopeers'] = '<p>The test measures your ability in {$a->quotedscale} by calculating an ability score in the range between
+{$a->scale_min} and {$a->scale_max}. A higher value indicates a better ability.</p>
+<p>You reached a score of {$a->ability_global} (with a standard error of ± {$a->se_global}).</p>
+<p>There are not yet enough comparison results to show an average score for this test.</p>
+<p>The following chart displays your personal score:</p>';
 $string['feedbackcompletedentirely'] = 'All feedbacks completed for this scale.';
 $string['feedbackcompletedpartially'] = '{$a} feedbacks of this scale completed.';
 $string['feedbacklegend'] = 'Feedback to be displayed in color bar legend';
@@ -402,8 +416,8 @@ $string['functiondoesntexist'] = 'The requested function does not exist.';
 $string['genericsubmit'] = 'Confirm';
 $string['global_scale'] = 'Global scale';
 $string['graphicalsummary_description'] = 'During an attempt your ability is recalculated after each response. The following chart shows how your estimated ability in “{$a}” changed';
-$string['graphicalsummary_description_lowest'] = 'In addition, the development of your ability score with regard to the scale,
-    which has been identified as a shortcoming:';
+$string['graphicalsummary_description_lowest'] = 'In addition, the development of your ability score with regard to your
+    weakest tested area {$a} is shown:';
 $string['greateststrenght:tooltiptitle'] = 'your strongest scale {$a}';
 $string['groupenrolementstring'] = '“{$a->groupname}” in course “<a href="{$a->courseurl}">{$a->coursename}</a>”';
 $string['groupenrolmenthelptext'] = 'Please enter exact name(s) of existing group like (i.e. “group1,group2” or “group3”).';
@@ -416,6 +430,10 @@ $string['hubactions'] = 'Actions for central instances';
 $string['hubactionshelp'] = 'Perform calculations specific for central instances';
 $string['id'] = 'ID';
 $string['ifdefinedusedtomatch'] = 'If defined, will be used to match.';
+$string['import_warning_capped_difficulty'] = 'Item “{$a->id}”: difficulty {$a->value} is at or beyond the ±{$a->cap} bound and is most likely a clamped estimate rather than a real value.';
+$string['import_warning_capped_discrimination'] = 'Item “{$a->id}”: discrimination {$a->value} is at or beyond the {$a->cap} bound and is most likely a clamped estimate rather than a real value.';
+$string['import_warning_invalid_itemparams'] = 'Item “{$a->label}”: the item parameters are not usable for model “{$a->model}” ({$a->reason}). The item was imported as a pilot item instead of a productive one.';
+$string['import_warning_nonpositive_discrimination'] = 'Item “{$a->id}”: non-positive discrimination ({$a->value}). Items with a slope of zero or less are degenerate for models that use a discrimination and will not calibrate meaningfully.';
 $string['importcolumnsinfos'] = 'Informations about columns to be imported:';
 $string['importcontextinfo'] = 'The context id should be set when existing items are updated for unambiguous matching with exisiting items. When importing new items, it is advisable to leave the context field empty. A new context is then generated automatically, which contains the items from the default context plus the newly imported items. If a context is defined when importing new items, the context of the corresponding top scale must be changed (in the CAT Manager dashboard, Scales area) in order to use these items during quiz.';
 $string['importcsv'] = 'Import CSV';

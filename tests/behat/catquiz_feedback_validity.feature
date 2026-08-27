@@ -89,3 +89,14 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "Submit answer" "button"
     And I wait until the page is ready
     Then I should not see "No valid test result could be determined for this attempt."
+
+  ## NOT covered here: a scale whose reporting checkbox is switched off (issue #7).
+  ## The setting is an advcheckbox, so Moodle renders TWO inputs per scale with the
+  ## same name and label - a hidden value="0" input plus the visible checkbox - and
+  ## the label-based Behat step matches the hidden one first ("element not
+  ## interactable"). Addressing it by id is not an option either, because the ids
+  ## contain the generated scale id and therefore change from run to run.
+  ## The behaviour is covered at the gate instead, where it can be asserted
+  ## precisely: feedback_result_gate_test asserts that such a scale is NOT
+  ## displayable while staying statistically valid, so its result is still
+  ## persisted and available for carry-over.

@@ -161,6 +161,10 @@ class local_catquiz_generator extends testing_module_generator {
             [&$jsondata->catquiz_standarderrorgroup->catquiz_standarderror_max, 'catquiz_standarderror_max'],
             [&$jsondata->catquiz_includetimelimit, 'catquiz_includetimelimit'],
             [&$jsondata->numberoffeedbackoptionsselect, 'numberoffeedbackoptions'],
+            [&$jsondata->catquiz_showquestion, 'catquiz_showquestion'],
+            [&$jsondata->catquiz_questionfeedbacksettings->catquiz_showquestionresponse,
+                'catquiz_showquestionresponse'],
+
         ];
         foreach ($optionaloverrides as [&$target, $field]) {
             if (property_exists($adaptivequiz, $field)) {

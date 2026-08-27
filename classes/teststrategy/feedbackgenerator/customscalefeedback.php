@@ -96,7 +96,8 @@ class customscalefeedback extends feedbackgenerator {
         $customscalefeedback = $this->get_customscalefeedback_for_abilities_in_range(
             $data['customscalefeedback_abilities'],
             (array) $progress->get_quiz_settings(),
-            $data['catscales']
+            $data['catscales'],
+            ['se' => $data['se'] ?? []]
         );
 
         if (empty($customscalefeedback)) {
@@ -200,6 +201,7 @@ class customscalefeedback extends feedbackgenerator {
      * @param array $personabilities
      * @param array $quizsettings
      * @param array $catscales
+     * @param array $feedbackdata Surrounding feedback data, used for the SE values.
      *
      * @return string
      *
@@ -207,21 +209,27 @@ class customscalefeedback extends feedbackgenerator {
     private function get_customscalefeedback_for_abilities_in_range(
         array $personabilities,
         array $quizsettings,
-        array $catscales
+        array $catscales,
+        array $feedbackdata = []
     ): string {
         $scalefeedback = [];
         $relevantscalesfound = false;
 
-        // Filter for scales to be reported.
-        $personabilitiestoreport = array_filter($personabilities, fn($a) => isset($a['toreport']));
-        if (empty($personabilitiestoreport)) {
-            // If no scale is to be reported, return reason.
-            return $this->get_exclusion_reason_string($personabilities);
+        /* Issue #7 DoD 2/3: the gate and the rejection message both come from the
+           central result object. Previously this filtered on `toreport` and then
+           skipped `excluded`/`hidden` itself, which duplicated the validator's
+           rules and left the display out of step whenever those rules changed. */
+        $attemptresult = feedback_helper::build_attempt_result($personabilities, $feedbackdata);
+        $displayable = array_filter(
+            $personabilities,
+            fn($scaleid) => feedback_helper::is_displayable($attemptresult, (int) $scaleid),
+            ARRAY_FILTER_USE_KEY
+        );
+        if (empty($displayable)) {
+            // No scale can be shown: report the machine readable reason.
+            return feedback_helper::get_rejection_reason_string($attemptresult, $personabilities);
         }
-        foreach ($personabilitiestoreport as $catscaleid => $personability) {
-            if (!empty($personability['excluded']) || !empty($personability['hidden'])) {
-                continue;
-            }
+        foreach ($displayable as $catscaleid => $personability) {
             $relevantscalesfound = true;
             // Issue #14: a score is assigned to exactly one range (half-open
             // intervals), instead of matching every range whose inclusive bounds

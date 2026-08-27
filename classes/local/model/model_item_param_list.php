@@ -35,6 +35,7 @@ use IteratorAggregate;
 use local_catquiz\catcontext;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
+use local_catquiz\local\model\model_strategy;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\data\dataapi;
 use local_catquiz\event\testiteminscale_added;
@@ -57,6 +58,19 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate {
+    /**
+     * @var float Discrimination values at or above this bound are treated as a
+     * clamped estimate for import warnings (mirrors the models' default
+     * trusted_region_max_b).
+     */
+    private const CALIBRATION_DISCRIMINATION_CAP = 5.0;
+
+    /**
+     * @var float Difficulty magnitudes at or above this bound are treated as a
+     * clamped estimate for import warnings (mirrors catcalc's trait limit).
+     */
+    private const CALIBRATION_DIFFICULTY_ABS_CAP = 10.0;
+
     /**
      * @var bool Indicates if the list uses question hashes instead of IDs.
      */
@@ -505,6 +519,38 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
         }
 
         $newrecord['status'] = !empty($newrecord['status']) ? $newrecord['status'] : LOCAL_CATQUIZ_STATUS_UPDATED_MANUALLY;
+
+        // Model contract guard: parameters that are unusable for the declared model
+        // must not be imported as productive item parameters. Playing such an item
+        // is worse than piloting it - e.g. a 2PL item with discrimination 0 is
+        // mathematically mute (P = 0.5 for every ability, Fisher information 0) and
+        // freezes the ability estimate. Downgrade the item to a pilot instead and
+        // report the concrete reason to the person importing.
+        $validationreasons = model_strategy::validate_item_parameters((object) $newrecord);
+        if ($validationreasons) {
+            $newrecord['status'] = LOCAL_CATQUIZ_STATUS_NOT_CALCULATED;
+            $newrecord['warning'] = trim(
+                ($newrecord['warning'] ?? '') . ' ' . get_string(
+                    'import_warning_invalid_itemparams',
+                    'local_catquiz',
+                    [
+                        'label' => $newrecord['label'] ?? ($newrecord['componentid'] ?? '?'),
+                        'model' => $newrecord['model'] ?? '',
+                        'reason' => implode('; ', $validationreasons),
+                    ]
+                )
+            );
+        }
+
+        // Advisory calibration warnings: flag item parameters that look
+        // miscalibrated or clamped (non-positive discrimination, or values pinned
+        // at the trusted bounds) so the person importing notices them. The item is
+        // still imported; these are hints, not errors.
+        $calibrationwarnings = self::calibration_warnings($newrecord);
+        if ($calibrationwarnings) {
+            $newrecord['warning'] = trim(($newrecord['warning'] ?? '') . ' ' . implode(' ', $calibrationwarnings));
+        }
+
         $itemparam = model_item_param::from_record((object) $newrecord);
         if ($record) {
             $itemparam->set_id($record->id);
@@ -526,6 +572,53 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
                 'recordid' => $itemparam->get_id(),
              ];
         }
+    }
+
+    /**
+     * Returns advisory warnings for item parameters that look miscalibrated or
+     * clamped.
+     *
+     * Catches a non-positive discrimination (degenerate for any model that uses a
+     * slope - the ALiSe pilots carry a = 0.00), and difficulty/discrimination
+     * values pinned at the trusted bounds, which are almost always clamped
+     * estimates rather than real values. The item is still imported; these are
+     * hints only.
+     *
+     * @param array $newrecord
+     * @return string[] Zero or more human-readable warning strings.
+     */
+    private static function calibration_warnings(array $newrecord): array {
+        $warnings = [];
+        $id = $newrecord['label'] ?? ($newrecord['componentid'] ?? '?');
+
+        if (isset($newrecord['discrimination']) && is_numeric($newrecord['discrimination'])) {
+            $discrimination = (float) $newrecord['discrimination'];
+            if ($discrimination <= 0.0) {
+                $warnings[] = get_string('import_warning_nonpositive_discrimination', 'local_catquiz', [
+                    'id' => $id,
+                    'value' => sprintf('%.2f', $discrimination),
+                ]);
+            } else if ($discrimination >= self::CALIBRATION_DISCRIMINATION_CAP) {
+                $warnings[] = get_string('import_warning_capped_discrimination', 'local_catquiz', [
+                    'id' => $id,
+                    'value' => sprintf('%.2f', $discrimination),
+                    'cap' => sprintf('%.2f', self::CALIBRATION_DISCRIMINATION_CAP),
+                ]);
+            }
+        }
+
+        if (isset($newrecord['difficulty']) && is_numeric($newrecord['difficulty'])) {
+            $difficulty = (float) $newrecord['difficulty'];
+            if (abs($difficulty) >= self::CALIBRATION_DIFFICULTY_ABS_CAP) {
+                $warnings[] = get_string('import_warning_capped_difficulty', 'local_catquiz', [
+                    'id' => $id,
+                    'value' => sprintf('%.2f', $difficulty),
+                    'cap' => sprintf('%.2f', self::CALIBRATION_DIFFICULTY_ABS_CAP),
+                ]);
+            }
+        }
+
+        return $warnings;
     }
 
     /**

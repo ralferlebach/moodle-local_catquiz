@@ -47,6 +47,33 @@ class grmgeneralized extends model_multiparam {
      * @param stdClass $record
      * @return array
      */
+    /**
+     * Validates the item parameters for this generalized polytomous model.
+     *
+     * On top of the polytomous contract (a well formed json payload) this model
+     * uses a discrimination, which must be strictly positive. With a slope of 0 the
+     * category probabilities no longer depend on the ability at all: the item
+     * carries no information and the ability estimate stops moving.
+     *
+     * @param stdClass $record The raw item parameter record.
+     * @return string[] Reasons the parameters are invalid; empty array if valid.
+     */
+    public static function validate_parameters(stdClass $record): array {
+        $reasons = parent::validate_parameters($record);
+
+        if (!self::is_valid_positive_float($record->discrimination ?? null)) {
+            $reasons[] = 'discrimination must be a number greater than 0';
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * Returns the parameters as associative array, where the key is the parameter name.
+     *
+     * @param stdClass $record
+     * @return array
+     */
     public static function get_parameters_from_record(stdClass $record): array {
 
         $difficulties = json_decode($record->json, true)['difficulties'];
@@ -936,7 +963,7 @@ class grmgeneralized extends model_multiparam {
      *
      * @return string
      */
-    protected function get_multi_param_name(): string {
+    protected static function get_multi_param_name(): string {
         return 'difficulties';
     }
 

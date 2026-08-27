@@ -45,6 +45,35 @@ class raschbirnbaum extends model_raschmodel {
      * @param stdClass $record
      * @return array
      */
+    /**
+     * Validates the item parameters for the 2PL model.
+     *
+     * On top of the base contract (finite, signed difficulty) a 2PL item needs a
+     * strictly positive discrimination. With a = 0 the response probability
+     * collapses to 0.5 for every ability, the Fisher information is 0 and the item
+     * contributes nothing - the ability estimate then appears "frozen". A negative
+     * a would invert the item (harder items becoming easier), which is never a
+     * valid calibration result here.
+     *
+     * @param stdClass $record The raw item parameter record.
+     * @return string[] Reasons the parameters are invalid; empty array if valid.
+     */
+    public static function validate_parameters(stdClass $record): array {
+        $reasons = parent::validate_parameters($record);
+
+        if (!self::is_valid_positive_float($record->discrimination ?? null)) {
+            $reasons[] = 'discrimination must be a number greater than 0';
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * Returns the parameters as associative array, where the key is the parameter name.
+     *
+     * @param stdClass $record
+     * @return array
+     */
     public static function get_parameters_from_record(stdClass $record): array {
         return [
             'difficulty' => $record->difficulty,

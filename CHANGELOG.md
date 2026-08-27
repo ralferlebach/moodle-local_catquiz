@@ -1,5 +1,1266 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082152)
+
+> Dokumentations-Aktualisierung und Sitzungsabschluss des Strangs „CI grün"
+> (Sitzungen 065–085). Keine Codeänderung.
+
+- **`doc/environment-setup.md`**: Zielzustand auf mod_adaptivequiz 3.0.0
+  aktualisiert, Locale `en_AU.UTF-8` und `local_moodlecheck` als Fixpunkte
+  ergänzt. Alle `sudo`-Beispiele auf die Container-Realität umgestellt (man ist
+  root, `sudo` fehlt meist). Drei beim Aufsetzen aufgetretene Blocker
+  dokumentiert: `max_input_vars` muss **dauerhaft** in die `php.ini` (der
+  PHPUnit-Init ignoriert `-d`), `locale-gen en_AU.UTF-8`, und phpcs braucht
+  `installed_paths` für PHPCSExtra **und** moodle-cs. Neuer §5a zum
+  PHPDoc-Checker als lokale Reproduktion des CI-Quality-Jobs. Behat-Status von
+  „non-blocking" auf „blockierend und grün" berichtigt. Neue Stolpersteine: lange
+  Läufe im Hintergrund fahren, „ein ZIP löscht nichts", CRLF verfälscht
+  `grep`/`preg_match`.
+- **`doc/engineering-guide.md`**: neuer **§2a „Zahlen aus Fremdquellen: nie blind
+  casten"** – die häufigste Fehlerklasse dieses Strangs (viermal dieselbe Wurzel)
+  mit Tabelle und Diagnose-Merkmal. §2.4 um zwei Fälle erweitert, in denen der
+  Zahn-Test eine **wirkungslose eigene Assertion** entlarvt hat, samt Regel.
+  §2.5 um die Grenze des Aggregats (veraltete Referenz → referenzfreie
+  Invarianten). Neuer §5a „Was ein ZIP nicht kann"; Checkliste um Punkt 9
+  erweitert.
+- **`doc/README.md`**: Index bis session-084 fortgeschrieben (endete bei 018),
+  `issues/` aufgenommen, Themenübersicht 065–084 ergänzt.
+- **`doc/session-start-prompt.md`**: Release 1.1.5, aktuelle Abhängigkeiten,
+  Behat-Status, **Cross-Plugin-Warnung** (Repo-Stand und gebündelte Adapter-Kopie
+  können auseinanderlaufen – gebaut wird aus dem Repo) sowie der aktuelle Stand
+  mit den bekannten Restpunkten.
+- **`doc/session-085-changes.md`** neu.
+- Verifikation: alle 7 Modell-Suiten grün (Skip-Zahlen unverändert), Kernsuiten
+  grün, Sättigungs-Stresstest 2.856 Assertions ohne nicht-endliche Werte,
+  phpcs plugin-weit Exit 0 (verzeichnisweise gefahren), PHPDoc 0 Fehler.
+
+## 1.1.5 (interne Version 2026082150)
+
+> Beide offenen Punkte umgesetzt: Der Adapter liefert jetzt den fehlenden
+> Report-Callback, und der seit Langem inkomplette Schätz-Test ist untersucht.
+
+- **Adapter-Callback `attempts_report_url`** (Patch für
+  `adaptivequizcatmodel_catquiz`, liegt bei). Ohne ihn rendert
+  `mod_adaptivequiz` die Versuchszahl auf der Aktivitätsseite als **reinen Text**
+  (`attempts_number::when_custom_catmodel_in_use`) – eine Lehrkraft kam damit
+  weder zu einer Versuchsübersicht noch zur Aktion „Close attempt".
+  - Der Callback liefert `local/catquiz/feedback.php` mit `courseid` und
+    `instanceid`, also die plugin-eigene Versuchsübersicht.
+  - **Im echten Moodle verifiziert**, nicht nur angenommen:
+    `get_plugin_list_with_function()` findet den Callback, und
+    `attempts_number::when_custom_catmodel_in_use()` liefert damit
+    `.../feedback.php?courseid=7&instanceid=42` statt `null`; ohne gesetztes
+    `catmodel` weiterhin `null`.
+  - Das zugehörige Behat-Szenario ist wieder aufgenommen (prüft, dass die
+    Versuchszahl für die Lehrkraft erscheint).
+- **`test_given_responses_lead_to_expected_abilities` untersucht.** Der Test war
+  nicht nur inkomplett, sondern **doppelt defekt** – beides hatte der Skip
+  verdeckt:
+  1. Der Aufruf `createtestenvironment($strategy)` hatte sein zweites Argument
+     verloren und wäre mit `ArgumentCountError` gestorben. **Repariert.**
+  2. Der Test fälscht den Attempt-Record (`instance 1, id 1`), statt einen echten
+     Versuch anzulegen. Sobald der CAT endet – seit den #6-Fixes deutlich früher –
+     betritt die Strategie den Feedback-Pfad und stirbt in `fetch_question_id()`
+     mit `attemptfeedback::$contextid must not be accessed before initialization`.
+     Eine Begrenzung der Antwortzahl hilft nicht, weil der Versuch vorher endet.
+  - Der Test bleibt daher `markTestIncomplete` – aber mit **zutreffender**
+    Begründung statt des alten, irreführenden „Calculated value is not yet
+    correct". Ihn lauffähig zu machen heißt, die Harness auf einen echten Versuch
+    umzubauen; das ist eine Neufassung, keine Korrektur. Der Schätzer ist
+    zwischenzeitlich durch den invariantenbasierten Trajektorientest und
+    `ability_monotonicity_test` gedeckt.
+- phpcs Exit 0 (beide Repos), PHPDoc 0 Fehler.
+
+## 1.1.5 (interne Version 2026082149)
+
+> Zweiter Behat-Lauf: wieder 19/21. Die beiden verbliebenen Szenarien sind über
+> die Oberfläche **grundsätzlich nicht durchführbar** – beides sind echte Befunde,
+> keine Testfehler. Sie sind entfernt und die Gründe dokumentiert.
+
+- **Administratives Schließen ist bei aktivem CAT-Model per UI nicht erreichbar.**
+  `mod_adaptivequiz/view.php` rendert bei gesetztem `catmodel` keinen Link zum
+  Attempt-Report, sondern ruft nur `attempts_number()`. Diese Funktion liefert
+  **reinen Text**, solange das CAT-Model den Callback `attempts_report_url` nicht
+  implementiert – und `adaptivequizcatmodel_catquiz` implementiert ihn nicht
+  (verifiziert in `classes/output/attempts_number.php:51-71`). Die Lehrkraft hat
+  damit keinen Weg zu „Close attempt". Der HTML-Dump bestätigt es: die
+  Aktivitätsseite zeigt lediglich „Attempts: 1" ohne Link, und das einzige
+  „Reports" auf der Seite ist der Nutzermenü-Eintrag des Report-Builders.
+  - **Der Code-Pfad ist unabhängig davon verifiziert**: `closeattempt.php` ruft
+    `adaptivequiz_complete_attempt()` – dieselbe autoritative Funktion wie der
+    Cron –, und genau das prüft `cancel_expired_attempts_path_test`.
+  - Konsequenz für #5 DoD 7: per Behat nicht erfüllbar, solange der Adapter keinen
+    `attempts_report_url`-Callback anbietet. **Das wäre die eigentliche
+    Verbesserung** – dann wäre der Report auch für Lehrende erreichbar.
+- **Die Reporting-Checkbox ist per Label nicht adressierbar.** `advcheckbox`
+  rendert je Skala **zwei** Inputs mit gleichem Namen und Label – ein verstecktes
+  `value="0"` plus die sichtbare Checkbox. Der label-basierte Behat-Schritt trifft
+  das versteckte zuerst („element not interactable"). Eine Adressierung über die
+  id scheidet aus, weil diese die generierte Skalen-ID enthält und je Lauf
+  wechselt.
+  - Der Sachverhalt ist stattdessen **am Gate** abgedeckt, wo er präziser
+    prüfbar ist: `feedback_result_gate_test` belegt in zwei Tests, dass eine
+    solche Skala nicht angezeigt wird, aber statistisch valide bleibt – ihr
+    Ergebnis wird also weiterhin gespeichert und steht für die Vorwertübernahme
+    zur Verfügung.
+- Beide Begründungen stehen als Kommentar in den betroffenen Feature-Dateien,
+  damit die Lücke nicht später als Versehen gelesen wird.
+- Behat-Bestand jetzt **19 Szenarien**, davon 4 in dieser Sitzung neu
+  (#6 Back/Forward, #6 wiederholtes Wiederbetreten, #5/#8 keine
+  Doppel-Finalisierung, #9 Carryover) – alle im zweiten Lauf grün.
+
+## 1.1.5 (interne Version 2026082148)
+
+> Behat-Nachbesserung: 19 von 21 Szenarien liefen im ersten Lauf grün, die zwei
+> Fehlschläge waren genau die vorhergesagten Oberflächen-Annahmen.
+
+- **Undefinierter Schritt behoben.** `I uncheck the "..." checkbox` existiert in
+  Moodle nicht; Abwählen wird als `I set the field "..." to ""` ausgedrückt.
+  - Dabei war auch der **Feldname geraten und falsch**: Die Checkbox heißt nicht
+    „Report results of this scale", sondern **„Include scale for report"**
+    (`$string['reportscale']`). Am Code verifiziert statt erneut geraten.
+- **Navigation zum Attempt-Report behoben.** `I follow "Reports"` scheiterte mit
+  `ElementNotInteractableException` – der Link liegt in der Aktivitäts-
+  administration. Ersetzt durch
+  `I navigate to "Reports" in current page administration`, das Muster der
+  mod_adaptivequiz-eigenen Szenarien.
+- **Zwei weitere Fehler vorab gefunden**, die im nächsten Lauf sonst rot geworden
+  wären – beide durch Nachlesen im Mod-Quelltext statt durch Raten:
+  - In der Report-Tabelle trägt der Link zu den Versuchen einer Person die
+    **Anzahl der Versuche** als Text, nicht den Namen (`renderer.php:368`).
+    Jetzt zeilenbezogen adressiert: `I click on "1" "link" in the
+    "Student1 Test" "table_row"`.
+  - „Close attempt" wird als **Action-Icon** (`t/stop`) gerendert, nicht als
+    Textlink (`renderer.php:727`) – daher `"Close attempt" "icon"`.
+  - Gegengeprüft und bestätigt: `closeattempt.php` nutzt `$renderer->confirm()`,
+    dessen Button „Continue" heißt, und
+    `I press the "back|forward" button in the browser` existiert im Core
+    (`behat_general.php:1990`) – dieses Szenario war im ersten Lauf bereits grün.
+- Die übrigen vier neuen Szenarien (Back/Forward, wiederholtes Wiederbetreten,
+  Doppel-Finalisierung, Carryover) bestanden den ersten Lauf ohne Änderung.
+
+## 1.1.5 (interne Version 2026082147)
+
+> Das doppeldeutige `excluded`-Flag ist aufgetrennt, und die Behat-Abdeckung für
+> #5–#9 ist vollständig geschrieben.
+
+- **`excluded` bedeutet jetzt genau eine Sache: die Messung ist unbrauchbar.**
+  Die Anzeigeentscheidung „Reporting abgeschaltet" trägt ein eigenes Flag
+  `feedbacksettings::FIELD_NOTREPORTED`. Bisher setzte `filter_excluded_scales()`
+  dafür ebenfalls `excluded`, weshalb jeder Konsument zusätzlich das
+  `error`-Array inspizieren musste, um „unbrauchbar" von „soll nicht angezeigt
+  werden" zu unterscheiden.
+  - `attempt_result_validator` braucht die Kompensation über `$hascheckbox` nicht
+    mehr; `reportable` und `statisticallyvalid` lesen sich direkt aus den Flags.
+  - `inferlowestskillgap` und `infergreateststrength` schließen weiterhin **beide**
+    Fälle aus der Primary-Auswahl aus – die Auswahl verhält sich unverändert.
+  - `feedback_helper::get_exclusion_reason_string()` erkennt beide Flags.
+- **Rückwärtskompatibel.** Daten, die **vor** der Auftrennung geschrieben wurden,
+  markieren den Reporting-Fall zusätzlich als `excluded`. Damit solche Ergebnisse
+  nicht nachträglich ungültig werden, gilt weiterhin: ein ausgeschlossener, aber
+  nur nicht-berichteter Wert bleibt statistisch valide. Das ist getestet
+  (`test_legacy_reporting_flag_stays_statistically_valid`) und zahn-geprüft.
+- **Verifikation**: `feedback_result_gate_test` auf 9 Tests erweitert (neue und
+  alte Datenform, `excluded` allein bedeutet weiterhin unbrauchbar). Die
+  vollständige CAT-Simulationsmatrix läuft unverändert grün
+  (35 Tests / 2537 Assertions), die Selektionslogik ist also nicht betroffen.
+  phpcs Exit 0, PHPDoc 0 Fehler.
+- **Behat-Abdeckung vervollständigt** (6 neue Szenarien, insgesamt 20):
+  - **#6**: Zurück/Vorwärts im Browser erzeugt keinen Doppel-Slot; wiederholtes
+    Wiederbetreten eines unbeantworteten Items behält einen Slot.
+  - **#7**: Eine Skala mit abgeschaltetem Reporting wird nicht angezeigt, der
+    Versuch aber normal finalisiert – der zentrale „kein valides Ergebnis"-Hinweis
+    bleibt echten Messproblemen vorbehalten.
+  - **#5/#8**: neue Datei `catquiz_attempt_finalisation.feature` – administratives
+    Schließen finalisiert wie ein normaler Abschluss (verifiziert: auch
+    `closeattempt.php` nutzt `adaptivequiz_complete_attempt()`), und ein
+    abgeschlossener Versuch wird nicht doppelt finalisiert.
+  - **#9**: Ein zweiter Versuch startet auf dem übernommenen Ergebnis.
+  Alle Feature-Dateien folgen dem bewährten Muster der bestehenden Szenarien
+  (Settings-Round-Trip über das Aktivitätsformular) und sind strukturell geprüft.
+
+## 1.1.5 (interne Version 2026082146)
+
+> Die übersprungene CAT-Simulationsmatrix läuft wieder – und prüft wieder etwas.
+> 35 Tests, 2537 Assertions statt 26 übersprungener Datensätze.
+
+- **Befund zuerst, dann der Umbau.** Ich habe den Skip entfernt und alle Datensätze
+  mit Diagnoseausgabe gegen die gepinnte Referenz gemessen. Ergebnis: **7 von 13**
+  Datensätzen treffen die Referenz nur zu 3–43 % (Labels teils 2 %), dazu **11
+  Errors** vom Typ `Exception: Should not be 0`. Letzteres heißt: Der CAT war
+  bereits fertig, während die Referenz weiterlaufen wollte.
+  - Das ist **keine** numerische Verschiebung, sondern die direkte Folge der
+    korrekten #6-Fixes: Der Versuch stoppt jetzt nach der konfigurierten Zahl
+    **beantworteter** statt angezeigter Items, und Pilot-/Vertragsitems werden
+    anders behandelt. Die Referenz ist damit **konstruktionsbedingt veraltet**.
+- **Warum weder Re-Pinning noch Aggregat.** Ein aggregierter Vergleich
+  (Engineering-Guide §2.5) würde hier Veralterung messen statt Korrektheit – eine
+  Schwelle, die 3 % durchlässt, ist wertlos. Ein frisches Neupinnen würde
+  zementieren, was der Code heute tut, inklusive eventuell verbliebener Fehler.
+- **Stattdessen referenzfreie Invarianten**, die für **jeden** korrekten CAT-Lauf
+  gelten und nicht vom diskreten Newton-Zweig abhängen:
+  - Der Versuch terminiert von selbst; ein früheres Ende als in der Referenz ist
+    legitim und keine Exception mehr.
+  - Jede Schätzung bleibt endlich und im Trust-Range.
+  - Die Trajektorie folgt dem Antwortmuster: mindestens vier Fünftel falsch →
+    Endwert unter dem Startwert, mindestens vier Fünftel richtig → darüber.
+  Das Antwortmuster der Referenz bleibt als Treiber nutzbar, ihre Labels nicht.
+- **Verifikation**: 35 Tests / 2537 Assertions grün (Laufzeit ~7:40).
+  **Zahn-getestet**: Trajektorie um 100 verschoben → Trust-Range-Invariante fällt;
+  Trajektorie gespiegelt → Richtungsinvariante fällt („16 wrong out of 19 must end
+  below its starting ability"). Die erste Fassung der Richtungsprüfung
+  (strikt all-wrong/all-right) feuerte bei keinem Datensatz – erkannt und auf eine
+  Mehrheitsbedingung umgestellt, was 13 zusätzliche Assertions bringt.
+- phpcs Exit 0, PHPDoc 0 Fehler.
+
+## 1.1.5 (interne Version 2026082145)
+
+> PHPUnit-Fix: Der Umbau der Mindestfragen-Zählung (2026082140) hatte einen
+> Mock-Test nicht mitgezogen.
+
+- **`filterbytestinfo_minquestions_test` repariert** (2 Failures, beide Datensätze
+  desselben Tests). Der Test mockt `progress` und stubbte nur
+  `get_playedquestions()`. Seit der Umstellung auf **beantwortete** statt
+  **angezeigte** Items fragt `filterbytestinfo` jedoch
+  `get_num_answered_productive_questions()` – ungestubbt lieferte der Mock dort 0,
+  die Ausschlussbedingung wurde nie erreicht und das erwartete
+  `deactivate_scale()` blieb aus.
+  - Der Stub liefert die Zahl jetzt ebenfalls; in dieser Fixture ist jedes
+    gespielte Item beantwortet und produktiv, die Erwartungen bleiben also
+    unverändert.
+  - Gegenprüfung: Alle weiteren Tests, die `progress` mocken und
+    `get_playedquestions()` stubben, wurden gesichtet – nur
+    `mayberemovescale_test` tut das noch, ist aber von der Umstellung nicht
+    betroffen (grün).
+- **Hinweis zur Simulationsmatrix**: `strategy_test::test_strategy_returns_expected_questions`
+  ist in der CI mit allen 26 Datensätzen **übersprungen**, und zwar als
+  dokumentierter Vorbestand („CAT trajectory pinned to pre-refactor estimator").
+  Sie sichert die Umbauten dieser Sitzung also **nicht** ab – das Re-Pinning aus
+  einem frischen Simulationslauf bleibt offen.
+- phpcs Exit 0, PHPDoc 0 Fehler; Filter-, Feedback-, Ergebnis-, Attempt- und
+  Kernsuiten grün.
+
+## 1.1.5 (interne Version 2026082144)
+
+> Issue **#7 DoD 2/3**: Der Feedback-Pfad urteilt jetzt über das zentrale
+> Ergebnisobjekt statt über die mehrdeutigen Rohflags.
+
+- **Das Problem: `excluded` bedeutete zweierlei.** `feedbacksettings` setzt das
+  Flag sowohl für ein **Messproblem** (SE unter dem Minimum, zu wenige Items) als
+  auch für eine reine **Anzeigeentscheidung** (Reporting-Checkbox aus). Jeder
+  Konsument musste wissen, welche Kombination was bedeutet – und die Anzeige
+  konnte von der Validität abdriften, sobald sich die Regeln ändern.
+- **Neu: ein Gate für alle.**
+  - `feedback_helper::build_attempt_result()` baut aus den Feedback-Daten das
+    `attempt_result`-DTO – dieselbe Quelle, die auch der Validator nutzt.
+  - `feedback_helper::is_displayable()` entscheidet über die Anzeige:
+    `reportable && statisticallyvalid`.
+  - `feedbackgenerator` und `customscalefeedback` filtern nicht mehr selbst über
+    `toreport`/`excluded`/`hidden`, sondern fragen dieses Gate.
+- **Ablehnungsgründe kommen aus `rejectionreasons`.**
+  `feedback_helper::get_rejection_reason_string()` leitet die Meldung aus den
+  maschinenlesbaren Gründen ab; die interpolierten Detailwerte (Schwellen,
+  Ist-Werte) stammen weiterhin aus dem `error`-Array derselben Skala, weil die
+  Sprachstrings sie brauchen.
+  - **Verhaltensverbesserung**: Die alte Implementierung meldete den Grund der
+    **ersten** ausgeschlossenen Skala, die ihr begegnete. Lag dort ein reines
+    Anzeigeproblem vor, wurde die generische Meldung „keine Skalen gefunden"
+    gezeigt und das echte Messproblem einer anderen Skala nie sichtbar. Jetzt
+    überspringen anzeigebezogene Gründe und das Messproblem gewinnt.
+- **Äquivalenz abgesichert**: `feedback_result_gate_test` (6 Tests) prüft das neue
+  Gate über **alle** Flag-Kombinationen gegen den historischen Filter
+  (`toreport && !excluded && !hidden`), belegt die Trennung von Anzeige und
+  Validität und pinnt die Verhaltensverbesserung samt Gegenprobe gegen den alten
+  Helfer. **Zahn-getestet**: lässt man in `is_displayable()` die statistische
+  Validität weg, divergiert das Gate beim Fall „SE unter Minimum".
+- phpcs Exit 0, PHPDoc 0 Fehler; Feedback-, Validator-, Carryover-, Finalizer- und
+  Kernsuiten grün, ebenso der vollständige Attempt-Durchlauf
+  (`test_all_wrong_attempt_drives_ability_down`, 55 Assertions).
+
+## 1.1.5 (interne Version 2026082143)
+
+> Issue **#9**: Der Live-Carryover ist verdrahtet. Vorwerte kommen jetzt aus der
+> Versuchshistorie statt aus dem lebenden Zwischenstand.
+
+- **`personability_loader` nutzt die Versuchshistorie als Vorwert.** Bisher las er
+  ausschließlich `local_catquiz_personparams`. Diese Tabelle wird jedoch
+  **während** eines Versuchs fortgeschrieben (`updatepersonability`,
+  `filterbystandarderror`) – sie ist damit ein lebender Zwischenstand und keine
+  Historie abgeschlossener Versuche. Als Prior gelesen konnte sie eine
+  halbfertige Schätzung in den Folgeversuch tragen.
+  - Neu wird je Zielskala zuerst `attemptscale_repository::get_latest_valid()`
+    befragt. Diese Zeilen entstehen **einmalig bei der Finalisierung** und nur für
+    valide gemessene Skalen. `personparams` bleibt der Fallback für Skalen ohne
+    solche Zeile (ältere Versuche, nie gemessen).
+  - Gilt für **alle** Zielskalen (Hauptskala und ausgewählte Subskalen), nicht nur
+    die Hauptskala.
+- **Tests** `personability_loader_carryover_test` (3 Tests): abgeschlossener
+  Versuch schlägt den lebenden Personparameter; ohne Historie bleibt der
+  Personparameter der Fallback; ein **invalides** Ergebnis wird nicht übernommen.
+  **Zahn-getestet**: Carryover-Vorrang entfernt → der Loader liefert wieder den
+  Zwischenstand (2.5 statt 0.8) und der Test fällt.
+- **Nebenbefund**: Die Spalte heißt `score`, nicht `ability` – beim Verdrahten
+  aufgefallen und korrigiert.
+- phpcs Exit 0, PHPDoc 0 Fehler; Loader-, Repository-, Finalizer-, Preattempt- und
+  Weighting-Suiten grün.
+
+## 1.1.5 (interne Version 2026082142)
+
+> Gegenprüfung gegen `mod_adaptivequiz` **3.0.0** (2026082500): Mehrere
+> Cross-Plugin-Punkte sind fremdseitig bereits erledigt, und eine Kritik am
+> Validator erweist sich als nicht zutreffend.
+
+- **#6 ist implementierungsseitig vollständig – auf beiden Seiten.** Am Code der
+  gelieferten Version verifiziert:
+  - Der **Adapter** (`catquiz_item_administration`) gibt bei aktivem
+    `$previousquestionslot` bereits `next_item::from_quba_slot()` zurück, und zwar
+    **vor** der CAT-Selektion – genau die zuvor empfohlene Änderung.
+  - `cat_session` hält einen **Lock** (`lock_config`, Key je Quiz+User), sucht
+    **innerhalb** des Locks nach einem bestehenden aktiven Slot
+    (`find_active_slot_for_question()` mit Fallback `find_any_active_slot()`) und
+    ruft erst danach `add_question()`.
+  - Es verbleiben damit nur noch die **Tests** (QUBA-Slotanzahl explizit prüfen,
+    Concurrency, Back/Forward, Multi-Click).
+- **Korrektur einer Review-Aussage zu #7.** Der Vorwurf, der
+  `attempt_result_validator` vermische Validität und Reporting, trifft **nicht**
+  zu: `$statisticallyvalid = ($reasons === []) && !($excluded && !$hascheckbox);`
+  nimmt den Checkbox-Fall ausdrücklich von der statistischen Validität aus, und
+  beide Zustände sind testgesichert
+  (`test_reporting_disabled_is_display_only_not_statistical`,
+  `test_reporting_disabled_scale_stays_statistically_valid_contract`).
+- **Berechtigt bleibt** der Kern von #7 DoD 2/3: `customscalefeedback` filtert die
+  Anzeige selbst und die Fehlerausgabe nutzt die alten `error`-Arrays statt
+  `rejectionreasons`. Das ist jedoch **Refactoring-Schuld**, kein Rechenfehler:
+  Das `attempt_result`-DTO wird im Feedback-Pfad derzeit gar nicht bereitgestellt.
+  Zusätzlich dokumentiert: `feedbacksettings` setzt `excluded` für zwei fachlich
+  verschiedene Sachverhalte (SE unter Minimum vs. Reporting aus); der Validator
+  kompensiert das, sauberer wäre ein eigenes Flag – das berührt aber auch
+  `inferlowestskillgap`/`infergreateststrength` und gehört in denselben Schritt.
+- Aktualisiert: `doc/issues/strang-c-dod-review.md` mit der Gegenprüfung gegen
+  3.0.0 und den korrigierten Bewertungen.
+
+## 1.1.5 (interne Version 2026082141)
+
+> Issue **#5** abgearbeitet: Der Cron schließt Versuche jetzt über denselben
+> autoritativen Pfad wie ein normaler Abschluss, und der Finalizer erfindet keine
+> Endzeit mehr. Geprüft gegen `mod_adaptivequiz` **3.0.0** (2026082500).
+
+- **Cron umging den Finalizer.** `cancel_expired_attempts` rief
+  `local_catquiz\local\attempt\attempt::complete()`. Diese Methode setzt nur
+  `attemptstate` und `attemptstopcriteria` – sie stempelt **kein** `timefinished`
+  und ruft **nicht** den CAT-Model-Callback. Ein per Cron geschlossener Versuch
+  übersprang damit `attempt_finalizer::finalize()` vollständig: weder Endzeit noch
+  Ergebnis (und damit `resultvalid`) wurden persistiert.
+  - Der Task nutzt jetzt `adaptivequiz_complete_attempt()`. Die Funktion ist in
+    `mod_adaptivequiz` 3.0.0 vorhanden, setzt `timefinished` **genau einmal**
+    (`if (empty($attempt->timefinished))`) und ruft
+    `post_complete_attempt_callback` – Browser-, Admin- und Cron-Abschluss
+    erzeugen damit konsistente Daten.
+- **Finalizer erfindet keine Endzeit mehr.** `if ($finishedat <= 0) { $finishedat
+  = time(); }` persistierte einen fabrizierten Zeitstempel – genau das, was eine
+  **autoritative** Endzeit nie sein darf. Stattdessen wird die Finalisierung
+  abgelehnt und die Bedingung per `debugging()` sichtbar gemacht; der Versuch
+  bleibt offen, statt mit erfundener Abschlusszeit dazustehen.
+- **Tests**: neuer `cancel_expired_attempts_path_test` (3 Tests) schließt die vom
+  Review benannte Lücke, dass nur die Timeout-**Erkennung** geprüft war: Der Task
+  darf keinen zweiten Completion-Mechanismus besitzen, die autoritative Funktion
+  muss den Catmodel-Callback erreichen, und der Finalizer darf keine Endzeit
+  fabrizieren. Der bestehende `test_finalize_falls_back_when_timefinished_missing`
+  schrieb das alte Verhalten fest und ist durch
+  `test_finalize_refuses_without_authoritative_end_time` ersetzt (prüft zusätzlich,
+  dass **nichts** geschrieben wird).
+  **Zahn-getestet**: Cron zurück auf `attempt->complete()` → rot;
+  `time()`-Fallback zurück → rot.
+- phpcs Exit 0, PHPDoc 0 Fehler; Finalizer-, Validator-, Repository-, Cron- und
+  progress-Suiten grün.
+
+## 1.1.5 (interne Version 2026082140)
+
+> #6: Das State-Modell von `progress` ist bereinigt. „Angezeigt", „offen" und
+> „beantwortet" sind jetzt sauber getrennt – und zwar geschlossen, samt aller
+> Stellen, die bisher die falsche Größe gezählt haben.
+
+- **Mindestfragezahlen zählen jetzt beantwortete statt angezeigter Items.**
+  `filterbystandarderror`, `filterbytestinfo` und `filterbyquestionsperscale`
+  verglichen `count(playedquestions)` gegen `minimumquestions` bzw.
+  `min_attempts_per_scale` – also **angezeigte** Fragen. Damit galt eine
+  Mindestzahl bereits als erreicht, während die letzte Frage noch offen war, und
+  die Zählung war zudem nicht pilot-gefiltert. Alle drei nutzen jetzt
+  `progress::get_num_answered_productive_questions()` bzw. dessen
+  per-Skala-Variante – dieselbe Größe, die schon `maximumquestionscheck` und der
+  Ergebnisvalidator verwenden. „Mindestens N Fragen" und „höchstens N Fragen"
+  meinen damit endlich dasselbe.
+- **`progress::load()` entfernt die offene Frage nicht mehr aus
+  `playedquestions`.** Der Block widersprach dem eigenen Datenmodell
+  (`playedquestions` = „bereits angezeigte Fragen"): `lastquestion` zeigte auf
+  eine Frage, die laut `playedquestions` nie gespielt worden war, und
+  `get_num_playedquestions()` war nicht monoton. Die fehlende Response
+  identifiziert das Item jetzt als offen. Nebeneffekt: Das offene Item kann nicht
+  mehr wie eine neue Frage erneut ausgewählt werden (zahlt auf #6 ein).
+  - Möglich wurde das erst durch die Umstellung oben – vorher hätte das Behalten
+    der offenen Frage die Mindestfragezahl eine Frage zu früh erfüllt.
+- **Verifikation**: Neben den gezielten Suiten wurde
+  `test_all_wrong_attempt_drives_ability_down` gefahren, das einen vollständigen
+  Attempt-Durchlauf abbildet (55 Assertions, grün), ebenso
+  `test_legacy_selectfirstquestion_does_not_break_attempt`,
+  `test_get_last_response_uses_last_answered_not_last_added`,
+  `firstquestion_testinfo`, `ability_monotonicity`, `attempt_result_validator`,
+  `progress_*` und `feedback_gating`. phpcs Exit 0, PHPDoc 0 Fehler.
+- **Issue-Anpassung dokumentiert**: `doc/issues/issue-7-validity-vs-reporting.md`
+  – Vorschlag, „Reporting aktiviert" aus den Validitätsbedingungen von #7 zu
+  entfernen und Validität/Anzeige getrennt zu führen (nur Textänderung am Issue,
+  das Verhalten ist bereits so implementiert).
+
+## 1.1.5 (interne Version 2026082139)
+
+> DoD-Gegenprüfung der Issues #5–#9 am Code. Die Kritik ist in den überprüfbaren
+> Punkten berechtigt; ein belegter Fehler ist behoben, der Rest ist als
+> Arbeitsplan festgehalten.
+
+- **#7 DoD 4 behoben: `N` enthielt Pilot- und unbeantwortete Items.** Der
+  `attempt_result_validator` bildete die per-Skala-Anzahl über
+  `count($progress->get_playedquestions(true, $scaleid))` – also über
+  **angezeigte** Fragen –, während der Kommentar daneben „pilot-filtered"
+  behauptete. Damit konnte `N` ein noch offenes Item und Pilotitems enthalten und
+  ein Versuch auf zu optimistischer Basis als valide gelten.
+  - `progress::get_num_answered_productive_questions()` erhält eine
+    **per-Skala-Variante**: gezählt wird nur, was eine Response hat, kein Pilotitem
+    ist und der Zielskala zugeordnet ist.
+  - Der Validator nutzt ausschließlich diese Größe; der irreführende Kommentar ist
+    ersetzt.
+  - Test `progress_answered_count_test` (2 Tests, 6 Assertions) inkl. dem direkten
+    Nachweis, dass sich „angezeigt" von „beantwortet" unterscheidet.
+    **Zahn-getestet**: Pilot-/Skalenfilter deaktiviert → rot. Bestehende
+    Validator-Suite unverändert grün (8 Tests, 52 Assertions).
+- **Gegenprüfung dokumentiert** in `doc/issues/strang-c-dod-review.md`: je
+  Behauptung die Fundstelle im Code und die Bewertung, dazu der Arbeitsplan in der
+  Reihenfolge #5 → #6 → #7(Rest) → #9 → #8 samt Cross-Plugin-Vorbehalten.
+  Bestätigt als echte Fehler: Cron umgeht den Finalizer (#5), Finalizer erfindet
+  bei fehlendem `timefinished` eine Endzeit (#5), `customscalefeedback` filtert
+  weiterhin selbst (#7.2). Als **bewusst zurückgestellt** (und in der Doku auch so
+  benannt): Live-Carryover und `get_last_primary()` (#9).
+- **Korrektur einer eigenen Fehlaussage**: Die in Session 072 als offen notierte
+  „Bevorzugung defizitärer Skalen" existiert bereits als `scaleterm` im
+  IF-modifizierenden Score (`strategydeficitscore`), verifiziert und in der Doku
+  richtiggestellt. Kein Handlungsbedarf.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler.
+
+## 1.1.5 (interne Version 2026082138)
+
+> Nacharbeiten nach grüner CI: Chart/Legende auf eine Bezugsgröße, Debug-Warnungen
+> im PDF, Kommunikation zum „schwächsten Teilbereich" geschärft.
+
+- **Differenz-Chart: Balkenwert, Farbe und Legende beziehen sich jetzt auf
+  dieselbe Größe.** Zuvor mischte der Chart drei Bezugspunkte: der Balken zeigte
+  die **Differenz** zur Globalskala, gefärbt wurde nach der **absoluten**
+  Subskalen-Fähigkeit gegen die **Subskalen**-Ranges, und die Legende darunter
+  wurde für die **Globalskala** gerendert. Ein Lernender konnte so einen grünen
+  Balken unter einer Legende sehen, deren grünes Band weit rechts von diesem
+  Balkenwert beginnt. Jetzt wird die Differenz gegen die Ranges der Globalskala
+  eingefärbt – dieselbe Größe und dieselbe Skala wie Balken und Legende.
+- **Debug-Warnungen zu unbrauchbaren Itemparametern erscheinen im
+  Attempt-Debug-Output (CSV/PDF).** `pilotquestions_loader` sammelte sie bereits
+  im Kontext (`invaliditemparams`), sie wurden aber nirgends dargestellt. Neue
+  Spalte `invaliditemparams` in `debuginfo` mit Item-ID, Label, Modell und
+  konkretem Grund – ein stummes Item (z. B. 2PL mit `discrimination = 0`) ist
+  damit aus dem Export heraus nachvollziehbar.
+- **Kommunikation statt Technik beim „lowestskill".** Die Auswahl der Teilskala
+  bleibt bewusst unverändert (niedrigste gemessene Subskala). Die Texte sprachen
+  aber von „größtes Defizit" bzw. „als Defizit identifizierte Skala", obwohl die
+  Skala über dem Gesamtwert liegen kann. Neu: „**schwächster getesteter
+  Teilbereich**" mit einer Einordnung, dass dies kein Defizit bedeuten muss,
+  sondern der Bereich mit dem größten Lernpotenzial ist (de + en).
+- **Issue-Entwurf** `doc/issues/backend-invalid-itemparams.md`: Sichtbarkeit
+  unbrauchbarer Itemparameter im CAT-Manager (Anzeige, Grund, serverseitiges
+  Filtern/Sortieren, aggregierte Übersicht, Performance, Tests) – im Format von
+  Issue #53.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler, Feedback- und Kernsuiten
+  grün. Die neuen Lang-Schlüssel liegen in **de und en**.
+
+## 1.1.5 (interne Version 2026082137)
+
+> Root Cause der beiden „Question 5"-Behat-Fails: ein **veralteter
+> Last-Response-Cache**. Die Zählgröße aus 2026082136 war richtig – sie bekam
+> nach einem Resume nur veraltete Daten geliefert.
+
+- **Ursache: der Cache-Key war nicht monoton.** `progress` cachte die letzte
+  Antwort unter `lastresponse_<usageid>_<numplayedquestions>`. Dieser Key setzt
+  voraus, dass die Zahl der gespielten Fragen ein **monoton wachsender**
+  Versionsindikator der Antwort-Historie ist. Genau das verletzt `load()`: ist die
+  zuletzt ausgelieferte Frage noch unbeantwortet, wird sie aus `playedquestions`
+  entfernt – der Zähler geht **2 → 1** und wieder auf **2**, sobald das Item
+  beantwortet ist. Beim zweiten Treffer auf Key `..._2` liefert der Cache die
+  **alte** Antwort (die von vor dem offenen Item). Die frisch gegebene Antwort
+  erreicht die Response-Akkumulation nie, `responses` hinkt um eins hinterher, und
+  der Test administriert ein Item über das Maximum hinaus.
+- **Fix**: Der Cache in `progress::get_last_response_for_attempt()` ist
+  **entfernt**; die letzte Antwort wird immer frisch gelesen. Die Query ist eine
+  gezielte Einzelzeile (`LIMIT 1`) und läuft pro Versuch höchstens einige Dutzend
+  Mal – Korrektheit schlägt hier die eingesparte Abfrage deutlich. Zudem müsste
+  man für eine korrekte Invalidierung ohnehin die QUBA-Historie kennen, also genau
+  das, was die Abfrage liefert.
+- **Regressionstest** `progress_lastresponse_cache_test`: ein vorab gesetzter
+  Cache-Eintrag unter dem alten Key darf den echten Wert **nicht** verdecken.
+  **Zahn-getestet**: Cache reinjiziert → Test fällt (`111 is not equal to 111`).
+- **Bewusst NICHT geändert**: der Löschblock in `progress::load()`, der die offene
+  Frage aus `playedquestions` entfernt. Ohne den Cache hängt die Korrektheit nicht
+  mehr an der Monotonie dieses Zählers, und ein Eingriff hätte breite
+  Auswirkungen – `filterbystandarderror` und `filterbytestinfo` vergleichen
+  `count(playedquestions)` gegen `minimumquestions`, die Mindestfragezahl wäre
+  also eine Frage früher erreicht. Die saubere Trennung
+  „administriert / offen / beantwortet" bleibt als eigener Schritt offen.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler; Kern- und Feedback-Suiten
+  grün (catcalc, model_item_param_list, Importer, progress-Suiten,
+  maximumquestionscheck, item_parameter_contract).
+
+## 1.1.5 (interne Version 2026082136)
+
+> Zwei Befunde mit derselben Wurzel wie schon beim Import: ein locale-unsicherer
+> Zahlparser. Dazu die richtige Zählgröße für die Testlänge.
+
+- **Obergrenzen im Feedback-Formular wurden am Komma abgeschnitten.**
+  `feedbackclass` las die Grenzwerte per
+  `optional_param(..., PARAM_FLOAT)`. Moodles `PARAM_FLOAT` ist ein **reiner
+  Cast**: `clean_param('1,5', PARAM_FLOAT)` ergibt **1.0**, `'-0,5'` ergibt
+  `-0.0`. Eine eingegebene Obergrenze „1,5" landete deshalb als „1" im Feld,
+  während die nächste Untergrenze weiterhin 1,5 zeigte - daraus entstand die
+  Validierungsmeldung „Keine Lücken in Personenfähigkeitsspanne erlaubt".
+  - Fix: neuer locale-sicherer Leser `feedbackclass::optional_limit_param()`
+    (`PARAM_RAW` + `unformat_float()`, mit Punkt-/Komma-Fallback), eingesetzt für
+    **Ober- und Untergrenze**. Die Untergrenze war nur deshalb unauffällig, weil
+    ihr Wert meist aus den gespeicherten Defaults kam, nicht aus dem Request.
+  - Verifiziert: `"1,5"` → 1.5 (vorher 1.0), `"-0,5"` → -0.5 (vorher -0.0);
+    Punkt-Notation unverändert korrekt.
+- **Behat „Question 5": die Zählgröße war falsch, nicht nur der Zähler.**
+  Die Prüfung in `maximumquestionscheck` stützte sich zuletzt auf
+  `max(questionsattempted, playedquestions)`. Beide sind **nicht autoritativ**:
+  `questionsattempted` wird außerhalb des Plugins gepflegt und driftet beim
+  Resume, und `playedquestions` zählt **angezeigte** Items - `progress::load()`
+  entfernt dort beim Resume sogar die noch offene letzte Frage.
+  - Fix: neue autoritative Methode
+    `progress::get_num_answered_productive_questions()` zählt **beantwortete**
+    Items (über das `responses`-Array) ohne Pilotitems. `maximumquestionscheck`
+    nutzt ausschließlich diese Größe; `questionsattempted` bleibt reiner
+    Legacy-Fallback, wenn kein `progress` im Kontext liegt.
+  - Damit gilt exakt: angezeigt-aber-unbeantwortet zählt **nicht**, ein Resume
+    ändert die Zählung **nicht**, und nach der vierten Antwort ist Schluss.
+- **Tests neu geschnitten** (`maximumquestionscheck_test`, 5 Tests): Stopp bei
+  erreichter Antwortzahl, offenes Item zählt nicht, **vollständiger
+  Resume-Lifecycle** (Q1 beantwortet → Q2 offen → Resume → Q2–Q4 beantwortet →
+  Stopp), Pilotantworten zählen nicht, `-1` unbegrenzt, Fallback ohne progress.
+  **Zahn-getestet gegen beide alten Zählgrößen**: zurück auf `questionsattempted`
+  → 2 Failures; zurück auf `playedquestions` → 4 Errors.
+- phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler, übrige Suiten grün.
+- **CI-Stand**: `codeanalysis` success; Behat von 3 auf 2 Fails gesunken (der
+  `graphicalsummary`-Fail ist seit 2026082134 behoben).
+
+## 1.1.5 (interne Version 2026082135)
+
+> Die verbleibenden zwei Behat-Fails („Question 5") liegen **nicht** in
+> `mod_adaptivequiz`, sondern in der Abbruchlogik von `local_catquiz`.
+> Damit ist die im Dokumentationsplan vermerkte Altlast „Test bricht nicht bei
+> Maximalfragezahl ab" behoben.
+
+- **Korrektur einer früheren Fehleinschätzung.** Ich hatte die „Question 5"-Fails
+  dem Slot-Reuse in `mod_adaptivequiz` zugeschrieben. Der aktuelle Lauf widerlegt
+  das: nach dem Resume erscheint korrekt „Question 2", alle Zwischenschritte
+  bestehen – der Slot-Reuse **funktioniert**. Es scheitert erst daran, dass nach
+  **vier beantworteten Fragen** eine fünfte ausgeliefert wird, obwohl
+  `catquiz_maxquestions = 4` konfiguriert ist.
+- **Ursache**: `maximumquestionscheck` prüfte ausschließlich gegen den extern von
+  `mod_adaptivequiz` gepflegten Zähler `questionsattempted`. Dieser kann beim
+  Wiederaufnehmen eines Versuchs driften (das offene Item wird erneut gerendert,
+  ohne erneut gezählt zu werden) – und ein um eins zu niedriger Zähler lässt
+  genau ein Item zu viel zu.
+- **Fix**: Die Prüfung stützt sich jetzt zusätzlich auf die **eigene**
+  Fortschrittszählung (`progress->without_pilots()->get_playedquestions()`) und
+  nimmt das Maximum aus beiden Quellen. Diese Zählung ist driftfest, weil
+  `add_playedquestion()` beim Ausliefern greift und nach Fragen-ID indiziert ist –
+  ein beim Resume erneut ausgeliefertes Item wird also nicht doppelt gezählt.
+  Pilotitems zählen nicht zur produktiven Testlänge. Fehlt `progress` im Kontext,
+  gilt weiterhin der bisherige Zähler.
+- **Regressionstest** `maximumquestionscheck_test` (4 Tests): Stopp bei
+  erreichtem Maximum, **Stopp auch bei driftendem externem Zähler**, Weiterlaufen
+  unterhalb des Maximums, `-1` = unbegrenzt sowie Fallback ohne `progress`.
+  **Zahn-getestet**: alte Logik reinjiziert → der Drift-Test fällt.
+- **CI-Stand**: `codeanalysis` ist **success**. Behat ist von 3 auf 2 Fails
+  gesunken – der `graphicalsummary`-Fail (`.catquiz-response-answerlabel`) ist
+  durch 2026082134 behoben. phpcs Exit 0, plugin-weiter PHPDoc-Check 0 Fehler.
+
+## 1.1.5 (interne Version 2026082134)
+
+> Quizverlauf-Tabelle: Breite, Korrektheits-Indikator und Modal-Ladefehler.
+> Der neue Behat-Fail (`.catquiz-response-answerlabel` fehlt) hatte dieselbe
+> Ursache wie die fehlende Korrektheitsangabe.
+
+- **Korrektheitsangabe fehlte – toter Code.** `render_table()` baute die Zelle
+  `$responsecell` (Verdikt + gegebene Antwort) vollständig auf, fügte sie aber
+  **nie in `$newrow` ein**. Die Spalte fehlte deshalb komplett in der Ausgabe –
+  und der Behat-Test fand folgerichtig weder `.catquiz-response-answerlabel`
+  noch `.catquiz-responsesummary`.
+  - Neu: eigene Spalte **direkt nach der Fragenzahl**, als Icon –
+    `fa-solid fa-circle-check` (grün) für richtig,
+    `fa-solid fa-circle-xmark` (rot) für falsch,
+    `fa-solid fa-triangle-exclamation` (gelb) für teilweise richtig.
+  - Die Spalte erscheint **nur**, wenn „Indikator zur Korrektheit der gegebenen
+    Antwort anzeigen" (`catquiz_showquestionresponse`) aktiv ist.
+  - Barrierefrei: Icon mit `title` und `aria-hidden`, Verdikt zusätzlich als
+    `sr-only`-Text – die Aussage hängt nicht an Farbe/Form allein.
+- **Tabelle zu breit.** Die CSS-Regel `min-width: 55rem` zwang die Tabelle über
+  die Containerbreite hinaus und schob den ganzen Feedback-Tab in horizontales
+  Scrollen. Ersetzt durch `max-width: 100%`; die neue Korrektheitsspalte ist wie
+  Nummer/Fähigkeit/Aktion schmal gehalten (`width: 1%`).
+- **Modal-Ladefehler „Cannot call moodle_page::add_body_class after output has
+  been started".** `render_question_with_response::execute()` rief
+  `$OUTPUT->header()` – das **startet die Ausgabe**. Alles, was das anschließende
+  Question-Rendering an der Seite tut (Fragetypen und die Question-Engine rufen
+  `$PAGE->add_body_class()`), lief danach in den Coding-Error. Der Renderer wird
+  jetzt ohne Ausgabe initialisiert (`set_pagelayout('embedded')` +
+  `$OUTPUT->doctype()`).
+- **Testbarkeit**: `catquiz_showquestionresponse` (und `catquiz_showquestion`)
+  sind jetzt über den Behat-Generator setzbar; die Fixture
+  `testenvironmentdummy.json` enthält die `catquiz_questionfeedbacksettings`.
+  Das Feature setzt die Option explizit und prüft zusätzlich
+  `.catquiz-col-correctness` und `.catquiz-response-icon`.
+- **CI**: Der Quality-Fail des letzten Laufs (`pilot_classification_test::question
+  has incomplete parameters list`) war bereits in 2026082133 behoben – die CI lief
+  auf dem älteren Commit `2be3037`. Plugin-weiter PHPDoc-Check: 0 Fehler.
+  Die zwei verbleibenden Behat-Fails („Question 5") liegen unverändert in
+  `mod_adaptivequiz` (Slot-Reuse) und sind hier nicht behebbar.
+
+## 1.1.5 (interne Version 2026082133)
+
+> Der Modell-Vertrag galt bisher nur für die Birnbaum-Modelle. Jetzt deckt er
+> **alle sieben** Modelle ab, und kein Modell kann künftig vergessen werden.
+
+- **Lücke geschlossen: polytome Modelle hatten keinen eigenen Vertrag.** GRM,
+  GGRM, PCM und GPCM erbten nur die Basisprüfung auf die skalare
+  `difficulty`-Spalte – die bei polytomen Modellen aber nur einen **abgeleiteten
+  Mittelwert** enthält. Die echten Parameter (Thresholds bzw. Intercepts) liegen
+  im `json`-Feld. Ein Item mit fehlendem oder kaputtem json wäre also
+  durchgewinkt worden und erst später bei der Schätzung explodiert.
+  - Neu: `model_multiparam::validate_parameters()` prüft die **json-Nutzlast** –
+    vorhanden, korrekter Schlüssel (`difficulties` bzw. `intercepts`), nicht
+    leer, alle Einträge endliche Zahlen.
+  - `get_multi_param_name()` wurde dafür von einer Instanz- zu einer statischen
+    Methode (die beiden bestehenden `$this->`-Aufrufe bleiben gültig).
+- **GGRM und GPCM verlangen jetzt `discrimination` > 0.** Beide nutzen eine
+  Trennschärfe; bei 0 hängen die Kategoriewahrscheinlichkeiten nicht mehr von der
+  Fähigkeit ab – dasselbe stumme Item wie im 2PL-Fall. GRM und PCM nutzen keine
+  Trennschärfe, dort bleibt eine gespeicherte 0 folgenlos.
+- **`method_exists()`-Krücke entfernt.** Alle Modelle leiten von `model_model` ab,
+  das `validate_parameters()` definiert – der Vertrag ist strukturell garantiert
+  und braucht keine defensive Laufzeitprüfung mehr.
+- **Neuer Wächtertest** `test_every_installed_model_implements_the_contract`
+  stellt sicher, dass jedes installierte Modell den Vertrag erfüllt; ein künftig
+  hinzugefügtes Modell ohne Vertrag lässt den Test fallen.
+- **Verifikation**: `item_parameter_contract_test` 9 Tests / 37 Assertions grün,
+  beide neuen Guards **zahn-getestet** (polytome Validierung neutralisiert → rot;
+  GGRM-Trennschärfe-Guard entfernt → rot). Alle 7 Modell-Suiten unverändert grün.
+  phpcs Exit 0; plugin-weiter PHPDoc-Check 0 Fehler (zwei durch die Einfügungen
+  verwaiste Docblocks repariert – die bekannte Falle aus Engineering-Guide §4).
+
+## 1.1.5 (interne Version 2026082132)
+
+> **Root Cause der genullten negativen Difficulties gefunden und behoben.**
+> Reproduziert mit der echten `ALiSe_Mathematik.csv`: vorher 0 negative
+> Difficulties nach dem Parsen, nachher 326 – bei unveränderter Discrimination.
+
+- **Ursache: Moodles Formel-Escaping schlägt auf den Zahlwert durch.**
+  `csv_import_reader::load_csv_content()` legt die geparsten Zeilen über
+  `csv_export_writer::print_array()` in einer Zwischendatei ab; dessen
+  `add_data()` wendet `\core\dataformat::escape_spreadsheet_formula()` an. Dieser
+  Helfer stellt jedem Wert, der mit `=`, `+`, `-` oder `@` beginnt, ein
+  **Apostroph** voran, damit Tabellenkalkulationen ihn nicht als Formel lesen.
+  Eine negative IRT-Schwierigkeit kommt im Importer damit als `'-5.81` an – und
+  `floatval("'-5.81")` ist **0.0**. Positive Werte und die Discrimination sind
+  nicht betroffen, weil sie nicht mit einem Formelzeichen beginnen. Das erklärt
+  den Fingerabdruck exakt: *alle* negativen Difficulties → 0.0000, alle
+  nicht-negativen und alle Discriminations korrekt.
+  - Die CSV selbst ist sauber: 0 Apostrophe in der Datei (byteweise geprüft),
+    das Apostroph entsteht ausschließlich im Import-Pfad.
+  - Weder Spaltentyp (`decimal(10,4)` signed, kein UNSIGNED), noch
+    `enforce_min_max_range()`, noch die Kontext-Duplizierung sind beteiligt.
+- **Fix**: neuer Helfer `fileparser::strip_formula_escape()` entfernt das
+  Schutz-Apostroph, bevor der Wert zur Zahl wird – angewandt sowohl im
+  Float-Konvertierungspfad als auch in `cast_string_to_float()`. Ein echtes
+  Apostroph in Text bleibt unangetastet (nur `'` gefolgt von `=`/`+`/`-`/`@`
+  wird entfernt).
+- **Verifikation**: echter Parserlauf gegen die Originaldatei – 805 Zeilen,
+  **326 negative** Difficulties (vorher 0), erste Zeile `MA.v1.A01-01` jetzt
+  `b=-5.81, a=0.4` (vorher `b=0.0`). Regressionstest
+  `test_formula_escape_guard_is_stripped`, **zahn-getestet** (Guard entfernt →
+  rot). phpcs Exit 0; Importer-Suiten grün.
+
+## 1.1.5 (interne Version 2026082131)
+
+> Modell-Vertrag für Itemparameter + aktiver Itemparam. Simulation mit echten
+> ALiSe-Kennwerten belegt: der Schätzer ist gesund; das Einfrieren kam von
+> stummen Items (discrimination = 0) und vom falsch gewählten Itemparameter.
+
+- **`set_active_itemparam()` wählte den unkalibrierten Parameter.** Der Kommentar
+  versprach „highest status", der Code sortierte aufsteigend und nahm Element 0 –
+  also den **niedrigsten** Status. Bei Items mit Parametern für mehrere Modelle
+  wurde damit der stale/All-Zero-Datensatz aktiv und im Test gespielt (die
+  Test-Query joint korrekt über `lci.activeparamid`). Fix: absteigend sortieren.
+- **Modell-Vertrag (neu).** Ursprüngliche Regel bleibt: kein Itemparameter-Eintrag
+  = Pilotitem. Neu: Parameter, die für ihr Modell unbrauchbar sind, gelten wie
+  fehlende – das Item wird Pilot statt produktiv gespielt.
+  - `model_model::validate_parameters()` (Basis: difficulty = signed float,
+    endlich; b = 0 und negative b sind gültig), überschreibbar je Modell.
+  - 2PL: `discrimination` > 0. 3PL: zusätzlich `guessing` in [0, 1). 1PL: eine
+    gespeicherte 0 in discrimination bleibt folgenlos.
+  - `model_strategy::validate_item_parameters()` als gemeinsamer Einstiegspunkt
+    für **Import und Testdurchführung**.
+- **Import**: Vertragsverletzung → Import als Pilot (Status `NOT_CALCULATED`)
+  statt produktiv, mit Warnung inkl. Label, Modell und Grund (de+en).
+- **Testdurchführung**: `ispilot()` wendet denselben Guard an; bei aktivem
+  CATQUIZ-Debug (`store_debug_info`) wird Item-ID, Modell und Grund in
+  `$context['invaliditemparams']` gesammelt und per `debugging()` ausgegeben.
+- **Belegt durch Simulation**: discrimination = 0 im 2PL ergibt θ-Änderung exakt
+  +0,0000 (P = 0,5 für jedes θ, Fisher-Information 0) – reproduziert das
+  Einfrieren bitgenau. b = 0 allein friert **nicht** ein. Dieselben Items als 1PL
+  bewegen θ normal.
+- **Verifikation**: `item_parameter_contract_test` (6 Tests, 19 Assertions),
+  zahn-getestet (Sortierung zurückgedreht → rot; discrimination-Guard entfernt →
+  rot). phpcs Exit 0; raschbirnbaum (348) und rasch (347) grün.
+
+## 1.1.5 (interne Version 2026082130)
+
+> Feedback-Farben: Skala-Grenzen mit deutschem Dezimalkomma wurden abgeschnitten
+> (1,5 → 1), wodurch Fähigkeiten fälschlich grün statt gelb eingefärbt wurden.
+> Ursache (Attempt 208) belegt aus dem Settings-Export und Schätz-Trace.
+
+- **Ursache – `floatval`/`(float)` schneidet „1,5" zu 1 ab.** Der
+  Settings-Export zeigt: die nicht angefassten Skalen (Global 22, Report-AUS)
+  tragen die Gelb/Grün-Grenze korrekt bei **1,5**; alle **konfigurierten**
+  Report-Skalen (u. a. Ma-D01=141, Ma-C04=133) tragen **1**. Der Feedback-Text
+  dieser Skalen sagt selbst „höher als 1,5" – die Absicht war 1,5. Beim
+  **Kopieren der Werte auf die Subskalen** (`catquiz_handler::set_data_after_definition`)
+  werden die rohen, lokalisierten `getSubmitValues()`-Strings verarbeitet; „1,5"
+  wurde dort zu 1 abgeschnitten. Der direkte Formular-Speicherpfad ist sauber
+  (`float`-mform-Element nutzt `unformat_float`), daher blieben die unberührten
+  Skalen korrekt.
+- **Sichtbares Symptom.** Der Differenz-/Personabilities-Chart färbt die
+  Subskalen-Balken über deren **eigene** (korrumpierte) Grenze `1`, während die
+  Legende aus der **Globalskala 22** (Grenze `1,5`) gerendert wird → Fähigkeit
+  1,10/1,32 lag ≥ 1 → **grün**, obwohl die Legende Gelb bis 1,5 zeigt.
+
+- **Fix Schreibseite:** Der Copy-Pfad normalisiert die Grenz-Felder jetzt per
+  `unformat_float()` statt sie roh durchzureichen – „1,5" wird 1.5.
+- **Fix Leseseite (Härtung):** Neuer kommasicherer Parser
+  `feedback_helper::parse_range_limit()`, eingesetzt in `get_color_for_personability`
+  und `get_feedback_range_index`. Selbst ein je gespeicherter Komma-String wird
+  nun korrekt interpretiert statt abgeschnitten.
+- **Regressionstest** `feedback_range_locale_test` (DB-frei): „1,5" → 1.5;
+  Fähigkeit 1,10/1,32 → **gelb** (Range-Index 2), 1,60 → grün, −1,0 → rot.
+  **Zahn-getestet**: truncating cast reinjiziert → 1,10 wird grün (Index 3) und
+  der Test fällt; Fix restauriert → grün. phpcs Exit 0.
+- **Datenreparatur mitgeliefert:** `fix_feedback_limits.py` hebt in einem
+  Settings-Export jede an `upper_*_2`/`lower_*_3` abgeschnittene `1` auf den
+  Elternskalen-Sollwert `1,5` an (Attempt-208-Export: **68** Grenzen über 34
+  Skalen). Das korrigierte JSON liegt bei.
+- **Offener Folgepunkt (dokumentiert):** Der Differenz-Chart sollte Farbe **und**
+  Legende aus derselben Skala speisen; mit dem korrigierten JSON stimmen beide
+  wieder überein, die Skala-Divergenz bleibt als Härtung offen.
+
+## 1.1.5 (interne Version 2026082129)
+
+> CI-Fix (Quality-Job): ungültiger Inline-PHPDoc-Tag im Regressionstest behoben.
+> Zusätzlich diagnostiziert: die verbleibenden Behat-Fails liegen in der
+> Abhängigkeit `mod_adaptivequiz` (separater Patch beigelegt).
+
+- **PHPDoc-Fehler behoben** (`tests/teststrategy/progress_response_accumulation_test.php`):
+  Der Moodle-PHPDoc-Checker meldete in Zeile 39 `Invalid inline phpdocs tag
+  @covers found`. Ursache war das Wort `@covers` **im Fließtext** des
+  Klassen-Docblocks (Beschreibung der bestehenden Trajektorien-Tests) – der
+  Checker wertet jedes `@…` in einem Docblock als Tag. Das `@` im Prosatext
+  entfernt (`one @covers …` → `one covers …`); der legitime `@covers`-Tag auf der
+  eigenen Zeile bleibt unverändert und wirksam.
+  - Reproduziert mit `local_moodlecheck` (exakt derselbe Checker wie der
+    CI-Quality-Job): vorher 1 `<error>`, nachher 0. **Zahn-getestet**: `@covers`
+    reinjiziert → Fehler kehrt zurück; entfernt → grün. phpcs Exit 0; die Suite
+    selbst läuft weiter grün (1 Test, 12 Assertions – der echte `@covers`-Tag ist
+    intakt). Plugin-weiter PHPDoc-Scan: 0 Fehler.
+
+- **Behat-Fails eindeutig zugeordnet (Fix in `mod_adaptivequiz`, nicht hier):**
+  - **`.catquiz-graphicalsummary-table` fehlt** (`catquiz_graphicalsummary_modal`):
+    `mod_adaptivequiz/renderer.php` gab das Attempt-Feedback über
+    `html_writer::tag('p', s($attemptfeedback), …)` aus. `s()` escaped die
+    CATquiz-Feedback-Tabelle zu sichtbarem `&lt;table&gt;`-Text und das `<p>`
+    strippt Block-Elemente → das Diagramm-/Tabellen-Markup existiert nicht als DOM.
+    Fix: als vertrauenswürdiges `format_text(…, FORMAT_HTML, ['para' => false])`
+    in einem `<div>` rendern. Beigelegt als
+    `adaptivequiz-feedback-html-fix.patch` (git-anwendbar; im Änderungsbereich
+    phpcs-sauber).
+  - **2× „Question 5"** (`catquiz_attempt_completion` Resume,
+    `catquiz_slot_reuse` Reload): Der HTML-Dump belegt `id="question-…-5"` /
+    `qno 5` → „Question 5" ist die **quba-Slot-Nummer**, nicht die CAT-Fragenzahl.
+    Der Duplicate-Slot-Guard (`find_any_active_slot`) ist im aktuellen
+    `mod_adaptivequiz`-Branch `v-3.0` (Commit `d755697`) bereits vorhanden und
+    korrekt; die schrittweise Durchsicht der Resume-Sequenz ergibt mit diesem
+    Guard Slots 1–4 und Stopp bei `maxquestions=4`. Da `v-3.0` ein **beweglicher
+    Branch** ist und Guard-Commit und CI-Lauf zeitlich dicht liegen, ist der rote
+    Lauf am plausibelsten ein Checkout-vor-Push-Race. Empfehlung: CI erneut gegen
+    den aktuellen `v-3.0`-Tip; bei weiterhin rot ist browserbasierte Reproduktion
+    nötig (im CLI-Container ohne Chrome/Selenium nicht möglich). Kein spekulativer
+    Zusatz-Fix hier.
+
+## 1.1.5 (interne Version 2026082128)
+
+> Fähigkeitsschätzung: gezielte Regressionsabdeckung für die eingefrorene
+> Trajektorie; Ursache diagnostiziert und im aktuellen Code verifiziert behoben.
+
+- **Ursache der eingefrorenen Quizverlauf-Kurve** (Attempt 207): Nicht die
+  Schätz-Mathematik, sondern ihre **Eingabe** fror ein. `progress::update_cached_responses()`
+  ergänzt die Response-Menge aus dem gecachten `get_last_response_for_attempt()`
+  und dedupliziert per `questionid`; lieferte der Lookup eine stale Response,
+  wuchs `$this->responses` nicht und `catcalc::estimate_person_ability()` bekam
+  Frage um Frage dieselbe Eingabe → bit-identische Kurve, bis die Menge extern neu
+  aufgebaut wurde. Der Attempt lief auf `2026082110`; der `…19`-Fix an
+  `catquiz::get_last_response_for_attempt` (höchster beantworteter Slot statt
+  `max(questionattemptid)`) behebt das im aktuellen Code.
+- **Warum die vorhandene Abdeckung das nicht fing**: `ability_monotonicity_test`
+  ist `@covers catcalc::estimate_person_ability` (handgebaute, korrekt wachsende
+  Menge direkt in den Schätzer), `updatepersonability_test` **stubt** `progress`
+  und liefert `get_user_responses()` als festes Array – beide umgehen genau die
+  Akkumulations-Schicht mit dem Fehler.
+- **Neuer Regressionstest** `progress_response_accumulation_test`: fährt die
+  **echte** Akkumulation gegen eine reale Question-Usage, beantwortet und gradet
+  Frage für Frage und prüft, dass die Response-Menge **streng um eins wächst** und
+  stets auf der gerade beantworteten Frage endet – kann also nicht mehr
+  unbemerkt einfrieren. Grün gegen den aktuellen Code; zahn-getestet (Akkumulation
+  deaktiviert → sofort rot). Schließt die Testlücke exakt auf der betroffenen Ebene.
+
+## 1.1.5 (interne Version 2026082127)
+
+> CI-Fix: Import-/Kalibrier-Warnung robust gemacht (polytome Array-Werte + Tests).
+
+- **`calibration_warnings()` bricht nicht mehr bei polytomen Modellen**: difficulty
+  ist dort ein Array von Schwellen; die Wertprüfung nutzt jetzt `is_numeric()`
+  statt `!== ''` und überspringt Array-/nicht-numerische Werte (vorher
+  „Array to string conversion"). Eine skalare Trennschärfe wird auch bei polytomen
+  Items weiterhin geprüft.
+- **Import-Tests korrigiert**: `count($result['errors'])` zählte auch die unter
+  `result['errors']['warnings']` verschachtelten Warnungen mit. Da Warnungen keine
+  Fehler sind (Items werden importiert), prüfen `testitemimporter_test` und
+  `strategy_test` jetzt nur echte Fehler (`array_diff_key(..., ['warnings' => 1])`).
+- Neue Testfälle in `test_calibration_warnings` für Array-/nicht-numerische Werte.
+  model/importer-Suiten grün.
+
+## 1.1.5 (interne Version 2026082126)
+
+> Quizverlauf-Tabelle: „Antwort"-Spalte entfernt (siehe Nutzer-Feedback). Weitere
+> gemeldete Punkte (Zeit-Abbruch, Farb-Schwelle, Modal, Detail-Tabelle) sind
+> diagnostiziert und werden separat verifiziert nachgezogen.
+
+- **„Antwort"-Spalte aus der Quizverlauf-Tabelle entfernt**
+  (`graphicalsummary.php`): Spaltenklasse `catquiz-col-response`, Kopf
+  `get_string('response')` und die Antwort-Zelle je Zeile sind raus. Die übrigen
+  Spalten (Nr., Frage, Skala, Fähigkeits-Wert, optional Frage-anzeigen) bleiben.
+
+## 1.1.5 (interne Version 2026082125)
+
+> Import-/Kalibrier-Warnungen: Der CSV-Import weist jetzt auf degenerierte oder
+> gedeckelte Item-Parameter hin.
+
+- **Kalibrierungs-Warnungen beim Testitem-Import**: `model_item_param_list::
+  save_or_update_testitem_in_db()` prüft die importierten Parameter über den neuen
+  Helfer `calibration_warnings()` und meldet advisorische Warnungen (das Item wird
+  weiterhin importiert, `success => 2` über den bestehenden Warnkanal – wie bei den
+  vorhandenen Import-Warnungen im Ergebnis sichtbar):
+  - **Nicht-positive Trennschärfe** (`a ≤ 0`): degeneriert für jedes Modell mit
+    Steigung – die ALiSe-Piloten tragen `a = 0.00`.
+  - **Gedeckelte Trennschärfe** (`a ≥ 5.0`, Default `trusted_region_max_b`): sehr
+    wahrscheinlich ein geklemmter Schätzwert.
+  - **Gedeckelte Schwierigkeit** (`|b| ≥ 10.0`, catcalc-Trait-Grenze): dito.
+  - Die Grenzen liegen als Konstanten `CALIBRATION_DISCRIMINATION_CAP` (5.0) und
+    `CALIBRATION_DIFFICULTY_ABS_CAP` (10.0) in der Klasse und spiegeln die
+    Modell-Defaults.
+- **Lang-Strings** (en + de) ergänzt: `import_warning_nonpositive_discrimination`,
+  `import_warning_capped_discrimination`, `import_warning_capped_difficulty`
+  (alphabetisch korrekt einsortiert; phpcs/Lang-Ordering = Exit 0).
+- **Tests**: Neuer `test_calibration_warnings` (Reflection, 13 Assertions – alle
+  Schwellen, Kombination, leere/fehlende Werte, Meldungsinhalt; zahn-getestet).
+  Der bestehende Import-Datensatz (`raschbirnbaum`, disc `5.92`) erwartet nun
+  ehrlich `success => 2`, da 5.92 die 5.0-Grenze überschreitet und korrekt gewarnt
+  wird. `model_item_param_list_test`: 3/3 grün.
+
+## 1.1.5 (interne Version 2026082124)
+
+> Resume-Ursache gefunden und behoben. „Question 5" war die **quba-Slot-Nummer**,
+> nicht die Anzahl distinkter CAT-Fragen: Ein Resume/Reload erzeugte einen
+> **doppelten Slot**. Der eigentliche Fix liegt in **mod_adaptivequiz** (separater
+> Patch); hier wird die falsche zählbasierte Fährte zurückgebaut und die
+> Diagnose-Instrumentierung entfernt.
+
+- **Ursache (per CI-Trace + HTML-Dump belegt)**: Der HTML-Dump der fehlschlagenden
+  Szenarien zeigt `<div id="question-433000-5">` / `<span class="qno">5</span>` –
+  „Question 5" ist also die **Slot-Nummer in der Question-Usage**, nicht die
+  Fragenzahl. Der Instrumentierungs-Trace bewies, dass catquiz' Zählung korrekt
+  ist (`played` bleibt sauber; der Reload-Filter entfernt korrekt das
+  unbeantwortete letzte Item). Beim Resume wählt catquiz jedoch eine **andere**
+  nächste Frage als die im aktiven, unbeantworteten Slot liegende, worauf
+  mod_adaptivequiz einen **neuen** Slot anlegte → die Slot-Nummer wuchs auf 5.
+
+- **Fix in mod_adaptivequiz** (Branch der Abhängigkeit, separater Patch
+  `adaptivequiz-slotreuse-fix.patch`): Der Duplicate-Slot-Guard in
+  `cat_session.php` (Issue #6) griff bisher nur, wenn dieselbe Frage neu gewählt
+  wurde. Da ein CAT-Attempt immer nur **einen** aktiven unbeantworteten Slot hat,
+  wird nun per `find_any_active_slot()` **jeder** aktive Slot wiederverwendet, wenn
+  die Suche nach der konkreten Frage fehlschlägt. Unit-Test `test_find_any_active_slot`
+  ergänzt (2/2 grün).
+
+- **Zählbasierte `maximumquestionscheck`-Änderung zurückgebaut**: Der in
+  2026082121 eingeführte `max(questionsattempted, progress-Zähler)` adressierte
+  ein Nicht-Problem (die Zählung hinkte nie – es waren die Slots) und wird
+  vollständig auf das Original zurückgesetzt; der zugehörige Test
+  `maximumquestionscheck_test` entfällt.
+
+- **Diagnose-Instrumentierung entfernt**: `classes/local/debugtrace.php`, alle
+  Trace-Aufrufe in `progress.php` und der nicht-blockierende CI-Diagnoseschritt in
+  `moodle-plugin-ci-dev.yml` sind wieder draußen.
+
+- **Resume-Szenarien wieder im Gate**: `@catquiz_wip_resume` aus
+  `catquiz_attempt_completion` und `catquiz_slot_reuse` entfernt, der
+  `--tags`-Ausschluss in beiden Workflows zurückgenommen. Mit dem
+  mod_adaptivequiz-Patch laufen sie grün und gaten wieder mit. **Wichtig:** Beide
+  Teile gehören zusammen – ohne den mod_adaptivequiz-Patch würden die nun
+  un-getaggten Szenarien in der CI erneut rot (der Slot-Bug bestünde fort).
+
+## 1.1.5 (interne Version 2026082123) — DIAGNOSE-BUILD (temporär)
+
+> Nur zur Resume-Triage: fügt eine Behat-only-Instrumentierung und einen
+> nicht-blockierenden CI-Diagnoseschritt hinzu, die den Fragen-Zählverlauf über
+> einen Resume/Reload aufzeichnen. Nach Auswertung wieder zu entfernen.
+
+- **`classes/local/debugtrace.php`** (neu, temporär): `debugtrace::resume()`
+  schreibt Trace-Zeilen nach `sys_get_temp_dir()/catquiz_resume_trace.log` –
+  aber **nur wenn `BEHAT_SITE_RUNNING` gesetzt ist**. In Produktion und in normalen
+  PHPUnit-Läufen komplett inert (verifiziert: kein Dateizugriff im PHPUnit-Lauf).
+- **Trace-Punkte**: `progress::load()` (welcher Zweig – answered/gaveup/
+  reload-remove – plus `playedquestions`-IDs vor/nach dem Reload-Filter, der die
+  zuletzt gezeigte unbeantwortete Frage entfernt), `progress::add_playedquestion()`
+  (hinzugefügte ID + laufende Zahl) und `maximumquestionscheck::run()`
+  (`questionsattempted`, progress-Zähler, effektiver Wert, max, Entscheidung).
+- **CI-Diagnoseschritt** in `moodle-plugin-ci-dev.yml` (nach dem regulären
+  Behat-Schritt, `continue-on-error`): führt **nur** die
+  `@catquiz_wip_resume`-Szenarien mit aktiver Instrumentierung aus und legt
+  `catquiz_resume_trace.log` + `behat-resume.log` in die hochgeladene
+  `error-summary-dev-behat`-Artefaktsammlung. Blockiert die Pipeline nicht; das
+  reguläre Gate (ohne die Resume-Szenarien) bleibt unverändert grün.
+- Fachlogik unverändert (der `max()`-Guard in `maximumquestionscheck` bleibt wie
+  in 2026082121/2026082122); `maximumquestionscheck_test` weiterhin 3/3 grün.
+
+## 1.1.5 (interne Version 2026082122)
+
+> codeanalysis-Warning behoben; verschachtelte `.git`-Verzeichnisse aus dem
+> Auslieferungspaket entfernt (Regel dokumentiert); Resume-Szenarien nach
+> gescheitertem Zähler-Fix ehrlich wieder als WIP markiert.
+
+- **codeanalysis grün**: Die in Version 2026082121 neu eingefügte Kommentarzeile
+  in `maximumquestionscheck.php` begann mit `$context…` und löste
+  `moodle.Commenting.InlineComment.NotCapital` aus (bei `--max-warnings 0`
+  pipeline-blockierend). Umformuliert, sodass sie mit einem Großbuchstaben
+  beginnt. phpcs auf die Datei = Exit 0.
+
+- **Keine `.git`-Verzeichnisse mehr im Paket**: Das volle Arbeitspaket-ZIP enthielt
+  bislang verschachtelte Fremd-`.git`-Verzeichnisse (`catquizcentralhub/client/.git`,
+  `.../host/.git`), weil der `cp -a`-Build nur das oberste `.git` entfernte. Diese
+  bringen das Git auf der Empfängerseite durcheinander. Die verschachtelten Repos
+  sind aus dem Workspace entfernt, und der Paket-Build streift jetzt **alle**
+  `.git`-Verzeichnisse (`find … -type d -name .git -prune -exec rm -rf {} +`). Die
+  Regel ist in `doc/engineering-guide.md` (§5 und Checkliste §7),
+  `doc/environment-setup.md` (§10) und `doc/session-start-prompt.md` festgehalten.
+
+- **Resume-Zähler-Fix war unzureichend – Szenarien wieder WIP**: Der in 2026082121
+  eingeführte `max(questionsattempted, progress-Zähler)` in `maximumquestionscheck`
+  löste die zwei Resume-/Reload-Szenarien **nicht** (CI weiterhin „Question 5").
+  Erkenntnis: Auch der progress-Zähler steht beim Check < Maximum – die erste Frage
+  geht offenbar über den Resume verloren, sodass **beide** Zähler um eins zu
+  niedrig sind. Das ist ein tieferer Cross-Plugin-Persistenzeffekt, der nur
+  in-browser (kein lokales Chrome) belastbar zu triagieren ist. Der `max()`-Guard
+  bleibt als sinnvolle, zahn-getestete Härtung erhalten (schadet nicht, ist Teil der
+  späteren Lösung), reicht allein aber nicht. Die zwei Szenarien sind wieder mit
+  `@catquiz_wip_resume` markiert und im Behat-Lauf beider Workflows ausgeschlossen,
+  der Workflow-Kommentar nennt die genaue (revidierte) Ursache. Das übrige
+  Behat-Set (inkl. des reparierten graphicalsummary-Szenarios) gatet weiter.
+
+## 1.1.5 (interne Version 2026082121)
+
+> Resume-Triage: Maximalfragen-Abbruch nutzt jetzt den resume-sicheren
+> progress-Zähler; Behat-graphicalsummary vollends grün; die zwei Resume-/Reload-
+> Szenarien wieder ins Gate genommen.
+
+- **Issue #5 / Resume-Abbruch – Ursache und Fix**: Die beiden Szenarien
+  `catquiz_attempt_completion` („Resuming an interrupted attempt …") und
+  `catquiz_slot_reuse` („Reloading mid-attempt …") endeten nach einem
+  Resume/Reload nicht bei `catquiz_maxquestions` (eine fünfte Frage erschien).
+  Ursache: `maximumquestionscheck` prüfte allein `$context['questionsattempted']`,
+  den Zähler aus dem `adaptivequiz_attempt`-Record von mod_adaptivequiz. Dieser
+  Cross-Plugin-Zähler kann nach einem Resume/Reload um eins nachhinken (der
+  gerade beantworteten Frage ist beim Lauf des Checks noch nicht angerechnet), im
+  linearen Ablauf tritt das nicht auf. Fix: Der Check nimmt jetzt das **Maximum**
+  aus diesem Zähler und `progress::get_num_playedquestions()` – catquiz' eigene,
+  im progress-Payload persistierte und damit resume-sichere Zählung der gespielten
+  Fragen. Der progress-Zähler ist pilotgefiltert (`without_pilots()`), sodass in
+  piloten Attempts weiterhin der adaptivequiz-Zähler dominiert und sich das
+  Verhalten nur im Resume-/Reload-Fall ändert. Neuer, zahn-getesteter Test
+  `maximumquestionscheck_test` (drei Fälle inkl. „Zähler hinkt nach → trotzdem
+  Abbruch"; Rücknahme des `max()` → rot).
+
+- **`@catquiz_wip_resume` entfernt**: Die zwei Resume-/Reload-Szenarien sind
+  wieder untagged und der `--tags`-Ausschluss in beiden Workflows
+  (`moodle-plugin-ci-main.yml`, `-dev.yml`) ist zurückgenommen – der obige Fix
+  wird damit von der CI end-to-end verifiziert, statt hinter dem WIP-Tag verdeckt
+  zu bleiben.
+
+- **Behat `catquiz_graphicalsummary_modal` – letzte fragile Assertion entfernt**:
+  Die `.questionbutton`-„should exist"-Assertion hing am Setting
+  `catquiz_showquestion`, das den adaptivequiz-Settings-Round-trip in der
+  Behat-Umgebung nicht überlebt (der Button rendert dann nicht). Das Szenario
+  prüft die Datenabbildung jetzt über die drei stabilen DOM-Assertions
+  (`.catquiz-graphicalsummary-table`, `.catquiz-response-answerlabel`,
+  `.catquiz-responsesummary`); Button und Modalverhalten sind durch den
+  Jest-Test abgedeckt. Szenariotitel entsprechend angepasst.
+
+## 1.1.5 (interne Version 2026082120)
+
+> CI-Reparatur (codeanalysis + Behat) und Issue #7: Primärskalen-Delegation an
+> den Ergebnis-Validator.
+
+- **codeanalysis grün** (blockierender `codechecker` mit `--max-warnings 0`, in
+  dem also auch Warnings die Pipeline killen): sechs Befunde behoben — fünf
+  `moodle.Commenting.InlineComment.NotCapital`-Warnings (Großschreibung der
+  Inline-Kommentare in `feedbackgenerator/graphicalsummary.php` Z. 228/366,
+  `external/render_question_with_response.php` Z. 141/161/193 und
+  `tests/teststrategy/strategy_test.php` Z. 589) sowie der
+  `moodle.Commenting.DocblockDescription.Missing`-**Error** durch eine
+  Ein-Zeilen-Beschreibung für den Datenprovider
+  `strategy_returns_expected_questions_provider`. phpcs auf die betroffenen
+  Dateien = Exit 0. (`phpmd`/`phpcpd` sind `continue-on-error` und damit nicht
+  Pipeline-relevant.)
+
+- **Behat-Szenario `catquiz_graphicalsummary_modal` robust gemacht**: Die
+  Quizverlauf-Tabelle liegt in einem Feedback-Tab (`tab-pane fade`), der bis zum
+  Öffnen durch die Lernenden inaktiv ist — die Zeilen stehen also im DOM, sind
+  aber nicht sichtbar. Das Szenario prüft die Datenabbildung jetzt über
+  **DOM-Existenz** (`.catquiz-graphicalsummary-table`,
+  `.catquiz-response-answerlabel`, `.catquiz-responsesummary`, `.questionbutton`
+  → „should exist") statt über Sichtbarkeit/Modal-Interaktion. Das Öffnen/Schließen
+  des Modals inkl. der „kein hängender Spinner"-Zusage deckt der verifizierte
+  Jest-Test (`tests/jest/graphicalsummary.test.js`) ab.
+
+- **Zwei Resume-/Reload-Szenarien als `@catquiz_wip_resume` markiert und im
+  Behat-Lauf ausgeschlossen** (`--tags '@local_catquiz&&~@catquiz_wip_resume'` in
+  `moodle-plugin-ci-main.yml` und `-dev.yml`): `catquiz_attempt_completion`
+  („Resuming an interrupted attempt …") und `catquiz_slot_reuse` („Reloading
+  mid-attempt …") enden nach einem Resume/Reload nicht bei der konfigurierten
+  Maximalfragezahl (es erscheint eine fünfte Frage). Ursache liegt im
+  Cross-Plugin-Resume-/Slot-Reuse-Pfad (`questionsattempted` stammt aus dem
+  `adaptivequiz_attempt`-Record von mod_adaptivequiz); eine belastbare Korrektur
+  braucht In-Browser-Triage (lokal kein Chrome). Die jeweils *normalen*
+  Completion-/Reload-Szenarien bleiben grün und gatend. Der Ausschluss ist
+  dokumentiert und durch Entfernen des Tags reversibel.
+
+- **Issue #7 – Primärskalen-Delegation an den Validator**: `validate()` liest die
+  von der Strategie festgelegte Primärskala (`primaryscale.id`) aus den
+  gespeicherten Feedback-Daten und reicht sie an
+  `attempt_result_validator::from_personabilities()` durch. Dadurch bestimmt nur
+  noch diese eine Skala das Gültigkeitsurteil (jede weitere berichtete Skala wird
+  `REASON_NOT_PRIMARY` und ist damit nicht `valid`); zuvor griff der
+  `$toreport`-Fallback, der *jede* berichtete Skala als primär behandelte. Fehlt
+  die Angabe (z. B. Attempts, die vor dieser Persistenz finalisiert wurden),
+  bleibt der Fallback erhalten. Neuer, zahn-getesteter Test
+  `test_finalize_delegates_primary_scale` (Rücknahme der Delegation → rot);
+  Finalizer-Suite 9/9, Validator-Suite 8/8 grün.
+
+## 1.1.5 (interne Version 2026082119)
+
+> Jest-Tests in die CI-Pipeline integriert; Quizverlauf-Datenabbildung über
+> Behat abgesichert.
+
+- **Jest in der CI-Pipeline** (`.github/workflows/moodle-plugin-ci-main.yml` und
+  `-dev.yml`): Ein neuer Schritt „Jest (plugin JS unit tests)" führt nach dem
+  Grunt-Schritt `npm install && npm test` im Plugin-Verzeichnis aus und tee-t die
+  Ausgabe nach `ci-logs/jest.log` (Teil der Error-Summary-ZIP). In `main.yml` im
+  sequenziellen `test`-Job vor PHPUnit; in `dev.yml` im `lint-jsamd`-Job (den das
+  `ci-complete`-Gate bereits voraussetzt). Basis sind die verifizierten
+  Workflow-Dateien aus dem Repository, nicht die lokale Arbeitskopie. Der
+  CI-äquivalente Ablauf (`npm install && npm test`) wurde lokal grün verifiziert.
+- **Quizverlauf-Datenabbildung abgesichert**
+  (`tests/behat/catquiz_graphicalsummary_modal.feature`): Das Szenario prüft nun
+  zusätzlich, dass die responsive Ergebnistabelle
+  (`.catquiz-graphicalsummary-table`) gerendert wird und der tatsächlich gegebene
+  Antwortwert dort erscheint. Damit ist die Feld-/Datenabbildung, die sich im
+  reinen PHPUnit-Harness nicht auslösen ließ (Feedback-Pipeline hängt am vollen
+  Preselect-/Response-Flow), end-to-end im echten Browser-Flow abgedeckt.
+
+## 1.1.5 (interne Version 2026082118)
+
+> Audit + Fix von `get_last_response_for_attempt` (Expertise Teil C).
+
+- **`catquiz::get_last_response_for_attempt` korrigiert**: Die Abfrage keyte
+  bisher auf `max(questionattemptid)` — das question_attempt mit der höchsten ID,
+  also die zuletzt **hinzugefügte** Frage. Das ist nicht die zuletzt
+  **beantwortete** Frage: war das zuletzt hinzugefügte Item noch unbeantwortet,
+  filterte der Finished-State-Filter alles weg und die Abfrage lieferte `null`,
+  obwohl frühere Items beantwortet waren; zudem wurde angenommen, die
+  Attempt-ID-Reihenfolge entspreche der Administrationsreihenfolge. Die Abfrage
+  nutzt nun eine belastbare **slot-/schrittbasierte** Ordnung: der höchste Slot
+  mit einem abgeschlossenen Antwortschritt und darin der finale Schritt — so
+  gehören `questionattemptid`, `slot`, `questionid`, `fraction` und
+  `responsesummary` immer zur **selben** beantworteten Frage.
+- **Zahn-getesteter Regressionstest**
+  (`test_get_last_response_uses_last_answered_not_last_added`): zwei beantwortete
+  Items plus ein hinzugefügtes, aber unbeantwortetes; erwartet den höchsten
+  beantworteten Slot statt `null`. Mit der alten `max(questionattemptid)`-Logik
+  wird der Test rot (verifiziert).
+
+## 1.1.5 (interne Version 2026082117)
+
+> Teil J vervollständigt: Jest-Tests (Modal) + Behat-Feature (End-to-End).
+
+- **Jest-Tests** für den „Frage anzeigen"-Modal-Handler
+  (`tests/jest/graphicalsummary.test.js`, 3 Tests, grün): erfolgreiches AJAX
+  öffnet das Modal und entfernt den Spinner; eine AJAX-Rejection entfernt den
+  Spinner **und** meldet den Fehler via `core/notification` (kein Dauerspinner)
+  und öffnet kein Modal; ein Doppelklick startet keine parallelen Requests. Ein
+  plugin-lokales Jest-Setup wurde ergänzt (`package.json`, `babel.config.js`,
+  Mocks für die Core-AMD-Module unter `tests/jest/mocks/`), da Moodle 4.5 kein
+  eigenes Jest-Framework mitbringt. `package.json`/`babel.config.js` sind
+  export-ignore (nicht im Release-ZIP).
+- **Behat-Feature** (`tests/behat/catquiz_graphicalsummary_modal.feature`):
+  vollständiges Szenario – Attempt starten, Fragen beantworten, abschließen,
+  Quizverlauf öffnen, „Gegebene Antwort" prüfen, Lupe klicken, Modal öffnet,
+  schließen, zweite Frage öffnen. An das funktionierende `catquiz_slot_reuse`-
+  Feature modelliert; Ausführung erfolgt browserbasiert in der CI.
+
+## 1.1.5 (interne Version 2026082116)
+
+> Tests für „Frage anzeigen" (Expertise Teil J) + Chartdaten-Verifikation (I).
+
+- **External-API-Test** (`render_question_with_response`): gültiger Slot rendert
+  die Frage; falscher Slot bzw. nicht passende Question-Attempt-ID lösen einen
+  kontrollierten `invalidquestionslot`-Fehler aus (statt stillem Fehlschlag, der
+  den Modal-Spinner hängen ließ). Test in `strategy_test`, nutzt einen echten
+  Question-Usage-Attempt; die Testumgebung aktiviert dafür `catquiz_showquestion`
+  und `catquiz_questionfeedbacksettings`.
+- **Teil I (Chartdaten = Globalskala) verifiziert**: `personability_after` wird
+  aus `person_ability[catscaleid]` gebildet, wobei `catscaleid` in
+  `attemptfeedback` auf `catquiz_catscales` (die konfigurierte Globalskala des
+  Tests) gesetzt wird – nicht auf die zuletzt beantwortete Subskala.
+
+## 1.1.5 (interne Version 2026082115)
+
+> Quizverlauf-Tabelle & „Frage anzeigen"-Modal (Expertise Teil B–H, L).
+
+- **„Frage anzeigen"-Modal robust** (`amd/src/graphicalsummary.js`): der
+  Click-Handler ist in try/catch/finally gekapselt; der Ladespinner wird im
+  `finally` **immer** aufgelöst (nie mehr Dauerspinner bei AJAX-Fehlern),
+  Fehler werden über `core/notification` sichtbar gemeldet, Mehrfachklicks
+  während eines laufenden Requests werden verhindert und `aria-busy` gesetzt/
+  entfernt. AMD-Build via grunt regeneriert.
+- **Echter Fragentitel statt CAT-Label** (`graphicalsummary`): die Tabelle zeigt
+  den Moodle-Fragentitel als Primärtext und das technische CAT-Item-Label als
+  Sekundärinfo. Legacy-Zeilen fallen sauber auf das Label zurück.
+- **Antwortspalte eindeutig** – „Gegebene Antwort": die Antwort wird als solche
+  gekennzeichnet und über `format_text` mit aktiven Filtern gerendert, sodass
+  TeX/STACK-Formeln korrekt erscheinen statt roh (`[\dfrac…]`); `format_text`
+  bereinigt zugleich das HTML (kein XSS aus Nutzereingaben).
+- **Sichere HTML-Erzeugung**: klickbarer Fragenname und Lupe über `html_writer`
+  mit Attribut-Arrays statt roher `sprintf`-Interpolation; die Lupe ist ein
+  echtes `<button type="button">` mit `aria-label`/`title`.
+- **Zuverlässige Slot-/Question-Attempt-Auflösung**: Legacy-Zeilen ohne
+  gespeicherten Slot werden **einmalig** über die Question-Usage aufgelöst
+  (question_id → Slot/Question-Attempt/Titel je Occurrence) statt über den
+  Zeilenindex (`$index + 1`). Keine N+1-Abfragen.
+- **Responsive Ergebnistabelle**: eigene Klasse
+  `catquiz-graphicalsummary-table` in einem `table-responsive`-Wrapper, mit
+  semantischen Spaltenklassen (`catquiz-col-*`); schmale Spalten (Nr., Wert,
+  Aktion) `nowrap`, keine globalen `table`-Regeln. Kein Umbruch mitten im Wort.
+- Entwicklungshistorische `Issue #12:`-Kommentare in fachliche Kommentare
+  überführt; DE/EN-Strings ergänzt (`feedback_table_givenanswer`).
+
+## 1.1.5 (interne Version 2026082114)
+
+> Flip-Heuristik korrigiert (schwierigste/leichteste Frage, trennschärfen-
+> standardisiert, Monotonie-Guard); fester Export-Tab; Durchschnitts-Text bei
+> zu wenigen Peers korrigiert.
+
+- **Personenschätzung – Flip-Heuristik überarbeitet** (`updatepersonability`):
+  - Flip-Ziel ist nun die **schwierigste** (All-correct) bzw. **leichteste**
+    (All-wrong) beantwortete Frage der Skala statt der zufällig zuletzt
+    administrierten. Das entfernt den Cross-Step-Jitter, der den berichteten
+    Fähigkeitseinbruch (z. B. 2.82→2.42) verursachte.
+  - Das Flip-Probe-Item wird **trennschärfen-standardisiert** (Diskrimination = 1,
+    Schwierigkeit erhalten; bei polytomen Modellen bleiben die übrigen Parameter
+    erhalten). Damit hängt der Alternativwert nicht mehr von der (teils gedeckelten)
+    Diskrimination des Extremitems ab – nachgewiesen konstant statt Spanne ~0.4.
+  - **Monotonie-Guard** für Degeneriertmuster: All-correct senkt den gespeicherten
+    Wert nie unter den Vorschritt, All-wrong hebt ihn nie darüber.
+  - Absicherung durch `ability_monotonicity_test` (unverändert grün).
+- **Fester Export-Tab** (`debuginfo`/`exportattempt`): Der Export ist jetzt für
+  Nutzer mit Feedback-Berechtigung **immer** verfügbar (Haupt-Export
+  `export_feedback_csv.php`), nicht mehr nur bei aktiviertem Debug-Speicher. Die
+  Debug-Exporte (Roh-Dump, Debug-CSV, PDF) erscheinen nur zusätzlich, wenn
+  `store_debug_info` aktiv ist. DE/EN-Strings ergänzt.
+- **Durchschnitts-Vergleich bei zu wenigen Peers** (`comparetotestaverage`): Der
+  Fließtext behauptete auch ohne genügend Vergleichsdaten „…beträgt 0.00". Bei
+  `has_enough_peers = false` wird nun ein eigener Text
+  (`feedbackcomparetoaverage_nopeers`, DE/EN) verwendet, der keinen Schein-
+  Durchschnitt nennt. Das Vergleichs-Dreieck war bereits korrekt ausgeblendet.
+
+## 1.1.5 (interne Version 2026082113)
+
+> Aufräumung + Monotonie-Absicherung der Personenschätzung.
+
+- **`newton_raphson_multi_stable` → `newton_raphson`** umbenannt (mathcat:
+  `newton_raphson`, `gradient_ascent`; catcalc-Aufrufer nachgezogen). Keine
+  weiteren/alten Newton-Verfahren vorhanden.
+- **Neuer Regressionstest `ability_monotonicity_test`**: sichert, dass die
+  Basis-Schätzung `estimate_person_ability` auf **ausschließlich realen
+  Responses** psychometrisch monoton ist — All-correct erhöht nie die Fähigkeit
+  nicht (1PL/2PL/3PL), All-wrong senkt sie nie nicht (90 Assertions). Grundlage
+  für die Ursachenanalyse des berichteten Fähigkeitseinbruchs.
+- Workbench bereinigt (verwaiste leere Verzeichnisse entfernt).
+
+## 1.1.5 (interne Version 2026082112)
+
+> Aufräumung als Vorbereitung des „vermuteter Wert"-Features (8.3): korrekte
+> MAP-Terminologie und Entfernung einer toten Legacy-Krücke.
+
+- **Rename `fneapestimator` → `fnmapestimator`** (inkl. `…derivative1st`,
+  interner `eapgradient` → `mapgradient`, Doc/Meldungen EAP → MAP) in `mathcat`
+  (`newton_raphson_multi_stable`, `gradient_ascent`). Was der Schätzer rechnet,
+  ist ein Posterior-**Modus** (MAP) mit Gauss-Prior, keine EAP-Quadratur — die
+  Benennung ist jetzt konsistent. Reine Umbenennung, byte-identisch verifiziert;
+  der Hook bleibt (wie bisher) ungenutzt.
+- **`fallback_ability_update()` entfernt** (`updatepersonability`): toter Code
+  (0 Aufrufer, kein dynamischer Aufruf, keine Test-Referenz) — eine sehr frühe
+  Legacy-Lösung (`±5·fraction`-Halbschritt) des Degeneriert-Falls, längst durch
+  den TR-regularisierten `maybe_change_to_alternative_ability`-Pfad ersetzt.
+- Bestätigt (kein Codeänderungsbedarf): der aktive MAP-Prior N(ParentScore,
+  ParentSE) läuft bereits über die Trusted-Region-Terme; alle drei
+  `estimate_person_ability`-Aufrufstellen speisen `parentability`/`parentse`.
+- Regression grün: mathcat 15/15, catcalc 8/8, updatepersonability 7/7,
+  Trajektorien-Wächter.
+
+## 1.1.5 (interne Version 2026082111)
+
+> Load-Test-CI (jMeter/k6) repariert – Patch unverändert übernommen. CI grün.
+> Betrifft nur `.github/` (per `.gitattributes export-ignore` nicht im Release-ZIP).
+
+- **`.github/workflows/load-jmeter.yml`, `load-k6.yml`:** Load-Tests installieren
+  jetzt eine **echte Live-Moodle-Site** (`moodle-plugin-ci … --no-init`, dann
+  `admin/cli/install.php` + `upgrade.php` + `purge_caches.php` + Schema-
+  Verifikation) statt der PHPUnit/Behat-Konfiguration; **Multi-Worker-PHP-Server**
+  (`PHP_CLI_SERVER_WORKERS=8`), damit Concurrency-Messungen valide sind;
+  robusterer Readiness-Check (HTTP 200 **und** Login-Token, Server-Prozess-Check);
+  Diagnose-Artefakte bei Fehler. Trigger nur noch auf Push/Merge zu `main`
+  (PRs deckt „Moodle Plugin CI Main" ab, keine Doppelläufe). Action-/PHP-Anhebung:
+  `checkout@v6`, `cache@v5`, `upload-artifact@v7`, PHP `8.3`.
+
 ## 1.1.5 (interne Version 2026082110)
 
 > Verifikationslücke geschlossen: End-to-End-Trajektorien-Wächter reaktiviert

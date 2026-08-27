@@ -95,13 +95,14 @@ class debuginfo extends feedbackgenerator {
     protected function get_teacherfeedback(array $data): array {
         global $OUTPUT, $DB, $CFG;
 
-        // Note: Has to be redone as well.
-        if (!get_config('local_catquiz', 'store_debug_info')) {
-            return [];
-        }
+        // The export tab is always available to users with the feedback
+        // permission. The raw debug exports below are added only when debug
+        // storage is enabled for the plugin.
+        $debugenabled = (bool) get_config('local_catquiz', 'store_debug_info');
+
         $csvstring = "";
 
-        foreach ($data['debuginfo'] as $row) {
+        foreach (($data['debuginfo'] ?? []) as $row) {
             $newrow = $this->convert($row);
             $csvstring .= $this
                 ->set_row_data($newrow)
@@ -117,6 +118,7 @@ class debuginfo extends feedbackgenerator {
                 ->add_column_value('originalfraction')
                 ->add_column_value('fraction')
                 ->add_column_value('questionattemptid')
+                ->add_column_value('invaliditemparams')
                 ->as_csv_string();
         }
         $heading = implode(';', $this->columns) . PHP_EOL;
@@ -142,8 +144,9 @@ class debuginfo extends feedbackgenerator {
                 'description' => $description,
                 'debuginfo_raw' => rawurlencode(nl2br(str_replace(" ", "&nbsp;", var_export($data, true)))),
                 'cfg->root' => $CFG->wwwroot,
-                'isteacher' => true, // Hier auf has_capability mit 'local/catquiz:view_users_feedback' und $contextid testen!
-                'iscatmanager' => has_capability(
+                'isteacher' => true,
+                'debugenabled' => $debugenabled,
+                'iscatmanager' => $debugenabled && has_capability(
                     'local/catquiz:canmanage',
                     context_system::instance()
                 ),
@@ -172,6 +175,38 @@ class debuginfo extends feedbackgenerator {
             $updated['lastresponse'] = $row['lastresponse']['fraction'];
         }
         return $updated;
+    }
+
+    /**
+     * Formats the collected "unusable item parameters" warnings for the debug output.
+     *
+     * pilotquestions_loader collects a warning whenever an item had to be demoted to
+     * a pilot item because its stored parameters violate its model contract (for
+     * example a 2PL item with discrimination 0, which is mathematically mute and
+     * would freeze the ability estimate). Surfacing item id, model and the concrete
+     * reason here makes such an item traceable from the attempt debug export/PDF.
+     *
+     * @param array $warnings
+     *
+     * @return string
+     */
+    private static function format_invalid_itemparams(array $warnings): string {
+        if ($warnings === []) {
+            return self::NA;
+        }
+
+        $lines = [];
+        foreach ($warnings as $warning) {
+            $lines[] = sprintf(
+                '%s (%s / model "%s"): %s',
+                (string) ($warning['itemid'] ?? '?'),
+                (string) ($warning['label'] ?? ''),
+                (string) ($warning['model'] ?? ''),
+                (string) ($warning['reason'] ?? '')
+            );
+        }
+
+        return '"' . implode('; ', $lines) . '"';
     }
 
     /**
@@ -320,6 +355,7 @@ class debuginfo extends feedbackgenerator {
             'originalfraction' => isset($lastresponse['originalfraction']) ? $lastresponse['originalfraction'] : self::NA,
             'fraction' => isset($lastresponse['fraction']) ? $lastresponse['fraction'] : self::NA,
             'questionattemptid' => isset($lastresponse['questionattemptid']) ? $lastresponse['questionattemptid'] : self::NA,
+            'invaliditemparams' => self::format_invalid_itemparams($newdata['invaliditemparams'] ?? []),
         ];
 
         return ['debuginfo' => $debuginfo];

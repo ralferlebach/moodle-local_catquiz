@@ -91,8 +91,16 @@ class render_question_with_response extends external_api {
         $PAGE->set_context(context_system::instance());
         $PAGE->set_url('/local/catquiz/external/render_question_with_response.php');
 
-        // Hack alert: Forcing bootstrap_renderer to initiate moodle page.
-        $OUTPUT->header();
+        // The renderer has to be initialised before the question is rendered, but
+        // $OUTPUT->header() actually STARTS the output. Anything the question
+        // rendering does afterwards that touches the page - most notably
+        // $PAGE->add_body_class(), which several question types and the question
+        // engine call - then dies with "Cannot call moodle_page::add_body_class
+        // after output has been started". Force the theme/renderer to initialise
+        // without emitting anything instead.
+        $PAGE->set_pagelayout('embedded');
+        $OUTPUT->doctype();
+
         $PAGE->start_collecting_javascript_requirements();
         $questionhtml = self::render_question($slot, $attemptid, $questionattemptid);
         $jsfooter = $PAGE->requires->get_end_code();
@@ -138,7 +146,7 @@ class render_question_with_response extends external_api {
         self::validate_context($context);
         $PAGE->set_context($context);
 
-        // Issue #12: enforce access before revealing anything about the attempt.
+        // Enforce access before revealing anything about the attempt.
         // An attempt may only be inspected by its owner or by a user with the
         // review capability; otherwise a participant could pass a foreign
         // attemptid and read another user's question and response.
@@ -158,7 +166,7 @@ class render_question_with_response extends external_api {
         $uniqueid = $attempt->uniqueid;
         $quba = question_engine::load_questions_usage_by_activity($uniqueid);
 
-        // Issue #12: validate that the slot really exists in this usage and, when
+        // Validate that the slot really exists in this usage and, when
         // a question attempt id is supplied, that the slot maps to exactly that
         // question attempt. This replaces the previous reliance on a slot that was
         // reconstructed from a table row index.
@@ -190,7 +198,7 @@ class render_question_with_response extends external_api {
         $displayoptions->generalfeedback = $showfeedback;
         $displayoptions->feedback = $showfeedback;
 
-        // Issue #12: emit the QUBA HTML unchanged. Running it through format_text
+        // Emit the QUBA HTML unchanged. Running it through format_text
         // corrupts inputs, ids, JavaScript hooks and STACK structures. The head
         // html carries per-question CSS/JS (MathJax, STACK, ...) that the modal
         // needs; the question's own JavaScript is collected by the page

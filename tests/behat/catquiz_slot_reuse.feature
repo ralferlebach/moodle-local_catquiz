@@ -87,3 +87,73 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     And I click on "Submit answer" "button"
     And I wait until the page is ready
     Then I should not see "Question 5"
+
+  @javascript
+  Scenario: Navigating back and forward does not create a duplicate slot
+    ## The browser Back button re-enters an already answered question. The slot
+    ## guard must recognise the existing active slot instead of adding a new one,
+    ## so the attempt still ends after exactly the configured four questions.
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    ## Go back to the previous page and forward again.
+    And I press the "back" button in the browser
+    And I wait until the page is ready
+    And I press the "forward" button in the browser
+    And I wait until the page is ready
+    ## Re-enter through the activity so no answer is re-posted out of sequence.
+    And I am on the "adaptivecatquiz1" Activity page
+    And I wait until the page is ready
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    Then I should not see "Question 5"
+
+  @javascript
+  Scenario: Re-entering an unanswered item repeatedly keeps one slot
+    ## Repeatedly re-opening the attempt while an item is unanswered must keep
+    ## re-showing that same item. Each re-entry runs the item administration
+    ## again, so without the slot guard every re-entry would add another slot and
+    ## the attempt would run past its configured length.
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I am on the "adaptivecatquiz1" Activity page
+    And I wait until the page is ready
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 2"
+    And I am on the "adaptivecatquiz1" Activity page
+    And I wait until the page is ready
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I should see "Question 2"
+    And I should not see "Question 3"
+    ## Finish the attempt: the repeated re-entries must not have consumed items.
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    Then I should not see "Question 5"

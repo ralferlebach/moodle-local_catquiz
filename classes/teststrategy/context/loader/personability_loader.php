@@ -27,6 +27,7 @@ namespace local_catquiz\teststrategy\context\loader;
 use cache;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
+use local_catquiz\local\result\attemptscale_repository;
 use local_catquiz\teststrategy\context\contextloaderinterface;
 use local_catquiz\teststrategy\progress;
 
@@ -139,6 +140,25 @@ class personability_loader implements contextloaderinterface {
 
         $abilities = [];
         foreach ($catscaleids as $scaleid) {
+            /* Issue #9: the attempt history is the authoritative source for a
+               carry-over start value. local_catquiz_personparams is written
+               DURING an attempt (updatepersonability, filterbystandarderror), so
+               it is a living intermediate state rather than a record of finished
+               attempts - reading it as a prior can carry over a half-finished
+               estimate. attemptscale rows are written once at finalisation and
+               only for scales that were validly measured, so they are preferred
+               whenever one exists; personparams remains the fallback for scales
+               without such a row (older attempts, never measured). */
+            $carryover = attemptscale_repository::get_latest_valid(
+                (int) $context['userid'],
+                (int) $context['contextid'],
+                (int) $scaleid
+            );
+            if ($carryover !== null && $carryover->score !== null && $carryover->score !== '') {
+                $abilities[$scaleid] = (float) $carryover->score;
+                continue;
+            }
+
             $ability = ! empty($filteredparams[$scaleid])
                 ? floatval($filteredparams[$scaleid]->ability)
                 : $this->get_default_ability();

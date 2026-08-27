@@ -25,11 +25,14 @@
 namespace local_catquiz\teststrategy;
 
 use context_course;
+use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_model;
+use local_catquiz\local\result\attempt_result;
+use local_catquiz\local\result\scale_result;
 use local_catquiz\local\result\attempt_result_validator;
 use local_catquiz\output\attemptfeedback;
 use LogicException;
@@ -136,6 +139,116 @@ class feedback_helper {
     }
 
     /**
+     * Builds the authoritative attempt result for the feedback path.
+     *
+     * Issue #7 DoD 2: every feedback generator must judge a scale by the SAME
+     * result object instead of re-implementing the gate over the raw flags
+     * `toreport` / `excluded` / `hidden`. Those flags are ambiguous - notably
+     * `excluded` is set both for a measurement problem (SE below the minimum) and
+     * for a pure display decision (reporting checkbox off) - so every consumer had
+     * to know which combination meant what.
+     *
+     * @param array $personabilities The per-scale abilities including error/flags.
+     * @param array $feedbackdata The surrounding feedback data, used for the SE.
+     *
+     * @return attempt_result
+     */
+    public static function build_attempt_result(array $personabilities, array $feedbackdata = []): attempt_result {
+        $sebyscale = [];
+        foreach (($feedbackdata['se'] ?? []) as $scaleid => $se) {
+            if (is_numeric($se)) {
+                $sebyscale[(int) $scaleid] = (float) $se;
+            }
+        }
+
+        $primaryscaleid = null;
+        foreach ($personabilities as $scaleid => $entry) {
+            if (is_array($entry) && !empty($entry['primary'])) {
+                $primaryscaleid = (int) $scaleid;
+                break;
+            }
+        }
+
+        return attempt_result_validator::from_personabilities(
+            $personabilities,
+            $sebyscale,
+            [],
+            [],
+            $primaryscaleid
+        );
+    }
+
+    /**
+     * Shows whether a scale may be displayed in the feedback.
+     *
+     * A scale is displayed when it is meant to be reported AND its measurement is
+     * statistically sound. Both conditions come from the central result object, so
+     * display and validity stay in step (issue #7).
+     *
+     * @param attempt_result $result
+     * @param int $scaleid
+     *
+     * @return bool
+     */
+    public static function is_displayable(attempt_result $result, int $scaleid): bool {
+        $scale = $result->get_scale_result($scaleid);
+        if ($scale === null) {
+            return false;
+        }
+        return $scale->reportable && $scale->statisticallyvalid;
+    }
+
+    /**
+     * Turns the machine readable rejection reasons into a user facing message.
+     *
+     * Issue #7 DoD 3: the displayed reason is derived from
+     * scale_result::$rejectionreasons rather than from the legacy `error` arrays.
+     * The interpolated detail values (thresholds, current values) still come from
+     * the error array of the same scale, because the language strings use them.
+     *
+     * @param attempt_result $result
+     * @param array $personabilities Used only for the interpolated detail values.
+     *
+     * @return string
+     */
+    public static function get_rejection_reason_string(attempt_result $result, array $personabilities): string {
+        foreach ($result->get_scale_results() as $scaleid => $scale) {
+            if ($scale->rejectionreasons === []) {
+                continue;
+            }
+            $error = $personabilities[$scaleid]['error'] ?? [];
+
+            foreach ($scale->rejectionreasons as $reason) {
+                switch ($reason) {
+                    case scale_result::REASON_ROOTONLY:
+                        return get_string('error:rootonly', 'local_catquiz', $error['rootonly'] ?? null);
+                    case scale_result::REASON_SE_MIN:
+                        return get_string('error:semin', 'local_catquiz', $error['se'] ?? null);
+                    case scale_result::REASON_SE_MAX:
+                        return get_string('error:semax', 'local_catquiz', $error['se'] ?? null);
+                    case scale_result::REASON_N_MIN:
+                        return get_string('error:nminscale', 'local_catquiz', $error['nminscale'] ?? null);
+                    case scale_result::REASON_FRACTION:
+                        $fraction = $error['fraction']['fraction'] ?? null;
+                        if ((string) $fraction === '1') {
+                            return get_string('error:fraction1', 'local_catquiz');
+                        }
+                        if ((string) $fraction === '0') {
+                            return get_string('error:fraction0', 'local_catquiz');
+                        }
+                        return get_string('noscalesfound', 'local_catquiz');
+                    default:
+                        // Reporting disabled, hidden, not primary and not measured
+                        // are not measurement problems; keep looking for one.
+                        continue 2;
+                }
+            }
+        }
+
+        return get_string('noscalesfound', 'local_catquiz');
+    }
+
+    /**
      * Maps an excluded scale's error to a human-readable rejection reason.
      *
      * Shared by customscalefeedback and by the central "no valid result" notice
@@ -146,7 +259,9 @@ class feedback_helper {
      */
     public static function get_exclusion_reason_string(array $personabilities): string {
         foreach ($personabilities as $personability) {
-            if (!is_array($personability) || !isset($personability['excluded']) || !isset($personability['error'])) {
+            $isexcluded = isset($personability['excluded'])
+                || isset($personability[feedbacksettings::FIELD_NOTREPORTED]);
+            if (!is_array($personability) || !$isexcluded || !isset($personability['error'])) {
                 continue;
             }
             $errorcode = array_keys($personability['error'])[0];
@@ -291,13 +406,41 @@ class feedback_helper {
     }
 
     /**
-     * Write information about colorgradient for colorbar.
+     * Locale-robust parse of a configured feedback range limit.
+     *
+     * The limits may arrive as native numbers (JSON) or as localised strings.
+     * A German decimal comma ("1,5") must NOT be truncated by floatval()/(float)
+     * to 1.0 - that shifted the colour bands and mis-coloured abilities (an
+     * ability of 1.10 fell into the green band because the yellow/green boundary
+     * had collapsed from 1.5 to 1). This helper normalises a decimal comma to a
+     * dot before casting, so "1,5", "1.5" and the numeric 1.5 all yield 1.5.
+     *
+     * @param mixed $value
+     * @return float
+     */
+    public static function parse_range_limit($value): float {
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+        $string = trim((string) $value);
+        if ($string === '') {
+            return 0.0;
+        }
+        // A decimal comma is only a decimal separator when there is no dot too.
+        if (strpos($string, ',') !== false && strpos($string, '.') === false) {
+            $string = str_replace(',', '.', $string);
+        }
+        return (float) $string;
+    }
+
+    /**
+     * Returns the color for a given person ability.
      *
      * @param array $quizsettings
      * @param float $personability
      * @param int $catscaleid
-     * @return string
      *
+     * @return string
      */
     public function get_color_for_personability(array $quizsettings, float $personability, int $catscaleid): string {
         $default = LOCAL_CATQUIZ_DEFAULT_GREY;
@@ -316,8 +459,8 @@ class feedback_helper {
         for ($i = 1; $i <= $numberoffeedbackoptions; $i++) {
             $rangestartkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_" . $i;
             $rangeendkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $i;
-            $rangestart = floatval($quizsettings[$rangestartkey]);
-            $rangeend = floatval($quizsettings[$rangeendkey]);
+            $rangestart = self::parse_range_limit($quizsettings[$rangestartkey]);
+            $rangeend = self::parse_range_limit($quizsettings[$rangeendkey]);
 
             if ($personability >= $rangestart && $personability <= $rangeend) {
                 $colorkey = 'wb_colourpicker_' . $catscaleid . '_' . $i;
@@ -666,8 +809,8 @@ class feedback_helper {
             if (!isset($settings[$lowerkey]) || !isset($settings[$upperkey])) {
                 continue;
             }
-            $lower = (float) $settings[$lowerkey];
-            $upper = (float) $settings[$upperkey];
+            $lower = self::parse_range_limit($settings[$lowerkey]);
+            $upper = self::parse_range_limit($settings[$upperkey]);
             if ($value < $lower) {
                 continue;
             }

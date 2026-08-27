@@ -96,18 +96,30 @@ final class attempt_finalizer_test extends advanced_testcase {
     }
 
     /**
-     * A missing/zero timefinished never results in an empty stored end time.
+     * Issue #5: the end time is authoritative, so finalisation refuses to run
+     * without one instead of inventing a timestamp.
+     *
+     * The previous behaviour fell back to time() and persisted a fabricated end
+     * time, which silently produced a finalised attempt whose completion time was
+     * never stamped by the authoritative completion path.
      */
-    public function test_finalize_falls_back_when_timefinished_missing(): void {
+    public function test_finalize_refuses_without_authoritative_end_time(): void {
         global $DB;
         $this->resetAfterTest();
 
         [$adaptiveattemptid, $catid] = $this->create_running_attempt(2);
 
-        $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, 0, ''));
+        $this->assertDebuggingNotCalled();
+        $this->assertFalse(
+            attempt_finalizer::finalize($adaptiveattemptid, 0, ''),
+            'Finalisation must refuse a missing end time.'
+        );
+        $this->assertDebuggingCalled();
 
+        // Nothing was written: the attempt stays open rather than carrying a
+        // fabricated completion time.
         $catattempt = $DB->get_record('local_catquiz_attempts', ['id' => $catid]);
-        $this->assertNotEmpty($catattempt->endtime);
+        $this->assertEmpty($catattempt->endtime);
     }
 
     /**
@@ -166,6 +178,55 @@ final class attempt_finalizer_test extends advanced_testcase {
         $updated = $DB->get_record('adaptivequiz_attempt', ['id' => $adaptiveattemptid], 'resultvalid, resultstatus');
         $this->assertEquals(1, (int) $updated->resultvalid);
         $this->assertEquals('valid', $updated->resultstatus);
+    }
+
+    /**
+     * Issue #7: when the stored feedback data names a primary scale, only that
+     * scale drives the completion verdict - every other reported scale is marked
+     * not-primary and therefore not valid, even when statistically sound. Without
+     * the delegation both reported scales would be primary (the $toreport
+     * fallback), so this pins the delegation down.
+     */
+    public function test_finalize_delegates_primary_scale(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $now = time();
+        $json = json_encode([
+            'personabilities_abilities' => [
+                5 => ['value' => 0.4, 'toreport' => true],
+                6 => ['value' => 0.2, 'toreport' => true],
+            ],
+            'se' => [5 => 0.3, 6 => 0.25],
+            // The strategy designated scale 6 as the primary scale.
+            'primaryscale' => ['id' => 6],
+        ]);
+        $adaptiveattemptid = $DB->insert_record('adaptivequiz_attempt', (object) [
+            'instance' => 1, 'userid' => 2, 'uniqueid' => 7788, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 6, 'difficultysum' => 0,
+            'standarderror' => 0.3, 'measure' => 0, 'timefinished' => null, 'timecreated' => $now, 'timemodified' => $now,
+        ]);
+        $catid = $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => 2, 'scaleid' => 5, 'contextid' => 9, 'attemptid' => $adaptiveattemptid,
+            'component' => 'mod_adaptivequiz', 'status' => 0, 'number_of_testitems_used' => 6,
+            'endtime' => null, 'json' => $json, 'timecreated' => $now, 'timemodified' => $now,
+        ]);
+
+        $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
+
+        $rows = $DB->get_records('local_catquiz_attemptscale', ['catattemptid' => $catid]);
+        $byscale = [];
+        foreach ($rows as $row) {
+            $byscale[(int) $row->catscaleid] = $row;
+        }
+        // Scale 6 is the designated primary scale: primary and therefore valid.
+        $this->assertArrayHasKey(6, $byscale);
+        $this->assertEquals(1, (int) $byscale[6]->isprimary);
+        $this->assertEquals(1, (int) $byscale[6]->isvalid);
+        // Scale 5 is reported but not the primary scale: not-primary hence not valid.
+        $this->assertArrayHasKey(5, $byscale);
+        $this->assertEquals(0, (int) $byscale[5]->isprimary);
+        $this->assertEquals(0, (int) $byscale[5]->isvalid);
     }
 
     /**

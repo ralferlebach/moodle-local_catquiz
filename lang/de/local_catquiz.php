@@ -264,6 +264,10 @@ $string['dateparseformat'] = 'Format des Datums';
 $string['dateparseformat_help'] = 'Bitte Datum so wie es im CSV definiert wurde verwenden. Hilfe unter <a href="http://php.net/manual/en/function.date.php">Datumsdokumentation</a> für diese Einstellung.';
 $string['daysago'] = 'Vor {$a} Tagen';
 $string['debuginfo_desc'] = 'Hier können Sie als Nutzer mit Berechtigung zum Download eines Exports den Versuchsverlauf als CSV-Datei exportieren.';
+$string['exportattemptcsv'] = 'Versuch exportieren (CSV)';
+$string['exportattemptdebugcsv'] = 'Debug-Verlauf exportieren (CSV)';
+$string['exportdebuginfopdf'] = 'Debug-Info exportieren (PDF)';
+$string['viewrawdebuginfo'] = 'Rohe Debug-Info anzeigen';
 $string['debuginfo_desc_title'] = 'Export des Testversuchs Nr. {$a}';
 $string['defaultcontext'] = 'Neuer Standard Einsatz-Kontext für Skala';
 $string['defaultcontextdescription'] = 'Beinhaltet alle Testitems';
@@ -316,6 +320,7 @@ $string['error:fraction1'] = 'Herzlichen Glückwunsch, Sie haben alle Fragen ric
 $string['error:minmaxrangeequal'] = 'Es liegt ein Fehler in den Einstellungen zu den genutzten CAT-Skalen vor: Die minimalen und maximale Skalenbegrenzungen
     sind identisch. Bitte melden Sie das Problem unter Nennung des von Ihnen genutzten Tests dem bzw. der CAT-Manager*in mit der Bitte,
     die Angaben zu den Skalen-Begrenzungen zu korrigieren.';
+$string['error:notestenvironmentsettings'] = 'Für {$a->component} mit der Instanz-ID {$a->componentid} sind keine CAT-Quiz-Einstellungen gespeichert. Vermutlich wurde die Aktivität noch nicht als CAT-Quiz konfiguriert.';
 $string['error:nminscale'] = 'Leider konnten wir kein Ergebnis ermitteln, da im Testversuch nicht genügend Fragen beantwortet wurden.
     Bitte stellen Sie bei Ihrem nächsten Versuch sicher, alle Fragen zu beantworten, um ein vollständiges Ergebnis zu erhalten.';
 $string['error:noscalestoreport'] = 'Leider konnten wir mit der aktuellen Anzahl an gestellten Fragen in den getesteten Bereichen
@@ -356,11 +361,16 @@ $string['feedback_details_highestskill'] = 'Teilbereich (Skala) „<b>{$a->name}
     persönlichen Fähigkeits-Wert von {$a->value} (± {$a->se}) als Ihre größte
     Stärke ermittelt.';
 $string['feedback_details_lowestskill'] = 'Teilbereich (Skala) „<b>{$a->name}</b>“ wurde mit einem
-    persönlichen Fähigkeits-Wert von {$a->value} (± {$a->se}) als Ihr größtes
-    Defizit ermittelt.';
+    persönlichen Fähigkeits-Wert von {$a->value} (± {$a->se}) als Ihr <b>schwächster
+    getesteter Teilbereich</b> ermittelt. Das bedeutet nicht zwingend, dass Sie dort
+    schwach sind – es ist der Bereich, in dem Sie im Vergleich zu den übrigen
+    getesteten Bereichen am wenigsten Punkte erreicht haben und der sich deshalb zum
+    Weiterlernen am ehesten anbietet.';
 $string['feedback_tab_clicked'] = 'Klick auf Feedback Tab';
 $string['feedback_tab_clicked_description'] = 'Nutzer {$a->userid} hat auf Feedback {$a->feedback_translated} in {$a->attemptlink} geklickt';
 $string['feedback_table_answercorrect'] = 'Richtig';
+$string['feedback_table_correctness'] = 'Ergebnis';
+$string['feedback_table_givenanswer'] = 'Gegebene Antwort:';
 $string['feedback_table_answerincorrect'] = 'Falsch';
 $string['feedback_table_answerpartlycorrect'] = 'Teilweise richtig';
 $string['feedback_table_questionnumber'] = 'Nr.';
@@ -375,6 +385,12 @@ durchschnittliche Fähigkeits-Wert aller Teilnehmenden an dem Test beträgt {$a-
 <p>Die folgende Graﬁk stellt Ihren Fähigkeitswert (obere Markierung) und den aktuellen
 Durchschnitt (untere Markierung) dar:</p>';
 $string['feedbackcomparison_betterthan'] = 'Mit Ihrem Ergebnis sind Sie momentan <b>besser als {$a->quantile}% aller anderen Test-Teilnehmenden</b>.';
+$string['feedbackcomparetoaverage_nopeers'] = '<p>Der Test misst Ihr Wissen und Können in „{$a->quotedscale}“ in Form eines Fähigkeits-Wertes zwischen
+{$a->scale_min} und {$a->scale_max}. Je höher Ihr Fähigkeits-Wert ausfällt, desto besser ist Ihr Wissen und Ihr
+Können in der Skala.</p>
+<p>Ihr erreichter Fähigkeits-Wert ist <b>{$a->ability_global}</b> (mit einem Standardfehler von ±{$a->se_global}).</p>
+<p>Es liegen noch nicht genügend Vergleichsergebnisse vor, um einen Durchschnitt für diesen Test anzuzeigen.</p>
+<p>Die folgende Graﬁk stellt Ihren Fähigkeitswert dar:</p>';
 $string['feedbackcompletedentirely'] = 'Alle Feedbacks für diese CAT-Skala hinterlegt.';
 $string['feedbackcompletedpartially'] = '{$a} Feedbacks für diese Skala hinterlegt.';
 $string['feedbacklegend'] = 'Beschreibung der Fähigkeits-Stufe';
@@ -415,8 +431,8 @@ berechnet und aktualisiert. Die folgende Grafik zeigt Ihnen, wie sich die Einsch
 Ihres Fähigkeits-Wertes in „{$a}“ über den Verlauf des Testversuchs hinweg
 verändert hat.';
 $string['graphicalsummary_description_lowest'] = 'Zusätzlich ist auch die
-    Entwicklung Ihres Fähigkeits-Wertes bezüglich der als Defizit
-    identifizierten Skala {$a} dargestellt:';
+    Entwicklung Ihres Fähigkeits-Wertes bezüglich Ihres schwächsten getesteten
+    Teilbereichs {$a} dargestellt:';
 $string['greateststrenght:tooltiptitle'] = 'Ihre stärkste Skala „{$a}„';
 $string['groupenrolementstring'] = '„{$a->groupname}“ in Kurs <a href={$a->courseurl}>{$a->coursename}</a>“';
 $string['groupenrolmenthelptext'] = 'Bitte geben Sie den/die genauen Namen existierender Gruppe/n ein (z.B.: „Gruppe1,Gruppe2“ oder „Gruppe3“).';
@@ -429,6 +445,10 @@ $string['hubactions'] = 'Berechnungen auf zentraler Instanz';
 $string['hubactionshelp'] = 'Hier können Berechnungen, die spezifisch für zentrale Instanzen sind, ausgeführt werden';
 $string['id'] = 'ID';
 $string['ifdefinedusedtomatch'] = 'Wenn angegeben findet der Abgleich über diesen Wert statt.';
+$string['import_warning_capped_difficulty'] = 'Item „{$a->id}“: Schwierigkeit {$a->value} liegt an oder jenseits der ±{$a->cap}-Grenze und ist höchstwahrscheinlich ein gedeckelter Schätzwert und kein echter Wert.';
+$string['import_warning_capped_discrimination'] = 'Item „{$a->id}“: Trennschärfe {$a->value} liegt an oder jenseits der {$a->cap}-Grenze und ist höchstwahrscheinlich ein gedeckelter Schätzwert und kein echter Wert.';
+$string['import_warning_invalid_itemparams'] = 'Item „{$a->label}“: Die Itemparameter sind für das Modell „{$a->model}“ nicht verwendbar ({$a->reason}). Das Item wurde als Pilotitem statt als produktives Item importiert.';
+$string['import_warning_nonpositive_discrimination'] = 'Item „{$a->id}“: nicht-positive Trennschärfe ({$a->value}). Items mit einer Steigung von null oder kleiner sind für Modelle mit Trennschärfe degeneriert und kalibrieren nicht sinnvoll.';
 $string['importcolumnsinfos'] = 'Informationen zu Importfeldern:';
 $string['importcontextinfo'] = 'Die Kontextid sollte gesetzt werden, wenn bestehende Items bearbeitet werden, damit die eindeutige Zuordnung gelingt. Für den Import von neuen Items, empfiehlt es sich, den Kontext leer zu lassen. Es wird dann ein neuer Kontext automatisch generiert, welcher die Items aus dem Standardkontext plus die neu importierten enthält. Falls beim Import neuer Items ein Kontext angegeben wird, muss der Kontext der entsprechenden obersten Skala umgestellt werden (im CAT-Manager Dashboard, Skalen-Bereich), damit diese Items zum Einsatz kommen.';
 $string['importcsv'] = 'Import CSV';

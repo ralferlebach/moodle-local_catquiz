@@ -247,10 +247,9 @@ class feedbackclass {
                         get_string('lowerlimit', 'local_catquiz')
                     );
                     $lowerlimit = $defaultvalues['feedback_scaleid_limit_lower_' . $scale->id . '_' . $j]
-                        ?? optional_param(
+                        ?? self::optional_limit_param(
                             'feedback_scaleid_limit_lower_' . $scale->id . '_' . $j,
-                            LOCAL_CATQUIZ_RANDOM_DEFAULT,
-                            PARAM_FLOAT
+                            LOCAL_CATQUIZ_RANDOM_DEFAULT
                         );
                     if ($lowerlimit === LOCAL_CATQUIZ_RANDOM_DEFAULT) {
                         $lowerlimit = self::return_limits_for_scale(
@@ -288,10 +287,9 @@ class feedbackclass {
                         get_string('upperlimit', 'local_catquiz')
                     );
                     $upperlimit = $defaultvalues['feedback_scaleid_limit_upper_' . $scale->id . '_' . $j]
-                        ?? optional_param(
+                        ?? self::optional_limit_param(
                             'feedback_scaleid_limit_upper_' . $scale->id . '_' . $j,
-                            LOCAL_CATQUIZ_RANDOM_DEFAULT,
-                            PARAM_FLOAT
+                            LOCAL_CATQUIZ_RANDOM_DEFAULT
                         );
                     if ($upperlimit === LOCAL_CATQUIZ_RANDOM_DEFAULT) {
                         $upperlimit = self::return_limits_for_scale(
@@ -621,6 +619,47 @@ class feedbackclass {
         }
 
         return $coloroptions;
+    }
+
+    /**
+     * Reads a feedback range limit from the request in a locale safe way.
+     *
+     * Moodle's PARAM_FLOAT is a plain cast, so clean_param('1,5', PARAM_FLOAT)
+     * yields 1.0 - a German decimal comma is silently truncated. That turned an
+     * upper limit of "1,5" into "1" in the settings form, which then produced the
+     * "no gaps allowed in the person ability range" validation error because the
+     * next lower limit still read 1,5. Read the raw value and parse it with the
+     * locale aware unformat_float() instead, falling back to a dot-decimal read.
+     *
+     * @param string $paramname The request parameter to read.
+     * @param mixed $default Returned when the parameter is absent or unparsable.
+     *
+     * @return mixed The parsed float or the given default.
+     */
+    private static function optional_limit_param(string $paramname, $default) {
+        $raw = optional_param($paramname, null, PARAM_RAW);
+        if ($raw === null || trim((string) $raw) === '') {
+            return $default;
+        }
+
+        $raw = trim((string) $raw);
+
+        // Unformat_float() understands the decimal separator of the active language.
+        $parsed = unformat_float($raw, true);
+        if ($parsed !== false && $parsed !== null) {
+            return (float) $parsed;
+        }
+
+        // The value did not match the current locale - accept a plain dot decimal
+        // as well, and treat a comma as decimal separator when there is no dot.
+        if (strpos($raw, ',') !== false && strpos($raw, '.') === false) {
+            $raw = str_replace(',', '.', $raw);
+        }
+        if (is_numeric($raw)) {
+            return (float) $raw;
+        }
+
+        return $default;
     }
 
     /**

@@ -803,7 +803,7 @@ class pcm extends model_multiparam {
      *
      * @return string The name of the multiple parameter.
      */
-    protected function get_multi_param_name(): string {
+    protected static function get_multi_param_name(): string {
         return 'intercepts';
     }
 

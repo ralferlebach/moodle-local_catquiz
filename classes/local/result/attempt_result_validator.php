@@ -16,6 +16,7 @@
 
 namespace local_catquiz\local\result;
 
+use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\teststrategy\progress;
 
 /**
@@ -89,19 +90,28 @@ final class attempt_result_validator {
                 $reasons[] = scale_result::REASON_ROOTONLY;
             }
 
-            $hascheckbox = isset($error['checkbox']);
+            /* 'excluded' now means exactly one thing: the measurement is unusable.
+               The display decision "reporting switched off" arrives as its own flag
+               (feedbacksettings::FIELD_NOTREPORTED), so the statistical check no
+               longer has to compensate for a conflated flag by inspecting the error
+               array. The checkbox error entry is still read for backwards
+               compatibility with data written before the split. */
+            $notreported = !empty($entry[feedbacksettings::FIELD_NOTREPORTED]) || isset($error['checkbox']);
             $excluded = !empty($entry['excluded']);
             $hidden = !empty($entry['hidden']);
             $toreport = !empty($entry['toreport']);
 
-            // Statistical validity: no measurement-quality reason, and not
-            // excluded for any non-reporting reason. Reporting being disabled
-            // (checkbox) does not make a result statistically invalid.
-            $statisticallyvalid = ($reasons === []) && !($excluded && !$hascheckbox);
+            /* Statistical validity: no measurement-quality reason and not excluded.
+               Reporting being switched off never makes a result invalid. Data
+               written BEFORE the flag split marks the reporting case as 'excluded'
+               too, so an excluded scale that is only not-reported still counts as
+               statistically valid - otherwise stored results would retroactively
+               become invalid. */
+            $statisticallyvalid = ($reasons === []) && !($excluded && !$notreported);
 
             // Reporting / display gate.
-            $reportable = $toreport && !$hidden && !$hascheckbox;
-            if ($hascheckbox) {
+            $reportable = $toreport && !$hidden && !$notreported;
+            if ($notreported) {
                 $reasons[] = scale_result::REASON_REPORTING_DISABLED;
             }
             if ($hidden) {
@@ -179,20 +189,33 @@ final class attempt_result_validator {
 
         $sebyscale = (isset($data['se']) && is_array($data['se'])) ? $data['se'] : [];
 
-        // Per-scale item counts from the progress (pilot-filtered), so N never
-        // includes pilot or unanswered items (Issue #7 / #6).
+        /* Per-scale N must be the number of ANSWERED, non-pilot items of that scale.
+           This used to call get_playedquestions(), which counts DISPLAYED items - so
+           N could include a still unanswered pending item as well as pilot items,
+           and an attempt could be declared valid on a too optimistic N. The comment
+           here claimed the value was pilot-filtered while the code was not; the
+           authoritative counter on progress now enforces both filters (Issue #7). */
         $nbyscale = [];
         if (!empty($catattempt->contextid)) {
             try {
                 $progress = progress::load($adaptiveattemptid, 'mod_adaptivequiz', (int) $catattempt->contextid);
                 foreach (array_keys($personabilities) as $scaleid) {
-                    $nbyscale[(int) $scaleid] = count($progress->get_playedquestions(true, (int) $scaleid));
+                    $nbyscale[(int) $scaleid] = $progress->get_num_answered_productive_questions((int) $scaleid);
                 }
             } catch (\Throwable $e) {
                 $nbyscale = [];
             }
         }
 
-        return self::from_personabilities($personabilities, $sebyscale, $nbyscale);
+        // Issue #7: the strategy records its designated primary scale in the
+        // stored feedback data. Delegate its id so only that scale drives the
+        // completion verdict (from_personabilities marks every other reported
+        // scale REASON_NOT_PRIMARY). Absent - e.g. attempts finalised before this
+        // was persisted - keeps the historic $toreport fallback.
+        $primaryscaleid = isset($data['primaryscale']['id'])
+            ? (int) $data['primaryscale']['id']
+            : null;
+
+        return self::from_personabilities($personabilities, $sebyscale, $nbyscale, [], $primaryscaleid);
     }
 }

@@ -637,6 +637,40 @@ class model_strategy {
      *
      * @return array<string>
      */
+    /**
+     * Validates the item parameters of a record against the contract of its model.
+     *
+     * Single entry point used both by the CSV importer and by the test runtime, so
+     * that an item is judged by exactly the same rules in both places.
+     *
+     * @param \stdClass $record The raw item parameter record (needs a `model` field).
+     * @return string[] Reasons the parameters are invalid; empty array if valid.
+     */
+    public static function validate_item_parameters(\stdClass $record): array {
+        $modelname = $record->model ?? '';
+        if ($modelname === '' || $modelname === null) {
+            // No model means there is nothing calibrated - the original rule applies:
+            // no usable item parameter, therefore a pilot item.
+            return ['no model is set'];
+        }
+
+        $models = self::get_installed_models();
+        if (!isset($models[$modelname])) {
+            return [sprintf('unknown model "%s"', $modelname)];
+        }
+
+        // Every model derives from model_model, which defines validate_parameters(),
+        // so the contract is guaranteed - no defensive method_exists() needed.
+        $class = $models[$modelname];
+
+        return $class::validate_parameters($record);
+    }
+
+    /**
+     * Returns all installed models.
+     *
+     * @return array
+     */
     public static function get_installed_models(): array {
         $pm = core_plugin_manager::instance();
         $models = [];

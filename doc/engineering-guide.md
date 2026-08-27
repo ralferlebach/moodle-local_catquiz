@@ -117,6 +117,20 @@ Konkret in dieser Session: Der reaktivierte Simulationstest wurde geprüft, inde
 der Memo-Bug (siehe §3) reinjiziert wurde – der Test fiel (Trefferquote 0,9 %),
 mit korrekter Verdrahtung grün.
 
+Der Zahn-Test fängt auch **wirkungslose eigene Assertions** – zweimal belegt:
+
+- Eine Richtungsinvariante war als „alle Antworten falsch → Endwert unter Start"
+  formuliert. Alle Referenzmuster sind aber gemischt, die Bedingung traf bei
+  **keinem** Datensatz zu. Erst als der Zahn-Test trotz gespiegelter Trajektorie
+  grün blieb, fiel es auf; die Mehrheitsbedingung (≥ 4/5) bringt 13 zusätzliche
+  Assertions.
+- Ein Host-Test für den Slot-Vertrag bildete in seiner Hilfsmethode den Fix nach,
+  statt den Produktionscode zu durchlaufen – er wäre auch ohne Fix grün gewesen.
+  Verworfen statt ausgeliefert.
+
+**Regel:** Bleibt der Zahn-Test grün, ist nicht der Fix trivial, sondern die
+Assertion kaputt.
+
 ### 2.5 Toleranz- statt Punktpinning bei sensiblen Trajektorien
 
 Der stabilisierte Newton kippt an Rand-/Degeneriertfällen diskrete Zweige anders
@@ -125,6 +139,53 @@ Schritte quasi exakt, wenige komplett divergent), nicht graduell. Solche Tests
 nicht auf jeden Einzelschritt pinnen, sondern **aggregiert** prüfen (z. B. „≥ 90 %
 der Schritte treffen die Referenz auf 0.01"). Das fängt grobe Regressionen
 zuverlässig und bleibt gegenüber legitimen Zweig-Unterschieden robust.
+
+**Grenze des Aggregats.** Es hilft nur, solange die Referenz noch dieselbe Sache
+misst. Nach den Zählgrößen-Fixes (Stopp nach *beantworteten* statt *angezeigten*
+Items) trafen 7 von 13 Datensätzen die alte Referenz nur zu 3–43 %, teils 2 % der
+Labels, dazu 11 Abbrüche „Should not be 0" – der CAT war fertig, die Referenz
+wollte weiterlaufen. Die Referenz war also **konstruktionsbedingt veraltet**, nicht
+numerisch verrutscht. Dann ist beides falsch: Ein Aggregat misst Veralterung statt
+Korrektheit, und frisches Neupinnen zementiert das aktuelle Verhalten samt
+möglicher Fehler. Richtig sind dann **referenzfreie Invarianten** – der Versuch
+terminiert von selbst, jede Schätzung bleibt endlich und im Trust-Range, die
+Trajektorie folgt dem Antwortmuster (siehe session-080).
+
+---
+
+## 2a. Zahlen aus Fremdquellen: nie blind casten
+
+Die häufigste Fehlerklasse dieser Sitzung – **viermal dieselbe Wurzel**, jedes Mal
+mit stillen, plausibel aussehenden Falschwerten statt einer Fehlermeldung:
+
+| Fundstelle | Eingabe | `floatval`/Cast | korrekt |
+|---|---|---|---|
+| Feedback-Ranges (JSON) | `"1,5"` | `1.0` | `1.5` |
+| Formular (`PARAM_FLOAT`) | `"1,5"` | `1.0` | `1.5` |
+| CSV-Import | `"'-5.81"` | `0.0` | `-5.81` |
+| Pilot-Erkennung | `0.0` | *falsy* → Pilot | gültiger IRT-Wert |
+
+Merksätze:
+
+- **`floatval()` schneidet am ersten ungültigen Zeichen ab.** Ein deutsches
+  Dezimalkomma wird damit zu einer glatten Zahl, ein Apostroph-Präfix zu `0.0`.
+- **`PARAM_FLOAT` ist in Moodle ein reiner Cast**, kein locale-fähiger Parser.
+  Für Benutzereingaben `PARAM_RAW` + `unformat_float()` verwenden.
+- **Moodles CSV-Reader escaped beim Zwischenspeichern.**
+  `csv_import_reader::load_csv_content()` schreibt über
+  `csv_export_writer::print_array()`, dessen `add_data()`
+  `\core\dataformat::escape_spreadsheet_formula()` anwendet: Werte, die mit
+  `=`, `+`, `-` oder `@` beginnen, bekommen ein **Apostroph** vorangestellt. Jede
+  negative Zahl ist betroffen. Vor der Konvertierung strippen
+  (`fileparser::strip_formula_escape()`).
+- **`0.0` ist ein gültiger Wert, kein „fehlt".** Nie als Wahrheitswert prüfen –
+  `floatval($difficulty)` als Gate machte jedes kalibrierte b = 0 zur Pilotfrage.
+
+**Diagnose-Merkmal:** Wenn *alle* Werte einer Vorzeichen- oder Formatklasse falsch
+sind und die übrigen stimmen (hier: alle negativen → 0, alle positiven korrekt),
+ist es kein Rundungs-, sondern ein Parse-Problem. Dann die Rohbytes ansehen und
+den Wert an der Stelle instrumentieren, an der er ankommt – nicht dort, wo man ihn
+vermutet.
 
 ---
 
@@ -195,6 +256,17 @@ stellt, nicht nur „kein Absturz".
   - `…-<version>.zip`: das volle Arbeitspaket inkl. Tooling und `doc/`.
 - Vor jeder Auslieferung die Checkliste in §7 abarbeiten.
 
+**Keine `.git`-Verzeichnisse ausliefern (verbindlich).** Ausgelieferte ZIPs
+dürfen **kein** `.git`-Verzeichnis enthalten – auch keine verschachtelten (z. B.
+`catquizcentralhub/client/.git`, `.../host/.git`). Eingespielte Fremd-`.git`
+bringen das Git auf der Empfängerseite durcheinander. Das `…-release.zip` (via
+`git archive`) ist per se frei davon; das volle Arbeitspaket wird per `cp -a`
+gebaut und **muss** danach mit `find <ziel> -type d -name .git -prune -exec rm -rf
+{} +` von **allen** `.git` befreit werden (nicht nur dem obersten). Ebenso im
+Workspace: verschachtelte Fremd-Repos (`catquizcentralhub/*/.git`) gehören
+gelöscht – sie beeinflussen die Arbeit nicht und leaken sonst in Deliverables.
+Der Ausschluss ist Teil der Auslieferungs-Checkliste (§7).
+
 **Version-Bump erzwingt Schema-Rebuild (verbindlich).** Moodle wendet Änderungen
 an `db/install.xml`/`db/upgrade.php` **nur** an, wenn `$plugin->version` steigt.
 Bleibt die Version gleich, sieht Moodle „schon installiert" und lässt das alte
@@ -220,11 +292,14 @@ lokal in den Moodle-Baum klonen und die Tests dagegen laufen lassen, statt der
 Vermutung zu vertrauen, ein bestimmter Branch „behebe es schon". Erst der
 Klon-Nachweis zeigte, dass alise denselben Bug hat.
 
-**Behat.** Bleibt bewusst non-blocking (`continue-on-error`), solange die
-adaptivequiz-Integration am obigen Dependency-Bug hängt und lokal (ohne
-Chrome/Selenium) nicht verifizierbar ist. Der Workflow-Kommentar nennt die
-genaue Ursache; scharf schalten ist ein Einzeiler, sobald der Fork seinen
-Generator fixt.
+**Behat.** Inzwischen **blockierend** und grün (19 Szenarien, Stand Aug 2026);
+der frühere `continue-on-error`-Zustand ist überholt. Lokal bleibt Behat mangels
+Chrome/Selenium nicht lauffähig: Szenarien lassen sich schreiben, aber nur in der
+CI verifizieren. Erfahrung aus Strang C: Szenarien, die ausschließlich eigene
+Oberflächen und bewährte Schrittmuster nutzen, laufen meist sofort; rot wird
+regelmäßig das, was durch **fremde** UI navigiert. Deshalb Schritte an fremden
+Oberflächen vorher im Quelltext des Fremd-Plugins nachlesen statt zu raten – und
+akzeptieren, dass manche Wege gar nicht existieren (siehe session-083).
 
 **Moodle-4.5-Core-API: `external_api` ist namespaced.** In Moodle 4.5 sind die
 globalen Klassen `external_api`, `external_function_parameters`,
@@ -243,6 +318,26 @@ von phpcs als überflüssig moniert und ist zu entfernen.
 
 ---
 
+### 5a. Was ein ZIP nicht kann
+
+Ein ZIP, das über einen vorhandenen Checkout entpackt wird, **löscht nichts**.
+Eine aus dem Paket entfernte Datei bleibt beim Empfänger liegen. Löschungen
+brauchen deshalb immer eine ausdrückliche Anweisung neben dem Paket:
+
+```bash
+git rm -r <pfade>
+```
+
+In dieser Sitzung hat das eine Runde gekostet: Fünf tote Klassen waren aus dem
+Adapter-Paket entfernt, im Ziel-Repo aber weiterhin vorhanden – der
+Autoload-Wächter meldete sie prompt erneut.
+
+Ebenso gehören **keine Fremddateien** ins Plugin-Paket: kein Patch, kein
+Hilfsskript, keine Notiz. Ein Plugin-ZIP enthält Plugin-Code, sonst nichts.
+Begleitmaterial separat ausliefern.
+
+---
+
 ## 7. Checkliste vor Auslieferung
 
 1. Alle 7 Modell-Suiten grün (erwartete Test-/Skip-Zahlen unverändert).
@@ -253,6 +348,10 @@ von phpcs als überflüssig moniert und ist zu entfernen.
 5. Neue Fixes/Guards zahn-getestet (Rücknahme → rot).
 6. phpcs plugin-weit Exit 0.
 7. Interne Version erhöht; CHANGELOG + Session-Doku aktualisiert.
-8. Beide ZIPs gebaut, Datei-/Ausschlusszahlen geprüft, präsentiert.
-9. Ehrlicher Abschlussbericht inkl. verbleibender Übergangszustände
-   (z. B. Behat non-blocking, warum).
+8. Beide ZIPs gebaut, Datei-/Ausschlusszahlen geprüft, präsentiert. Dabei
+   sichergestellt, dass **kein** `.git`-Verzeichnis (auch kein verschachteltes)
+   im Paket liegt: `unzip -l … | grep -c '/\.git/'` muss `0` sein.
+9. Bei Löschungen: `git rm`-Anweisung **neben** dem Paket mitgeben (§5a). Keine
+   Fremddateien (Patches, Skripte) im Plugin-ZIP.
+10. Ehrlicher Abschlussbericht inkl. verbleibender Übergangszustände
+   (z. B. was nur statisch hergeleitet und nicht ausgeführt wurde, und warum).
