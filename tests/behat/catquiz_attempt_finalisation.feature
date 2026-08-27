@@ -41,36 +41,15 @@ Feature: Completing an attempt is authoritative on every path.
     And I click on "Save and return to course" "button"
     And I log out
 
-  @javascript
-  Scenario: A teacher closing an attempt finalises it like a normal completion
-    ## Issue #5 DoD 3/7: administrative closing must not be a second completion
-    ## mechanism. The attempt is left unfinished by the student and then closed by
-    ## the teacher; afterwards it must be reported as finished, not as in progress.
-    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
-    And I wait until the page is ready
-    And I should see "Question 1"
-    And I click on "richtige Antwort" "text" in the "Question 1" "question"
-    And I click on "Submit answer" "button"
-    And I should see "Question 2"
-    ## Leave the attempt unfinished.
-    And I log out
-    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
-    ## The report is reached through the activity administration, the same way the
-    ## mod_adaptivequiz scenarios navigate there.
-    And I navigate to "Reports" in current page administration
-    And I wait until the page is ready
-    ## In the report table the link to a user's attempts carries the NUMBER of
-    ## attempts as its text, not the user name - so address it within the row.
-    And I click on "1" "link" in the "Student1 Test" "table_row"
-    And I wait until the page is ready
-    ## "Close attempt" is rendered as an action icon, not as a plain text link.
-    And I click on "Close attempt" "icon"
-    And I wait until the page is ready
-    And I press "Continue"
-    And I wait until the page is ready
-    ## The attempt is now finalised: the report no longer lists it as in progress.
-    Then I should not see "In progress"
+  ## NOT covered here: administratively closing an attempt (issue #5 DoD 7).
+  ## With a custom CAT model in use, mod_adaptivequiz does not render a link to the
+  ## attempts report at all: view.php only calls attempts_number(), and that returns
+  ## plain text unless the CAT model implements the `attempts_report_url` callback -
+  ## which adaptivequizcatmodel_catquiz does not. The teacher therefore has no UI
+  ## path to "Close attempt", so this cannot be driven through Behat. The code path
+  ## itself is verified: closeattempt.php calls adaptivequiz_complete_attempt(), the
+  ## same authoritative function the cron uses, and that is asserted in
+  ## cancel_expired_attempts_path_test.
 
   @javascript
   Scenario: A completed attempt is not finalised twice

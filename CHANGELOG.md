@@ -1,5 +1,43 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082149)
+
+> Zweiter Behat-Lauf: wieder 19/21. Die beiden verbliebenen Szenarien sind über
+> die Oberfläche **grundsätzlich nicht durchführbar** – beides sind echte Befunde,
+> keine Testfehler. Sie sind entfernt und die Gründe dokumentiert.
+
+- **Administratives Schließen ist bei aktivem CAT-Model per UI nicht erreichbar.**
+  `mod_adaptivequiz/view.php` rendert bei gesetztem `catmodel` keinen Link zum
+  Attempt-Report, sondern ruft nur `attempts_number()`. Diese Funktion liefert
+  **reinen Text**, solange das CAT-Model den Callback `attempts_report_url` nicht
+  implementiert – und `adaptivequizcatmodel_catquiz` implementiert ihn nicht
+  (verifiziert in `classes/output/attempts_number.php:51-71`). Die Lehrkraft hat
+  damit keinen Weg zu „Close attempt". Der HTML-Dump bestätigt es: die
+  Aktivitätsseite zeigt lediglich „Attempts: 1" ohne Link, und das einzige
+  „Reports" auf der Seite ist der Nutzermenü-Eintrag des Report-Builders.
+  - **Der Code-Pfad ist unabhängig davon verifiziert**: `closeattempt.php` ruft
+    `adaptivequiz_complete_attempt()` – dieselbe autoritative Funktion wie der
+    Cron –, und genau das prüft `cancel_expired_attempts_path_test`.
+  - Konsequenz für #5 DoD 7: per Behat nicht erfüllbar, solange der Adapter keinen
+    `attempts_report_url`-Callback anbietet. **Das wäre die eigentliche
+    Verbesserung** – dann wäre der Report auch für Lehrende erreichbar.
+- **Die Reporting-Checkbox ist per Label nicht adressierbar.** `advcheckbox`
+  rendert je Skala **zwei** Inputs mit gleichem Namen und Label – ein verstecktes
+  `value="0"` plus die sichtbare Checkbox. Der label-basierte Behat-Schritt trifft
+  das versteckte zuerst („element not interactable"). Eine Adressierung über die
+  id scheidet aus, weil diese die generierte Skalen-ID enthält und je Lauf
+  wechselt.
+  - Der Sachverhalt ist stattdessen **am Gate** abgedeckt, wo er präziser
+    prüfbar ist: `feedback_result_gate_test` belegt in zwei Tests, dass eine
+    solche Skala nicht angezeigt wird, aber statistisch valide bleibt – ihr
+    Ergebnis wird also weiterhin gespeichert und steht für die Vorwertübernahme
+    zur Verfügung.
+- Beide Begründungen stehen als Kommentar in den betroffenen Feature-Dateien,
+  damit die Lücke nicht später als Versehen gelesen wird.
+- Behat-Bestand jetzt **19 Szenarien**, davon 4 in dieser Sitzung neu
+  (#6 Back/Forward, #6 wiederholtes Wiederbetreten, #5/#8 keine
+  Doppel-Finalisierung, #9 Carryover) – alle im zweiten Lauf grün.
+
 ## 1.1.5 (interne Version 2026082148)
 
 > Behat-Nachbesserung: 19 von 21 Szenarien liefen im ersten Lauf grün, die zwei
