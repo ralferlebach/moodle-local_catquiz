@@ -101,7 +101,9 @@ Feature: Feedback output is bound to a valid CAT result.
     And I follow "Settings"
     And I wait until the page is ready
     And I expand all fieldsets
-    And I uncheck the "Report results of this scale" checkbox
+    ## Unchecking is expressed as setting the field to an empty value; there is no
+    ## dedicated "uncheck" step in Moodle.
+    And I set the field "Include scale for report" to ""
     And I click on "Save and return to course" "button"
     And I log out
     And I am on the "adaptivecatquiz1" Activity page logged in as student1

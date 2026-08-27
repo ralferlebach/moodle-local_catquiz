@@ -56,16 +56,20 @@ Feature: Completing an attempt is authoritative on every path.
     ## Leave the attempt unfinished.
     And I log out
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher
-    And I follow "Reports"
+    ## The report is reached through the activity administration, the same way the
+    ## mod_adaptivequiz scenarios navigate there.
+    And I navigate to "Reports" in current page administration
     And I wait until the page is ready
-    And I follow "Student1 Test"
+    ## In the report table the link to a user's attempts carries the NUMBER of
+    ## attempts as its text, not the user name - so address it within the row.
+    And I click on "1" "link" in the "Student1 Test" "table_row"
     And I wait until the page is ready
-    And I follow "Close attempt"
+    ## "Close attempt" is rendered as an action icon, not as a plain text link.
+    And I click on "Close attempt" "icon"
     And I wait until the page is ready
     And I press "Continue"
     And I wait until the page is ready
-    ## The attempt is now closed; re-opening the activity as the student offers a
-    ## new attempt rather than resuming the old one.
+    ## The attempt is now finalised: the report no longer lists it as in progress.
     Then I should not see "In progress"
 
   @javascript

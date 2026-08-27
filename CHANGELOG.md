@@ -1,5 +1,35 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082148)
+
+> Behat-Nachbesserung: 19 von 21 Szenarien liefen im ersten Lauf grün, die zwei
+> Fehlschläge waren genau die vorhergesagten Oberflächen-Annahmen.
+
+- **Undefinierter Schritt behoben.** `I uncheck the "..." checkbox` existiert in
+  Moodle nicht; Abwählen wird als `I set the field "..." to ""` ausgedrückt.
+  - Dabei war auch der **Feldname geraten und falsch**: Die Checkbox heißt nicht
+    „Report results of this scale", sondern **„Include scale for report"**
+    (`$string['reportscale']`). Am Code verifiziert statt erneut geraten.
+- **Navigation zum Attempt-Report behoben.** `I follow "Reports"` scheiterte mit
+  `ElementNotInteractableException` – der Link liegt in der Aktivitäts-
+  administration. Ersetzt durch
+  `I navigate to "Reports" in current page administration`, das Muster der
+  mod_adaptivequiz-eigenen Szenarien.
+- **Zwei weitere Fehler vorab gefunden**, die im nächsten Lauf sonst rot geworden
+  wären – beide durch Nachlesen im Mod-Quelltext statt durch Raten:
+  - In der Report-Tabelle trägt der Link zu den Versuchen einer Person die
+    **Anzahl der Versuche** als Text, nicht den Namen (`renderer.php:368`).
+    Jetzt zeilenbezogen adressiert: `I click on "1" "link" in the
+    "Student1 Test" "table_row"`.
+  - „Close attempt" wird als **Action-Icon** (`t/stop`) gerendert, nicht als
+    Textlink (`renderer.php:727`) – daher `"Close attempt" "icon"`.
+  - Gegengeprüft und bestätigt: `closeattempt.php` nutzt `$renderer->confirm()`,
+    dessen Button „Continue" heißt, und
+    `I press the "back|forward" button in the browser` existiert im Core
+    (`behat_general.php:1990`) – dieses Szenario war im ersten Lauf bereits grün.
+- Die übrigen vier neuen Szenarien (Back/Forward, wiederholtes Wiederbetreten,
+  Doppel-Finalisierung, Carryover) bestanden den ersten Lauf ohne Änderung.
+
 ## 1.1.5 (interne Version 2026082147)
 
 > Das doppeldeutige `excluded`-Flag ist aufgetrennt, und die Behat-Abdeckung für
