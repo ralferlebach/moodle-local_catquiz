@@ -320,6 +320,7 @@ $string['error:fraction1'] = 'Herzlichen Glückwunsch, Sie haben alle Fragen ric
 $string['error:minmaxrangeequal'] = 'Es liegt ein Fehler in den Einstellungen zu den genutzten CAT-Skalen vor: Die minimalen und maximale Skalenbegrenzungen
     sind identisch. Bitte melden Sie das Problem unter Nennung des von Ihnen genutzten Tests dem bzw. der CAT-Manager*in mit der Bitte,
     die Angaben zu den Skalen-Begrenzungen zu korrigieren.';
+$string['error:notestenvironmentsettings'] = 'Für {$a->component} mit der Instanz-ID {$a->componentid} sind keine CAT-Quiz-Einstellungen gespeichert. Vermutlich wurde die Aktivität noch nicht als CAT-Quiz konfiguriert.';
 $string['error:nminscale'] = 'Leider konnten wir kein Ergebnis ermitteln, da im Testversuch nicht genügend Fragen beantwortet wurden.
     Bitte stellen Sie bei Ihrem nächsten Versuch sicher, alle Fragen zu beantworten, um ein vollständiges Ergebnis zu erhalten.';
 $string['error:noscalestoreport'] = 'Leider konnten wir mit der aktuellen Anzahl an gestellten Fragen in den getesteten Bereichen
