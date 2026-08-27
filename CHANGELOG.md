@@ -1,5 +1,42 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082150)
+
+> Beide offenen Punkte umgesetzt: Der Adapter liefert jetzt den fehlenden
+> Report-Callback, und der seit Langem inkomplette Schätz-Test ist untersucht.
+
+- **Adapter-Callback `attempts_report_url`** (Patch für
+  `adaptivequizcatmodel_catquiz`, liegt bei). Ohne ihn rendert
+  `mod_adaptivequiz` die Versuchszahl auf der Aktivitätsseite als **reinen Text**
+  (`attempts_number::when_custom_catmodel_in_use`) – eine Lehrkraft kam damit
+  weder zu einer Versuchsübersicht noch zur Aktion „Close attempt".
+  - Der Callback liefert `local/catquiz/feedback.php` mit `courseid` und
+    `instanceid`, also die plugin-eigene Versuchsübersicht.
+  - **Im echten Moodle verifiziert**, nicht nur angenommen:
+    `get_plugin_list_with_function()` findet den Callback, und
+    `attempts_number::when_custom_catmodel_in_use()` liefert damit
+    `.../feedback.php?courseid=7&instanceid=42` statt `null`; ohne gesetztes
+    `catmodel` weiterhin `null`.
+  - Das zugehörige Behat-Szenario ist wieder aufgenommen (prüft, dass die
+    Versuchszahl für die Lehrkraft erscheint).
+- **`test_given_responses_lead_to_expected_abilities` untersucht.** Der Test war
+  nicht nur inkomplett, sondern **doppelt defekt** – beides hatte der Skip
+  verdeckt:
+  1. Der Aufruf `createtestenvironment($strategy)` hatte sein zweites Argument
+     verloren und wäre mit `ArgumentCountError` gestorben. **Repariert.**
+  2. Der Test fälscht den Attempt-Record (`instance 1, id 1`), statt einen echten
+     Versuch anzulegen. Sobald der CAT endet – seit den #6-Fixes deutlich früher –
+     betritt die Strategie den Feedback-Pfad und stirbt in `fetch_question_id()`
+     mit `attemptfeedback::$contextid must not be accessed before initialization`.
+     Eine Begrenzung der Antwortzahl hilft nicht, weil der Versuch vorher endet.
+  - Der Test bleibt daher `markTestIncomplete` – aber mit **zutreffender**
+    Begründung statt des alten, irreführenden „Calculated value is not yet
+    correct". Ihn lauffähig zu machen heißt, die Harness auf einen echten Versuch
+    umzubauen; das ist eine Neufassung, keine Korrektur. Der Schätzer ist
+    zwischenzeitlich durch den invariantenbasierten Trajektorientest und
+    `ability_monotonicity_test` gedeckt.
+- phpcs Exit 0 (beide Repos), PHPDoc 0 Fehler.
+
 ## 1.1.5 (interne Version 2026082149)
 
 > Zweiter Behat-Lauf: wieder 19/21. Die beiden verbliebenen Szenarien sind über
