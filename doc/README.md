@@ -42,9 +42,39 @@ Zwei Arten von Dokumenten:
 - **session-017-changes.md** – Experiment-Konsequenzen K3 (reduzierte Struktur), K4 (KKT-Gate), K5 (Identifizierbarkeits-Report) umgesetzt.
 - **session-018-changes.md** – CI-Fix: K2 zurückgenommen (K3 ist der Wurzelfix), phpdoc + catscale-float-cast.
   (inkrementell/disruptiv), Lock-API, Lauf-Zusammenfassung und CAT-Management-UI.
+- **session-019…064-changes.md** – Numerik-, Politom- und Feedback-Arbeitsstränge,
+  Diagramme/Feedback/Statistik (Issues #12–#16), Ergebnisspeicherung und
+  Abschluss-Logik (Strang C, Issues #5–#9).
+- **session-065…084-changes.md** – „CI grün"-Strang, siehe die Themenübersicht
+  unten.
+- **issues/** – ausformulierte Issue-Entwürfe und Review-Abgleiche:
+  `strang-c-dod-review.md` (DoD-Gegenprüfung #5–#9 mit Fundstellen),
+  `issue-7-validity-vs-reporting.md`, `backend-invalid-itemparams.md`.
 - **experiments-ip-edgecases.md** – strukturierte Zusammenstellung der
   IP-Edge-Case-Experimente (Annahmen, Durchführung, Ergebnisse, Befunde,
   Konsequenzen).
 
-Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.4),
+### Themenübersicht der Sitzungen 065–084 (Release 1.1.5)
+
+Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
+
+| Thema | Sitzung(en) |
+|---|---|
+| PHPDoc-CI-Fix, Behat-Erstdiagnose | 065 |
+| Feedback-Farben: abgeschnittene Skala-Grenzen (`floatval("1,5")`) | 066 |
+| Modell-Vertrag für Itemparameter (alle 7 Modelle), Pilot-Erkennung | 067, 076 |
+| Quizverlauf-Tabelle: Breite, Korrektheits-Icon, Modal-Fix | 068 |
+| Maximalfragezahl: richtige Zählgröße (beantwortet statt angezeigt) | 069, 070, 074 |
+| CSV-Import: Formel-Escaping nullte negative Difficulties | 070 |
+| „Question 5": nicht-monotoner Last-Response-Cache | 071 |
+| Chart/Legende auf eine Bezugsgröße, Debug-Warnungen im Export | 072 |
+| Strang-C-Review gegen die Codebasis, Arbeitsplan | 073 |
+| Autoritativer Versuchsabschluss (Cron, keine erfundene Endzeit) | 075 |
+| Live-Carryover aus der Versuchshistorie | 077 |
+| Feedback-Pfad auf das Ergebnis-DTO, `excluded` aufgetrennt | 078, 081 |
+| CAT-Simulationsmatrix reaktiviert (referenzfreie Invarianten) | 079, 080 |
+| Behat-Abdeckung #5–#9, Nachbesserung, zwei UI-Sackgassen | 081, 082, 083 |
+| Adapter: Report-Callback, Workflows, Tests, toter Code | 084 |
+
+Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.5),
 `../README.md` (Plugin-Beschreibung).

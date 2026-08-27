@@ -1,5 +1,39 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082152)
+
+> Dokumentations-Aktualisierung und Sitzungsabschluss des Strangs „CI grün"
+> (Sitzungen 065–085). Keine Codeänderung.
+
+- **`doc/environment-setup.md`**: Zielzustand auf mod_adaptivequiz 3.0.0
+  aktualisiert, Locale `en_AU.UTF-8` und `local_moodlecheck` als Fixpunkte
+  ergänzt. Alle `sudo`-Beispiele auf die Container-Realität umgestellt (man ist
+  root, `sudo` fehlt meist). Drei beim Aufsetzen aufgetretene Blocker
+  dokumentiert: `max_input_vars` muss **dauerhaft** in die `php.ini` (der
+  PHPUnit-Init ignoriert `-d`), `locale-gen en_AU.UTF-8`, und phpcs braucht
+  `installed_paths` für PHPCSExtra **und** moodle-cs. Neuer §5a zum
+  PHPDoc-Checker als lokale Reproduktion des CI-Quality-Jobs. Behat-Status von
+  „non-blocking" auf „blockierend und grün" berichtigt. Neue Stolpersteine: lange
+  Läufe im Hintergrund fahren, „ein ZIP löscht nichts", CRLF verfälscht
+  `grep`/`preg_match`.
+- **`doc/engineering-guide.md`**: neuer **§2a „Zahlen aus Fremdquellen: nie blind
+  casten"** – die häufigste Fehlerklasse dieses Strangs (viermal dieselbe Wurzel)
+  mit Tabelle und Diagnose-Merkmal. §2.4 um zwei Fälle erweitert, in denen der
+  Zahn-Test eine **wirkungslose eigene Assertion** entlarvt hat, samt Regel.
+  §2.5 um die Grenze des Aggregats (veraltete Referenz → referenzfreie
+  Invarianten). Neuer §5a „Was ein ZIP nicht kann"; Checkliste um Punkt 9
+  erweitert.
+- **`doc/README.md`**: Index bis session-084 fortgeschrieben (endete bei 018),
+  `issues/` aufgenommen, Themenübersicht 065–084 ergänzt.
+- **`doc/session-start-prompt.md`**: Release 1.1.5, aktuelle Abhängigkeiten,
+  Behat-Status, **Cross-Plugin-Warnung** (Repo-Stand und gebündelte Adapter-Kopie
+  können auseinanderlaufen – gebaut wird aus dem Repo) sowie der aktuelle Stand
+  mit den bekannten Restpunkten.
+- **`doc/session-085-changes.md`** neu.
+- Verifikation: alle 7 Modell-Suiten grün (Skip-Zahlen unverändert), Kernsuiten
+  grün, Sättigungs-Stresstest 2.856 Assertions ohne nicht-endliche Werte,
+  phpcs plugin-weit Exit 0 (verzeichnisweise gefahren), PHPDoc 0 Fehler.
+
 ## 1.1.5 (interne Version 2026082150)
 
 > Beide offenen Punkte umgesetzt: Der Adapter liefert jetzt den fehlenden

@@ -25,25 +25,48 @@ verifizierten Fixpunkte dieser Umgebung stehen in §0.
 | phpunit_dataroot  | `/home/claude/moodledata_phpu`, `phpunit_prefix=phpu_`       |
 | phpcs / moodle-cs | `/tmp/moodlecs` mit `moodlehq/moodle-cs 3.7.0` (exakt wie CI) |
 | moodle-plugin-ci  | v4 unter `/home/claude/ci` (reproduziert die CI-Checks lokal) |
-| Abhängigkeiten    | mod_adaptivequiz **@v-3.0** + Bridge adaptivequizcatmodel_catquiz @v-3.0; catquizcentralhub_{host,client}; local_wunderbyte_table; filter_shortcodes |
+| Abhängigkeiten    | mod_adaptivequiz **3.0.0** (ralferlebach `v-3.0`) + Adapter adaptivequizcatmodel_catquiz `v-3.0`; catquizcentralhub_{host,client}; local_wunderbyte_table (main); filter_shortcodes (master) |
+| Locale            | `en_AU.UTF-8` (vom PHPUnit-Init verlangt)                     |
+| PHPDoc-Checker    | `local_moodlecheck` im Moodle-Baum (= CI-Job `phpdoc`)        |
 
 ---
 
 ## 1. Systempakete
 
 ```bash
-sudo apt-get update
+apt-get update
 # PHP 8.3 + die von Moodle geforderten Erweiterungen
-sudo apt-get install -y php-cli php-pgsql php-xml php-mbstring php-curl \
+apt-get install -y php-cli php-pgsql php-xml php-mbstring php-curl \
      php-gd php-zip php-intl php-soap php-ctype php-iconv php-simplexml \
      postgresql postgresql-client git unzip
 # Composer (falls nicht vorhanden)
 which composer || (php -r "copy('https://getcomposer.org/installer','ci.php');" \
-     && sudo php ci.php --install-dir=/usr/local/bin --filename=composer && rm ci.php)
+     && php ci.php --install-dir=/usr/local/bin --filename=composer && rm ci.php)
 ```
 
-Moodle verlangt `max_input_vars >= 5000`. Statt die php.ini zu ändern, wird das
+Moodle verlangt `max_input_vars >= 5000`. Für `admin/cli/*` genügt das Flag am
+Aufruf. **Der PHPUnit-Init prüft jedoch die effektive `php.ini`** und ignoriert
+`-d`, weil er die Prüfung in einem Unterprozess ausführt – dort scheitert er mit
+„this test must pass - PHP setting max_input_vars must be at least 5000".
+Deshalb einmalig dauerhaft setzen:
+
+```bash
+PHPINI=$(php -i | grep "Loaded Configuration File" | awk '{print $NF}')
+grep -q '^max_input_vars' "$PHPINI" \
+  && sed -i 's/^max_input_vars.*/max_input_vars=5000/' "$PHPINI" \
+  || echo 'max_input_vars=5000' >> "$PHPINI"
+```
+
+Für Einzelaufrufe wird das
 Flag bei den CLI-Aufrufen mitgegeben (siehe §6).
+
+Der PHPUnit-Init verlangt zusätzlich das Locale `en_AU.UTF-8`, sonst bricht er mit
+„Required locale 'en_AU.UTF-8' is not installed" ab:
+
+```bash
+apt-get install -y locales
+locale-gen en_AU.UTF-8
+```
 
 ## 2. PostgreSQL: Start, Rolle, Datenbank
 
@@ -51,8 +74,8 @@ Flag bei den CLI-Aufrufen mitgegeben (siehe §6).
 # Server starten. Achtung: im CLI-Container ist `sudo` häufig NICHT vorhanden.
 service postgresql start             # ohne sudo; alternativ: pg_ctlcluster 16 main start
 # Rolle/DB einmalig anlegen (als postgres-Systemnutzer, wo verfügbar):
-sudo -u postgres psql -c "CREATE ROLE moodle LOGIN PASSWORD 'moodle';"   # sonst als postgres-User
-sudo -u postgres psql -c "CREATE DATABASE moodle OWNER moodle;"
+su postgres -c "psql -c \"CREATE ROLE moodle LOGIN PASSWORD 'moodle';\""
+su postgres -c "psql -c \"CREATE DATABASE moodle OWNER moodle;\
 ```
 
 > Der DB-Server läuft nach einem Container-Neustart oft nicht automatisch – vor
@@ -153,8 +176,19 @@ php -d max_input_vars=5000 admin/cli/upgrade.php --non-interactive
 ## 5. Code-Style: phpcs / moodle-cs
 
 ```bash
+export COMPOSER_ALLOW_SUPERUSER=1          # im Container läuft man als root
 mkdir -p /tmp/moodlecs && cd /tmp/moodlecs
 composer require --dev moodlehq/moodle-cs:^3.7
+```
+
+**Ohne Registrierung der Standard-Pfade** meldet phpcs nur
+„the 'moodle' coding standard is not installed". Der moodle-Standard baut auf
+PHPCSExtra auf, beide Pfade müssen eingetragen werden:
+
+```bash
+/tmp/moodlecs/vendor/bin/phpcs --config-set installed_paths \
+    /tmp/moodlecs/vendor/phpcsstandards/phpcsextra,/tmp/moodlecs/vendor/moodlehq/moodle-cs/moodle
+/tmp/moodlecs/vendor/bin/phpcs -i        # Kontrolle: "… and moodle"
 ```
 
 Prüfen (Exit 0 = sauber). Die zwei genannten Sniffs werden bewusst ausgeschlossen:
@@ -166,6 +200,20 @@ cd /home/claude/catquiz
 # Auto-Fix, was maschinell fixbar ist:
 /tmp/moodlecs/vendor/bin/phpcbf --standard=moodle --extensions=php .
 ```
+
+### 5a. PHPDoc-Checker (der CI-Quality-Job)
+
+`moodle-plugin-ci phpdoc` ist `local_moodlecheck`. Lokal reproduzierbar über:
+
+```bash
+cd /home/claude/moodle
+git clone --depth 1 https://github.com/moodlehq/moodle-local_moodlecheck.git local/moodlecheck
+php local/moodlecheck/cli/moodlecheck.php --path=local/catquiz     # 0 <error> = sauber
+```
+
+Immer **plugin-weit** laufen lassen, nicht nur über die geänderten Dateien: Das
+Einfügen einer Methode verwaist gern den Docblock der folgenden – die häufigste
+Ursache für einen roten Quality-Job (Engineering-Guide §4).
 
 ## 6. PHPUnit (Unit-/Integrationstests)
 
@@ -213,9 +261,11 @@ vendor/bin/behat --config /home/claude/moodledata_behat/behatrun/behat/behat.yml
     --tags @local_catquiz
 ```
 
-> Aktueller CI-Stand: Behat ist bewusst `continue-on-error` (non-blocking),
-> solange die adaptivequiz-Integration am `attemptfeedbackeditor`-Dependency-Bug
-> hängt (Engineering-Guide §6).
+> Aktueller CI-Stand (Aug 2026): Behat ist **blockierend** und grün – 19 Szenarien.
+> Der frühere `continue-on-error`-Zustand (attemptfeedbackeditor-Dependency-Bug)
+> ist überholt. Lokal ist Behat mangels Chrome/Selenium weiterhin nicht lauffähig;
+> neue Szenarien lassen sich nur schreiben, nicht ausführen – die Verifikation
+> liefert erst der CI-Lauf.
 
 ## 8. Lint für Gherkin, Mustache, PHP (wie in der CI)
 
@@ -262,7 +312,7 @@ Ein Durchlauf, der die häufigste Schleife abbildet:
 
 ```bash
 cd /home/claude/moodle
-sudo service postgresql start; sleep 2
+service postgresql start; sleep 2
 rm -rf local/catquiz && cp -a /home/claude/catquiz local/catquiz
 php -d max_input_vars=5000 admin/tool/phpunit/cli/init.php --no-composer-self-update
 vendor/bin/phpunit local/catquiz/catmodel/<modell>/tests/<modell>_test.php
@@ -270,8 +320,10 @@ vendor/bin/phpunit local/catquiz/catmodel/<modell>/tests/<modell>_test.php
 
 ## 10. Typische Stolpersteine
 
-- **DB down:** Server-Start vergessen → Verbindungsfehler. `sudo` fehlt im
-  Container oft → `service postgresql start` bzw. `pg_ctlcluster 16 main start`.
+- **DB down:** Server-Start vergessen → Verbindungsfehler. Im Container läuft man
+  als **root**, `sudo` ist meist gar nicht installiert → `service postgresql start`
+  bzw. `pg_ctlcluster 16 main start`; DB-Rolle über `su postgres -c "psql …"`.
+  Nach jeder Container-Pause erneut starten.
 - **PHPUnit nicht reinitialisiert** nach `cp -a` → „No tests executed" oder
   veraltete Datenprovider.
 - **`max_input_vars`** fehlt → PHPUnit-Init bricht mit Moodle-Umgebungscheck ab.
@@ -305,3 +357,20 @@ vendor/bin/phpunit local/catquiz/catmodel/<modell>/tests/<modell>_test.php
   laufen oder `--runtime-set moodleBranch 405` setzen.
 - **plugininfo fehlt:** ohne `\mod_adaptivequiz\plugininfo\adaptivequizcatmodel`
   bricht die Plugin-Installation in der CI ab (Subplugin-Typ-Prüfung).
+- **Locale `en_AU.UTF-8` fehlt** → PHPUnit-Init bricht ab („Required locale … is
+  not installed"). `locale-gen en_AU.UTF-8` (Paket `locales`).
+- **phpcs ohne `installed_paths`** → „the 'moodle' coding standard is not
+  installed". PHPCSExtra **und** moodle-cs eintragen (siehe §5).
+- **Lange Läufe sprengen das Tool-Timeout:** Die CAT-Simulationsmatrix
+  (`strategy_test`) braucht ~8–10 Minuten. Im Hintergrund starten und pollen
+  (`nohup … > /tmp/x.log 2>&1 &`, dann `sleep`/`tail`), statt sie im Vordergrund
+  laufen zu lassen.
+- **Ein ZIP löscht nichts.** Wird eine Datei aus dem Paket entfernt, verschwindet
+  sie beim Entpacken über einen vorhandenen Checkout **nicht**. Löschungen
+  brauchen eine explizite Anweisung (`git rm …`) neben dem Paket – sonst meldet
+  z. B. der Autoload-Wächter des Adapters die längst „entfernten" Klassen erneut.
+- **CRLF verfälscht Auswertungen:** Dateien mit Windows-Zeilenenden liefern bei
+  `grep`/`preg_match` ein abschließendes `\r` mit. Ein daraus gebauter
+  Klassenname schlägt bei `class_exists()` fehl – das sah in dieser Sitzung nach
+  einem Autoload-Fehler aus, wo keiner war. Vor solchen Prüfungen `trim()` bzw.
+  `tr -d '\r'` verwenden.
