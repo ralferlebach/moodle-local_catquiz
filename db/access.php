@@ -59,9 +59,13 @@ $capabilities = [
                         'manager' => CAP_ALLOW,
                 ],
         ],
+        // Issue #18: this capability is checked in the context the attempt belongs
+        // to (module, otherwise course). Declaring it at CONTEXT_MODULE lets it be
+        // assigned and overridden per course and per quiz; system wide assignments
+        // keep working, because Moodle inherits capabilities downwards.
         'local/catquiz:view_teacher_feedback' => [
                 'captype' => 'write',
-                'contextlevel' => CONTEXT_SYSTEM,
+                'contextlevel' => CONTEXT_MODULE,
                 'archetypes' => [
                         'manager' => CAP_ALLOW,
                         'teacher' => CAP_ALLOW,

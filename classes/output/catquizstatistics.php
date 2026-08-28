@@ -24,6 +24,8 @@ use core\chart_series;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
+use local_catquiz\local\access\context_resolver;
+use local_catquiz\local\access\feedback_access;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\info;
@@ -95,6 +97,13 @@ class catquizstatistics {
      * @var ?int $testid
      */
     private ?int $testid;
+
+    /**
+     * Resolved context these statistics refer to (issue #18).
+     *
+     * @var ?\context
+     */
+    private ?\context $statisticscontext = null;
 
     /**
      * @var ?int $scaleid
@@ -201,6 +210,23 @@ class catquizstatistics {
         foreach ($tests as $test) {
             $this->quizsettings[$test->componentid] = json_decode($test->json);
         }
+    }
+
+    /**
+     * Returns the context these statistics refer to.
+     *
+     * Issue #18: resolved once from the most specific scope available (test
+     * instance, otherwise course, otherwise system) so that the rendered page,
+     * the export button and the exported CSV all judge access identically.
+     *
+     * @return \context
+     */
+    public function get_statistics_context(): \context {
+        if ($this->statisticscontext === null) {
+            $this->statisticscontext = context_resolver::for_statistics($this->courseid, $this->testid);
+        }
+
+        return $this->statisticscontext;
     }
 
     /**
@@ -395,13 +421,9 @@ class catquizstatistics {
         $chart = new chart_bar();
 
         // Teachers and CAT managers can see the test information in addition to the ability.
-        $canviewcourse = false;
-        if ($this->courseid) {
-            $context = context_course::instance($this->courseid);
-            $canviewcourse = has_capability('local/catquiz:view_users_feedback', $context);
-        }
-        $ismanager = has_capability('local/catquiz:canmanage', context_system::instance());
-        $canviewall = $ismanager || $canviewcourse;
+        // Issue #18: judged in the context these statistics refer to (the quiz module
+        // or the course), never in the system context alone.
+        $canviewall = feedback_access::can_view_other_users($this->get_statistics_context());
         if ($canviewall) {
             $chart->add_series($tiseries);
         }
@@ -864,10 +886,7 @@ class catquizstatistics {
                 ) {
                     $this->quizsettingcompatibility[$level] = false;
                     if (
-                        $CFG->debug > 0 && has_capability(
-                            'local/catquiz:view_users_feedback',
-                            context_course::instance($this->courseid)
-                        )
+                        $CFG->debug > 0 && feedback_access::can_view_other_users($this->get_statistics_context())
                     ) {
                         if (round($qs->$startkey, 3) !== round($rangestart, 3) || round($qs->$endkey, 3) !== round($rangeend, 3)) {
                             echo sprintf(
@@ -1169,13 +1188,7 @@ class catquizstatistics {
      * @return string
      */
     public function render_export_button(): string {
-        $hasglobalaccess = has_capability('local/catquiz:canmanage', context_system::instance());
-        $haslocalaccess = $this->courseid && has_capability(
-            'local/catquiz:view_users_feedback',
-            context_course::instance($this->courseid)
-        );
-
-        if (!$hasglobalaccess && !$haslocalaccess) {
+        if (!feedback_access::can_view_other_users($this->get_statistics_context())) {
             return sprintf(
                 '<div class="alert alert-primary mt-1" role="alert">%s</div>',
                 get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback')
@@ -1207,10 +1220,11 @@ class catquizstatistics {
     public function get_export_data(): array {
         global $DB;
 
-        if (
-            !has_capability('local/catquiz:canmanage', context_system::instance()) &&
-            !has_capability('local/catquiz:view_users_feedback', context_course::instance($this->courseid))
-        ) {
+        // Issue #18: the previous check called context_course::instance($this->courseid)
+        // unconditionally, which threw as soon as the statistics were not scoped to a
+        // course (site wide shortcode). The resolver degrades to the system context
+        // instead, and the rule itself now lives in one place.
+        if (!feedback_access::can_view_other_users($this->get_statistics_context())) {
             return [];
         }
 
@@ -1227,7 +1241,14 @@ class catquizstatistics {
          );
 
         $data = [];
+        // Issue #18: in separate groups mode a teacher without accessallgroups may
+        // only export members of their own groups. Null means "no restriction", so
+        // the common case costs nothing.
+        $alloweduserids = feedback_access::get_allowed_userids($this->get_statistics_context());
         foreach ($DB->get_recordset_sql($sql, $params) as $r) {
+            if ($alloweduserids !== null && !in_array((int) $r->userid, $alloweduserids, true)) {
+                continue;
+            }
             $r->status = get_string('attemptstatus_' . $r->status, 'local_catquiz');
             // phpcs:disable
             // TODO: To be implemented: 'Ergebnis-Range', 'N global', 'frac global', 'N Ergebnisskala', 'frac Ergebnisskala'.

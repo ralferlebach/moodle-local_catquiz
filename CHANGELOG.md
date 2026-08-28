@@ -1,5 +1,37 @@
 # Changelog – local_catquiz
 
+## 1.1.5 (interne Version 2026082801)
+
+> Issue #18: Statistik- und Review-Rechte werden im tatsächlichen Kurs- bzw.
+> Modulkontext geprüft statt im Systemkontext oder über den globalen `$COURSE`.
+
+- **Neu `local\access\context_resolver`**: löst einen Versuch auf den Kontext auf,
+  zu dem er gehört (Modul → Kurs → System), mit Request-Cache gegen N+1.
+  `SITEID` wird bewusst nicht als Kurskontext akzeptiert – das wäre wieder eine
+  systemweite Prüfung.
+- **Neu `local\access\feedback_access`**: die Regel „darf fremde Ergebnisse sehen"
+  existiert jetzt genau einmal und wird von Anzeige, Export und AJAX gleichermaßen
+  benutzt. Inklusive Gruppenmodus (`SEPARATEGROUPS` ohne `accessallgroups`).
+- **`debuginfo`**: toter, unerreichbarer Fix hinter einem `return` entfernt (er
+  hätte zudem auf einer privaten Property fatal geworfen); handgebauter Lookup in
+  der `context`-Tabelle mit hartkodiertem `contextlevel => 50` ersetzt.
+- **`catquizstatistics`**: vier Prüfstellen vereinheitlicht; zwei latente Abstürze
+  behoben (`context_course::instance(null)` bei site-weiter Statistik).
+- **`feedback_tab_clicked`**: AJAX-Endpunkt validiert den aufgelösten Kontext.
+- **`show_attemptfeedback.php`**: die Review-Seite verlangte systemweites
+  `manage_catscales` – eine Lehrkraft konnte einen Versuch des eigenen Kurses nicht
+  einsehen. Jetzt Kontext des Versuchs + `feedback_access`-Regel; neuer String
+  `error:noreviewpermission`.
+- **Behat**: neues Feature `catquiz_context_permissions.feature` (2 Szenarien, echter
+  Chrome-Lauf grün; bei zurückgenommenem Fix fallen beide) und ein neuer Step, der die
+  Versuchs-ID zur Laufzeit per Username auflöst.
+- **`db/access.php`**: `view_teacher_feedback` auf `CONTEXT_MODULE` (systemweite
+  Zuweisungen wirken durch Vererbung unverändert weiter).
+- **Fallstrick dokumentiert**: `groups_get_activity_groupmode()` liefert einen
+  **String** – ein Strict-Vergleich gegen `SEPARATEGROUPS` trifft nie zu.
+- Neue Suite `tests/local/access/context_resolver_test.php` (14 Tests), alle drei
+  Zahn-Tests werden bei Rücknahme rot.
+
 ## 1.1.5 (interne Version 2026082152)
 
 > Dokumentations-Aktualisierung und Sitzungsabschluss des Strangs „CI grün"

@@ -25,10 +25,10 @@
 namespace local_catquiz\teststrategy;
 
 use coding_exception;
-use context_course;
 use context_system;
 use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
+use local_catquiz\local\access\context_resolver;
 use stdClass;
 use UnexpectedValueException;
 
@@ -339,7 +339,7 @@ abstract class feedbackgenerator {
     protected function has_teacherfeedbackpermission(): bool {
         return has_capability(
             'local/catquiz:view_teacher_feedback',
-            context_system::instance()
+            $this->get_attempt_context()
         );
     }
 
@@ -349,19 +349,46 @@ abstract class feedbackgenerator {
      * @return bool
      */
     protected function has_extended_view_permissions(): bool {
-        global $COURSE;
-
-        if ($COURSE) {
-            $context = context_course::instance($COURSE->id);
-            if (has_capability('local/catquiz:view_users_feedback', $context)) {
-                return true;
-            }
+        if (has_capability('local/catquiz:view_users_feedback', $this->get_attempt_context())) {
+            return true;
         }
         if (has_capability('local/catquiz:canmanage', context_system::instance())) {
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Returns the context the current attempt belongs to.
+     *
+     * Issue #18: permissions must be judged in the course or module context of the
+     * attempt being viewed, not in the system context and not via the global
+     * $COURSE, which during shortcode or AJAX rendering is not necessarily the
+     * course of the attempt.
+     *
+     * @return \context
+     */
+    protected function get_attempt_context(): \context {
+        return context_resolver::for_attempt($this->get_attemptid(), $this->component);
+    }
+
+    /**
+     * Returns the id of the attempt this generator is working on.
+     *
+     * @return int
+     */
+    protected function get_attemptid(): int {
+        return $this->attemptid ?? 0;
+    }
+
+    /**
+     * Returns the component the current attempt belongs to.
+     *
+     * @return string
+     */
+    protected function get_component(): string {
+        return $this->component;
     }
 
     /**

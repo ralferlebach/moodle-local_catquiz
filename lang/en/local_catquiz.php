@@ -323,6 +323,7 @@ $string['error:minmaxrangeequal'] = 'There is an error in the database entry: Th
 $string['error:notestenvironmentsettings'] = 'No CAT quiz settings are stored for {$a->component} instance {$a->componentid}. The activity has probably not been configured as a CAT quiz yet.';
 $string['error:nminscale'] = 'Unfortunately, we were unable to determine a result as not enough questions were answered during the test attempt.
     Please make sure you answer all the questions in your next attempt to get a correct result.';
+$string['error:noreviewpermission'] = 'You do not have permission to review this attempt.';
 $string['error:noscalestoreport'] = 'Unfortunately, with the current number of questions asked in the areas tested,
     we were unable to determine a reliable result. We recommend that you contact those responsible for the test
     and ask them to increase the number of questions to be answered.';

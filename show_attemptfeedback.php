@@ -23,23 +23,54 @@
  */
 
 use local_catquiz\catquiz;
+use local_catquiz\local\access\context_resolver;
+use local_catquiz\local\access\feedback_access;
 use local_catquiz\output\attemptfeedback;
 
 require_once('../../config.php');
 
 global $USER, $OUTPUT, $COURSE;
-$context = \context_system::instance();
-$PAGE->set_context($context);
-require_login();
-require_capability('local/catquiz:manage_catscales', $context);
 
 $attemptid = optional_param('attemptid', 0, PARAM_INT);
 $contextid = optional_param('contextid', 0, PARAM_INT);
-$courseid = $COURSE->id;
+
+// Issue #18: this page used to set the system context and require
+// local/catquiz:manage_catscales there. A teacher of the very course the attempt
+// belongs to could therefore not review it, while the check said nothing about
+// whether the attempt had anything to do with the person looking at it. Resolve
+// the attempt's own context and judge access in it.
+$context = context_resolver::for_attempt($attemptid);
+
+// A module or course context also needs its course (and course module) on the
+// page. Moodle's navigation builds the course tree from them; setting only the
+// context leaves it without a course and it fails while rendering the header.
+// require_login() with the course also enforces enrolment for the resolved course.
+$cm = null;
+$course = null;
+if ($context->contextlevel == CONTEXT_MODULE) {
+    [$course, $cm] = get_course_and_cm_from_cmid($context->instanceid);
+} else if ($context->contextlevel == CONTEXT_COURSE) {
+    $course = get_course($context->instanceid);
+}
+
+if ($cm) {
+    require_login($course, false, $cm);
+} else if ($course) {
+    require_login($course, false);
+} else {
+    require_login();
+}
+$PAGE->set_context($context);
+
+if (!feedback_access::can_view_other_users($context)) {
+    throw new moodle_exception('error:noreviewpermission', 'local_catquiz');
+}
+
+$courseid = $course ? $course->id : $COURSE->id;
 
 $attemptfeedback = new attemptfeedback($attemptid, $contextid, null, $courseid);
 
-$PAGE->set_url(new moodle_url('/local/catquiz/show_attemptfeedback.php', []));
+$PAGE->set_url(new moodle_url('/local/catquiz/show_attemptfeedback.php', ['attemptid' => $attemptid]));
 
 echo $OUTPUT->header();
 
