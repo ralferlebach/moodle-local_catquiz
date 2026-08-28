@@ -1287,5 +1287,152 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026082104, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026082803) {
+        // Issue #25: composite and unique indexes for the hot access patterns.
+        //
+        // Order matters: every unique index is preceded by a deduplication step,
+        // because adding a unique index to a table that already contains duplicates
+        // fails the whole upgrade. Each step reports what it removed via mtrace, so
+        // the cleanup is auditable rather than silent.
+
+        // 1. The index named "timecreated" actually indexed instanceid, which merely
+        // duplicated the separate instanceid index and left time-range filters
+        // unindexed. Drop the misnamed one and create it on the intended field.
+        $table = new xmldb_table('local_catquiz_attempts');
+        $wrongindex = new xmldb_index('timecreated', XMLDB_INDEX_NOTUNIQUE, ['instanceid']);
+        if ($dbman->index_exists($table, $wrongindex)) {
+            $dbman->drop_index($table, $wrongindex);
+        }
+        $rightindex = new xmldb_index('timecreated', XMLDB_INDEX_NOTUNIQUE, ['timecreated']);
+        if (!$dbman->index_exists($table, $rightindex)) {
+            $dbman->add_index($table, $rightindex);
+        }
+
+        // 2. Statistics access pattern: context + scale + user.
+        $statsindex = new xmldb_index(
+            'contextid_scaleid_userid_attemptid',
+            XMLDB_INDEX_NOTUNIQUE,
+            ['contextid', 'scaleid', 'userid', 'attemptid']
+        );
+        if (!$dbman->index_exists($table, $statsindex)) {
+            $dbman->add_index($table, $statsindex);
+        }
+
+        // 3. One person parameter per user, context and scale. The saving code in
+        // model_person_param_list keys existing rows by userid and therefore already
+        // assumed this; duplicates would silently make it update the wrong row.
+        local_catquiz_upgrade_remove_duplicates(
+            'local_catquiz_personparams',
+            ['userid', 'contextid', 'catscaleid']
+        );
+        $table = new xmldb_table('local_catquiz_personparams');
+        $ppindex = new xmldb_index('userid_contextid_catscaleid', XMLDB_INDEX_UNIQUE, ['userid', 'contextid', 'catscaleid']);
+        if (!$dbman->index_exists($table, $ppindex)) {
+            $dbman->add_index($table, $ppindex);
+        }
+
+        // 4. Exactly one progress row per attempt.
+        local_catquiz_upgrade_remove_duplicates('local_catquiz_progress', ['attemptid']);
+        $table = new xmldb_table('local_catquiz_progress');
+        $oldprogress = new xmldb_index('attemptid', XMLDB_INDEX_NOTUNIQUE, ['attemptid']);
+        if ($dbman->index_exists($table, $oldprogress)) {
+            $dbman->drop_index($table, $oldprogress);
+        }
+        $newprogress = new xmldb_index('attemptid', XMLDB_INDEX_UNIQUE, ['attemptid']);
+        if (!$dbman->index_exists($table, $newprogress)) {
+            $dbman->add_index($table, $newprogress);
+        }
+
+        // 5. Item lookup by scale and component, and the join to the active parameter.
+        $table = new xmldb_table('local_catquiz_items');
+        foreach (
+            [
+                'catscaleid_componentname_componentid' => ['catscaleid', 'componentname', 'componentid'],
+                'catscaleid_activeparamid' => ['catscaleid', 'activeparamid'],
+            ] as $name => $fields
+        ) {
+            $index = new xmldb_index($name, XMLDB_INDEX_NOTUNIQUE, $fields);
+            if (!$dbman->index_exists($table, $index)) {
+                $dbman->add_index($table, $index);
+            }
+        }
+
+        // Catquiz savepoint reached.
+        upgrade_plugin_savepoint(true, 2026082803, 'local', 'catquiz');
+    }
+
     return true;
+}
+
+/**
+ * Removes duplicate rows before a unique index is added, keeping the newest row.
+ *
+ * Issue #25: adding a unique index to a table that already holds duplicates aborts
+ * the whole upgrade with a database error that says nothing about which data caused
+ * it. This helper removes the duplicates first and reports per group what it deleted,
+ * so an administrator can trace the cleanup afterwards instead of guessing.
+ *
+ * The row with the highest id wins: for both affected tables the later row is the
+ * more recently written state.
+ *
+ * @param string $table Table name without prefix.
+ * @param string[] $fields Fields that together must be unique.
+ * @return int Number of deleted rows.
+ */
+function local_catquiz_upgrade_remove_duplicates(string $table, array $fields): int {
+    global $DB;
+
+    $fieldlist = implode(', ', $fields);
+
+    // GROUP BY treats two NULLs as the same value, a unique index does not: both
+    // PostgreSQL and MariaDB allow any number of rows that carry NULL in an indexed
+    // column. Grouping alone would therefore delete rows that the index would have
+    // accepted - real data loss for no gain, and contextid (personparams) as well as
+    // attemptid (progress) are nullable. Skip any group in which one of the fields
+    // is NULL; such rows can never violate the constraint.
+    $notnull = [];
+    foreach ($fields as $field) {
+        $notnull[] = "$field IS NOT NULL";
+    }
+    $where = implode(' AND ', $notnull);
+
+    $sql = "SELECT $fieldlist, COUNT(*) AS cnt, MAX(id) AS keepid
+              FROM {" . $table . "}
+             WHERE $where
+          GROUP BY $fieldlist
+            HAVING COUNT(*) > 1";
+
+    $groups = $DB->get_recordset_sql($sql);
+    $deleted = 0;
+    foreach ($groups as $group) {
+        // NULL groups were already excluded by the query above, so every field of a
+        // returned group carries a real value.
+        $conditions = [];
+        $params = [];
+        foreach ($fields as $field) {
+            $conditions[] = "$field = :$field";
+            $params[$field] = $group->{$field};
+        }
+        $params['keepid'] = $group->keepid;
+        $where = implode(' AND ', $conditions) . ' AND id <> :keepid';
+        $count = $DB->count_records_select($table, $where, $params);
+        if ($count > 0) {
+            $DB->delete_records_select($table, $where, $params);
+            $deleted += $count;
+            mtrace(sprintf(
+                'local_catquiz issue #25: removed %d duplicate row(s) from %s for %s, kept id %d.',
+                $count,
+                $table,
+                json_encode(array_intersect_key((array) $group, array_flip($fields))),
+                $group->keepid
+            ));
+        }
+    }
+    $groups->close();
+
+    if ($deleted === 0) {
+        mtrace("local_catquiz issue #25: no duplicates found in $table.");
+    }
+
+    return $deleted;
 }

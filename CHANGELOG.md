@@ -1,5 +1,36 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026082804)
+
+> Issue #25: Datenbankindizes für Attempts, Progress und Skalenabfragen –
+> verifiziert auf PostgreSQL **und** MariaDB, inkl. zweier dabei gefundener Fehler.
+
+- **Upgrade-Block wäre nie gelaufen**: Savepoint `2026082803` lag über
+  `$plugin->version` (`2026082802`). Bestandsinstallationen hätten die Indizes nie
+  bekommen. Version liegt jetzt über dem höchsten Savepoint.
+- **Dubletten-Bereinigung löschte zu viel**: `GROUP BY` fasst alle `NULL` zu einer
+  Gruppe zusammen, ein Unique-Index beschränkt bei `NULL` dagegen nichts. Zeilen mit
+  `NULL` wurden gelöscht, obwohl der Index sie zugelassen hätte – und `contextid`
+  (personparams) sowie `attemptid` (progress) sind nullable. Die Abfrage schließt
+  NULL-Gruppen jetzt aus; neuer Regressionstest.
+- **`timecreated`-Index** zeigte auf `instanceid` – korrigiert; Zeitraumfilter sind
+  damit erstmals indiziert.
+- Neue Indizes: `personparams` UNIQUE `(userid, contextid, catscaleid)`,
+  `progress` UNIQUE `(attemptid)`, `attempts` `(contextid, scaleid, userid,
+  attemptid)`, `items` `(catscaleid, componentname, componentid)` und
+  `(catscaleid, activeparamid)`.
+- **EXPLAIN belegt die Nutzung** aller drei Hauptmuster auf beiden Engines
+  (20.000 Zeilen, nach `ANALYZE`).
+- **Sprachdateien sortiert** (`moodle.Files.LangFilesOrdering`): je vier Verstöße in
+  `lang/en` und `lang/de` behoben; nachgewiesen, dass sich nur die Reihenfolge
+  ändert (760 bzw. 750 Strings, key⇒value identisch). Die CI fährt
+  `--max-warnings 0`, diese Warnungen blockierten den Lauf.
+- **Nicht umgesetzt, bewusst**: `UNIQUE (component, attemptid)` aus dem Issue.
+  `catquiz.php` sucht Versuche über `attemptid` allein; eine Lockerung würde
+  `get_record()` bei mehreren Treffern brechen und verlangt eine Codeänderung.
+- **Befund ohne Änderung**: 14 redundante Index-Paare (Bestand, beide Engines),
+  weil `install.xml` für dieselbe Spalte Key *und* Index deklariert.
+
 ## 1.1.5 (interne Version 2026082801)
 
 > Issue #18: Statistik- und Review-Rechte werden im tatsächlichen Kurs- bzw.

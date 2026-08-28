@@ -264,10 +264,6 @@ $string['dateparseformat'] = 'Format des Datums';
 $string['dateparseformat_help'] = 'Bitte Datum so wie es im CSV definiert wurde verwenden. Hilfe unter <a href="http://php.net/manual/en/function.date.php">Datumsdokumentation</a> für diese Einstellung.';
 $string['daysago'] = 'Vor {$a} Tagen';
 $string['debuginfo_desc'] = 'Hier können Sie als Nutzer mit Berechtigung zum Download eines Exports den Versuchsverlauf als CSV-Datei exportieren.';
-$string['exportattemptcsv'] = 'Versuch exportieren (CSV)';
-$string['exportattemptdebugcsv'] = 'Debug-Verlauf exportieren (CSV)';
-$string['exportdebuginfopdf'] = 'Debug-Info exportieren (PDF)';
-$string['viewrawdebuginfo'] = 'Rohe Debug-Info anzeigen';
 $string['debuginfo_desc_title'] = 'Export des Testversuchs Nr. {$a}';
 $string['defaultcontext'] = 'Neuer Standard Einsatz-Kontext für Skala';
 $string['defaultcontextdescription'] = 'Beinhaltet alle Testitems';
@@ -320,12 +316,12 @@ $string['error:fraction1'] = 'Herzlichen Glückwunsch, Sie haben alle Fragen ric
 $string['error:minmaxrangeequal'] = 'Es liegt ein Fehler in den Einstellungen zu den genutzten CAT-Skalen vor: Die minimalen und maximale Skalenbegrenzungen
     sind identisch. Bitte melden Sie das Problem unter Nennung des von Ihnen genutzten Tests dem bzw. der CAT-Manager*in mit der Bitte,
     die Angaben zu den Skalen-Begrenzungen zu korrigieren.';
-$string['error:notestenvironmentsettings'] = 'Für {$a->component} mit der Instanz-ID {$a->componentid} sind keine CAT-Quiz-Einstellungen gespeichert. Vermutlich wurde die Aktivität noch nicht als CAT-Quiz konfiguriert.';
 $string['error:nminscale'] = 'Leider konnten wir kein Ergebnis ermitteln, da im Testversuch nicht genügend Fragen beantwortet wurden.
     Bitte stellen Sie bei Ihrem nächsten Versuch sicher, alle Fragen zu beantworten, um ein vollständiges Ergebnis zu erhalten.';
 $string['error:noscalestoreport'] = 'Leider konnten wir mit der aktuellen Anzahl an gestellten Fragen in den getesteten Bereichen
 kein verlässliches Ergebnis ermitteln. Wir empfehlen Ihnen, sich an die Verantwortlichen für den Test zu wenden und zu bitten,
 die Anzahl der zu beantwortenden Fragen zu erhöhen.';
+$string['error:notestenvironmentsettings'] = 'Für {$a->component} mit der Instanz-ID {$a->componentid} sind keine CAT-Quiz-Einstellungen gespeichert. Vermutlich wurde die Aktivität noch nicht als CAT-Quiz konfiguriert.';
 $string['error:permissionforcsvdownload'] = 'Ihnen fehlt die notwendige Berechtigung ({$a}), die gewünschte Informationen herunterzuladen.';
 $string['error:rootonly'] = '';
 $string['error:semax'] = 'Leider konnten wir in den getesteten Bereichen kein Ergebnis mit der vorgegebenen Mindestgenauigkeit ermitteln.
@@ -349,6 +345,9 @@ $string['eventtime'] = 'Zeitpunkt des Ereignisses';
 $string['exceededmaxattempttime'] = 'Die erlaubte Zeit für den Versuch wurde überschritten';
 $string['executed_calculation_description'] = 'Es wurde eine Berechnung der CAT-Skala „{$a->catscalename}“ mit der ID {$a->catscaleid} im Kontext
     {$a->contextid} durchgeführt von {$a->user}. In folgenden Modellen wurden Fragen neu berechnet: {$a->updatedmodels}';
+$string['exportattemptcsv'] = 'Versuch exportieren (CSV)';
+$string['exportattemptdebugcsv'] = 'Debug-Verlauf exportieren (CSV)';
+$string['exportdebuginfopdf'] = 'Debug-Info exportieren (PDF)';
 $string['eyeicontitle'] = 'Aktivieren/Deaktivieren';
 $string['failedtoaddmultipleitems'] = '{$a->numadded} Fragen wurden erfolgreich hinzugefügt, bei folgenden {$a->numfailed} Fragen traten Probleme auf: {$a->failedids}';
 $string['feedback_colorrange'] = 'Farbbereich auf einer Feedback-Skala';
@@ -369,10 +368,10 @@ $string['feedback_details_lowestskill'] = 'Teilbereich (Skala) „<b>{$a->name}<
 $string['feedback_tab_clicked'] = 'Klick auf Feedback Tab';
 $string['feedback_tab_clicked_description'] = 'Nutzer {$a->userid} hat auf Feedback {$a->feedback_translated} in {$a->attemptlink} geklickt';
 $string['feedback_table_answercorrect'] = 'Richtig';
-$string['feedback_table_correctness'] = 'Ergebnis';
-$string['feedback_table_givenanswer'] = 'Gegebene Antwort:';
 $string['feedback_table_answerincorrect'] = 'Falsch';
 $string['feedback_table_answerpartlycorrect'] = 'Teilweise richtig';
+$string['feedback_table_correctness'] = 'Ergebnis';
+$string['feedback_table_givenanswer'] = 'Gegebene Antwort:';
 $string['feedback_table_questionnumber'] = 'Nr.';
 $string['feedback_uncertainty_factor_desc'] = 'Wenn groesser als 0, wird ein Feedbackbereich nur angezeigt, wenn das Konfidenzintervall Faehigkeit +/- k*SE vollstaendig in einem Bereich liegt. 0 deaktiviert dies.';
 $string['feedback_uncertainty_factor_name'] = 'Feedback-Unsicherheitsfaktor (k)';
@@ -384,13 +383,13 @@ Können in der Skala.</p>
 durchschnittliche Fähigkeits-Wert aller Teilnehmenden an dem Test beträgt {$a->average_ability}. {$a->betterthan}</p>
 <p>Die folgende Graﬁk stellt Ihren Fähigkeitswert (obere Markierung) und den aktuellen
 Durchschnitt (untere Markierung) dar:</p>';
-$string['feedbackcomparison_betterthan'] = 'Mit Ihrem Ergebnis sind Sie momentan <b>besser als {$a->quantile}% aller anderen Test-Teilnehmenden</b>.';
 $string['feedbackcomparetoaverage_nopeers'] = '<p>Der Test misst Ihr Wissen und Können in „{$a->quotedscale}“ in Form eines Fähigkeits-Wertes zwischen
 {$a->scale_min} und {$a->scale_max}. Je höher Ihr Fähigkeits-Wert ausfällt, desto besser ist Ihr Wissen und Ihr
 Können in der Skala.</p>
 <p>Ihr erreichter Fähigkeits-Wert ist <b>{$a->ability_global}</b> (mit einem Standardfehler von ±{$a->se_global}).</p>
 <p>Es liegen noch nicht genügend Vergleichsergebnisse vor, um einen Durchschnitt für diesen Test anzuzeigen.</p>
 <p>Die folgende Graﬁk stellt Ihren Fähigkeitswert dar:</p>';
+$string['feedbackcomparison_betterthan'] = 'Mit Ihrem Ergebnis sind Sie momentan <b>besser als {$a->quantile}% aller anderen Test-Teilnehmenden</b>.';
 $string['feedbackcompletedentirely'] = 'Alle Feedbacks für diese CAT-Skala hinterlegt.';
 $string['feedbackcompletedpartially'] = '{$a} Feedbacks für diese Skala hinterlegt.';
 $string['feedbacklegend'] = 'Beschreibung der Fähigkeits-Stufe';
@@ -843,6 +842,7 @@ $string['validateform:onlyoneconfirmedstatusallowed'] = 'Dieser Status ist nur f
 $string['valuemustbegreaterzero'] = 'Wert muss höher als 0 sein.';
 $string['versionchosen'] = 'ausgewählte Versionierung:';
 $string['versioning'] = 'Versionierung';
+$string['viewrawdebuginfo'] = 'Rohe Debug-Info anzeigen';
 $string['warnings'] = 'Warnungen';
 $string['wronglabels'] = 'Die importierten Spaltennamen entsprechen nicht der Vorgabe. {$a} kann nicht importiert werden.';
 $string['yourscorein'] = 'Ihre durchschnittlichen „{$a}”-Ergebnisse';

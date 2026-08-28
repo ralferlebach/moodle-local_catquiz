@@ -135,6 +135,8 @@
         <INDEX NAME="catscaleid" UNIQUE="false" FIELDS="catscaleid"/>
         <INDEX NAME="contextid" UNIQUE="false" FIELDS="contextid"/>
         <INDEX NAME="activeparamid" UNIQUE="false" FIELDS="activeparamid"/>
+        <INDEX NAME="catscaleid_componentname_componentid" UNIQUE="false" FIELDS="catscaleid,componentname,componentid" COMMENT="Issue #25: item lookup by scale and component."/>
+        <INDEX NAME="catscaleid_activeparamid" UNIQUE="false" FIELDS="catscaleid,activeparamid" COMMENT="Issue #25: joins from items to their active parameter per scale."/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_catquiz_itemparams" COMMENT="Store cat item parameters">
@@ -188,6 +190,7 @@
         <INDEX NAME="catscaleid" UNIQUE="false" FIELDS="catscaleid"/>
         <INDEX NAME="contextid" UNIQUE="false" FIELDS="contextid"/>
         <INDEX NAME="attemptid" UNIQUE="false" FIELDS="attemptid"/>
+        <INDEX NAME="userid_contextid_catscaleid" UNIQUE="true" FIELDS="userid,contextid,catscaleid" COMMENT="Issue #25: one person parameter per user, context and scale. The saving code keyed existing rows by userid and therefore already assumed this."/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_catquiz_attempts" COMMENT="Table to save all relevant data about attempts of adaptive quiz instances.">
@@ -228,7 +231,8 @@
         <INDEX NAME="attemptid" UNIQUE="true" FIELDS="attemptid" COMMENT="Issue #5: at most one CATquiz attempt per adaptive quiz attempt."/>
         <INDEX NAME="instanceid" UNIQUE="false" FIELDS="instanceid"/>
         <INDEX NAME="endtime" UNIQUE="false" FIELDS="endtime"/>
-        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="instanceid"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated" COMMENT="Issue #25: this index was named timecreated but indexed instanceid, duplicating the instanceid index and leaving time-range filters unindexed."/>
+        <INDEX NAME="contextid_scaleid_userid_attemptid" UNIQUE="false" FIELDS="contextid,scaleid,userid,attemptid" COMMENT="Issue #25: covers the statistics access pattern context + scale + user."/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_catquiz_progress" COMMENT="Stores the progress of attempts that are not yet finished.">
@@ -247,7 +251,7 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
-        <INDEX NAME="attemptid" UNIQUE="false" FIELDS="attemptid"/>
+        <INDEX NAME="attemptid" UNIQUE="true" FIELDS="attemptid" COMMENT="Issue #25: exactly one progress row per attempt."/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_catquiz_qhashmap" COMMENT="Maps questions between instances using hashes">
