@@ -317,6 +317,43 @@ final class context_resolver_test extends advanced_testcase {
     }
 
     /**
+     * Every teacher role of the course may see the teacher feedback.
+     *
+     * Role archetypes are independent templates: a role with archetype
+     * "editingteacher" does NOT inherit the defaults granted to "teacher". Listing
+     * only 'teacher' in db/access.php therefore left editing teachers - the role
+     * that already reviews other people's attempts - as the one teacher role
+     * without access. Verified empirically before the fix: editingteacher returned
+     * false, teacher returned true.
+     *
+     * @return void
+     */
+    public function test_all_teacher_roles_may_see_teacher_feedback(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        [$course, $cm] = $this->make_attempt(4722);
+        $context = context_module::instance($cm->id);
+
+        foreach (['editingteacher', 'teacher'] as $rolename) {
+            $user = $this->getDataGenerator()->create_user();
+            $this->getDataGenerator()->enrol_user($user->id, $course->id, $rolename);
+            $this->setUser($user);
+
+            $this->assertTrue(
+                has_capability('local/catquiz:view_teacher_feedback', $context),
+                "Role $rolename must hold view_teacher_feedback in the attempt's context."
+            );
+        }
+
+        // A participant must not, otherwise the assertions above prove nothing.
+        $student = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($student->id, $course->id, 'student');
+        $this->setUser($student);
+        $this->assertFalse(has_capability('local/catquiz:view_teacher_feedback', $context));
+    }
+
+    /**
      * Without separate groups mode no user filtering is applied.
      *
      * @return void

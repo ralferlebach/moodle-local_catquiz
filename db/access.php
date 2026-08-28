@@ -63,11 +63,18 @@ $capabilities = [
         // to (module, otherwise course). Declaring it at CONTEXT_MODULE lets it be
         // assigned and overridden per course and per quiz; system wide assignments
         // keep working, because Moodle inherits capabilities downwards.
+        //
+        // editingteacher is listed explicitly: role archetypes are independent
+        // templates, an editingteacher role does NOT inherit the defaults granted to
+        // the teacher archetype. Without this line an editing teacher - who already
+        // holds view_users_feedback and may review other people's attempts - would
+        // be the only teacher role unable to see the teacher feedback.
         'local/catquiz:view_teacher_feedback' => [
                 'captype' => 'write',
                 'contextlevel' => CONTEXT_MODULE,
                 'archetypes' => [
                         'manager' => CAP_ALLOW,
+                        'editingteacher' => CAP_ALLOW,
                         'teacher' => CAP_ALLOW,
                 ],
         ],

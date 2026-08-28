@@ -1,5 +1,44 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026082806)
+
+> Archetyp-Lücke bei `view_teacher_feedback` geschlossen.
+
+- **`editingteacher` erhält `local/catquiz:view_teacher_feedback`.** Rollen-
+  Archetypen sind unabhängige Vorlagen – ein `editingteacher` erbt **nichts** vom
+  `teacher`-Archetyp (Vererbung läuft in Moodle über Kontexte, nicht über
+  Archetypen). Vor dem Fix war ausgerechnet die Rolle ausgesperrt, die fremde
+  Versuche ohnehin prüfen darf. Empirisch belegt: editingteacher = nein,
+  teacher = ja.
+- Ein Scan aller neun Capabilities zeigte genau diese eine Lücke.
+- Neuer Dauertest `test_all_teacher_roles_may_see_teacher_feedback()` (positiv für
+  beide Lehrrollen, negativ für Teilnehmende); Zahn-Test rot bei Rücknahme.
+- **Entschieden und geschlossen:** `UNIQUE (component, attemptid)` wird nicht
+  umgesetzt. Ein Versuch läuft über genau einen Komponententyp, `attemptid` ist
+  für sich eindeutig – das bestehende `UNIQUE (attemptid)` ist fachlich korrekt.
+
+## 1.1.6 (interne Version 2026082805)
+
+> Issue #25, Nachtrag: redundante Indizes entfernt. Spaltennamen unverändert.
+
+- **18 doppelt abgedeckte Spalten bereinigt.** XMLDB legt für jeden
+  `<KEY TYPE="foreign">` bereits einen Index an; ein zusätzlicher `<INDEX>` auf
+  derselben Spalte erzeugte einen zweiten, physisch identischen Index. Betroffen:
+  `attempts` 4, `personparams` 4, `items` 3, `progress` 2, `tests` 2,
+  `catscales` 1, `subscriptions` 1, `itemparams` 1. Es wurden ausschließlich
+  `<INDEX>`-Deklarationen entfernt – **kein `FIELDS` und kein Spaltenname geändert**.
+- **`progress.attemptid`**: Der eigenständige Index trug die Eindeutigkeitsgarantie.
+  Der Fremdschlüssel ist jetzt `TYPE="foreign-unique"` – ein eindeutiger Index, die
+  Relation bleibt dokumentiert.
+- **Upgrade-Helfer** `local_catquiz_upgrade_drop_duplicate_indexes()` entscheidet vor
+  dem Löschen, welcher Index überlebt, und löscht per Namen. `drop_index()` löst über
+  die Spaltenliste auf und hätte den eindeutigen Index treffen können.
+- Entfallen ist dabei auch `<INDEX NAME="catscaleid" FIELDS="scaleid">` auf
+  `attempts` – Name und Spalte stimmten nicht überein. Die Spalte heißt weiter
+  `scaleid`.
+- Neuer Wächter `test_no_redundant_indexes_remain()` und neue Suite
+  `schema_index_cleanup_test.php`; verifiziert auf PostgreSQL und MariaDB.
+
 ## 1.1.6 (interne Version 2026082804)
 
 > Issue #25: Datenbankindizes für Attempts, Progress und Skalenabfragen –

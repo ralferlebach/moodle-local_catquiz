@@ -1361,7 +1361,147 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026082803, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026082805) {
+        // Issue #25: drop the index declarations that a foreign key already covers.
+        //
+        // XMLDB does not create real foreign key constraints here; it creates an
+        // index on the referencing column. Where install.xml additionally declared
+        // an <INDEX> on that same column, every row change had to maintain two
+        // physically identical indexes. That is pure write cost on exactly the
+        // tables written on every single answer (attempts, progress).
+        //
+        // The declarations are gone from install.xml, so new installations are
+        // already correct. Existing installations still carry both, and the
+        // duplicate must be dropped by name: $dbman->drop_index() resolves an index
+        // by its columns and would happily drop whichever it finds first, including
+        // the unique one we must keep on progress.attemptid.
+        $duplicates = [
+            ['local_catquiz_catscales', ['contextid'], false],
+            ['local_catquiz_subscriptions', ['itemid'], false],
+            ['local_catquiz_tests', ['catscaleid'], false],
+            ['local_catquiz_tests', ['courseid'], false],
+            ['local_catquiz_items', ['catscaleid'], false],
+            ['local_catquiz_items', ['contextid'], false],
+            ['local_catquiz_items', ['activeparamid'], false],
+            ['local_catquiz_itemparams', ['contextid'], false],
+            ['local_catquiz_personparams', ['userid'], false],
+            ['local_catquiz_personparams', ['catscaleid'], false],
+            ['local_catquiz_personparams', ['contextid'], false],
+            ['local_catquiz_personparams', ['attemptid'], false],
+            ['local_catquiz_attempts', ['userid'], false],
+            ['local_catquiz_attempts', ['scaleid'], false],
+            ['local_catquiz_attempts', ['contextid'], false],
+            ['local_catquiz_attempts', ['courseid'], false],
+            ['local_catquiz_progress', ['userid'], false],
+            // The attemptid column of progress carries a uniqueness guarantee, now
+            // expressed by a foreign-unique key. Keep the unique index, drop the
+            // plain one.
+            ['local_catquiz_progress', ['attemptid'], true],
+        ];
+
+        $dropped = 0;
+        foreach ($duplicates as [$tablename, $columns, $keepunique]) {
+            $dropped += local_catquiz_upgrade_drop_duplicate_indexes(
+                $tablename,
+                $columns,
+                $keepunique
+            );
+        }
+        mtrace("local_catquiz issue #25: dropped $dropped redundant index(es) in total.");
+
+        // Catquiz savepoint reached.
+        upgrade_plugin_savepoint(true, 2026082805, 'local', 'catquiz');
+    }
+
     return true;
+}
+
+/**
+ * Drops physically identical indexes on a column, leaving exactly one.
+ *
+ * Issue #25: several columns were covered both by a foreign key (which XMLDB
+ * implements as an index) and by an explicit <INDEX> declaration, so two identical
+ * indexes existed and both had to be maintained on every write.
+ *
+ * Moodle's $dbman->drop_index() resolves an index by its columns only and returns
+ * the first match, which makes it unsafe here: on a column whose duplicates differ
+ * in uniqueness it might drop the unique one. This helper therefore resolves the
+ * concrete index names itself and drops all but the one to keep.
+ *
+ * @param string $tablename Table name without prefix.
+ * @param string[] $columns Columns the index covers.
+ * @param bool $keepunique Keep the unique index rather than an arbitrary one.
+ * @return int Number of dropped indexes.
+ */
+function local_catquiz_upgrade_drop_duplicate_indexes(
+    string $tablename,
+    array $columns,
+    bool $keepunique = false
+): int {
+    global $DB;
+
+    $dbman = $DB->get_manager();
+    if (!$dbman->table_exists(new xmldb_table($tablename))) {
+        return 0;
+    }
+
+    $matching = [];
+    foreach ($DB->get_indexes($tablename) as $name => $info) {
+        $indexcolumns = array_values($info['columns']);
+        if ($indexcolumns === array_values($columns)) {
+            $matching[$name] = !empty($info['unique']);
+        }
+    }
+
+    if (count($matching) < 2) {
+        return 0;
+    }
+
+    // Decide which one survives before dropping anything.
+    $keep = null;
+    if ($keepunique) {
+        foreach ($matching as $name => $isunique) {
+            if ($isunique) {
+                $keep = $name;
+                break;
+            }
+        }
+        if ($keep === null) {
+            // No unique index present: the guarantee this column relies on is
+            // missing, so do not touch anything and say so.
+            mtrace(sprintf(
+                'local_catquiz issue #25: %s(%s) has no unique index - left untouched.',
+                $tablename,
+                implode(',', $columns)
+            ));
+            return 0;
+        }
+    } else {
+        $keep = array_key_first($matching);
+    }
+
+    $prefixed = $DB->get_prefix() . $tablename;
+    $mysql = $DB->get_dbfamily() === 'mysql';
+    $dropped = 0;
+    foreach (array_keys($matching) as $name) {
+        if ($name === $keep) {
+            continue;
+        }
+        $sql = $mysql
+            ? "DROP INDEX $name ON $prefixed"
+            : "DROP INDEX $name";
+        $DB->change_database_structure($sql);
+        $dropped++;
+        mtrace(sprintf(
+            'local_catquiz issue #25: dropped redundant index %s on %s(%s), kept %s.',
+            $name,
+            $tablename,
+            implode(',', $columns),
+            $keep
+        ));
+    }
+
+    return $dropped;
 }
 
 /**

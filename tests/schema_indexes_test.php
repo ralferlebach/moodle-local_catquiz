@@ -351,4 +351,51 @@ final class schema_indexes_test extends advanced_testcase {
         $this->assertTrue($DB->record_exists('local_catquiz_personparams', ['id' => $first]));
         $this->assertTrue($DB->record_exists('local_catquiz_personparams', ['id' => $second]));
     }
+
+    /**
+     * No table carries two indexes over the same column list.
+     *
+     * XMLDB creates an index for every foreign key, so declaring an <INDEX> on a
+     * column that a <KEY TYPE="foreign"> already covers produces two physically
+     * identical indexes. Both then have to be maintained on every write - pure cost
+     * on tables that are written on every single answer. This guard keeps the
+     * declarations from drifting back in.
+     *
+     * @return void
+     */
+    public function test_no_redundant_indexes_remain(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+
+        $tables = [
+            'local_catquiz_attempts',
+            'local_catquiz_personparams',
+            'local_catquiz_progress',
+            'local_catquiz_items',
+            'local_catquiz_tests',
+            'local_catquiz_catscales',
+            'local_catquiz_subscriptions',
+            'local_catquiz_itemparams',
+        ];
+
+        $redundant = [];
+        foreach ($tables as $table) {
+            $bycolumns = [];
+            foreach ($DB->get_indexes($table) as $name => $info) {
+                $bycolumns[implode(',', $info['columns'])][] = $name;
+            }
+            foreach ($bycolumns as $columns => $names) {
+                if (count($names) > 1) {
+                    $redundant[] = sprintf('%s(%s): %s', $table, $columns, implode(', ', $names));
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $redundant,
+            "Redundant indexes found:\n" . implode("\n", $redundant)
+        );
+    }
 }
