@@ -155,7 +155,7 @@ class catquiz {
         global $DB;
 
         $select = '*';
-        $from = "( SELECT q.id, q.name, q.questiontext, q.qtype, qc.name as categoryname
+        $from = "( SELECT q.id, q.name, q.qtype, qc.name as categoryname
             FROM {question} q
                 JOIN {question_versions} qv ON q.id=qv.questionid
                 JOIN {question_bank_entries} qbe ON qv.questionbankentryid=qbe.id
@@ -231,7 +231,6 @@ class catquiz {
             qbe.idnumber as label,
             COALESCE (qbe.idnumber, CAST(qbe.id AS CHAR)) as idnumber,
             q.name as questionname,
-            q.questiontext as questiontext,
             q.qtype as qtype,
             qc.name as categoryname,
             -- Information about CAT scales, parameters and contexts
@@ -358,13 +357,12 @@ class catquiz {
         $select = "id,
                 idnumber,
                 name,
-                questiontext,
                 qtype,
                 categoryname,
                 'question' as component,
                 contextattempts as questioncontextattempts,
                 catscaleids";
-        $from = "( SELECT q.id, qbe.idnumber, q.name, q.questiontext, q.qtype, qc.name as categoryname, s2.contextattempts," .
+        $from = "( SELECT q.id, qbe.idnumber, q.name, q.qtype, qc.name as categoryname, s2.contextattempts," .
              $DB->sql_group_concat($DB->sql_concat("'-'", 'lci.catscaleid', "'-'")) . " as catscaleids
             FROM {question} q
                 JOIN (
@@ -385,7 +383,7 @@ class catquiz {
                     WHERE $contextfilter
                     GROUP BY ccc1.id, qa.questionid
                 ) s2 ON q.id = s2.questionid
-                GROUP BY q.id, qbe.idnumber, q.name, q.questiontext, q.qtype, qc.name, s2.contextattempts
+                GROUP BY q.id, qbe.idnumber, q.name, q.qtype, qc.name, s2.contextattempts
             ) as s1";
 
         $where = " ( " . $DB->sql_like('catscaleids', ':catscaleid', false, false, true) . ' OR catscaleids IS NULL ) ';

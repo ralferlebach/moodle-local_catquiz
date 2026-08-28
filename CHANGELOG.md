@@ -1,5 +1,31 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026082807)
+
+> Issue #20: Fragetexte aus den Tabellenabfragen entfernt, Vorschau lazy geladen.
+
+- **`questiontext` aus fünf SQL-Stellen entfernt** (drei Query-Builder in
+  `catquiz.php`, inkl. innerem SELECT und `GROUP BY`). Die Listen selektieren den
+  Fragetext nicht mehr.
+- **Beide Renderer entschlackt**: `col_name()` und `col_questiontext()` bauten je
+  Zeile `question_rewrite_question_urls` → `format_text` → `strip_tags` auf und
+  betteten den Volltext in ein verstecktes Modal. Jetzt nur noch ein Auslöser mit
+  dem Fragenamen.
+- **Neuer Webservice** `local_catquiz_get_question_preview` mit
+  `validate_context()` und `require_capability('local/catquiz:manage_catscales')`.
+- **Neues AMD-Modul** `local_catquiz/questionpreview` lädt die Vorschau bei Klick in
+  ein Core-Modal; ein delegierter Listener überlebt das Neuzeichnen der Tabelle bei
+  Sortierung, Filter und Pagination.
+- **Volltextsuche und Sortierung über `questiontext` entfallen** (im Issue als
+  bewusste Folge benannt); die irreführende Spaltenüberschrift „Fragetext" wurde
+  auf „Name" korrigiert.
+- Neue Tests: `question_list_payload_test.php` (4 Tests, prüft u. a. die
+  SELECT-Feldlisten und die Rechteprüfung des Endpunkts) und
+  `catquiz_question_preview_lazy.feature` (2 Szenarien). Zahn-Test: mit
+  wiederhergestelltem Volltext-Template fallen beide Szenarien.
+- **Hinweis:** `amd/build/questionpreview.min.js` ist handgeschrieben (kein grunt im
+  Container). Vor dem Merge `moodle-plugin-ci grunt` laufen lassen.
+
 ## 1.1.6 (interne Version 2026082806)
 
 > Archetyp-Lücke bei `view_teacher_feedback` geschlossen.

@@ -261,33 +261,38 @@ class catscalequestions_table extends wunderbyte_table {
 
 
     /**
+     * Returns the short label shown in the list for a question.
+     *
+     * Falls back through the fields the different list queries provide, so both
+     * the scale question list and the "add items" list get a sensible label
+     * without either of them selecting the question text.
+     *
+     * @param object $values
+     * @return string
+     */
+    private function get_question_label($values): string {
+        foreach (['questionname', 'name', 'label', 'idnumber'] as $field) {
+            if (!empty($values->{$field})) {
+                return format_string($values->{$field});
+            }
+        }
+
+        return get_string('question', 'core') . ' ' . (int) $values->id;
+    }
+
+    /**
      * Overrides the output for this column.
      * @param object $values
      */
     public function col_name($values) {
-
         global $OUTPUT;
 
-        $context = context_system::instance();
-
-        $questiontext = question_rewrite_question_urls(
-            $values->questiontext,
-            'pluginfile.php',
-            $context->id,
-            'question',
-            'questiontext',
-            [],
-            $values->id
-        );
-
-        $fulltext = format_text($questiontext);
-        $questiontext = strip_tags($fulltext);
-        $shorttext = substr($questiontext, 0, 30);
-        $shorttext .= strlen($shorttext) < strlen($questiontext) ? '...' : '';
-
+        // Issue #20: the list no longer selects or renders the question text. The
+        // row shows the question name and opens the preview on demand through
+        // local_catquiz_get_question_preview, so a page of rows no longer carries
+        // the formatted text - and any embedded images - of every question.
         $data = [
-            'shorttext' => $shorttext,
-            'fulltext' => $fulltext,
+            'label' => $this->get_question_label($values),
             'id' => $values->id,
         ];
 
@@ -387,37 +392,14 @@ class catscalequestions_table extends wunderbyte_table {
      * @param object $values
      */
     public function col_questiontext($values) {
-
         global $OUTPUT;
 
-        // phpcs:disable
-        // try {
-        // $question = question_bank::load_question($values->id);
-        // } catch (Exception $e) {
-        // return $values->questiontext;
-        // }
-        // phpcs:enable
-
-        $context = context_system::instance();
-
-        $questiontext = question_rewrite_question_urls(
-            $values->questiontext,
-            'pluginfile.php',
-            $context->id,
-            'question',
-            'questiontext',
-            [],
-            $values->id
-        );
-
-        $fulltext = format_text($questiontext);
-        $questiontext = strip_tags($fulltext);
-        $shorttext = substr($questiontext, 0, 30);
-        $shorttext .= strlen($shorttext) < strlen($questiontext) ? '...' : '';
-
+        // Issue #20: the list no longer selects or renders the question text. The
+        // row shows the question name and opens the preview on demand through
+        // local_catquiz_get_question_preview, so a page of rows no longer carries
+        // the formatted text - and any embedded images - of every question.
         $data = [
-            'shorttext' => $shorttext,
-            'fulltext' => $fulltext,
+            'label' => $this->get_question_label($values),
             'id' => $values->id,
         ];
 

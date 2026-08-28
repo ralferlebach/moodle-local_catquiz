@@ -92,7 +92,7 @@ class questionsdisplay {
      * @return ?string
      */
     public function renderquestionstable() {
-        global $DB;
+        global $DB, $PAGE;
         if ($this->scale === -1) {
             return $this->get_no_table_string();
         }
@@ -104,6 +104,10 @@ class questionsdisplay {
         $table = new catscalequestions_table(
             'catscale_' . $catscale . 'context' . $catcontext . ' questionstable'
         );
+
+        // Issue #20: the question text is fetched on demand when a preview is
+        // opened, instead of being embedded into every row.
+        $PAGE->requires->js_call_amd('local_catquiz/questionpreview', 'init');
         $table->set_catscaleid_and_contextid($catscale, $catcontext);
 
         // If we integrate questions from subscales, we add different ids.
@@ -142,7 +146,6 @@ class questionsdisplay {
             'catscalename',
             'categoryname',
             'questionname',
-            'questiontext',
             'qtype',
             'model',
             'astatlastattempttime',
@@ -204,11 +207,17 @@ class questionsdisplay {
      *
      */
     private function render_addtestitems_table(int $catscaleid) {
+        global $PAGE;
+
         $id = $catscaleid > -1 ? $catscaleid : 0;
 
         $catcontextid = empty($this->catcontextid) ? optional_param('contextid', 0, PARAM_INT) : $this->catcontextid;
 
         $table = new catscalequestions_table('catscaleid_' . $id . 'context' . $catcontextid . '_additems');
+
+        // Issue #20: the question text is fetched on demand when a preview is
+        // opened, instead of being embedded into every row.
+        $PAGE->requires->js_call_amd('local_catquiz/questionpreview', 'init');
         $table->set_catscaleid_and_contextid($id, $catcontextid);
 
         [$select, $from, $where, $filter, $params]
@@ -226,7 +235,7 @@ class questionsdisplay {
         ]);
         $table->define_headers([
             get_string('label', 'local_catquiz'),
-            get_string('questiontext', 'local_catquiz'),
+            get_string('name', 'core'),
             get_string('questiontype', 'local_catquiz'),
             get_string('questioncategories', 'local_catquiz'),
             get_string('questioncontextattempts', 'local_catquiz'),
@@ -249,11 +258,10 @@ class questionsdisplay {
         ]);
         $table->add_filter($standardfilter);
 
-        $table->define_fulltextsearchcolumns(['idnumber', 'name', 'questiontext', 'qtype']);
+        $table->define_fulltextsearchcolumns(['idnumber', 'name', 'qtype']);
         $table->define_sortablecolumns([
             'idnunber',
             'name',
-            'questiontext',
             'qtype',
             'questioncontextattempts',
         ]);
