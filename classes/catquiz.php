@@ -180,6 +180,7 @@ class catquiz {
      * @param array $wherearray
      * @param int $userid
      * @param string|null $orderby If given, order by the given field in ascending order
+     * @param int|null $questionid If given, restrict the query to this single question
      *
      * @return array
      *
@@ -189,7 +190,8 @@ class catquiz {
         int $contextid,
         array $wherearray = [],
         int $userid = 0,
-        ?string $orderby = null
+        ?string $orderby = null,
+        ?int $questionid = null
     ) {
 
         global $DB;
@@ -207,6 +209,16 @@ class catquiz {
         // If we fetch only for a given user, we need to add this to the sql.
         if (!empty($userid)) {
             $params['userid'] = $userid;
+        }
+
+        // Issue #19: the detail view needs exactly one question. Restricting the
+        // innermost query keeps the expensive statistics joins from aggregating
+        // over the whole scale first and discarding the rest afterwards - which is
+        // what exhausted the memory limit on large, image heavy pools.
+        $questionfilter = '';
+        if (!empty($questionid)) {
+            $questionfilter = ' AND q.id = :detailquestionid ';
+            $params['detailquestionid'] = $questionid;
         }
 
         $insql = '';
@@ -264,7 +276,7 @@ class catquiz {
             JOIN {local_catquiz_itemparams} lcip ON lcip.itemid = lci.id AND lci.activeparamid = lcip.id
 
           -- Get all information about the question from the questionbank itself
-            JOIN {question} q ON q.id=lci.componentid
+            JOIN {question} q ON q.id=lci.componentid $questionfilter
             JOIN {question_versions} qv ON qv.questionid=q.id
             JOIN {question_bank_entries} qbe ON qbe.id=qv.questionbankentryid
             JOIN {question_categories} qc ON qc.id=qbe.questioncategoryid

@@ -53,6 +53,11 @@ use moodle_url;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catscalequestions_table extends wunderbyte_table {
+    /**
+     * Whether the question text restriction has already been applied.
+     * @var bool
+     */
+    private bool $questiontextsearchapplied = false;
     /** @var int $catscaleid */
     private $catscaleid = 0;
 
@@ -259,6 +264,98 @@ class catscalequestions_table extends wunderbyte_table {
         return "problem with $values->id, no qtype";
     }
 
+
+    /**
+     * Upper bound for the id list produced by the question text search.
+     *
+     * A two letter search term can match most of the question bank, and an IN()
+     * clause with tens of thousands of ids is a performance problem of its own.
+     * @var int
+     */
+    const QUESTIONTEXT_SEARCH_LIMIT = 2000;
+
+    /**
+     * Narrows the list to questions whose text matches, before WBT builds its query.
+     *
+     * Issue #20 removed questiontext from the list queries, which also removed the
+     * ability to search inside question texts. Carrying the text in every row just
+     * so that it can be searched is precisely what made the lists slow, so the text
+     * is consulted only when somebody actually searches: a small dedicated query
+     * resolves the matching question ids and the list is narrowed to them.
+     *
+     * This is a separate restriction with AND semantics, not part of the table's own
+     * free text box: that box searches a concatenated column which would have to
+     * contain the question text again, which is the thing we removed.
+     *
+     * @param int $pagesize
+     * @param bool $useinitialsbar
+     * @return void
+     */
+    public function query_db_cached($pagesize, $useinitialsbar = true) {
+        $this->apply_questiontext_search();
+
+        parent::query_db_cached($pagesize, $useinitialsbar);
+    }
+
+    /**
+     * Appends the id restriction for the current question text search term.
+     *
+     * @return void
+     */
+    public function apply_questiontext_search(): void {
+        global $DB;
+
+        if ($this->questiontextsearchapplied) {
+            return;
+        }
+
+        $searchtext = trim(optional_param('qtsearch', '', PARAM_TEXT));
+        if ($searchtext === '') {
+            return;
+        }
+        $this->questiontextsearchapplied = true;
+
+        $ids = self::resolve_questiontext_matches($searchtext);
+
+        if ($ids === null) {
+            // Too many matches to restrict by id; leave the list untouched rather
+            // than building a huge IN() clause.
+            return;
+        }
+
+        if (empty($ids)) {
+            // Nothing matched. The correct answer is an empty list, not the
+            // unfiltered one.
+            $this->sql->where .= ' AND 1=0 ';
+            return;
+        }
+
+        [$insql, $inparams] = $DB->get_in_or_equal($ids, SQL_PARAMS_NAMED, 'catquizqtid');
+        $this->sql->where .= " AND id $insql ";
+        $this->sql->params = array_merge($this->sql->params, $inparams);
+    }
+
+    /**
+     * Returns the ids of questions whose text matches, or null if there are too many.
+     *
+     * @param string $searchtext
+     * @return int[]|null
+     */
+    public static function resolve_questiontext_matches(string $searchtext): ?array {
+        global $DB;
+
+        $like = $DB->sql_like('questiontext', ':catquizqtsearch', false, false);
+        $ids = $DB->get_fieldset_sql(
+            "SELECT id FROM {question} WHERE $like",
+            ['catquizqtsearch' => '%' . $DB->sql_like_escape($searchtext) . '%']
+        );
+
+        if (count($ids) > self::QUESTIONTEXT_SEARCH_LIMIT) {
+            return null;
+        }
+
+        return array_map('intval', $ids);
+    }
 
     /**
      * Returns the short label shown in the list for a question.
