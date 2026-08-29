@@ -209,6 +209,7 @@ class catquiz {
         // If we fetch only for a given user, we need to add this to the sql.
         if (!empty($userid)) {
             $params['userid'] = $userid;
+            $params['statuserid'] = $userid;
         }
 
         // Issue #19: the detail view needs exactly one question. Restricting the
@@ -227,7 +228,14 @@ class catquiz {
 
             [$parentscales1, $inparams1] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales1');
             [$parentscales2, $inparams2] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales2');
-            $params = array_merge($params, $inparams1, $inparams2);
+            // Issue #21: the statistics subqueries restrict by scale themselves, so
+            // they need their own placeholders - reusing the ones of the outer joins
+            // would bind the same names twice for different clauses.
+            [$parentscales3, $inparams3] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales3');
+            [$parentscales4, $inparams4] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales4');
+            $params = array_merge($params, $inparams1, $inparams2, $inparams3, $inparams4);
+            $params['statcontextid'] = $contextid;
+            $params['statcontextid2'] = $contextid;
 
             [$incatscales, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED, 'incatscales');
             $params = array_merge($params, $inparams);
@@ -283,13 +291,23 @@ class catquiz {
 
           -- Get all information about the attempts in the scale(s)
           -- and context(s) in general and for specific user(s)
-            LEFT JOIN (SELECT lca.scaleid, lca.contextid, qa.questionid, COUNT(qa.id) numberattempts,
+            -- Issue #21: the restriction to context and scales lives inside the
+            -- aggregation, not only in the outer join. Without it this subquery
+            -- aggregated every CAT attempt of the whole site before a single row was
+            -- discarded, and an outer LIMIT did nothing to shrink that work.
+            --
+            -- COUNT(DISTINCT qa.id): a question attempt has one step per interaction,
+            -- and the join to question_attempt_steps multiplies the rows accordingly.
+            -- A plain COUNT counted steps and reported them as attempts.
+            LEFT JOIN (SELECT lca.scaleid, lca.contextid, qa.questionid,
+                COUNT(DISTINCT qa.id) numberattempts,
               MAX(qas.timecreated) as lastattempt
               FROM {local_catquiz_attempts} lca
               JOIN {adaptivequiz_attempt} aqa ON lca.attemptid = aqa.id
               JOIN {question_attempts} qa ON qa.questionusageid = aqa.uniqueid
               JOIN {question_attempt_steps} qas
                 ON qas.questionattemptid = qa.id AND qas.fraction IS NOT NULL
+              WHERE lca.contextid = :statcontextid AND lca.scaleid $parentscales3
               GROUP BY lca.scaleid, lca.contextid, qa.questionid
             ) astat
               ON astat.contextid = lcip.contextid AND astat.questionid = q.id
@@ -304,13 +322,15 @@ class catquiz {
                         lca.contextid,
                         qa.questionid,
                         lca.userid,
-                        COUNT(qa.id) numberattempts,
+                        COUNT(DISTINCT qa.id) numberattempts,
                         MAX(qas.timecreated) as lastattempt
                     FROM {local_catquiz_attempts} lca
                       JOIN {adaptivequiz_attempt} aqa ON lca.attemptid = aqa.id
                       JOIN {question_attempts} qa ON qa.questionusageid = aqa.uniqueid
                       JOIN {question_attempt_steps} qas
                         ON qas.questionattemptid = qa.id AND qas.fraction IS NOT NULL
+                    WHERE lca.userid = :statuserid AND lca.contextid = :statcontextid2
+                      AND lca.scaleid $parentscales4
                     GROUP BY lca.scaleid, lca.contextid, qa.questionid, lca.userid
                 ) ustat
                   ON ustat.userid = :userid AND ustat.contextid = lcip.contextid AND ustat.questionid = q.id
@@ -372,10 +392,16 @@ class catquiz {
                 qtype,
                 categoryname,
                 'question' as component,
-                contextattempts as questioncontextattempts,
-                catscaleids";
-        $from = "( SELECT q.id, qbe.idnumber, q.name, q.qtype, qc.name as categoryname, s2.contextattempts," .
-             $DB->sql_group_concat($DB->sql_concat("'-'", 'lci.catscaleid', "'-'")) . " as catscaleids
+                contextattempts as questioncontextattempts";
+        // Issue #22: the list of scales a question belongs to used to be built with
+        // GROUP_CONCAT into a string like '-3--7-' and then filtered with
+        // LIKE '%-3-%'. That string was never displayed - it existed only to express
+        // "not already assigned to this scale" - and a leading-wildcard LIKE cannot
+        // use an index, so the filter forced a scan and the aggregation forced a
+        // GROUP BY over the whole result. NOT EXISTS states the same condition
+        // directly and is served by the (catscaleid, componentname, componentid)
+        // index added in issue #25.
+        $from = "( SELECT q.id, qbe.idnumber, q.name, q.qtype, qc.name as categoryname, s2.contextattempts
             FROM {question} q
                 JOIN (
                     SELECT *
@@ -388,20 +414,37 @@ class catquiz {
                 ON q.id=qv.questionid
                 JOIN {question_bank_entries} qbe ON qv.questionbankentryid=qbe.id
                 JOIN {question_categories} qc ON qc.id=qbe.questioncategoryid
-                LEFT JOIN {local_catquiz_items} lci ON lci.componentid = q.id
                 LEFT JOIN (
-                    SELECT ccc1.id contextid, qa.questionid, COUNT(*) contextattempts
+                    -- Issue #21: COUNT(*) over the join to question_attempt_steps
+                    -- counted one row per interaction step, so a question answered
+                    -- once was reported as several attempts. The same defect was
+                    -- fixed in the scale question list.
+                    SELECT ccc1.id contextid, qa.questionid,
+                        COUNT(DISTINCT qa.id) contextattempts
                     FROM $contextfrom
                     WHERE $contextfilter
                     GROUP BY ccc1.id, qa.questionid
                 ) s2 ON q.id = s2.questionid
-                GROUP BY q.id, qbe.idnumber, q.name, q.qtype, qc.name, s2.contextattempts
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM {local_catquiz_items} lci
+                    WHERE lci.componentid = q.id
+                      AND lci.componentname = 'question'
+                      AND lci.catscaleid = :notassignedscaleid
+                )
             ) as s1";
 
-        $where = " ( " . $DB->sql_like('catscaleids', ':catscaleid', false, false, true) . ' OR catscaleids IS NULL ) ';
-        $params['catscaleid'] = "%-$catscaleid-%";
+        $where = '1=1';
+        $params['notassignedscaleid'] = $catscaleid;
         $params['contextid'] = $contextid;
-        $params['default'] = '%"default":true%';
+
+        // Only bound when $contextfilter above actually references it: with
+        // contextid 0 the default context is identified by its JSON flag. This was
+        // briefly dropped while removing the GROUP_CONCAT filter for issue #22,
+        // which would have broken exactly the "no context given" path.
+        if ($contextid === 0) {
+            $params['default'] = '%"default":true%';
+        }
         $filter = '';
 
         foreach ($wherearray as $key => $value) {
@@ -1281,6 +1324,30 @@ class catquiz {
             'catscaleid' => $catscaleid,
         ];
         return [$sql, $params];
+    }
+
+    /**
+     * Returns the number of questions per scale, for all scales in one query.
+     *
+     * Issue #24: the scale overview called get_sql_for_number_of_questions_in_scale()
+     * once per scale, so the number of count queries grew with the number of scales.
+     * One grouped query answers the same question for every scale at once.
+     *
+     * @return array<int, int> Question count keyed by catscaleid.
+     */
+    public static function get_number_of_questions_per_scale(): array {
+        global $DB;
+
+        $sql = "SELECT catscaleid, COUNT(*) AS numberofquestions
+                  FROM {local_catquiz_items}
+              GROUP BY catscaleid";
+
+        $counts = [];
+        foreach ($DB->get_records_sql($sql) as $row) {
+            $counts[(int) $row->catscaleid] = (int) $row->numberofquestions;
+        }
+
+        return $counts;
     }
 
     /**

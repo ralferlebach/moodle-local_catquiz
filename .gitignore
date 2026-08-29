@@ -21,8 +21,14 @@ yarn.lock
 vendor/
 composer.lock
 
-# AMD build artefacts (keep src, ignore build output)
-amd/build/
+# AMD tooling. The compiled output under amd/build/ is deliberately NOT ignored:
+# Moodle loads amd/build/*.min.js at runtime and an administrator installing the
+# plugin has no Node toolchain, so the artefacts belong in the repository.
+#
+# Ignoring them had a subtle effect that cost a CI cycle: files added before the
+# rule stayed tracked and kept updating, so everything looked fine locally, while
+# every NEW module (questionpreview) was silently dropped from commits and CI
+# reported "File is newly generated and needs to be added".
 amd/Gruntfile.js
 amd/package.json
 amd/package-lock.json

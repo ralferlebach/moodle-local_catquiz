@@ -79,6 +79,8 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | DB-Indizes (#25), NULL-sichere Dubletten-Bereinigung, redundante Indizes | 088 |
 | Fragelisten entschlackt, Lazy-Vorschau (#20) | 089 |
 | Fragetext-Suche, Detailansicht (#19), CI-Grunt/browserslist | 090 |
+| Statistik eingeschränkt (#21), Add-Items ohne GROUP_CONCAT (#22) | 091 |
+| Skalenbaum ohne N+1 und quadratischen Aufbau (#24) | 092 |
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

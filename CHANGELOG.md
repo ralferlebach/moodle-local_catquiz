@@ -1,5 +1,87 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026082814)
+
+> Issue #24: Skalenbaum ohne N+1-Abfragen und ohne quadratischen Aufbau.
+
+- **Subscriptions in einer Abfrage.** `build_tree()` fragte je Skala den
+  Subscription-Status ab (`record_exists()` pro Skala). Neu:
+  `subscription::return_subscribed_itemids()` lädt alle auf einmal, der Baum schlägt
+  per `isset()` nach.
+- **Fragenzahlen gruppiert.** `export_for_template()` und `return_as_array()` zählten
+  je Skala einzeln. Neu: `catquiz::get_number_of_questions_per_scale()` mit
+  `GROUP BY catscaleid`.
+- **Linearer Baumaufbau.** Die Skalen werden einmal nach `parentid` gruppiert; jede
+  Ebene sieht nur ihre eigenen Kinder statt erneut die vollständige Liste. Die
+  Reihenfolge innerhalb einer Ebene bleibt unverändert.
+- Neue Tests `catscale_tree_test` (5 Tests): Abfragezahl bleibt konstant,
+  Baumstruktur und Reihenfolge über drei Ebenen, und – als eigentlicher Beleg –
+  Subscription-Zustand sowie Fragenzahlen **identisch** zu den bisherigen
+  Einzelabfragen.
+- Zahn-Tests beziffern den Gewinn: mit reinjiziertem N+1 braucht der größere Baum
+  **221 statt 12** Abfragen, die Fragenzahlen **3 statt 1**.
+- **Noch offen bei #24**: Application-Cache für die Skalenhierarchie samt
+  Invalidierung – bewusst zurückgestellt, weil falsche Invalidierung veraltete Bäume
+  zeigt und der Aufbau bereits linear mit konstanter Abfragezahl ist.
+
+## 1.1.6 (interne Version 2026082813)
+
+> Issue #22: „Frage hinzufügen" ohne globale Scans.
+
+- **`GROUP_CONCAT` und Wildcard-`LIKE` entfernt.** Die Abfrage baute je Frage einen
+  String aus allen zugeordneten Skalen (`-3--7-`) und filterte mit `LIKE '%-3-%'`.
+  Dieser String wurde nirgends angezeigt – er drückte nur „noch nicht dieser Skala
+  zugeordnet" aus. Ein führendes Wildcard kann keinen Index nutzen, und die
+  Aggregation erzwang ein `GROUP BY` über die gesamte Fragenbank.
+- **Ersetzt durch `NOT EXISTS`** auf `local_catquiz_items`. Das trifft genau den in
+  #25 angelegten Index `(catscaleid, componentname, componentid)`. Damit entfallen
+  auch der `LEFT JOIN`, das `GROUP BY` und ein toter Parameter.
+- Neue Tests `add_questions_query_test` (3 Tests): führen die Abfrage real aus und
+  prüfen, dass eine Zuordnung zu einer **anderen** Skala die Frage nicht ausblendet –
+  ein zu grob formuliertes `NOT EXISTS` wäre sonst unbemerkt durchgegangen.
+- **Noch offen bei #22**: `ROW_NUMBER()` über alle Frageversionen sowie Behat für
+  Suche, Pagination und Hinzufügen.
+
+## 1.1.6 (interne Version 2026082812)
+
+> Zählfehler auch in der Add-Items-Abfrage behoben (Fortsetzung von #21).
+
+- **`return_sql_for_addcatscalequestions` zählte Steps statt Versuche.** Sie erreicht
+  dieselben Daten über `get_sql_for_stat_base_request()`, das ebenfalls
+  `question_attempt_steps` joint – `COUNT(*)` zählte dort jede Interaktion einzeln.
+  Jetzt `COUNT(DISTINCT qa.id)`. Damit ist der Defekt an beiden Stellen behoben.
+- Regressionstest ergänzt; beide geänderten Abfragen zusätzlich real ausgeführt.
+
+## 1.1.6 (interne Version 2026082811)
+
+> CI `lint-jsamd`: die echte Ursache gefunden. Dazu Issue #21 (Teil 1).
+
+- **`.gitignore` ignorierte `amd/build/`.** Das ist die Ursache dafür, dass
+  `questionpreview.min.js` bei jedem CI-Lauf erneut als „newly generated" gemeldet
+  wurde, obwohl die Datei in jedem Paket lag: Bereits getrackte Build-Dateien werden
+  weiter aktualisiert, **neue** nimmt Git stillschweigend nicht mit. Die Regel ist
+  entfernt – Moodle lädt `amd/build/*.min.js` zur Laufzeit, und wer das Plugin
+  installiert, hat keine Node-Toolchain. **Einmalig nötig:**
+  `git add -f amd/build/questionpreview.min.js amd/build/questionpreview.min.js.map`
+- **`update-browserslist-db`-Schritt wieder entfernt** – er hat nicht geholfen, die
+  Diagnose war falsch.
+- **Neuer Schritt „Verify committed AMD build"** in beiden Workflows: sichert den
+  eingecheckten Stand, baut mit der Toolchain des Runners neu und vergleicht per
+  `diff`. Fehlschlag nur bei echtem Unterschied. Das umgeht das bekannte
+  False-Positive `moodlehq/moodle-plugin-ci#350`, ohne einen tatsächlich veralteten
+  Build zu kaschieren – letzteres wurde per Zahn-Test geprüft.
+- **Issue #21 (Teil 1)**: Die Statistik-Unterabfrage der Fragenliste hatte **kein
+  `WHERE`** und aggregierte jeden CAT-Versuch der gesamten Instanz, bevor der äußere
+  Join die erste Zeile verwarf; ein `LIMIT` außen reduzierte davon nichts. Jetzt
+  schränkt die Aggregation selbst auf Kontext und Skalen ein.
+- **Versuchszahlen zählen Versuche statt Steps**: `COUNT(qa.id)` zählte über den Join
+  auf `question_attempt_steps` jede Interaktion einzeln. Jetzt
+  `COUNT(DISTINCT qa.id)` in beiden Unterabfragen.
+- **Noch offen bei #21**: das zweistufige Laden auf die sichtbare Seitenmenge und die
+  leichte Count-Abfrage. **Nebenbefund für #22**: `return_sql_for_addcatscalequestions`
+  trägt über `get_sql_for_stat_base_request()` denselben Zählfehler (`COUNT(*)` über
+  den Steps-Join).
+
 ## 1.1.6 (interne Version 2026082810)
 
 > Fragetext-Suche, Issue #19 und Stabilisierung der CI-Stufe `lint-jsamd`.

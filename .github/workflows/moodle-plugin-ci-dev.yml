@@ -218,14 +218,39 @@ jobs:
           key: npm-${{ runner.os }}-${{ github.sha }}
           restore-keys: npm-${{ runner.os }}-
 
-      - name: Update browserslist database
+      - name: Verify committed AMD build
         if: ${{ always() }}
-        # Babel derives its output from the browserslist targets, and those come from
-        # caniuse-lite. A stale database makes grunt emit different bytes than the
-        # committed build files, so the job fails with "File is stale and needs to be
-        # rebuilt" for modules nobody touched. Refreshing it here keeps the runner in
-        # step with the toolchain the build files were generated with.
-        run: npx --yes update-browserslist-db@latest || true
+        shell: bash
+        # moodle-plugin-ci reports AMD files as stale on GitHub Actions even when a
+        # rebuild in the same runner produces byte-identical output (moodlehq/
+        # moodle-plugin-ci#350, still open). Simply rebuilding before the check would
+        # also paper over a genuinely outdated build, so this step compares instead:
+        # it snapshots the committed files, rebuilds with the runner's own toolchain
+        # and fails only if the bytes actually differ. A real difference is a real
+        # error; an identical result leaves freshly built files in place, which is the
+        # documented workaround for the false positive.
+        run: |
+          set -euo pipefail
+          MOODLE="${MOODLE_DIR:-$(pwd)/moodle}"
+          PLUGIN="$MOODLE/local/catquiz"
+
+          if [ ! -d "$PLUGIN/amd/build" ]; then
+            echo "No amd/build directory - nothing to verify."
+            exit 0
+          fi
+
+          rm -rf /tmp/amd-before
+          mkdir -p /tmp/amd-before
+          cp -a "$PLUGIN/amd/build/." /tmp/amd-before/
+
+          ( cd "$MOODLE" && npx grunt amd --root=local/catquiz )
+
+          if ! diff -ruN /tmp/amd-before "$PLUGIN/amd/build"; then
+            echo "::error::amd/build does not match the sources."
+            echo "Rebuild with 'npx grunt amd --root=local/catquiz' and commit the result."
+            exit 1
+          fi
+          echo "Committed AMD build matches the sources."
 
       - name: Grunt (JS / AMD / CSS)
         if: ${{ always() }}
