@@ -275,7 +275,7 @@ class catscalequestions_table extends wunderbyte_table {
     const QUESTIONTEXT_SEARCH_LIMIT = 2000;
 
     /**
-     * Narrows the list to questions whose text matches, before WBT builds its query.
+     * Narrows the list to questions whose text matches, as the SQL is defined.
      *
      * Issue #20 removed questiontext from the list queries, which also removed the
      * ability to search inside question texts. Carrying the text in every row just
@@ -287,14 +287,23 @@ class catscalequestions_table extends wunderbyte_table {
      * free text box: that box searches a concatenated column which would have to
      * contain the question text again, which is the thing we removed.
      *
-     * @param int $pagesize
-     * @param bool $useinitialsbar
+     * The restriction has to be applied here rather than while rendering. The table
+     * serialises its own $sql into an encoded, cached instance that later AJAX
+     * reloads are built from; a restriction added at render time is not part of that
+     * snapshot, so the first page looked filtered and every reload silently showed
+     * the unfiltered list again.
+     *
+     * @param string $fields
+     * @param string $from
+     * @param string $where
+     * @param string $filter
+     * @param array $params
      * @return void
      */
-    public function query_db_cached($pagesize, $useinitialsbar = true) {
-        $this->apply_questiontext_search();
+    public function set_filter_sql(string $fields, string $from, string $where, string $filter, array $params = []) {
+        parent::set_filter_sql($fields, $from, $where, $filter, $params);
 
-        parent::query_db_cached($pagesize, $useinitialsbar);
+        $this->apply_questiontext_search();
     }
 
     /**

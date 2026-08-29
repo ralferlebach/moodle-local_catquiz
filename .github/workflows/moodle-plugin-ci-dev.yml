@@ -218,6 +218,15 @@ jobs:
           key: npm-${{ runner.os }}-${{ github.sha }}
           restore-keys: npm-${{ runner.os }}-
 
+      - name: Update browserslist database
+        if: ${{ always() }}
+        # Babel derives its output from the browserslist targets, and those come from
+        # caniuse-lite. A stale database makes grunt emit different bytes than the
+        # committed build files, so the job fails with "File is stale and needs to be
+        # rebuilt" for modules nobody touched. Refreshing it here keeps the runner in
+        # step with the toolchain the build files were generated with.
+        run: npx --yes update-browserslist-db@latest || true
+
       - name: Grunt (JS / AMD / CSS)
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci grunt --max-lint-warnings 0 2>&1 | tee ci-logs/grunt.log

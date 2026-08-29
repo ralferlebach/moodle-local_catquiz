@@ -1,5 +1,35 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026082810)
+
+> Fragetext-Suche, Issue #19 und Stabilisierung der CI-Stufe `lint-jsamd`.
+
+- **CI `lint-jsamd` grün**: Vier fremde Module (`csvimport`, `managecatcontext`,
+  `managecatscale`, `testitem_model_overrides`) wurden als „stale" gemeldet, obwohl
+  niemand sie angefasst hatte. Ursache war eine veraltete `caniuse-lite`-Datenbank –
+  Babel leitet seine Ausgabe daraus ab und erzeugt dann andere Bytes als die
+  eingecheckten Build-Dateien. Die Dateien sind neu erzeugt, und beide Workflows
+  aktualisieren die Datenbank jetzt vor dem Grunt-Schritt.
+- **Issue #19**: Die Detailansicht schränkt die Abfrage auf die angeforderte Frage
+  ein (`:detailquestionid`, gesetzt im innersten Question-Join) statt die ganze Skala
+  zu laden und in PHP auszuwählen. Zwei Fehler behoben: `IGNORE_MISSING` war der
+  `$limitfrom`-Parameter und prüfte nichts, und die Frage-ID wurde im `$userid`-Slot
+  übergeben, den der Builder an einen Join über **benutzerbezogene** Statistiken
+  bindet – die Ansicht verglich Nutzer-IDs mit einer Frage-ID.
+- **Fragetext-Suche wieder verfügbar** (Folge von #20): eine dedizierte Abfrage löst
+  passende Frage-IDs auf, der Text bleibt aus der Listenabfrage. Kosten fallen pro
+  Suche an, nicht pro Seitenaufruf. Wildcards werden escaped, kein Treffer ergibt
+  eine leere Liste, und oberhalb von 2000 Treffern verzichtet die Suche auf die
+  Einschränkung statt eine riesige `IN()`-Klausel zu bauen.
+- **Dabei gefunden**: Die Einschränkung muss in `set_filter_sql()` sitzen, nicht beim
+  Rendern. `local_wunderbyte_table` serialisiert seine SQL in eine gecachte Instanz,
+  aus der AJAX-Nachladungen aufgebaut werden – zur Renderzeit ergänzte Bedingungen
+  überleben das erste Nachladen nicht. Die erste Seite sah gefiltert aus, jedes
+  Nachladen zeigte still wieder alle Datensätze.
+- Neue Tests: `question_detail_query_test` (4), `questiontext_search_test` (5),
+  Behat `catquiz_questiontext_search` (2 Szenarien). Fünf Zahn-Tests, alle rot bei
+  Rücknahme.
+
 ## 1.1.6 (interne Version 2026082807)
 
 > Issue #20: Fragetexte aus den Tabellenabfragen entfernt, Vorschau lazy geladen.

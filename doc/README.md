@@ -75,6 +75,10 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | CAT-Simulationsmatrix reaktiviert (referenzfreie Invarianten) | 079, 080 |
 | Behat-Abdeckung #5–#9, Nachbesserung, zwei UI-Sackgassen | 081, 082, 083 |
 | Adapter: Report-Callback, Workflows, Tests, toter Code | 084 |
+| Rechte im tatsächlichen Kurs-/Modulkontext (#18), Kontext-Resolver | 087 |
+| DB-Indizes (#25), NULL-sichere Dubletten-Bereinigung, redundante Indizes | 088 |
+| Fragelisten entschlackt, Lazy-Vorschau (#20) | 089 |
+| Fragetext-Suche, Detailansicht (#19), CI-Grunt/browserslist | 090 |
 
-Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.5),
+Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

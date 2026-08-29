@@ -331,6 +331,38 @@ class questionsdisplay {
     }
 
     /**
+     * Returns the page parameters that a GET form has to carry over.
+     *
+     * These are read from the request rather than from $PAGE->url, because the
+     * scale manager passes them as optional_param and does not register them on the
+     * page URL - $PAGE->url->params() is empty here. Without carrying them,
+     * submitting the search would drop the selected scale and context and silently
+     * show a different list than the one the user was looking at.
+     *
+     * @return array
+     */
+    private static function current_page_params(): array {
+        $definitions = [
+            'contextid' => PARAM_INT,
+            'scaleid' => PARAM_INT,
+            'usesubs' => PARAM_INT,
+            'sdv' => PARAM_INT,
+            'component' => PARAM_TEXT,
+        ];
+
+        $params = [];
+        foreach ($definitions as $name => $type) {
+            $value = optional_param($name, null, $type);
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $params[] = ['name' => $name, 'value' => $value];
+        }
+
+        return $params;
+    }
+
+    /**
      * Return the item tree of all catscales.
      * @return array
      */
@@ -353,6 +385,14 @@ class questionsdisplay {
             $data['table'] = $this->check_tabledisplay()['output'];
             $data['notable'] = $this->check_tabledisplay()['notable'];
             $data['modaltable'] = $this->render_addtestitems_table($this->scale);
+
+            // Issue #20: the question texts are no longer part of the list, so
+            // searching them runs as its own step with its own input field.
+            $qtsearch = trim(optional_param('qtsearch', '', PARAM_TEXT));
+            $data['qtsearch'] = $qtsearch;
+            $data['qtsearchtoomany'] = $qtsearch !== ''
+                && catscalequestions_table::resolve_questiontext_matches($qtsearch) === null;
+            $data['hiddenparams'] = self::current_page_params();
         }
         return $data;
     }
