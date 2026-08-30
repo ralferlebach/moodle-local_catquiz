@@ -1058,15 +1058,11 @@ class catquizstatistics {
      * @return array
      */
     public function render_attempts_per_person_chart(): array {
-        global $DB, $OUTPUT;
-        [$sql, $params] = catquiz::get_sql_for_attempts_per_person($this->contextid, $this->scaleid, $this->courseid);
-        if (!$records = $DB->get_records_sql($sql, $params)) {
-            return [
-                'charttitle' => get_string('catquizstatistics_numattemptsperperson_title', 'local_catquiz'),
-                'chart' => $this->get_nodata_body(),
-            ];
-        }
+        global $OUTPUT;
 
+        // Issue #23: this chart loaded one row per person only to count them per
+        // range and class. Both the maximum and the classification happen in the
+        // database now; only the finished counts come back.
         $chartdata = [];
         if (!$qs = $this->get_quizsettings()) {
             // Use range 0 for missing person ability and range 1 for everything else.
@@ -1077,14 +1073,34 @@ class catquizstatistics {
             $colors = array_values(feedbackclass::get_array_of_colors($qs->numberoffeedbackoptionsselect));
         }
         $colors[-1] = LOCAL_CATQUIZ_DEFAULT_GREY;
-        $maxattempts = $records[array_key_last($records)]->attempts;
+
+        $maxattempts = catquiz::get_max_attempts_per_person(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid
+        );
         if ($maxattempts == 0) {
             $maxattempts = self::DEFAULT_MAX_ATTEMPTS;
         }
 
         // Display a maximum of self::ATTEMPTS_PER_PERSON_CLASSES bars. This
         // means, that each bar covers a range of $classwidth attempts.
-        $classwidth = ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
+        $classwidth = (int) ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
+
+        $counts = catquiz::get_attempts_per_person_histogram(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid,
+            $classwidth,
+            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : []
+        );
+
+        if (empty($counts)) {
+            return [
+                'charttitle' => get_string('catquizstatistics_numattemptsperperson_title', 'local_catquiz'),
+                'chart' => $this->get_nodata_body(),
+            ];
+        }
 
         // Initialize all ranges of all possible attempt counts to 0.
         for ($i = 0; $i <= $maxrange; $i++) {
@@ -1093,18 +1109,19 @@ class catquizstatistics {
             }
         }
 
-        // Set the number of attempts per range.
-        foreach ($records as $r) {
-            if (!$qs) {
-                $range = $r->ability ? 1 : 0;
-            } else if (!$range = feedback_helper::get_range_of_value($this->get_quizsettings(), $this->scaleid, $r->ability)) {
-                $range = 0;
+        foreach ($counts as $range => $bins) {
+            // Without usable quiz settings everything with an ability goes to range 1,
+            // exactly as the previous implementation did.
+            if ($range > 0 && !$qs) {
+                $range = 1;
             }
-            if ($r->attempts == 0) {
-                $chartdata[$range][0]++;
-            } else {
-                $bin = feedback_helper::get_histogram_bin($r->attempts, $classwidth);
-                $chartdata[$range][$bin + 1]++;
+            foreach ($bins as $bin => $frequency) {
+                if (!isset($chartdata[$range][$bin])) {
+                    // A class beyond the configured number of classes; the previous
+                    // implementation dropped these as well.
+                    continue;
+                }
+                $chartdata[$range][$bin] += $frequency;
             }
         }
 

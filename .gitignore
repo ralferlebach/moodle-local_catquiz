@@ -17,6 +17,11 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
+# ... but the Playwright lockfile belongs in the repository: the CI workflow runs
+# "npm ci", which refuses to work without one. Same trap as amd/build/ before:
+# the file exists locally and in every package, and git silently leaves it out.
+!tests/playwright/package-lock.json
+
 # PHP / Composer
 vendor/
 composer.lock

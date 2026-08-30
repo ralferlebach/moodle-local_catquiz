@@ -1365,6 +1365,102 @@ class catquiz {
     }
 
     /**
+     * Upper bound for the number of data points a chart query returns.
+     *
+     * Issue #23: the classification already collapses a cohort into a handful of
+     * counts, but a misconfigured class width could still produce a long tail of
+     * near-empty classes. This caps what leaves the database; the charts themselves
+     * never draw more than ATTEMPTS_PER_PERSON_CLASSES classes anyway.
+     */
+    const CHART_MAX_DATA_POINTS = 500;
+
+    /**
+     * Returns the largest value of a column within a subquery.
+     *
+     * Issue #23: finding a maximum by loading every row and looping in PHP makes the
+     * cost grow with the cohort. The database answers it with a single value.
+     *
+     * @param string $innersql A complete SELECT usable as a subquery.
+     * @param array $params Its parameters.
+     * @param string $column The column to take the maximum of.
+     * @return int
+     */
+    public static function get_max_from_subquery(string $innersql, array $params, string $column): int {
+        global $DB;
+
+        return (int) $DB->get_field_sql("SELECT MAX($column) FROM ($innersql) sub", $params);
+    }
+
+    /**
+     * Classifies one row per person into (range, class) counts inside the database.
+     *
+     * Issue #23: both attempt charts only ever needed the number of people per range
+     * and class - they counted rows they had loaded. This does the counting in SQL,
+     * so only the finished numbers travel back.
+     *
+     * The class follows feedback_helper::get_histogram_bin(): value 0 forms class 0,
+     * everything else is ceil(value / classwidth), which already leaves class 0 free.
+     * The range follows feedback_helper::get_feedback_range_index(): half-open
+     * intervals with the topmost one closed. The boundaries are bound parameters, and
+     * a test compares both implementations directly so they cannot drift apart.
+     *
+     * @param string $innersql A complete SELECT yielding one row per person.
+     * @param array $params Its parameters.
+     * @param string $valuecolumn Column holding the count to classify.
+     * @param int $classwidth Width of one class; at least 1.
+     * @param array $ranges List of ['lower' => float, 'upper' => float], in order.
+     * @param int $unmatchedrange Range for a value outside every configured range.
+     * @return array<int, array<int, int>> Count keyed by range index, then class.
+     */
+    public static function aggregate_person_histogram(
+        string $innersql,
+        array $params,
+        string $valuecolumn,
+        int $classwidth,
+        array $ranges,
+        int $unmatchedrange = 0
+    ): array {
+        global $DB;
+
+        $classwidth = max(1, $classwidth);
+        $params['classwidth'] = $classwidth;
+
+        $cases = [];
+        foreach (array_values($ranges) as $index => $range) {
+            $j = $index + 1;
+            $params['rangelower' . $j] = (float) $range['lower'];
+            $params['rangeupper' . $j] = (float) $range['upper'];
+            // The topmost range includes its upper bound; all others are half-open.
+            $comparison = ($j === count($ranges)) ? '<=' : '<';
+            $cases[] = "WHEN ability >= :rangelower$j AND ability $comparison :rangeupper$j THEN $j";
+        }
+        $rangecase = 'CASE WHEN ability IS NULL THEN 0 '
+            . implode(' ', $cases)
+            . " ELSE $unmatchedrange END";
+
+        // CEIL over a real division: integer division would truncate and push the
+        // boundary value of every class into the class below it.
+        $bincase = "CASE WHEN $valuecolumn = 0 THEN 0
+                         ELSE CAST(CEIL($valuecolumn * 1.0 / :classwidth) AS INTEGER) END";
+
+        $sql = "SELECT rangeindex, bin, COUNT(*) AS frequency
+                  FROM (
+                        SELECT $rangecase AS rangeindex, $bincase AS bin
+                          FROM ($innersql) perperson
+                       ) classified
+                 WHERE rangeindex >= 0
+              GROUP BY rangeindex, bin
+              ORDER BY rangeindex, bin";
+
+        $counts = [];
+        foreach ($DB->get_records_sql($sql, $params, 0, self::CHART_MAX_DATA_POINTS) as $row) {
+            $counts[(int) $row->rangeindex][(int) $row->bin] = (int) $row->frequency;
+        }
+
+        return $counts;
+    }
+
+    /**
      * Returns the highest number of questions a single person answered.
      *
      * Issue #23: the chart used to load one row per enrolled person only to find
@@ -1385,9 +1481,7 @@ class catquiz {
 
         [$inner, $params] = self::get_sql_for_questions_answered_per_person($contextid, $scaleid, $courseid);
 
-        $sql = "SELECT MAX(total_answered) AS maxanswered FROM ($inner) perperson";
-
-        return (int) $DB->get_field_sql($sql, $params);
+        return self::get_max_from_subquery($inner, $params, 'total_answered');
     }
 
     /**
@@ -1421,48 +1515,52 @@ class catquiz {
         int $classwidth,
         array $ranges
     ): array {
-        global $DB;
-
-        $classwidth = max(1, $classwidth);
         [$inner, $params] = self::get_sql_for_questions_answered_per_person($contextid, $scaleid, $courseid);
-        $params['classwidth'] = $classwidth;
 
-        // Range 0 collects everybody without an ability, matching the chart's
-        // "no result" series.
-        $cases = [];
-        foreach (array_values($ranges) as $index => $range) {
-            $j = $index + 1;
-            $lowerkey = 'rangelower' . $j;
-            $upperkey = 'rangeupper' . $j;
-            $params[$lowerkey] = (float) $range['lower'];
-            $params[$upperkey] = (float) $range['upper'];
-            // The topmost range includes its upper bound; all others are half-open.
-            $comparison = ($j === count($ranges)) ? '<=' : '<';
-            $cases[] = "WHEN ability >= :$lowerkey AND ability $comparison :$upperkey THEN $j";
-        }
-        $rangecase = $cases
-            ? 'CASE WHEN ability IS NULL THEN 0 ' . implode(' ', $cases) . ' ELSE -1 END'
-            : 'CASE WHEN ability IS NULL THEN 0 ELSE -1 END';
+        // Unmatched abilities are dropped here, as the chart did before: a value
+        // outside every configured range had no bar to go into.
+        return self::aggregate_person_histogram($inner, $params, 'total_answered', $classwidth, $ranges, -1);
+    }
 
-        // CEIL over a real division: an integer division would truncate and put the
-        // boundary values of every class into the class below.
-        $bincase = "CASE WHEN total_answered = 0 THEN 0
-                         ELSE CAST(CEIL(total_answered * 1.0 / :classwidth) AS INTEGER) END";
+    /**
+     * Returns the attempts-per-person histogram as counts, aggregated in the database.
+     *
+     * Issue #23: the twin of get_answers_per_person_histogram() for the attempts
+     * chart, which loaded one row per person for the same reason.
+     *
+     * @param int $contextid
+     * @param int $scaleid
+     * @param int|null $courseid
+     * @param int $classwidth
+     * @param array $ranges
+     * @return array<int, array<int, int>>
+     */
+    public static function get_attempts_per_person_histogram(
+        int $contextid,
+        int $scaleid,
+        ?int $courseid,
+        int $classwidth,
+        array $ranges
+    ): array {
+        [$inner, $params] = self::get_sql_for_attempts_per_person($contextid, $scaleid, $courseid);
 
-        $sql = "SELECT rangeindex, bin, COUNT(*) AS frequency
-                  FROM (
-                        SELECT $rangecase AS rangeindex, $bincase AS bin
-                          FROM ($inner) perperson
-                       ) classified
-                 WHERE rangeindex >= 0
-              GROUP BY rangeindex, bin";
+        // Unlike the answers chart, this one puts an unmatched ability into range 0
+        // rather than dropping it - that is what the PHP version did.
+        return self::aggregate_person_histogram($inner, $params, 'attempts', $classwidth, $ranges, 0);
+    }
 
-        $counts = [];
-        foreach ($DB->get_recordset_sql($sql, $params) as $row) {
-            $counts[(int) $row->rangeindex][(int) $row->bin] = (int) $row->frequency;
-        }
+    /**
+     * Returns the highest number of attempts a single person made.
+     *
+     * @param int $contextid
+     * @param int $scaleid
+     * @param int|null $courseid
+     * @return int
+     */
+    public static function get_max_attempts_per_person(int $contextid, int $scaleid, ?int $courseid = null): int {
+        [$inner, $params] = self::get_sql_for_attempts_per_person($contextid, $scaleid, $courseid);
 
-        return $counts;
+        return self::get_max_from_subquery($inner, $params, 'attempts');
     }
 
     /**

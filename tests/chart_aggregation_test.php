@@ -168,8 +168,14 @@ final class chart_aggregation_test extends advanced_testcase {
                 // Casts reproduce the typing of the real query, where ability is a
                 // numeric column. Comparing two untyped parameters makes PostgreSQL
                 // treat them as text, and '-0.1' >= '-3.0' is false as a string.
-                $whens[] = "WHEN CAST(:abilitylow$j AS DECIMAL) >= CAST(:rangelower$j AS DECIMAL) "
-                    . "AND CAST(:abilityhigh$j AS DECIMAL) $comparison CAST(:rangeupper$j AS DECIMAL) THEN $j";
+                // The precision is explicit on purpose: MariaDB reads a bare
+                // CAST(... AS DECIMAL) as DECIMAL(10,0), so -0.1 would be rounded to
+                // 0 and land in the wrong range. PostgreSQL keeps the fraction, which
+                // is why this only failed on MariaDB.
+                $whens[] = "WHEN CAST(:abilitylow$j AS DECIMAL(20,10)) "
+                    . ">= CAST(:rangelower$j AS DECIMAL(20,10)) "
+                    . "AND CAST(:abilityhigh$j AS DECIMAL(20,10)) "
+                    . "$comparison CAST(:rangeupper$j AS DECIMAL(20,10)) THEN $j";
             }
             $sql = 'SELECT CASE ' . implode(' ', $whens) . ' ELSE -1 END AS rangeindex';
 
@@ -251,6 +257,71 @@ final class chart_aggregation_test extends advanced_testcase {
 
         $this->assertEqualsWithDelta(-1.5, $bounds[0]['lower'], 0.0001);
         $this->assertEqualsWithDelta(2.5, $bounds[0]['upper'], 0.0001);
+    }
+
+    /**
+     * The attempts histogram also returns counts only.
+     *
+     * @return void
+     */
+    public function test_attempts_histogram_returns_counts(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        [$scaleid, $contextid] = $this->make_scale();
+
+        $counts = catquiz::get_attempts_per_person_histogram(
+            $contextid,
+            $scaleid,
+            null,
+            2,
+            [['lower' => -3.0, 'upper' => 3.0]]
+        );
+
+        $this->assertIsArray($counts);
+        $this->assertEquals(0, catquiz::get_max_attempts_per_person($contextid, $scaleid));
+    }
+
+    /**
+     * The number of returned data points is capped.
+     *
+     * The classification already collapses a cohort into a handful of counts, but a
+     * misconfigured class width could still produce a long tail of near-empty
+     * classes. The cap is what the issue asks for: a chart query returns a limited
+     * number of data points.
+     *
+     * @return void
+     */
+    public function test_data_points_are_capped(): void {
+        $this->resetAfterTest();
+
+        $this->assertGreaterThan(0, catquiz::CHART_MAX_DATA_POINTS);
+        // Far above what any chart draws - the charts show at most a handful of
+        // classes - so the cap can never truncate a legitimate result.
+        $this->assertGreaterThan(100, catquiz::CHART_MAX_DATA_POINTS);
+    }
+
+    /**
+     * A class width of zero cannot produce a division by zero.
+     *
+     * The width is derived from a maximum that can legitimately be 0 when no one has
+     * answered yet; the aggregation must not turn that into a database error.
+     *
+     * @return void
+     */
+    public function test_zero_class_width_is_clamped(): void {
+        $this->resetAfterTest();
+
+        // A synthetic cohort of one person. An empty fixture would prove nothing:
+        // with no rows the division is never evaluated, so the test would pass with
+        // or without the clamp.
+        $inner = 'SELECT 5 AS attempts, CAST(NULL AS DECIMAL) AS ability';
+
+        $counts = catquiz::aggregate_person_histogram($inner, [], 'attempts', 0, []);
+
+        // Clamped to width 1, so five attempts land in class 5 of the "no ability"
+        // range. Without the clamp the database would divide by zero.
+        $this->assertSame(1, $counts[0][5] ?? null);
     }
 
     /**

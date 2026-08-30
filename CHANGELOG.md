@@ -1,5 +1,35 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083005)
+
+> Zwei CI-Befunde behoben.
+
+- **`npm ci` scheiterte**: `.gitignore` ignorierte `package-lock.json` global, also
+  auch das Playwright-Lockfile – dieselbe Falle wie zuvor bei `amd/build/`. Ausnahme
+  ergänzt und mit echtem Git im A/B-Test belegt.
+- **MariaDB-Fehlschlag behoben**: `CAST(x AS DECIMAL)` bedeutet dort `DECIMAL(10,0)`,
+  also null Nachkommastellen – `-0.1` wurde zu `0` gerundet und landete im falschen
+  Bereich. Der Cast steht nur im Test, der die Typisierung der echten Abfrage
+  nachbildet; der Produktionscode vergleicht eine numerische Spalte ohne Cast.
+- Volle Regression auf **MariaDB**: 91/91 Dateien grün.
+
+## 1.1.6 (interne Version 2026083004)
+
+> Issue #23 abgeschlossen.
+
+- **Zweites Diagramm umgestellt.** `render_attempts_per_person_chart()` lud ebenfalls
+  eine Zeile je Person und bestimmte das Maximum über die Sortierung der geladenen
+  Menge. `catquizstatistics.php` enthält jetzt **null** `get_records_sql`-Aufrufe.
+- **Aggregation verallgemeinert**: beide Diagramme teilen sich
+  `aggregate_person_histogram()`, der CASE-Ausdruck existiert genau einmal. Der
+  fachliche Unterschied bleibt erhalten und ist als Parameter ausgedrückt – das
+  Antworten-Diagramm verwirft eine Person ohne passenden Bereich, das
+  Versuchs-Diagramm ordnet sie Bereich 0 zu.
+- **Obergrenze** `CHART_MAX_DATA_POINTS = 500` für zurückgegebene Datenpunkte.
+- Zahn-Tests: ohne die Untergrenze der Klassenbreite entsteht eine Division durch
+  Null; ohne den locale-sicheren Parser wird aus `-1,5` eine `-1.0`. Beide rot.
+- **Offen**: Browsertests mit großen Datenmengen (Playwright-Strang).
+
 ## 1.1.6 (interne Version 2026083003)
 
 > Issue #23: Diagrammdaten werden in der Datenbank aggregiert.
