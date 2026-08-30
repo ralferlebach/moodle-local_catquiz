@@ -35,7 +35,10 @@ global $CFG, $DB;
 // The search terms are deliberately nonsense words. A real word could occur in
 // Moodle's own sample content, and the test would then pass or fail depending on
 // what else happens to be installed rather than on the search itself.
+/** @var string A word that appears in exactly one seeded question text. */
 const CATQUIZ_SEED_MATCHING_TERM = 'zorblewump';
+
+/** @var string A word that appears in no seeded question text. */
 const CATQUIZ_SEED_MISSING_TERM = 'quxnotpresentqux';
 
 $now = time();

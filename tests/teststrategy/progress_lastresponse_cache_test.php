@@ -44,6 +44,7 @@ use stdClass;
  * Guards the last-response lookup against stale cache entries.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\teststrategy\progress
  */
 final class progress_lastresponse_cache_test extends advanced_testcase {
     /**

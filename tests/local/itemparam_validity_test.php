@@ -349,13 +349,7 @@ final class itemparam_validity_test extends advanced_testcase {
         $now = time();
         $contextid = 77;
 
-        /**
-         * Registers an item with an active parameter of the given usability.
-         *
-         * @param int $scaleid
-         * @param int $usable
-         * @param int $seq
-         */
+        // Registers an item with an active parameter of the given usability.
         $additem = function (int $scaleid, int $usable, int $seq) use ($DB, $now, $contextid): void {
             $itemid = (int) $DB->insert_record('local_catquiz_items', (object) [
                 'componentid' => 9000 + $seq,

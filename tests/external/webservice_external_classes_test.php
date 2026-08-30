@@ -44,29 +44,8 @@ use require_login_exception;
 
 defined('MOODLE_INTERNAL') || die();
 
-/**
- * Simple render stub for reload_template test.
- */
-class external_reload_template_stub {
-    /**
-     * Accept any constructor params from webservice payload.
-     *
-     * @param mixed ...$params
-     */
-    public function __construct(...$params) {
-    }
-
-    /**
-     * Mimic template export function.
-     *
-     * @return array
-     */
-    public function export_for_template(): array {
-        return [
-            'ok' => true,
-        ];
-    }
-}
+global $CFG;
+require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/external_reload_template_stub.php');
 
 /**
  * Behaviour-level tests for each external class execute() implementation.

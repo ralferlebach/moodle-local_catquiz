@@ -42,6 +42,7 @@ use stdClass;
  * Guards the maximum questions stop condition.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\teststrategy\preselect_task\maximumquestionscheck
  */
 final class maximumquestionscheck_test extends advanced_testcase {
     /**

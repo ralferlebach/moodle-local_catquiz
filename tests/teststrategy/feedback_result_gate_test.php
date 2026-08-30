@@ -43,6 +43,9 @@ use local_catquiz\teststrategy\feedbacksettings;
  * Guards the central display gate of the feedback path.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\teststrategy\feedback_helper::build_attempt_result
+ * @covers \local_catquiz\teststrategy\feedback_helper::is_displayable
+ * @covers \local_catquiz\teststrategy\feedback_helper::get_rejection_reason_string
  */
 final class feedback_result_gate_test extends advanced_testcase {
     /**

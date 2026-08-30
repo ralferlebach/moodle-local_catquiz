@@ -43,6 +43,8 @@ use stdClass;
  * Guards the sign of imported IRT item parameters.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\import\fileparser
+ * @covers \local_catquiz\local\model\model_item_param
  */
 final class negative_difficulty_import_test extends advanced_testcase {
     /**

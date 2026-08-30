@@ -1,5 +1,20 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083001)
+
+> CI-Codechecker grün.
+
+- **39 `@covers`-Warnungen behoben** in zehn Testdateien. Die Angaben standen im
+  Datei-Docblock statt am Klassen-Docblock – der Sniff wertet nur letzteren. Sie
+  wurden verschoben, nicht neu erfunden.
+- **Drei echte Fehler behoben**: fehlende Konstanten-Docblocks in
+  `tests/playwright/seed.php`, ein Inline-Docblock im `itemparam_validity_test` und
+  zwei Klassen in `webservice_external_classes_test.php` – der Stub liegt jetzt in
+  `tests/fixtures/external_reload_template_stub.php`.
+- Prüfstand: `classes`, `db`, `lang`, `catmodel`, `tests` und Top-Level jeweils
+  **0 Meldungen** (ohne die projektüblich ausgeschlossenen `TodoComment`).
+- Volle Regression: 90/90 Dateien grün.
+
 ## 1.1.6 (interne Version 2026083000)
 
 > Issue #54 abgeschlossen: Filtern, Sortieren und eine Übersicht je Skala.

@@ -41,6 +41,7 @@ use stdClass;
  * Guards pilot classification against the b = 0 falsiness trap.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\teststrategy\context\loader\pilotquestions_loader::ispilot
  */
 final class pilot_classification_test extends advanced_testcase {
     /**

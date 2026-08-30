@@ -39,6 +39,8 @@ use stdClass;
  * Guards the per-model item parameter contract.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\local\model\model_strategy::validate_item_parameters
+ * @covers \local_catquiz\teststrategy\context\loader\pilotquestions_loader::ispilot
  */
 final class item_parameter_contract_test extends advanced_testcase {
     /**

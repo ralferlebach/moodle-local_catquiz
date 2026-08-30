@@ -39,6 +39,7 @@ use stdClass;
  * Guards the answered-item count against pending and pilot items.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\teststrategy\progress::get_num_answered_productive_questions
  */
 final class progress_answered_count_test extends advanced_testcase {
     /**

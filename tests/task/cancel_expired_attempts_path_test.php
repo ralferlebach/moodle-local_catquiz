@@ -40,6 +40,7 @@ use ReflectionMethod;
  * Guards the cron completion path.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\task\cancel_expired_attempts
  */
 final class cancel_expired_attempts_path_test extends advanced_testcase {
     /**
