@@ -1,5 +1,51 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026082816)
+
+> CI-Grunt entschärft, Playwright-Browsertests eingeführt.
+
+- **CI `lint-jsamd`**: Der Verify-Schritt bricht nicht mehr ab, sondern meldet den
+  Diff als Warnung. Er rebuildet weiterhin im Runner – der dokumentierte Workaround
+  für `moodle-plugin-ci#350`. Der beobachtete Diff hatte zwei Ursachen, eine davon
+  (Sourcemap der falschen Datei) deutet auf Korruption im Build, nicht auf einen
+  veralteten Commit.
+- **Kein `caniuse-lite`-Pin**: eingebaut und wieder entfernt, weil die Gegenprobe
+  ihn nicht stützt – mit einer deutlich älteren Datenbank ändert sich die lokale
+  Ausgabe nicht.
+- **Playwright eingeführt** (`tests/playwright/`) nach dem Muster der
+  flexaccess-Workflows: Seed, Umgebungs-Helfer, CAT-Manager-Helfer und ein erster
+  Fall zur Fragetext-Suche. Eigener Workflow – manuell auf jedem Branch, automatisch
+  bei Push auf `dev`/`develop`/`development`, zusätzlich wöchentlich.
+- **Stabilität belegt**: drei vollständige Läufe hintereinander grün. Zwei echte
+  Ursachen behoben – Zählen während des AJAX-Nachladens (jetzt Warten auf Spinner
+  bzw. „keine Datensätze") und ein zu knappes Login-Timeout bei kaltem Cache.
+
+## 1.1.6 (interne Version 2026082815)
+
+> Issue #54: Unbrauchbare Itemparameter sind im CAT-Manager sichtbar – und
+> Pilotitems erscheinen überhaupt erst in der Liste.
+
+- **Neue Spalte „Parametergültigkeit"** in der Testitem-Übersicht. Bei „nicht
+  verwendbar" nennt der Text Modell und Ursache, mit Warnsymbol und Screenreader-Text
+  – nicht farbcodiert allein.
+- **Eine einzige Wahrheitsquelle**: `local\itemparam_validity` delegiert an
+  `model_strategy::validate_item_parameters()`, dieselbe Methode, die Import und
+  Laufzeit verwenden. Neue Modelle wirken ohne Anpassung der Ansicht. Ein Test pinnt,
+  dass Backend-Urteil und Validierung nie auseinanderlaufen.
+- **Drei Zustände**: verwendbar / nicht verwendbar / keine Parameter. Ein klassisches
+  Pilotitem und ein Item mit vorhandenen, aber unbrauchbaren Parametern werden beide
+  als Pilotitem gespielt – nur eines braucht Aufmerksamkeit.
+- **Kein N+1**: Die Spalte wird aus der ohnehin geladenen Zeile berechnet.
+- **Pilotitems waren gar nicht sichtbar.** Drei aufeinander aufbauende Ausschlüsse
+  mussten fallen: der `INNER JOIN` auf die Itemparameter, die Statistik-Joins über
+  `lcip.contextid` (bei Pilotitems NULL – die Kennzahlen wären leer geblieben) und
+  die `WHERE`-Bedingung auf derselben Spalte. Items ohne aktiven Parameter sind in
+  Pilotierung, und gerade ihre Versuchszahlen sind von Interesse.
+- Neue Tests `itemparam_validity_test` (8 Tests) decken alle im Issue genannten Fälle
+  ab; zwei Zahn-Tests werden bei Rücknahme rot.
+- **Noch offen bei #54**: serverseitiges Filtern/Sortieren (verlangt einen
+  persistierten Zustand) und die aggregierte Übersicht je Skala.
+
 ## 1.1.6 (interne Version 2026082814)
 
 > Issue #24: Skalenbaum ohne N+1-Abfragen und ohne quadratischen Aufbau.

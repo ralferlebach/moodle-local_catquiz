@@ -41,6 +41,7 @@ use context_system;
 use dml_exception;
 use local_catquiz\catquiz;
 use local_catquiz\event\catscale_updated;
+use local_catquiz\local\itemparam_validity;
 use local_catquiz\local\model\model_item_param;
 use local_wunderbyte_table\output\table;
 use moodle_url;
@@ -364,6 +365,42 @@ class catscalequestions_table extends wunderbyte_table {
         }
 
         return array_map('intval', $ids);
+    }
+
+    /**
+     * Shows whether the stored item parameters are usable for the item's model.
+     *
+     * Issue #54: an item whose parameters violate the model contract is silently
+     * treated as a pilot item at runtime. That was visible only in the import
+     * feedback and the attempt debug output, never where the pool is maintained.
+     *
+     * The classification is computed from the row the list already selected - model,
+     * difficulty, discrimination, guessing and json are part of the query - so this
+     * column costs no additional query per item.
+     *
+     * The state is conveyed by text and an icon, not by colour alone.
+     *
+     * @param object $values
+     * @return string
+     */
+    public function col_itemparamvalidity($values) {
+        $classification = itemparam_validity::classify((object) (array) $values);
+        $label = itemparam_validity::get_state_label($classification['state']);
+
+        if ($classification['state'] !== itemparam_validity::STATE_UNUSABLE) {
+            return html_writer::span(s($label), 'catquiz-itemparams-' . $classification['state']);
+        }
+
+        $reason = itemparam_validity::get_reason_text($classification);
+
+        return html_writer::span(
+            html_writer::tag('i', '', [
+                'class' => 'fa fa-exclamation-triangle mr-1',
+                'aria-hidden' => 'true',
+            ]) . s($label),
+            'catquiz-itemparams-unusable text-danger',
+            ['title' => $reason]
+        ) . html_writer::span(s($reason), 'sr-only');
     }
 
     /**

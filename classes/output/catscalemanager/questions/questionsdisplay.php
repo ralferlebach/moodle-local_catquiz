@@ -136,6 +136,8 @@ class questionsdisplay {
             'difficulty' => get_string('difficulty', 'local_catquiz'),
             'discrimination' => get_string('discrimination', 'local_catquiz'),
             'guessing' => get_string('guessing', 'local_catquiz'),
+            // Issue #54: whether these parameters can actually be used for the model.
+            'itemparamvalidity' => get_string('itemparamvalidity', 'local_catquiz'),
             'action' => get_string('action', 'local_catquiz'),
         ];
         $table->define_columns(array_keys($columnsarray));
@@ -153,6 +155,11 @@ class questionsdisplay {
 
         $sortcolumns = $columnsarray;
         unset($sortcolumns['action']);
+        // Issue #54: the validity is derived in PHP from the model contract, so there
+        // is no database column to sort by. Offering it would produce an ORDER BY on
+        // a non-existent column. Server-side sorting and filtering require the state
+        // to be persisted first - see the open point in doc/session-093-changes.md.
+        unset($sortcolumns['itemparamvalidity']);
         $table->define_sortablecolumns(array_keys($sortcolumns));
 
         $standardfilter = new standardfilter('qtype', get_string('questiontype', 'local_catquiz'));

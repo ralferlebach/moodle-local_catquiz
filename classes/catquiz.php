@@ -204,7 +204,13 @@ class catquiz {
             'contextid' => $contextid,
 
         ];
-        $wherearray['lcipcontextid'] = $contextid;
+        // Issue #54: items in piloting have no active parameter, so lcipcontextid is
+        // NULL for them. Restricting on it alone would drop exactly those items again
+        // after the join was widened - and their attempt numbers are the interesting
+        // part while an item is being piloted.
+        // The condition itself is appended below, parenthesised: an OR inside the
+        // generic wherecontains loop would bind looser than the surrounding ANDs and
+        // silently widen the whole WHERE clause.
 
         // If we fetch only for a given user, we need to add this to the sql.
         if (!empty($userid)) {
@@ -279,9 +285,16 @@ class catquiz {
           -- (INNER JOIN)
             JOIN {local_catquiz_items} lci ON lci.catscaleid=lccs.id
 
-          -- Get all the item parameter for the question for the given context(s),
-          -- skip if not existent
-            JOIN {local_catquiz_itemparams} lcip ON lcip.itemid = lci.id AND lci.activeparamid = lcip.id
+          -- Get the active item parameter, if there is one.
+          --
+          -- Issue #54: this used to be an INNER JOIN, so items without parameters -
+          -- or without an *active* parameter - never appeared in the list at all.
+          -- Those items are exactly the ones in piloting, and their statistics
+          -- (attempt counts, last attempt) are of interest precisely while they are
+          -- being piloted. A LEFT JOIN keeps them visible; the parameter columns are
+          -- then NULL, which the validity column reports as "no parameters".
+            LEFT JOIN {local_catquiz_itemparams} lcip
+              ON lcip.itemid = lci.id AND lci.activeparamid = lcip.id
 
           -- Get all information about the question from the questionbank itself
             JOIN {question} q ON q.id=lci.componentid $questionfilter
@@ -310,7 +323,12 @@ class catquiz {
               WHERE lca.contextid = :statcontextid AND lca.scaleid $parentscales3
               GROUP BY lca.scaleid, lca.contextid, qa.questionid
             ) astat
-              ON astat.contextid = lcip.contextid AND astat.questionid = q.id
+              -- Issue #54: joined on lcip.contextid before, which is NULL for items
+              -- without an active parameter - so pilot items lost their statistics,
+              -- the very numbers that matter while an item is being piloted. The
+              -- subquery already restricts the context itself (issue #21), so
+              -- matching the context here again was redundant anyway.
+              ON astat.questionid = q.id
                 AND astat.scaleid $parentscales1
         SQL;
 
@@ -333,7 +351,7 @@ class catquiz {
                       AND lca.scaleid $parentscales4
                     GROUP BY lca.scaleid, lca.contextid, qa.questionid, lca.userid
                 ) ustat
-                  ON ustat.userid = :userid AND ustat.contextid = lcip.contextid AND ustat.questionid = q.id
+                  ON ustat.userid = :userid AND ustat.questionid = q.id
                     AND ustat.scaleid $parentscales2 ) s
             SQL;
         } else {
@@ -354,6 +372,12 @@ class catquiz {
         foreach ($wherecontains as $key => $value) {
             $where .= sprintf(' AND %s %s', $key, $value);
         }
+
+        // Issue #54: items in piloting have no active parameter, so lcipcontextid is
+        // NULL for them. Restricting on it alone would drop exactly those items after
+        // the parameter join was widened - and their attempt numbers are the
+        // interesting part while an item is being piloted.
+        $where .= sprintf(' AND (lcipcontextid = %d OR lcipcontextid IS NULL)', (int) $contextid);
 
         if ($orderby) {
             $where .= " ORDER BY $orderby";
