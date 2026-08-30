@@ -565,20 +565,183 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  playwright:
+    name: Playwright (CAT manager UI)
+    runs-on: ubuntu-latest
+    # Same gate as behat: a browser run is expensive, and there is no point starting
+    # one while the PHP or the AMD build is known to be broken.
+    needs: [lint-php, lint-jsamd]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: moodle
+          POSTGRES_PASSWORD: moodle
+          POSTGRES_DB: moodle
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+
+    env:
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_WWWROOT: http://127.0.0.1:8000
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check out Moodle
+        run: git clone --depth 1 --branch "$MOODLE_BRANCH" https://github.com/moodle/moodle.git moodle
+
+      - name: Install the plugin ecosystem into Moodle
+        run: |
+          # local_catquiz declares hard dependencies in version.php, so the site
+          # cannot install with the plugin alone. DEP_REF pins the adaptivequiz side.
+          DEP_REF="${DEP_REF:-v-3.0}"
+
+          # The plugin under test comes from this checkout, never from a clone.
+          rm -rf moodle/local/catquiz
+          mkdir -p moodle/local
+          cp -a plugin moodle/local/catquiz
+          rm -rf moodle/local/catquiz/.git
+
+          git clone --depth 1 --branch "$DEP_REF" \
+            https://github.com/ralferlebach/moodle-mod_adaptivequiz.git moodle/mod/adaptivequiz
+          git clone --depth 1 --branch "$DEP_REF" \
+            https://github.com/ralferlebach/moodle-adaptivequizcatmodel_catquiz.git \
+            moodle/mod/adaptivequiz/catmodel/catquiz
+          git clone --depth 1 --branch main \
+            https://github.com/Wunderbyte-GmbH/moodle-local_wunderbyte_table.git \
+            moodle/local/wunderbyte_table
+          git clone --depth 1 --branch master \
+            https://github.com/branchup/moodle-filter_shortcodes.git moodle/filter/shortcodes
+
+          find moodle -mindepth 2 -type d -name .git -prune -exec rm -rf {} + || true
+
+      # install.php writes config.php itself and aborts when one exists, and it needs
+      # an existing dataroot OUTSIDE the Moodle tree.
+      - name: Install Moodle site
+        run: |
+          mkdir -p /tmp/moodledata
+          cd moodle
+          php admin/cli/install.php \
+            --non-interactive --agree-license \
+            --dbtype=pgsql --dbhost=127.0.0.1 --dbport=5432 --dbname=moodle \
+            --dbuser=moodle --dbpass=moodle \
+            --wwwroot="$MOODLE_WWWROOT" --dataroot=/tmp/moodledata \
+            --fullname="CI" --shortname="CI" \
+            --adminpass="Admin!23" --adminemail=ci@example.invalid
+
+      # seed.php prints "export KEY='value'" so it can be sourced locally;
+      # $GITHUB_ENV expects bare KEY=value, so the prefix and quotes are stripped.
+      - name: Seed the CAT manager fixture
+        run: |
+          cd moodle
+          php local/catquiz/tests/playwright/seed.php > /tmp/catquiz-seed.env
+          sed -n "s/^export \([A-Z_][A-Z_]*\)='\(.*\)'$/\1=\2/p" \
+            /tmp/catquiz-seed.env >> "$GITHUB_ENV"
+
+      - name: Install Playwright and browsers
+        run: |
+          cd moodle/local/catquiz/tests/playwright
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        env:
+          CATQUIZ_BASE_URL: ${{ env.MOODLE_WWWROOT }}
+        run: |
+          cd moodle/local/catquiz/tests/playwright
+          # PHP's built-in server is single-threaded unless PHP_CLI_SERVER_WORKERS is
+          # set, and a Moodle page pulls many subresources in parallel. Bound to
+          # 127.0.0.1 rather than "localhost", which clients resolve differently.
+          #
+          # Started inside THIS step: a server from an earlier step does not reliably
+          # survive into the next one.
+          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$GITHUB_WORKSPACE/moodle" \
+            >/tmp/moodle-server.log 2>&1 &
+          ready=0
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+              http://127.0.0.1:8000/login/index.php || true)
+            if [ "$code" = "200" ]; then ready=1; break; fi
+            sleep 3
+          done
+          if [ "$ready" != "1" ]; then
+            echo "Moodle wurde nicht erreichbar (letzter HTTP-Status: $code); Serverlog:"
+            tail -50 /tmp/moodle-server.log
+            exit 1
+          fi
+          npm test
+
+      - name: Show the tail of the server log on failure
+        if: failure()
+        run: tail -100 /tmp/moodle-server.log || true
+
+      # Only the directories of the tests that actually failed, and without videos:
+      # Playwright keeps a directory per test, so the evidence of a failed run is a
+      # small subset of a report that otherwise runs to tens of megabytes.
+      - name: Collect the failed tests only
+        if: failure()
+        run: |
+          src="moodle/local/catquiz/tests/playwright/test-results"
+          dest="$RUNNER_TEMP/playwright-failures"
+          rm -rf "$dest"; mkdir -p "$dest"
+          found=0
+          while IFS= read -r ctx; do
+            cp -a "$(dirname "$ctx")" "$dest/"
+            found=1
+          done < <(find "$src" -name error-context.md 2>/dev/null)
+          if [ "$found" = "1" ]; then
+            find "$dest" -name '*.webm' -delete
+            ls -1 "$dest"
+          else
+            echo "Keine Fehlerverzeichnisse gefunden."
+          fi
+          if [ -s /tmp/moodle-server.log ]; then
+            gzip -c /tmp/moodle-server.log > "$dest/moodle-server.log.gz"
+          fi
+
+      - name: Upload failures only
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-dev
+          path: ${{ runner.temp }}/playwright-failures
+          retention-days: 7
+          if-no-files-found: ignore
+
   ci-complete:
     name: CI complete
     # lint-jsamd is intentionally NOT listed here: it is already a prerequisite
     # of behat (needs: [lint-php, lint-jsamd]), so a lint-jsamd failure skips
     # behat and is caught below via behat's non-success result. Listing it again
     # would be a redundant edge.
-    needs: [lint-php, codeanalysis, quality, phpunit, behat]
+    needs: [lint-php, codeanalysis, quality, phpunit, behat, playwright]
     runs-on: ubuntu-22.04
     if: always()
     steps:
       - name: All dev jobs must have succeeded
         run: |
-          result="${{ needs.lint-php.result }}-${{ needs.codeanalysis.result }}-${{ needs.quality.result }}-${{ needs.phpunit.result }}-${{ needs.behat.result }}"
-          if [[ "$result" == "success-success-success-success-success" ]]; then
+          result="${{ needs.lint-php.result }}-${{ needs.codeanalysis.result }}-${{ needs.quality.result }}-${{ needs.phpunit.result }}-${{ needs.behat.result }}-${{ needs.playwright.result }}"
+          if [[ "$result" == "success-success-success-success-success-success" ]]; then
             echo "All dev CI jobs passed."
           else
             echo "CI result: $result - one or more jobs failed or were cancelled."

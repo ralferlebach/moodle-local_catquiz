@@ -431,15 +431,25 @@ class catquiz {
         // index added in issue #25.
         $from = "( SELECT q.id, qbe.idnumber, q.name, q.qtype, qc.name as categoryname, s2.contextattempts
             FROM {question} q
-                JOIN (
-                    SELECT *
-                    FROM (
-                        SELECT *, ROW_NUMBER() OVER (PARTITION BY questionbankentryid ORDER BY version DESC) n
-                        FROM {question_versions}
-                    ) s2
-                    WHERE n = 1
-                ) qv
-                ON q.id=qv.questionid
+                -- Issue #22: the current version used to be found by numbering EVERY
+                -- row of question_versions with a window function and then keeping
+                -- n = 1. That materialises the whole version history of the site
+                -- before a single row is discarded, and a window function cannot use
+                -- an index for it.
+                --
+                -- The condition below says: no newer version of the same bank entry
+                -- exists. That expresses the same
+                -- thing as a correlated check, which is served by the index on
+                -- questionbankentryid. It also stays portable: no window function,
+                -- so PostgreSQL and MariaDB behave alike.
+                JOIN {question_versions} qv
+                ON qv.questionid = q.id
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM {question_versions} qvnewer
+                       WHERE qvnewer.questionbankentryid = qv.questionbankentryid
+                         AND qvnewer.version > qv.version
+                   )
                 JOIN {question_bank_entries} qbe ON qv.questionbankentryid=qbe.id
                 JOIN {question_categories} qc ON qc.id=qbe.questioncategoryid
                 LEFT JOIN (
@@ -1352,6 +1362,107 @@ class catquiz {
             'catscaleid' => $catscaleid,
         ];
         return [$sql, $params];
+    }
+
+    /**
+     * Returns the highest number of questions a single person answered.
+     *
+     * Issue #23: the chart used to load one row per enrolled person only to find
+     * this maximum in PHP. The database can answer it with a single value, and the
+     * cost then no longer grows with the size of the cohort.
+     *
+     * @param int $contextid
+     * @param int $scaleid
+     * @param int|null $courseid
+     * @return int
+     */
+    public static function get_max_questions_answered_per_person(
+        int $contextid,
+        int $scaleid,
+        ?int $courseid = null
+    ): int {
+        global $DB;
+
+        [$inner, $params] = self::get_sql_for_questions_answered_per_person($contextid, $scaleid, $courseid);
+
+        $sql = "SELECT MAX(total_answered) AS maxanswered FROM ($inner) perperson";
+
+        return (int) $DB->get_field_sql($sql, $params);
+    }
+
+    /**
+     * Returns the answers-per-person histogram as counts, aggregated in the database.
+     *
+     * Issue #23: the chart only ever needed the number of people per (range, class) -
+     * it counted the rows it had loaded. Loading a row per person to count them is
+     * what made memory and runtime grow with the cohort. The classification happens
+     * in SQL instead, and only the finished counts travel back.
+     *
+     * The class of a person follows feedback_helper::get_histogram_bin(): zero
+     * answers form class 0, everything else is ceil(answers / classwidth), shifted by
+     * one so that class 0 stays reserved.
+     *
+     * The range follows feedback_helper::get_feedback_range_index(): half-open
+     * intervals, with the topmost one closed so the maximum value is still covered.
+     * The boundaries are passed as bound parameters, so the two implementations
+     * cannot drift apart silently - a test compares them directly.
+     *
+     * @param int $contextid
+     * @param int $scaleid
+     * @param int|null $courseid
+     * @param int $classwidth Width of one class; must be at least 1.
+     * @param array $ranges List of ['lower' => float, 'upper' => float], 1-based order.
+     * @return array<int, array<int, int>> Count keyed by range index, then class.
+     */
+    public static function get_answers_per_person_histogram(
+        int $contextid,
+        int $scaleid,
+        ?int $courseid,
+        int $classwidth,
+        array $ranges
+    ): array {
+        global $DB;
+
+        $classwidth = max(1, $classwidth);
+        [$inner, $params] = self::get_sql_for_questions_answered_per_person($contextid, $scaleid, $courseid);
+        $params['classwidth'] = $classwidth;
+
+        // Range 0 collects everybody without an ability, matching the chart's
+        // "no result" series.
+        $cases = [];
+        foreach (array_values($ranges) as $index => $range) {
+            $j = $index + 1;
+            $lowerkey = 'rangelower' . $j;
+            $upperkey = 'rangeupper' . $j;
+            $params[$lowerkey] = (float) $range['lower'];
+            $params[$upperkey] = (float) $range['upper'];
+            // The topmost range includes its upper bound; all others are half-open.
+            $comparison = ($j === count($ranges)) ? '<=' : '<';
+            $cases[] = "WHEN ability >= :$lowerkey AND ability $comparison :$upperkey THEN $j";
+        }
+        $rangecase = $cases
+            ? 'CASE WHEN ability IS NULL THEN 0 ' . implode(' ', $cases) . ' ELSE -1 END'
+            : 'CASE WHEN ability IS NULL THEN 0 ELSE -1 END';
+
+        // CEIL over a real division: an integer division would truncate and put the
+        // boundary values of every class into the class below.
+        $bincase = "CASE WHEN total_answered = 0 THEN 0
+                         ELSE CAST(CEIL(total_answered * 1.0 / :classwidth) AS INTEGER) END";
+
+        $sql = "SELECT rangeindex, bin, COUNT(*) AS frequency
+                  FROM (
+                        SELECT $rangecase AS rangeindex, $bincase AS bin
+                          FROM ($inner) perperson
+                       ) classified
+                 WHERE rangeindex >= 0
+              GROUP BY rangeindex, bin";
+
+        $counts = [];
+        foreach ($DB->get_recordset_sql($sql, $params) as $row) {
+            $counts[(int) $row->rangeindex][(int) $row->bin] = (int) $row->frequency;
+        }
+
+        return $counts;
     }
 
     /**

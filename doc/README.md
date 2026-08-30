@@ -83,6 +83,7 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | Skalenbaum ohne N+1 und quadratischen Aufbau (#24) | 092 |
 | Itemparameter-Gültigkeit sichtbar, Pilotitems gelistet (#54) | 093 |
 | CI-Grunt entschärft, Playwright eingeführt | 094 |
+| Diagrammdaten serverseitig aggregiert (#23) | 095 |
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

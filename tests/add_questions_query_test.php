@@ -211,6 +211,69 @@ final class add_questions_query_test extends advanced_testcase {
     }
 
     /**
+     * Only the current version of a question is offered, and without a window scan.
+     *
+     * The current version used to be found by numbering every row of
+     * question_versions with ROW_NUMBER() and keeping the first - the whole version
+     * history of the site, materialised before a single row was discarded.
+     *
+     * @return void
+     */
+    public function test_only_the_current_question_version_is_offered(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        [$scaleid, $contextid] = $this->make_scale();
+        $now = time();
+        $category = $this->getDataGenerator()->get_plugin_generator('core_question')
+            ->create_question_category();
+
+        // Two questions sharing one bank entry: an old version and the current one.
+        $entryid = (int) $DB->insert_record('question_bank_entries', (object) [
+            'questioncategoryid' => $category->id,
+            'idnumber' => null,
+            'ownerid' => 2,
+        ]);
+
+        $ids = [];
+        foreach ([1 => 'Old version', 2 => 'Current version'] as $version => $name) {
+            $questionid = (int) $DB->insert_record('question', (object) [
+                'name' => $name,
+                'questiontext' => 'body',
+                'questiontextformat' => FORMAT_HTML,
+                'qtype' => 'truefalse',
+                'generalfeedback' => '',
+                'generalfeedbackformat' => FORMAT_HTML,
+                'timecreated' => $now,
+                'timemodified' => $now,
+                'createdby' => 2,
+                'modifiedby' => 2,
+            ]);
+            $DB->insert_record('question_versions', (object) [
+                'questionbankentryid' => $entryid,
+                'version' => $version,
+                'questionid' => $questionid,
+                'status' => 'ready',
+            ]);
+            $ids[$version] = $questionid;
+        }
+
+        $offered = $this->offered_ids($scaleid, $contextid);
+
+        $this->assertContains($ids[2], $offered, 'The current version must be offered.');
+        $this->assertNotContains($ids[1], $offered, 'A superseded version must not be offered.');
+
+        [, $from] = catquiz::return_sql_for_addcatscalequestions($scaleid, $contextid);
+        $this->assertStringNotContainsStringIgnoringCase(
+            'ROW_NUMBER',
+            $from,
+            'The version must be resolved without numbering the whole version table.'
+        );
+    }
+
+    /**
      * Without a context id the query still runs, using the default context.
      *
      * This path is easy to lose sight of: with contextid 0 the filter identifies the

@@ -1,5 +1,46 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083003)
+
+> Issue #23: Diagrammdaten werden in der Datenbank aggregiert.
+
+- **Keine Vollkohorte mehr im Speicher.** Das Antworten-Histogramm lud eine Zeile je
+  eingeschriebener Person, um sie anschließend nur zu zählen. Maximum,
+  Klassenbildung und Bereichszuordnung geschehen jetzt in SQL; zurück kommen
+  ausschließlich fertige Zählungen.
+- Neue Methoden `catquiz::get_max_questions_answered_per_person()` und
+  `catquiz::get_answers_per_person_histogram()`; die bestehende Kohorten-Abfrage wird
+  als Unterabfrage umschlossen statt dupliziert.
+- `feedback_helper::get_feedback_range_bounds()` liefert die Feedback-Grenzen als
+  Zahlen – aus denselben Einstellungen und mit demselben Parser wie die bestehende
+  Klassifikation, damit SQL und PHP nicht auseinanderlaufen. Ein Test vergleicht
+  beide direkt.
+- Semantik unverändert: Klasse 0 bleibt für „keine Antworten" reserviert, Bereiche
+  sind halboffen mit geschlossenem oberstem Bereich.
+- Zahn-Test: ohne den locale-sicheren Parser wird aus `-1,5` eine `-1.0` – rot.
+- **Noch offen bei #23**: die zweite unbeschränkte Abfrage, eine konfigurierbare
+  Obergrenze für Diagrammpunkte und Browsertests mit großen Datenmengen.
+
+## 1.1.6 (interne Version 2026083002)
+
+> Issue #22 abgeschlossen; Playwright in die dev-CI eingebettet.
+
+- **Fensterfunktion über alle Frageversionen ersetzt.** `ROW_NUMBER() OVER
+  (PARTITION BY questionbankentryid ...)` nummerierte jede Zeile von
+  `question_versions` – die gesamte Versionshistorie der Instanz – und verwarf erst
+  danach. Jetzt eine korrelierte Bedingung („keine neuere Version desselben
+  Bank-Eintrags"), die den Index nutzt und ohne Fensterfunktion auskommt, also auf
+  PostgreSQL und MariaDB gleich arbeitet.
+- Neuer Test: zwei Versionen eines Bank-Eintrags, nur die aktuelle wird angeboten.
+  Zahn-Test rot ohne den Versionsfilter.
+- **CI**: `playwright` läuft im dev-Workflow parallel zu `phpunit` und `behat`, mit
+  `lint-php` und `lint-jsamd` als Voraussetzung und `ci-complete` als Nachfolger.
+- **Zurückgestellt bei #21**: das zweistufige Laden auf die sichtbare Seitenmenge.
+  Es griffe in die Paginierungsschleife von `local_wunderbyte_table` ein, wo
+  Paginierung, Callback-Filter, Sortierung und Instanz-Cache ineinandergreifen – das
+  braucht einen eigenen Testharnisch. Die bereits wirksame Einschränkung der
+  Aggregation auf Kontext und Skalen bleibt bestehen.
+
 ## 1.1.6 (interne Version 2026083001)
 
 > CI-Codechecker grün.

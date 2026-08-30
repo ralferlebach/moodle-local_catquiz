@@ -625,25 +625,23 @@ class catquizstatistics {
      * @return array
      */
     public function render_responses_by_users_chart() {
-        global $DB, $OUTPUT;
-        [$sql, $params] = catquiz::get_sql_for_questions_answered_per_person($this->contextid, $this->scaleid, $this->courseid);
-        if (!$results = $DB->get_records_sql($sql, $params)) {
-            return [
-                'charttitle' => get_string('responsesbyusercharttitle', 'local_catquiz'),
-                'chart' => $this->get_nodata_body(),
-            ];
-        }
-        $maxattempts = 0;
-        foreach ($results as $r) {
-            if ($r->total_answered > $maxattempts) {
-                $maxattempts = $r->total_answered;
-            }
-        }
+        global $OUTPUT;
+
+        // Issue #23: the chart only ever needed the number of people per range and
+        // class - it counted the rows it had loaded. Loading one row per enrolled
+        // person just to count them made memory and runtime grow with the cohort.
+        // Both the maximum and the classification now happen in the database, and
+        // only the finished counts come back.
+        $maxattempts = catquiz::get_max_questions_answered_per_person(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid
+        );
 
         if ($maxattempts === 0) {
             $maxattempts = self::DEFAULT_MAX_ATTEMPTS;
         }
-        $classwidth = ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
+        $classwidth = (int) ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
 
         if (!$qs = $this->get_quizsettings()) {
             $numranges = 1;
@@ -651,33 +649,42 @@ class catquizstatistics {
             $numranges = $qs->numberoffeedbackoptionsselect;
         }
 
+        $counts = catquiz::get_answers_per_person_histogram(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid,
+            $classwidth,
+            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : []
+        );
+
+        if (empty($counts)) {
+            return [
+                'charttitle' => get_string('responsesbyusercharttitle', 'local_catquiz'),
+                'chart' => $this->get_nodata_body(),
+            ];
+        }
+
         // Initialize the data to 0 for all ranges and bins.
+        $data = [];
         for ($i = 0; $i <= $numranges; $i++) {
             for ($j = 0; $j <= self::ATTEMPTS_PER_PERSON_CLASSES; $j++) {
-                $data[$i][$j] = [];
+                $data[$i][$j] = 0;
             }
         }
 
-        foreach ($results as $r) {
-            if (intval($r->total_answered) === 0) {
-                $bin = 0;
-            } else {
-                $bin = feedback_helper::get_histogram_bin($r->total_answered, $classwidth);
-                // Bar 0 is reserved for 0 answers. Spread the rest across bin 1 ... n.
-                $bin = $bin + 1;
+        foreach ($counts as $range => $bins) {
+            // Without usable quiz settings everything with an ability goes to the
+            // fallback range, exactly as before.
+            if ($range > 0 && !$qs) {
+                $range = self::FALLBACK_RANGE;
             }
-            if (!$r->ability) {
-                $data[0][$bin][] = $r;
-            } else {
-                // If we have incompatible quiz settings, assing all values to the fallback range.
-                $range = $qs
-                    ? feedback_helper::get_range_of_value($qs, $this->scaleid, $r->ability)
-                    : self::FALLBACK_RANGE;
-                if (!$range) {
-                    // Ability is outside defined range. TODO: how to handle?
+            foreach ($bins as $bin => $frequency) {
+                if (!isset($data[$range][$bin])) {
+                    // A class beyond the configured number of classes; the previous
+                    // implementation dropped these silently as well.
                     continue;
                 }
-                $data[$range][$bin][] = $r;
+                $data[$range][$bin] += $frequency;
             }
         }
 
@@ -697,7 +704,7 @@ class catquizstatistics {
             $color = $colors[$range - 1];
             $series = new \core\chart_series(
                 $serieslabel,
-                array_map(fn ($x) => count($x), $data[$range])
+                array_values($data[$range])
             );
             $series->set_color($color);
             $chart->add_series($series);

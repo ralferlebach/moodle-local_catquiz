@@ -775,6 +775,43 @@ class feedback_helper {
     }
 
     /**
+     * Returns the configured feedback ranges as plain lower/upper bounds.
+     *
+     * Issue #23: the histogram assigns the range in SQL now, so the boundaries have
+     * to leave PHP as numbers. They are read here from the same settings and with
+     * the same parser that get_feedback_range_index() uses, so the two cannot end up
+     * describing different ranges.
+     *
+     * @param stdClass|array $quizsettings
+     * @param int $scaleid
+     * @return array List of ['lower' => float, 'upper' => float], in range order.
+     */
+    public static function get_feedback_range_bounds($quizsettings, int $scaleid): array {
+        $settings = (array) $quizsettings;
+        $n = (int) ($settings['numberoffeedbackoptionsselect'] ?? 0);
+        if ($n < 1) {
+            while (isset($settings[sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $n + 1)])) {
+                $n++;
+            }
+        }
+
+        $bounds = [];
+        for ($j = 1; $j <= $n; $j++) {
+            $lowerkey = sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $j);
+            $upperkey = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $j);
+            if (!isset($settings[$lowerkey]) || !isset($settings[$upperkey])) {
+                continue;
+            }
+            $bounds[] = [
+                'lower' => self::parse_range_limit($settings[$lowerkey]),
+                'upper' => self::parse_range_limit($settings[$upperkey]),
+            ];
+        }
+
+        return $bounds;
+    }
+
+    /**
      * Returns the 1-based feedback range a value falls into, or null if none.
      *
      * Issue #14: ranges are treated as half-open [lower, upper) so a value on a
