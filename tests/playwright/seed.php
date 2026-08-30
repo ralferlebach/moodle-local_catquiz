@@ -82,7 +82,7 @@ $categoryid = (int) $DB->insert_record('question_categories', (object) [
  * @param int $categoryid
  * @param int $scaleid
  * @param int $contextid
- * @param array $param
+ * @param ?array $param
  * @return int The question id.
  */
 function catquiz_seed_question(
