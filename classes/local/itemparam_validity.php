@@ -105,6 +105,29 @@ class itemparam_validity {
     }
 
     /**
+     * Sets the persisted usable flag on a record about to be written.
+     *
+     * Issue #54: the backend has to filter and sort on the state, which needs a
+     * database column - the state itself is derived in PHP from the model contract.
+     * Persisting a derived value risks it drifting away from the rule, and the item
+     * parameters are written from eight different places.
+     *
+     * This function is the single place where the flag is computed. Every write path
+     * calls it, so the rule stays in model_strategy::validate_item_parameters() and
+     * nothing else decides what "usable" means. local_catquiz_upgrade_backfill_usable()
+     * recomputes the same value and reports mismatches, which turns the drift risk
+     * into something measurable rather than something to hope about.
+     *
+     * @param \stdClass $record An item parameter record.
+     * @return \stdClass The same record, with usable set.
+     */
+    public static function stamp(\stdClass $record): \stdClass {
+        $record->usable = empty(model_strategy::validate_item_parameters($record)) ? 1 : 0;
+
+        return $record;
+    }
+
+    /**
      * Returns a short, translated label for a state.
      *
      * @param string $state

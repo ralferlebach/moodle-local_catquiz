@@ -158,11 +158,15 @@ class catscales implements renderable, templatable {
 
         // Issue #24: one grouped query instead of one count per scale.
         $counts = catquiz::get_number_of_questions_per_scale();
+        // Issue #54: how many items of this scale carry unusable parameters.
+        $unusable = catquiz::get_unusable_item_counts_per_scale();
 
         foreach ($out as &$item) {
             $item['image'] = $output->get_generated_image_for_id($item['id']);
             $item['numberofchildren'] = count($item['children']);
             $item['numberofquestions'] = $counts[(int) $item['id']] ?? 0;
+            $item['numberofunusableitems'] = $unusable[(int) $item['id']] ?? 0;
+            $item['hasunusableitems'] = !empty($unusable[(int) $item['id']]);
         }
         return $out;
     }
@@ -176,10 +180,14 @@ class catscales implements renderable, templatable {
 
         // Issue #24: one grouped query instead of one count per scale.
         $counts = catquiz::get_number_of_questions_per_scale();
+        // Issue #54: how many items of this scale carry unusable parameters.
+        $unusable = catquiz::get_unusable_item_counts_per_scale();
 
         foreach ($out as &$item) {
             $item['numberofchildren'] = count($item['children']);
             $item['numberofquestions'] = $counts[(int) $item['id']] ?? 0;
+            $item['numberofunusableitems'] = $unusable[(int) $item['id']] ?? 0;
+            $item['hasunusableitems'] = !empty($unusable[(int) $item['id']]);
         }
 
         return $out;

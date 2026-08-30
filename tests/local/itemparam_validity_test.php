@@ -230,6 +230,178 @@ final class itemparam_validity_test extends advanced_testcase {
     }
 
     /**
+     * The stamped flag always agrees with the rule it is derived from.
+     *
+     * Persisting a derived value is what makes server side filtering and sorting
+     * possible at all, but it can drift away from the rule - and the item parameters
+     * are written from eight different places. This pins that the stamp uses nothing
+     * but validate_item_parameters().
+     *
+     * @return void
+     */
+    public function test_stamp_agrees_with_the_validation_rule(): void {
+        $this->resetAfterTest();
+
+        $records = [
+            $this->record(['model' => 'raschbirnbaum', 'difficulty' => 0.5, 'discrimination' => 1.2]),
+            $this->record(['model' => 'raschbirnbaum', 'difficulty' => 0.5, 'discrimination' => 0.0]),
+            $this->record(['model' => 'rasch', 'difficulty' => 0.1, 'discrimination' => 0.0]),
+            $this->record(['model' => 'grmgeneralized', 'difficulty' => 0.0, 'json' => '{broken']),
+        ];
+
+        $seenusable = false;
+        $seenunusable = false;
+        foreach ($records as $record) {
+            $expected = empty(model_strategy::validate_item_parameters($record)) ? 1 : 0;
+            itemparam_validity::stamp($record);
+
+            $this->assertSame($expected, (int) $record->usable);
+            $seenusable = $seenusable || $expected === 1;
+            $seenunusable = $seenunusable || $expected === 0;
+        }
+
+        // Without both outcomes the assertions above would hold for a stamp that
+        // simply always writes the same value.
+        $this->assertTrue($seenusable && $seenunusable, 'The sample must contain both outcomes.');
+    }
+
+    /**
+     * A record written through the normal path carries the correct flag.
+     *
+     * @return void
+     */
+    public function test_written_record_carries_the_flag(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $now = time();
+        $mute = (object) [
+            'itemid' => 1,
+            'componentname' => 'question',
+            'contextid' => 1,
+            'model' => 'raschbirnbaum',
+            'difficulty' => 0.5,
+            'discrimination' => 0.0,
+            'status' => 4,
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ];
+        itemparam_validity::stamp($mute);
+        $id = $DB->insert_record('local_catquiz_itemparams', $mute);
+
+        $this->assertEquals(
+            0,
+            (int) $DB->get_field('local_catquiz_itemparams', 'usable', ['id' => $id]),
+            'A 2PL item with discrimination 0 must be stored as unusable.'
+        );
+    }
+
+    /**
+     * The consistency check reports rows whose stored flag drifted.
+     *
+     * @return void
+     */
+    public function test_consistency_check_finds_drift(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        require_once($CFG->dirroot . '/local/catquiz/db/upgrade.php');
+
+        $now = time();
+        $id = $DB->insert_record('local_catquiz_itemparams', (object) [
+            'itemid' => 2,
+            'componentname' => 'question',
+            'contextid' => 1,
+            'model' => 'raschbirnbaum',
+            'difficulty' => 0.5,
+            'discrimination' => 0.0,
+            'usable' => 1,
+            'status' => 4,
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+
+        // Dry run reports without changing anything.
+        $this->assertEquals(1, local_catquiz_upgrade_backfill_usable(true));
+        $this->assertEquals(1, (int) $DB->get_field('local_catquiz_itemparams', 'usable', ['id' => $id]));
+
+        $this->assertEquals(1, local_catquiz_upgrade_backfill_usable());
+        $this->assertEquals(0, (int) $DB->get_field('local_catquiz_itemparams', 'usable', ['id' => $id]));
+
+        // Nothing left to fix once it has run.
+        $this->assertEquals(0, local_catquiz_upgrade_backfill_usable(true));
+    }
+
+    /**
+     * The per scale aggregate counts only items whose active parameter is unusable.
+     *
+     * @return void
+     */
+    public function test_unusable_counts_per_scale(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $now = time();
+        $contextid = 77;
+
+        /**
+         * Registers an item with an active parameter of the given usability.
+         *
+         * @param int $scaleid
+         * @param int $usable
+         * @param int $seq
+         */
+        $additem = function (int $scaleid, int $usable, int $seq) use ($DB, $now, $contextid): void {
+            $itemid = (int) $DB->insert_record('local_catquiz_items', (object) [
+                'componentid' => 9000 + $seq,
+                'componentname' => 'question',
+                'catscaleid' => $scaleid,
+                'contextid' => $contextid,
+                'activeparamid' => 0,
+                'status' => 0,
+            ]);
+            $paramid = (int) $DB->insert_record('local_catquiz_itemparams', (object) [
+                'itemid' => $itemid,
+                'componentname' => 'question',
+                'contextid' => $contextid,
+                'model' => 'rasch',
+                'difficulty' => 0.1,
+                'usable' => $usable,
+                'status' => 4,
+                'timecreated' => $now,
+                'timemodified' => $now,
+            ]);
+            $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $itemid]);
+        };
+
+        $additem(11, 0, 1);
+        $additem(11, 0, 2);
+        $additem(11, 1, 3);
+        $additem(12, 1, 4);
+
+        // An item in piloting: no active parameter at all. That is an expected state,
+        // not a broken one, and must not be counted.
+        $DB->insert_record('local_catquiz_items', (object) [
+            'componentid' => 9099,
+            'componentname' => 'question',
+            'catscaleid' => 11,
+            'contextid' => $contextid,
+            'activeparamid' => 0,
+            'status' => 0,
+        ]);
+
+        $counts = \local_catquiz\catquiz::get_unusable_item_counts_per_scale($contextid);
+
+        $this->assertEquals(2, $counts[11] ?? 0, 'Two unusable items in this scale.');
+        $this->assertArrayNotHasKey(12, $counts, 'A scale without unusable items has no row.');
+    }
+
+    /**
      * Items without an active parameter appear in the list, statistics included.
      *
      * Items without parameters - or without an *active* parameter - are precisely the

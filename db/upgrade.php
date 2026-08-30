@@ -1413,7 +1413,78 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026082805, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026083000) {
+        // Issue #54: persist whether the stored parameters are usable for their
+        // model. Without a column the backend cannot filter or sort on the state -
+        // it is derived in PHP from the model contract, and an ORDER BY on something
+        // that does not exist in the database is not an option.
+        $table = new xmldb_table('local_catquiz_itemparams');
+        $field = new xmldb_field('usable', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '1', 'status');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        $index = new xmldb_index('contextid_usable', XMLDB_INDEX_NOTUNIQUE, ['contextid', 'usable']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        // Backfill from the same rule the runtime uses, in batches: the parameter
+        // table grows with items times contexts times models, so loading it whole
+        // would defeat the point of the exercise.
+        local_catquiz_upgrade_backfill_usable();
+
+        upgrade_plugin_savepoint(true, 2026083000, 'local', 'catquiz');
+    }
+
     return true;
+}
+
+/**
+ * Recomputes the usable flag for every stored item parameter.
+ *
+ * Used by the issue #54 upgrade and by the consistency check. Returns the number of
+ * rows whose stored flag did not match the rule - zero means backend and runtime
+ * agree.
+ *
+ * @param bool $dryrun When true, only count the mismatches instead of fixing them.
+ * @return int Number of mismatching rows.
+ */
+function local_catquiz_upgrade_backfill_usable(bool $dryrun = false): int {
+    global $DB;
+
+    $mismatches = 0;
+    $batch = 500;
+    $lastid = 0;
+
+    while (true) {
+        $records = $DB->get_records_select(
+            'local_catquiz_itemparams',
+            'id > :lastid',
+            ['lastid' => $lastid],
+            'id ASC',
+            'id, model, difficulty, discrimination, guessing, json, usable',
+            0,
+            $batch
+        );
+        if (empty($records)) {
+            break;
+        }
+
+        foreach ($records as $record) {
+            $lastid = (int) $record->id;
+            $expected = empty(\local_catquiz\local\model\model_strategy::validate_item_parameters($record)) ? 1 : 0;
+            if ((int) $record->usable === $expected) {
+                continue;
+            }
+            $mismatches++;
+            if (!$dryrun) {
+                $DB->set_field('local_catquiz_itemparams', 'usable', $expected, ['id' => $record->id]);
+            }
+        }
+    }
+
+    return $mismatches;
 }
 
 /**

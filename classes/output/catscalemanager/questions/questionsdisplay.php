@@ -155,18 +155,29 @@ class questionsdisplay {
 
         $sortcolumns = $columnsarray;
         unset($sortcolumns['action']);
-        // Issue #54: the validity is derived in PHP from the model contract, so there
-        // is no database column to sort by. Offering it would produce an ORDER BY on
-        // a non-existent column. Server-side sorting and filtering require the state
-        // to be persisted first - see the open point in doc/session-093-changes.md.
+        // Issue #54: the column renders the state, but sorting has to happen on the
+        // persisted flag - "usable" is a real database column, "itemparamvalidity" is
+        // only the rendered label.
         unset($sortcolumns['itemparamvalidity']);
-        $table->define_sortablecolumns(array_keys($sortcolumns));
+        $sortablecolumns = array_keys($sortcolumns);
+        $sortablecolumns[] = 'usable';
+        $table->define_sortablecolumns($sortablecolumns);
 
         $standardfilter = new standardfilter('qtype', get_string('questiontype', 'local_catquiz'));
         $table->add_filter($standardfilter);
 
         $standardfilter = new standardfilter('model', get_string('model', 'local_catquiz'));
         $table->add_filter($standardfilter);
+
+        // Issue #54: filtering on the persisted flag, so that a maintainer can pull
+        // up exactly the items whose parameters cannot be used. The labels spell the
+        // states out; the stored values are 1 and 0.
+        $usablefilter = new standardfilter('usable', get_string('itemparamvalidity', 'local_catquiz'));
+        $usablefilter->add_options([
+            '1' => get_string('itemparams_usable', 'local_catquiz'),
+            '0' => get_string('itemparams_unusable', 'local_catquiz'),
+        ]);
+        $table->add_filter($usablefilter);
 
         $table->addcheckboxes = true;
 

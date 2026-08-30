@@ -35,6 +35,7 @@ use moodle_exception;
 use moodle_url;
 use question_engine;
 use stdClass;
+use local_catquiz\local\itemparam_validity;
 
 /**
  * Class catquiz
@@ -274,6 +275,9 @@ class catquiz {
             lcip.timecreated,
             lcip.timemodified,
             lcip.status,
+            -- Issue #54: persisted so the backend can filter and sort on it; NULL for
+            -- items in piloting, which have no active parameter row at all.
+            lcip.usable,
             lcip.contextid AS lcipcontextid,
             -- Information about usage statisitcs
             COALESCE(astat.numberattempts,0) attempts,
@@ -1348,6 +1352,45 @@ class catquiz {
             'catscaleid' => $catscaleid,
         ];
         return [$sql, $params];
+    }
+
+    /**
+     * Returns the number of items with unusable parameters, per scale.
+     *
+     * Issue #54: the per item column tells a maintainer what is wrong with one row,
+     * but not whether a scale has a problem at all. This answers that for every
+     * scale in one grouped query, so the overview costs the same whether there are
+     * three scales or three hundred.
+     *
+     * Counts only items whose active parameter is stored as unusable. Items in
+     * piloting have no active parameter and are a different, expected state.
+     *
+     * @param int|null $contextid Restrict to one context, or null for all.
+     * @return array<int, int> Number of unusable items keyed by catscaleid.
+     */
+    public static function get_unusable_item_counts_per_scale(?int $contextid = null): array {
+        global $DB;
+
+        $params = [];
+        $contextfilter = '';
+        if ($contextid !== null) {
+            $contextfilter = ' AND lci.contextid = :contextid ';
+            $params['contextid'] = $contextid;
+        }
+
+        $sql = "SELECT lci.catscaleid, COUNT(*) AS unusablecount
+                  FROM {local_catquiz_items} lci
+                  JOIN {local_catquiz_itemparams} lcip
+                    ON lcip.id = lci.activeparamid
+                 WHERE lcip.usable = 0 $contextfilter
+              GROUP BY lci.catscaleid";
+
+        $counts = [];
+        foreach ($DB->get_records_sql($sql, $params) as $row) {
+            $counts[(int) $row->catscaleid] = (int) $row->unusablecount;
+        }
+
+        return $counts;
     }
 
     /**
@@ -2859,6 +2902,7 @@ class catquiz {
     public static function save_item_param(stdClass $record): int {
         global $DB;
         $record->timemodified = time();
+        itemparam_validity::stamp($record);
         $id = $DB->insert_record('local_catquiz_itemparams', $record);
         return $id;
     }
@@ -2872,6 +2916,7 @@ class catquiz {
     public static function update_item_param(stdClass $record): int {
         global $DB;
         $record->timemodified = time();
+        itemparam_validity::stamp($record);
         $DB->update_record('local_catquiz_itemparams', $record);
         return $record->id;
     }
@@ -3022,6 +3067,9 @@ SQL;
                 },
                 $remainingparams
             );
+            foreach ($remainingparams as $remainingparam) {
+                itemparam_validity::stamp($remainingparam);
+            }
             $DB->insert_records('local_catquiz_itemparams', $remainingparams);
         }
 
@@ -3088,6 +3136,7 @@ SQL;
             }
             foreach ($qid2params[$questionid] as $p) {
                 $p->itemid = $itemid;
+                itemparam_validity::stamp($p);
                 $DB->update_record('local_catquiz_itemparams', $p, true);
             }
         }

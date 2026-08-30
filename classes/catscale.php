@@ -45,6 +45,7 @@ use local_catquiz\output\catscales;
 use moodle_exception;
 use moodle_url;
 use stdClass;
+use local_catquiz\local\itemparam_validity;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -713,6 +714,8 @@ class catscale {
             $record->contextid = $contextid;
             $oldid = $record->id;
             unset($record->id);
+            // Issue #54: keep the persisted usability flag in step with the rule.
+            itemparam_validity::stamp($record);
             $newid = $DB->insert_record('local_catquiz_itemparams', $record);
             $record->id = $newid;
             $saved[$newid] = $record;
@@ -754,6 +757,7 @@ class catscale {
         foreach ($newitems as $ipid => $itemid) {
             $itemparam = $saved[$ipid];
             $itemparam->itemid = $itemid;
+            itemparam_validity::stamp($itemparam);
             $DB->update_record('local_catquiz_itemparams', $itemparam, true);
         }
     }

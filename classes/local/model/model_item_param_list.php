@@ -44,6 +44,7 @@ use moodle_exception;
 use stdClass;
 use Traversable;
 use UnexpectedValueException;
+use local_catquiz\local\itemparam_validity;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -386,10 +387,14 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
         }
 
         if (!empty($newrecords)) {
+            foreach ($newrecords as $newrecord) {
+                itemparam_validity::stamp($newrecord);
+            }
             $DB->insert_records('local_catquiz_itemparams', $newrecords);
         }
 
         foreach ($updatedrecords as $r) {
+            itemparam_validity::stamp($r);
             $DB->update_record('local_catquiz_itemparams', $r, true);
         }
         cache_helper::purge_by_event('changesinitemparams');

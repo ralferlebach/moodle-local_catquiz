@@ -145,6 +145,7 @@
         <FIELD NAME="guessing" TYPE="number" LENGTH="10" NOTNULL="false" DEFAULT = "0" SEQUENCE="false" DECIMALS="4" COMMENT="overall influence of guessing on probability of successful solution of item"/>
         <FIELD NAME="json" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="values for item paramters"/> <!-- TODO: To be implemented soon -->
         <FIELD NAME="status" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="usable" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Issue #54: 1 when the stored parameters satisfy the contract of their model, 0 when the item is played as a pilot item instead. Derived from model_strategy::validate_item_parameters() when the row is written, so that the backend can filter and sort on it."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
@@ -154,6 +155,7 @@
       </KEYS>
       <INDEXES>
         <INDEX NAME="uniqueitemparam" UNIQUE="true" FIELDS="itemid,contextid,model"/>
+        <INDEX NAME="contextid_usable" UNIQUE="false" FIELDS="contextid,usable" COMMENT="Issue #54: serves the backend filter for unusable parameters and the per scale counts."/>
         <INDEX NAME="itemid" UNIQUE="false" FIELDS="itemid"/>
       </INDEXES>
     </TABLE>

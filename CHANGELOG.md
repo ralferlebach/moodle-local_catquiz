@@ -1,5 +1,25 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083000)
+
+> Issue #54 abgeschlossen: Filtern, Sortieren und eine Übersicht je Skala.
+
+- **Neue Spalte `local_catquiz_itemparams.usable`** samt Index `(contextid, usable)`.
+  Ohne Datenbankspalte gibt es kein serverseitiges Filtern und Sortieren – der
+  Zustand wird in PHP aus dem Modellvertrag abgeleitet.
+- **Genau eine Stelle berechnet den Wert**: `itemparam_validity::stamp()` fragt
+  ausschließlich `model_strategy::validate_item_parameters()`. Alle **acht**
+  Schreibpfade rufen sie auf, damit die Regel ungeteilt bleibt.
+- **Upgrade mit Backfill** in Stapeln zu 500 Zeilen, plus eine
+  **Konsistenzprüfung**, die nachrechnet und Abweichungen meldet, ohne etwas zu
+  ändern. Das im Issue benannte Driftrisiko wird damit messbar.
+- **Filter und Sortierung** in der Fragenliste auf der persistierten Spalte.
+- **Aggregierte Übersicht je Skala** (`get_unusable_item_counts_per_scale()`), eine
+  gruppierte Abfrage für alle Skalen. Gezählt werden nur Items mit unbrauchbarem
+  aktivem Parameter – Pilotitems ohne aktiven Parameter sind ein erwarteter Zustand.
+- Zahn-Tests: entwerteter Stempel und aufgeweichtes Aggregat werden beide rot;
+  letzteres zählt dann 4 statt 2, weil das Pilotitem mitgezählt würde.
+
 ## 1.1.6 (interne Version 2026082816)
 
 > CI-Grunt entschärft, Playwright-Browsertests eingeführt.
