@@ -276,6 +276,87 @@ class catscalequestions_table extends wunderbyte_table {
     const QUESTIONTEXT_SEARCH_LIMIT = 2000;
 
     /**
+     * Scale ids and context this table was built for, for the light count query.
+     * @var array|null
+     */
+    private ?array $countcontext = null;
+
+    /**
+     * Remembers what the light count query needs to know.
+     *
+     * @param array $catscaleids
+     * @param int $contextid
+     * @return void
+     */
+    public function set_count_context(array $catscaleids, int $contextid): void {
+        $this->countcontext = ['catscaleids' => $catscaleids, 'contextid' => $contextid];
+    }
+
+    /**
+     * Counts the list without computing the attempt statistics.
+     *
+     * Issue #21: counting the list meant counting the rows of the full query - the
+     * one carrying the per question and per user aggregates. Those are computed only
+     * to be discarded by COUNT(). The row set is defined by the joins up to the
+     * question bank; the statistics are LEFT JOINs and can neither add nor remove a
+     * row, so a light query returns the same number for a fraction of the work.
+     *
+     * Set here rather than when the table is built, for two reasons:
+     *
+     *   * The table library appends its own filter and search to $this->sql->where
+     *     AFTER the table is set up. A count fixed earlier would ignore them and
+     *     report a total that does not match the list - pagination would then offer
+     *     pages that are empty.
+     *   * The free text search may match on columns that only exist in the
+     *     aggregates (the last attempt time among them). With such a condition the
+     *     light query cannot answer the question at all.
+     *
+     * So the light count is used only while neither applies; otherwise the library
+     * falls back to its own behaviour, which stays correct.
+     *
+     * @param int $pagesize
+     * @param bool $useinitialsbar
+     * @return void
+     */
+    public function query_db($pagesize, $useinitialsbar = true) {
+        if ($this->countsql === null && $this->can_use_light_count()) {
+            [$from, $where, $params] = catquiz::return_sql_for_catscalequestions_count(
+                $this->countcontext['catscaleids'],
+                $this->countcontext['contextid']
+            );
+            $this->countsql = "SELECT COUNT(*) FROM $from WHERE $where";
+            $this->countparams = $params;
+        }
+
+        parent::query_db($pagesize, $useinitialsbar);
+    }
+
+    /**
+     * Whether the light count can answer the current query.
+     *
+     * @return bool
+     */
+    private function can_use_light_count(): bool {
+        if ($this->countcontext === null) {
+            return false;
+        }
+
+        // Any filter or search the library added narrows the list in a way the light
+        // query does not know about.
+        if (!empty($this->sql->filter) || !empty($this->searchtext)) {
+            return false;
+        }
+
+        // The question text search restricts by id and is not part of the light
+        // query either.
+        if ($this->questiontextsearchapplied) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Narrows the list to questions whose text matches, as the SQL is defined.
      *
      * Issue #20 removed questiontext from the list queries, which also removed the

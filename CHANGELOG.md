@@ -1,5 +1,22 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083006)
+
+> Leichte Count-Abfrage für die Fragenliste (#21) und Anschluss-Issue.
+
+- **Leichte Zählung ohne die Statistik-Joins**
+  (`return_sql_for_catscalequestions_count()`). Das Zählen der Liste zählte bisher
+  die Zeilen der vollen Abfrage; die Aggregate wurden nur berechnet, um von
+  `COUNT()` verworfen zu werden.
+- **Override mit Schutzbedingung** in `catscalequestions_table::query_db()`: Die
+  Bibliothek hängt Filter und Suche erst nach dem Tabellenaufbau an, eine zu früh
+  festgelegte Zählung würde eine Gesamtzahl melden, die nicht zur Liste passt.
+- **Noch nicht aktiviert** – `set_count_context()` wird nicht aufgerufen, der Stand
+  ist verhaltensneutral. Begründung und Restschritte in `doc/issue-21-followup.md`.
+- Neue Tests (4) und zwei Zahn-Tests; Playwright-Fixture für #54 im Seed ergänzt.
+- **Anschluss-Issue** `doc/issue-21-followup.md` für den verbleibenden Teil von #21,
+  mit DoD-Liste (5 erledigt, 8 offen) und der Upstream-Voraussetzung `protected`.
+
 ## 1.1.6 (interne Version 2026083005)
 
 > Zwei CI-Befunde behoben.

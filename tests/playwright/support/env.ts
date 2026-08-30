@@ -29,5 +29,7 @@ export const contextId = (): string => required('CATQUIZ_CONTEXTID');
 export const matchingTerm = (): string => required('CATQUIZ_MATCHING_TERM');
 export const missingTerm = (): string => required('CATQUIZ_MISSING_TERM');
 export const matchingQuestion = (): string => required('CATQUIZ_MATCHING_QUESTION');
+export const unusableQuestion = (): string => required('CATQUIZ_UNUSABLE_QUESTION');
+export const pilotQuestion = (): string => required('CATQUIZ_PILOT_QUESTION');
 export const adminUser = (): string => process.env.CATQUIZ_ADMIN_USER || 'admin';
 export const adminPass = (): string => required('CATQUIZ_ADMIN_PASS');

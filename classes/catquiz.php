@@ -1564,6 +1564,60 @@ class catquiz {
     }
 
     /**
+     * Returns a light FROM/WHERE for counting the rows of the question list.
+     *
+     * Issue #21: counting the list meant counting the rows of the full query - the
+     * one that carries the per question and per user attempt statistics. Those
+     * aggregates are computed only to be thrown away by COUNT(), which makes the
+     * count as expensive as the list itself.
+     *
+     * The row set is defined entirely by the joins up to the question bank; the
+     * statistics are LEFT JOINs and cannot add or remove a row. Leaving them out
+     * therefore yields exactly the same number.
+     *
+     * The joins are kept in the same order and with the same conditions as in
+     * return_sql_for_catscalequestions(); if that one changes, this has to follow.
+     * A test compares both counts so a divergence shows up rather than silently
+     * producing a wrong total.
+     *
+     * @param array $catscaleids
+     * @param int $contextid
+     * @return array [string $from, string $where, array $params]
+     */
+    public static function return_sql_for_catscalequestions_count(array $catscaleids, int $contextid): array {
+        global $DB;
+
+        $params = ['contextid' => $contextid];
+        $wherecontains = [];
+
+        if (!empty($catscaleids) && $catscaleids[0] > 0) {
+            [$incatscales, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED, 'countcatscales');
+            $params = array_merge($params, $inparams);
+            $wherecontains[] = "lccs.id $incatscales";
+        }
+
+        $from = <<<SQL
+        {local_catquiz_catscales} lccs
+            JOIN {local_catquiz_items} lci ON lci.catscaleid = lccs.id
+            LEFT JOIN {local_catquiz_itemparams} lcip
+              ON lcip.itemid = lci.id AND lci.activeparamid = lcip.id
+            JOIN {question} q ON q.id = lci.componentid
+            JOIN {question_versions} qv ON qv.questionid = q.id
+            JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+            JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
+        SQL;
+
+        // Issue #54: items in piloting have no active parameter, so their context is
+        // NULL - the same allowance the list itself makes.
+        $where = '(lcip.contextid = :contextid OR lcip.contextid IS NULL)';
+        foreach ($wherecontains as $condition) {
+            $where .= " AND $condition";
+        }
+
+        return [$from, $where, $params];
+    }
+
+    /**
      * Returns the number of items with unusable parameters, per scale.
      *
      * Issue #54: the per item column tells a maintainer what is wrong with one row,

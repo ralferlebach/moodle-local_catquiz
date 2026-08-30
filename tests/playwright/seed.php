@@ -84,7 +84,14 @@ $categoryid = (int) $DB->insert_record('question_categories', (object) [
  * @param int $contextid
  * @return int The question id.
  */
-function catquiz_seed_question(string $name, string $text, int $categoryid, int $scaleid, int $contextid): int {
+function catquiz_seed_question(
+    string $name,
+    string $text,
+    int $categoryid,
+    int $scaleid,
+    int $contextid,
+    ?array $param = ['model' => 'rasch', 'difficulty' => 0.5]
+): int {
     global $DB;
 
     $now = time();
@@ -123,18 +130,25 @@ function catquiz_seed_question(string $name, string $text, int $categoryid, int 
         'status' => 0,
     ]);
 
-    // A usable 1PL parameter, made active. Items are also listed without one, but a
-    // fixture that only contains pilot items would not exercise the normal case.
-    $paramid = (int) $DB->insert_record('local_catquiz_itemparams', (object) [
+    // No parameter at all: a classic pilot item.
+    if ($param === null) {
+        return $questionid;
+    }
+
+    $record = (object) array_merge([
         'itemid' => $itemid,
         'componentname' => 'question',
         'contextid' => $contextid,
-        'model' => 'rasch',
-        'difficulty' => 0.5,
         'status' => 4,
         'timecreated' => $now,
         'timemodified' => $now,
-    ]);
+    ], $param);
+
+    // Stamp through the same helper the plugin uses, so the fixture carries the
+    // usability flag the application would have written.
+    \local_catquiz\local\itemparam_validity::stamp($record);
+
+    $paramid = (int) $DB->insert_record('local_catquiz_itemparams', $record);
     $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $itemid]);
 
     return $questionid;
@@ -165,6 +179,30 @@ catquiz_seed_question(
     $contextid
 );
 
+// Issue #54: an item whose parameters exist but violate the contract of their
+// model. A 2PL item with discrimination 0 is mathematically mute, so it is played
+// as a pilot item - exactly the state the backend column has to make visible.
+$unusableid = catquiz_seed_question(
+    'Playwright unusable question',
+    '<p>Parameters exist but cannot be used.</p>',
+    $categoryid,
+    $scaleid,
+    $contextid,
+    ['model' => 'raschbirnbaum', 'difficulty' => 0.5, 'discrimination' => 0.0]
+);
+
+// An item in piloting: registered for the scale, but without any active parameter.
+$pilotid = catquiz_seed_question(
+    'Playwright pilot question',
+    '<p>No parameters at all.</p>',
+    $categoryid,
+    $scaleid,
+    $contextid,
+    null
+);
+
+echo "export CATQUIZ_UNUSABLE_QUESTION='Playwright unusable question'\n";
+echo "export CATQUIZ_PILOT_QUESTION='Playwright pilot question'\n";
 echo "export CATQUIZ_BASE_URL='" . $CFG->wwwroot . "'\n";
 echo "export CATQUIZ_SCALEID='" . $scaleid . "'\n";
 echo "export CATQUIZ_CONTEXTID='" . $contextid . "'\n";
