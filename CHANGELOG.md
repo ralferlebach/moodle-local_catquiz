@@ -1,5 +1,20 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083008)
+
+> Werkzeug und Nachweis für die Query-Pläne.
+
+- **Neu `cli/explain_hotqueries.php`** (mit `cli/explain_seed.php`): protokolliert
+  die Pläne der vier performancekritischen Abfragen, in beiden Dialekten
+  (`EXPLAIN (ANALYZE, BUFFERS)` bzw. `ANALYZE FORMAT=JSON`), nach Auffrischen der
+  Tabellenstatistiken. Auf einer echten Instanz genügt `--no-seed`.
+- **`doc/query-plans-postgres.md`**: gemessen an den Proportionen einer
+  Produktivinstanz. Leichte Zählung ohne Attempt-Tabellen, keine Fensterfunktion
+  mehr bei „Frage hinzufügen", Index Scan beim Itemparameter-Filter.
+- Der `Seq Scan` auf `question_versions` ist eingeordnet: korrekte Wahl des
+  Optimierers, der Gewinn liegt im Wegfall der Fensterfunktion.
+- **MariaDB-Lauf steht aus** und wird im Dokument ausdrücklich als offen benannt.
+
 ## 1.1.6 (interne Version 2026083007)
 
 > Review-Befunde: Upgrade-Ausgabe, Kontextauflösung, CI.
