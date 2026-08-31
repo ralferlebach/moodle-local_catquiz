@@ -148,6 +148,14 @@ final class attempt_finalizer {
                 } catch (\Throwable $e) {
                     $preattempt = [];
                 }
+
+                // Issue #56: the row is removed only after the pre-attempt abilities
+                // have been read - deleting earlier would lose exactly the value this
+                // block needs. In the retaining modes it stays, and the scheduled
+                // task applies the retention period.
+                if (\local_catquiz\local\progress_retention::should_delete()) {
+                    progress::delete($adaptiveattemptid);
+                }
             }
 
             foreach ($result->get_scale_results() as $scaleresult) {

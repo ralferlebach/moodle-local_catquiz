@@ -32,6 +32,7 @@ use local_catquiz\catscale;
 use local_catquiz\testenvironment;
 use Random\RandomException;
 use stdClass;
+use local_catquiz\local\progress_retention;
 
 defined('MOODLE_INTERNAL') || die();
 // No login check is expected here because this is already done in the
@@ -128,6 +129,12 @@ class progress implements JsonSerializable {
      * @var array Holds the abilities indexed by catscale
      */
     private array $abilities;
+
+    /**
+     * Ability estimate per scale and step, recorded in trace mode only.
+     * @var array
+     */
+    private array $abilitytrace = [];
 
     /**
      * @var array Holds the person abilities as they were BEFORE this attempt,
@@ -867,12 +874,39 @@ class progress implements JsonSerializable {
      * @return self
      */
     public function set_ability(float $ability, int $catscaleid): self {
-        if (!isset($this->abilities[$catscaleid])) {
-            $this->abilities[$catscaleid] = [];
+        // Issue #56: the empty array initialisation used to be pointless - the very
+        // next line replaced it with a scalar, so abilities only ever held the last
+        // estimate per scale and no trajectory could be reconstructed.
+        //
+        // In trace mode the estimates are appended instead. The other modes keep the
+        // scalar, so nothing about the existing behaviour or the size of the stored
+        // JSON changes for them.
+        if (progress_retention::should_trace()) {
+            if (!isset($this->abilitytrace[$catscaleid])) {
+                $this->abilitytrace[$catscaleid] = [];
+            }
+            $this->abilitytrace[$catscaleid][] = [
+                'step' => $this->get_step(),
+                'ability' => $ability,
+            ];
         }
+
         $this->abilities[$catscaleid] = $ability;
 
         return $this;
+    }
+
+    /**
+     * Returns the recorded ability trajectory per scale.
+     *
+     * Empty unless the retention level is trace. Each entry carries the step number
+     * and the estimate, so a trajectory can be reconstructed without depending on
+     * store_debug_info.
+     *
+     * @return array
+     */
+    public function get_ability_trace(): array {
+        return $this->abilitytrace;
     }
 
     /**

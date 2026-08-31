@@ -89,6 +89,7 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | Review-Befunde: Upgrade-Ausgabe, Kontextauflösung | 096 |
 | Behat-Fix, Gruppen im Kurskontext (#18), Playwright | 097 |
 | #23 im Browser, Lasttest-Ergebnisse | 098 |
+| Aufbewahrung des Fortschritts (#56), Skalierungsbefund | 099 |
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

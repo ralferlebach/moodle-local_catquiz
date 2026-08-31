@@ -158,6 +158,32 @@ if ($hassiteconfig) {
         )
     );
 
+    // Issue #56: how long the progress of an attempt is kept. The default is the
+    // data-sparing option on purpose - a plugin should not accumulate personal
+    // answer data because nobody decided otherwise.
+    $settings->add(new admin_setting_configselect(
+        'local_catquiz/progressretention',
+        get_string('progressretention', 'local_catquiz'),
+        get_string('progressretention_desc', 'local_catquiz'),
+        \local_catquiz\local\progress_retention::MINIMAL,
+        [
+            \local_catquiz\local\progress_retention::MINIMAL =>
+                get_string('progressretention_minimal', 'local_catquiz'),
+            \local_catquiz\local\progress_retention::KEEP =>
+                get_string('progressretention_keep', 'local_catquiz'),
+            \local_catquiz\local\progress_retention::TRACE =>
+                get_string('progressretention_trace', 'local_catquiz'),
+        ]
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_catquiz/progressretentiondays',
+        get_string('progressretentiondays', 'local_catquiz'),
+        get_string('progressretentiondays_desc', 'local_catquiz'),
+        0,
+        PARAM_INT
+    ));
+
     // Add a setting for the default maximum attempt duration.
     $settings->add(new admin_setting_configtext(
         'local_catquiz/maximum_attempt_duration_hours',

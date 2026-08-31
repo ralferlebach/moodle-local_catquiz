@@ -1,5 +1,21 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083012)
+
+> Issue #56 umgesetzt; Skalierungsbefund zu „Frage hinzufügen" erfasst.
+
+- **Aufbewahrung des Attempt-Fortschritts konfigurierbar** (#56): drei Stufen
+  (`minimal`, `keep`, `trace`) mit datensparsamem Standard, globale Einstellung als
+  Obergrenze für Aktivitäten, Löschung nach Abschluss über das bisher tote
+  `progress::delete()`, echter Schrittverlauf im Modus `trace` und ein
+  Cleanup-Task in Stapeln.
+- **25 fehlende Privacy-Strings ergänzt**: der Provider referenzierte 34, vorhanden
+  waren 9 – auf der Datenschutzseite standen Platzhalter.
+- **Neuer Issue** `doc/issue-add-questions-scaling.md`: „Frage hinzufügen" braucht
+  bei 110.005 Fragen 6.832 ms statt 28,7 ms bei 60.000 – die Abfrage skaliert mit
+  der Fragenbank, nicht mit der Seitengröße.
+- **Neu `cli/loadtest_seed.php`** zur reproduzierbaren Erzeugung großer Bestände.
+
 ## 1.1.6 (interne Version 2026083011)
 
 > Issue #23 im Browser abgedeckt, Lasttest-Ergebnisse dokumentiert.
