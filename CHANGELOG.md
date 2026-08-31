@@ -1,5 +1,22 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083007)
+
+> Review-Befunde: Upgrade-Ausgabe, Kontextauflösung, CI.
+
+- **Upgrade-Ausgabe entrauscht**: statt siebzehn Protokollzeilen je entferntem Index
+  nur noch eine Zusammenfassung; Details über `debugging()`. Die `issue #NN:`-Präfixe
+  sind aus nutzersichtbarer Ausgabe entfernt.
+- **Kontextauflösung komponentensicher**: `context_resolver::for_attempt()` löst über
+  `(component, attemptid)` auf und nutzt `IGNORE_MISSING` statt `IGNORE_MULTIPLE`.
+  Ohne Treffer greift der Systemkontext mit weiterhin geltender Capability-Prüfung –
+  fail closed statt Autorisierung gegen einen fremden Kurs.
+- **Entscheidung dokumentiert** (`doc/decision-attempt-identity.md`):
+  `UNIQUE(attemptid)` bleibt. Ein Versuch gehört fachlich genau einem
+  Komponententyp; die `component`-Spalte beschreibt die Herkunft, nicht den
+  Schlüssel. Ein Test hält die Invariante als gewollt fest.
+- CI: korrigierte `seed.php` übernommen.
+
 ## 1.1.6 (interne Version 2026083006)
 
 > Leichte Count-Abfrage für die Fragenliste (#21) und Anschluss-Issue.

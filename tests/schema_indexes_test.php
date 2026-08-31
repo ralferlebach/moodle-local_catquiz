@@ -308,7 +308,9 @@ final class schema_indexes_test extends advanced_testcase {
         $output = ob_get_clean();
 
         $this->assertEquals(0, $deleted);
-        $this->assertStringContainsString('no duplicates found', $output);
+        // Where there is nothing to clean up there is nothing to report: the step
+        // stays silent instead of adding a line to the upgrade log.
+        $this->assertSame('', trim($output));
         $this->assertTrue($DB->record_exists('local_catquiz_attempts', ['id' => $id]));
     }
 

@@ -4,6 +4,8 @@ Zwei Arten von Dokumenten:
 
 ## Dauerhaft (sitzungsübergreifend, vor der Arbeit lesen)
 
+- **decision-attempt-identity.md** – Warum `local_catquiz_attempts` bei
+  `UNIQUE(attemptid)` bleibt und kein zusammengesetzter Schlüssel eingeführt wird.
 - **engineering-guide.md** – Wiederverwendbare Lehren: numerische Stabilität der
   IRT-Ableitungen, Verifikationsdisziplin (FD-Harness, Bitgenau-Abgleich,
   Sättigungs-Stresstest, Zahn-Test, toleranzbasierte Trajektorientests), die
@@ -84,6 +86,7 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | Itemparameter-Gültigkeit sichtbar, Pilotitems gelistet (#54) | 093 |
 | CI-Grunt entschärft, Playwright eingeführt | 094 |
 | Diagrammdaten serverseitig aggregiert (#23) | 095 |
+| Review-Befunde: Upgrade-Ausgabe, Kontextauflösung | 096 |
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

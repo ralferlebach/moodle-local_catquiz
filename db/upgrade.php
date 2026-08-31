@@ -1407,7 +1407,9 @@ ENDSQL;
                 $keepunique
             );
         }
-        mtrace("local_catquiz issue #25: dropped $dropped redundant index(es) in total.");
+        if ($dropped > 0) {
+            mtrace("local_catquiz: removed $dropped redundant index(es).");
+        }
 
         // Catquiz savepoint reached.
         upgrade_plugin_savepoint(true, 2026082805, 'local', 'catquiz');
@@ -1541,7 +1543,7 @@ function local_catquiz_upgrade_drop_duplicate_indexes(
             // No unique index present: the guarantee this column relies on is
             // missing, so do not touch anything and say so.
             mtrace(sprintf(
-                'local_catquiz issue #25: %s(%s) has no unique index - left untouched.',
+                'local_catquiz: %s(%s) has no unique index - left untouched.',
                 $tablename,
                 implode(',', $columns)
             ));
@@ -1563,13 +1565,6 @@ function local_catquiz_upgrade_drop_duplicate_indexes(
             : "DROP INDEX $name";
         $DB->change_database_structure($sql);
         $dropped++;
-        mtrace(sprintf(
-            'local_catquiz issue #25: dropped redundant index %s on %s(%s), kept %s.',
-            $name,
-            $tablename,
-            implode(',', $columns),
-            $keep
-        ));
     }
 
     return $dropped;
@@ -1631,7 +1626,7 @@ function local_catquiz_upgrade_remove_duplicates(string $table, array $fields): 
             $DB->delete_records_select($table, $where, $params);
             $deleted += $count;
             mtrace(sprintf(
-                'local_catquiz issue #25: removed %d duplicate row(s) from %s for %s, kept id %d.',
+                'local_catquiz: removed %d duplicate row(s) from %s for %s, kept id %d.',
                 $count,
                 $table,
                 json_encode(array_intersect_key((array) $group, array_flip($fields))),
@@ -1641,9 +1636,7 @@ function local_catquiz_upgrade_remove_duplicates(string $table, array $fields): 
     }
     $groups->close();
 
-    if ($deleted === 0) {
-        mtrace("local_catquiz issue #25: no duplicates found in $table.");
-    }
-
+    // Nothing is reported when there is nothing to clean up; the caller decides
+    // whether the number matters.
     return $deleted;
 }

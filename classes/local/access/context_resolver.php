@@ -80,11 +80,21 @@ class context_resolver {
             return self::$attemptcontextcache[$cachekey];
         }
 
+        // The identity of an external attempt is (component, attemptid), not the
+        // attempt id alone: id 123 of one component is not id 123 of another. The
+        // component was already part of the cache key but was not used for the
+        // lookup, so a colliding id from another component could have decided the
+        // context.
+        //
+        // IGNORE_MISSING rather than IGNORE_MULTIPLE: an ambiguous or missing record
+        // must not silently pick one row. Without a record resolve_from_record()
+        // falls back to the system context, where the capability check still applies
+        // - fail closed rather than authorise against a foreign course.
         $record = $DB->get_record(
             'local_catquiz_attempts',
-            ['attemptid' => $attemptid],
+            ['attemptid' => $attemptid, 'component' => $component],
             'courseid, instanceid, component',
-            IGNORE_MULTIPLE
+            IGNORE_MISSING
         );
 
         $context = self::resolve_from_record($record);

@@ -443,4 +443,80 @@ final class context_resolver_test extends advanced_testcase {
 
         $this->assertNull(feedback_access::get_allowed_userids(context_module::instance($cm->id)));
     }
+    /**
+     * The lookup is component-safe and does not borrow a foreign component's course.
+     *
+     * The schema guarantees that an attempt id exists only once, so a collision
+     * cannot occur today. The resolver still asks for the component rather than
+     * relying on that guarantee: a lookup that authorises against whatever row it
+     * happens to find would depend on a constraint held elsewhere, and it used
+     * IGNORE_MULTIPLE, which explicitly accepts an arbitrary row.
+     *
+     * @return void
+     */
+    public function test_attempt_is_resolved_per_component(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $courseone = $this->getDataGenerator()->create_course();
+        $coursetwo = $this->getDataGenerator()->create_course();
+        $now = time();
+
+        $insert = function (string $component, int $courseid) use ($DB, $now): void {
+            $DB->insert_record('local_catquiz_attempts', (object) [
+                'userid' => 2,
+                'scaleid' => 1,
+                'contextid' => 1,
+                'courseid' => $courseid,
+                'attemptid' => 4242,
+                'component' => $component,
+                'instanceid' => 0,
+                'status' => 1,
+                'timecreated' => $now,
+                'timemodified' => $now,
+            ]);
+        };
+
+        $insert('mod_adaptivequiz', $courseone->id);
+
+        // UNIQUE(attemptid) is a deliberate domain invariant, not an oversight: an
+        // attempt belongs to exactly one component, so the same external id must not
+        // exist twice. The test pins that the database really enforces it - if the
+        // constraint were ever dropped, the invariant would silently stop holding
+        // and this test would say so.
+        try {
+            $insert('mod_somethingelse', $coursetwo->id);
+            $this->fail('UNIQUE(attemptid) no longer holds - the domain invariant is gone.');
+        } catch (\dml_exception $e) {
+            $this->assertTrue(true);
+        }
+
+        // With the component in the lookup the existing row still resolves correctly,
+        // and a request for a different component does not borrow it.
+        $mine = context_resolver::for_attempt(4242, 'mod_adaptivequiz');
+        $foreign = context_resolver::for_attempt(4242, 'mod_somethingelse');
+
+        $this->assertEquals(\context_course::instance($courseone->id)->id, $mine->id);
+        $this->assertEquals(
+            \context_system::instance()->id,
+            $foreign->id,
+            'A foreign component must not inherit the course of another one.'
+        );
+    }
+
+    /**
+     * An unknown attempt falls back to the system context, not to a foreign course.
+     *
+     * @return void
+     */
+    public function test_unknown_attempt_fails_closed(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $context = context_resolver::for_attempt(999999, 'mod_adaptivequiz');
+
+        $this->assertEquals(\context_system::instance()->id, $context->id);
+    }
 }
