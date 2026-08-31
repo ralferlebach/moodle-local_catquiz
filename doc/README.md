@@ -87,6 +87,7 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | CI-Grunt entschärft, Playwright eingeführt | 094 |
 | Diagrammdaten serverseitig aggregiert (#23) | 095 |
 | Review-Befunde: Upgrade-Ausgabe, Kontextauflösung | 096 |
+| Behat-Fix, Gruppen im Kurskontext (#18), Playwright | 097 |
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

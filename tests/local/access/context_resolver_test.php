@@ -519,4 +519,45 @@ final class context_resolver_test extends advanced_testcase {
 
         $this->assertEquals(\context_system::instance()->id, $context->id);
     }
+    /**
+     * A row stored under the plain module name is still found.
+     *
+     * The runtime writes 'adaptivequiz' while callers pass 'mod_adaptivequiz'. A
+     * strict comparison matched neither spelling against the other and sent every
+     * lookup into the system-context fallback - which is fail-closed, but denied
+     * teachers a review they are entitled to.
+     *
+     * @return void
+     */
+    public function test_plain_module_name_is_accepted(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $now = time();
+
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => 2,
+            'scaleid' => 1,
+            'contextid' => 1,
+            'courseid' => $course->id,
+            'attemptid' => 7777,
+            'component' => 'adaptivequiz',
+            'instanceid' => 0,
+            'status' => 1,
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+
+        foreach (['adaptivequiz', 'mod_adaptivequiz'] as $spelling) {
+            $context = context_resolver::for_attempt(7777, $spelling);
+            $this->assertEquals(
+                \context_course::instance($course->id)->id,
+                $context->id,
+                "Spelling $spelling must resolve to the course of the attempt."
+            );
+        }
+    }
 }

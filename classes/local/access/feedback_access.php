@@ -81,6 +81,11 @@ class feedback_access {
      * null when no group restriction applies, so callers can skip filtering
      * entirely instead of building a needlessly large IN() clause.
      *
+     * Both levels are covered. With a course module the activity group mode decides;
+     * for a course-wide view the course group mode does. The latter used to be
+     * skipped altogether, which released every participant of the course exactly
+     * where the widest set of people is shown.
+     *
      * @param context $context The context the viewed data belongs to.
      * @return int[]|null Allowed user ids, or null if unrestricted.
      */
@@ -88,14 +93,32 @@ class feedback_access {
         global $USER;
 
         $cm = self::get_coursemodule($context);
-        if (!$cm) {
-            return null;
+
+        if ($cm) {
+            // Moodle returns the group mode as a string ('1'), so a strict comparison
+            // against the int constant would never match. Cast explicitly rather than
+            // relying on loose comparison.
+            $groupmode = (int) groups_get_activity_groupmode($cm);
+            $groups = $groupmode === SEPARATEGROUPS ? groups_get_activity_allowed_groups($cm) : [];
+        } else {
+            // Course-wide views have no course module, and simply returning null here
+            // released every participant of the course: the group restriction was
+            // skipped precisely where the widest set of people is shown. The course
+            // group mode applies instead - it is what a course-wide statistic is
+            // governed by.
+            $coursecontext = $context->get_course_context(false);
+            if (!$coursecontext) {
+                // System context: no course, so no group semantics to apply.
+                return null;
+            }
+
+            $course = get_course($coursecontext->instanceid);
+            $groupmode = (int) $course->groupmode;
+            $groups = $groupmode === SEPARATEGROUPS
+                ? groups_get_all_groups($course->id, $USER->id)
+                : [];
         }
 
-        // Moodle returns the group mode as a string ('1'), so a strict comparison
-        // against the int constant would never match. Cast explicitly rather than
-        // relying on loose comparison.
-        $groupmode = (int) groups_get_activity_groupmode($cm);
         if ($groupmode !== SEPARATEGROUPS) {
             return null;
         }
@@ -105,7 +128,7 @@ class feedback_access {
         }
 
         $allowed = [];
-        foreach (groups_get_activity_allowed_groups($cm) as $group) {
+        foreach ($groups as $group) {
             foreach (groups_get_members($group->id, 'u.id') as $member) {
                 $allowed[(int) $member->id] = (int) $member->id;
             }

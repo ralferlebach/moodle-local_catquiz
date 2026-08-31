@@ -90,11 +90,25 @@ class context_resolver {
         // must not silently pick one row. Without a record resolve_from_record()
         // falls back to the system context, where the capability check still applies
         // - fail closed rather than authorise against a foreign course.
-        $record = $DB->get_record(
+        // The component is stored inconsistently: the runtime writes the plain
+        // module name ('adaptivequiz', see return_course_and_instance_id()), while
+        // callers of this method pass the frankenstyle form ('mod_adaptivequiz').
+        // Comparing either spelling against the other never matches, so both are
+        // accepted here. Normalising the stored data would need a migration and
+        // would not make old rows match in the meantime.
+        [$insql, $inparams] = $DB->get_in_or_equal(
+            self::component_spellings($component),
+            SQL_PARAMS_NAMED,
+            'component'
+        );
+        $inparams['attemptid'] = $attemptid;
+
+        $record = $DB->get_record_select(
             'local_catquiz_attempts',
-            ['attemptid' => $attemptid, 'component' => $component],
+            "attemptid = :attemptid AND component $insql",
+            $inparams,
             'courseid, instanceid, component',
-            IGNORE_MISSING
+            IGNORE_MULTIPLE
         );
 
         $context = self::resolve_from_record($record);
@@ -107,6 +121,32 @@ class context_resolver {
      * Builds the most specific context available for an attempt record.
      *
      * @param \stdClass|false $record Attempt record with courseid, instanceid and component.
+     * @return context
+     */
+    /**
+     * Returns the spellings a component may be stored under.
+     *
+     * Both the plain module name and the frankenstyle form are accepted, because the
+     * two are used inconsistently across the plugin and existing rows carry the
+     * former.
+     *
+     * @param string $component
+     * @return string[]
+     */
+    private static function component_spellings(string $component): array {
+        $plain = preg_replace('/^mod_/', '', $component);
+
+        return array_values(array_unique([$component, $plain, 'mod_' . $plain]));
+    }
+
+    /**
+     * Turns an attempt record into the most specific context available.
+     *
+     * Without a record the system context is returned: the capability check still
+     * applies there, so an unresolvable attempt fails closed rather than being
+     * authorised against a foreign course.
+     *
+     * @param \stdClass|false|null $record
      * @return context
      */
     private static function resolve_from_record($record): context {

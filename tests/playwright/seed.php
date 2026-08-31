@@ -41,7 +41,48 @@ const CATQUIZ_SEED_MATCHING_TERM = 'zorblewump';
 /** @var string A word that appears in no seeded question text. */
 const CATQUIZ_SEED_MISSING_TERM = 'quxnotpresentqux';
 
+/**
+ * Prints the shell exports both the fresh and the reused path need.
+ *
+ * @param string $wwwroot
+ * @param int $scaleid
+ * @param int $contextid
+ * @param int $matchingid
+ * @return void
+ */
+function catquiz_seed_export(string $wwwroot, int $scaleid, int $contextid, int $matchingid): void {
+    echo "export CATQUIZ_BASE_URL='" . $wwwroot . "'\n";
+    echo "export CATQUIZ_SCALEID='" . $scaleid . "'\n";
+    echo "export CATQUIZ_CONTEXTID='" . $contextid . "'\n";
+    echo "export CATQUIZ_MATCHING_TERM='" . CATQUIZ_SEED_MATCHING_TERM . "'\n";
+    echo "export CATQUIZ_MISSING_TERM='" . CATQUIZ_SEED_MISSING_TERM . "'\n";
+    echo "export CATQUIZ_MATCHING_QUESTION='Playwright matching question'\n";
+    echo "export CATQUIZ_MATCHING_QUESTIONID='" . $matchingid . "'\n";
+    echo "export CATQUIZ_UNUSABLE_QUESTION='Playwright unusable question'\n";
+    echo "export CATQUIZ_PILOT_QUESTION='Playwright pilot question'\n";
+    echo "export CATQUIZ_ADMIN_USER='admin'\n";
+    echo "export CATQUIZ_ADMIN_PASS='Admin!23'\n";
+}
+
 $now = time();
+
+// Idempotent: a second run must not build a second scale next to the first. Two
+// identically named scales in different contexts is what made earlier browser runs
+// fail in ways that looked like application bugs - the tests then pointed at
+// whichever of the two the environment happened to name.
+// get_record() would warn and pick arbitrarily if an older run left more than one
+// scale behind; take the oldest deterministically instead.
+$existing = $DB->get_records('local_catquiz_catscales', ['name' => 'Playwright scale'], 'id ASC', '*', 0, 1);
+$existing = $existing ? reset($existing) : false;
+if ($existing) {
+    $contextid = (int) $existing->contextid;
+    $scaleid = (int) $existing->id;
+    catquiz_seed_export($CFG->wwwroot, $scaleid, $contextid, (int) $DB->get_field_sql(
+        "SELECT MIN(componentid) FROM {local_catquiz_items} WHERE catscaleid = :id",
+        ['id' => $scaleid]
+    ));
+    exit(0);
+}
 
 $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
     'name' => 'Playwright context',
@@ -202,14 +243,4 @@ $pilotid = catquiz_seed_question(
     null
 );
 
-echo "export CATQUIZ_UNUSABLE_QUESTION='Playwright unusable question'\n";
-echo "export CATQUIZ_PILOT_QUESTION='Playwright pilot question'\n";
-echo "export CATQUIZ_BASE_URL='" . $CFG->wwwroot . "'\n";
-echo "export CATQUIZ_SCALEID='" . $scaleid . "'\n";
-echo "export CATQUIZ_CONTEXTID='" . $contextid . "'\n";
-echo "export CATQUIZ_MATCHING_TERM='" . CATQUIZ_SEED_MATCHING_TERM . "'\n";
-echo "export CATQUIZ_MISSING_TERM='" . CATQUIZ_SEED_MISSING_TERM . "'\n";
-echo "export CATQUIZ_MATCHING_QUESTION='Playwright matching question'\n";
-echo "export CATQUIZ_MATCHING_QUESTIONID='" . $matchingid . "'\n";
-echo "export CATQUIZ_ADMIN_USER='admin'\n";
-echo "export CATQUIZ_ADMIN_PASS='Admin!23'\n";
+catquiz_seed_export($CFG->wwwroot, $scaleid, $contextid, $matchingid);

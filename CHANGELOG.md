@@ -1,5 +1,20 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083010)
+
+> Behat-Fix, Gruppen im Kurskontext (#18), Playwright entblockt.
+
+- **Behat wieder grün**: Die Laufzeit schreibt `adaptivequiz`, die Aufrufer
+  übergeben `mod_adaptivequiz`. Nach der Umstellung des Lookups auf
+  `(component, attemptid)` traf der strenge Vergleich nie, und jede Einsicht wurde
+  verweigert. Der Resolver akzeptiert jetzt beide Schreibweisen.
+- **#18 abgeschlossen**: Die Gruppenprüfung wurde im Kurskontext übersprungen – dort,
+  wo die meisten Personen sichtbar sind. Ohne Kursmodul greift jetzt der
+  Kurs-Gruppenmodus. Neue Testdatei `feedback_access_test` (4 Tests).
+- **Playwright entblockt**: Der Seed ist idempotent und deterministisch; ein zweiter
+  Lauf legt keine weitere gleichnamige Skala an. Damit laufen beide Specs –
+  6 Tests grün, darunter die zuvor zurückgestellte #54-Spec.
+
 ## 1.1.6 (interne Version 2026083008)
 
 > Werkzeug und Nachweis für die Query-Pläne.
