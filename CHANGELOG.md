@@ -1,5 +1,21 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083011)
+
+> Issue #23 im Browser abgedeckt, Lasttest-Ergebnisse dokumentiert.
+
+- **Playwright deckt jetzt auch die Statistik-Diagramme ab** (#23). Der Seed baut
+  Kurs, Seite mit `[catquizstatistics]`, einen registrierten Test samt echter
+  adaptivequiz-Instanz und Versuchsdaten auf – idempotent, inklusive Abgleich des
+  Seiteninhalts mit der aktuellen Skala.
+- Drei Fehlerursachen dabei gefunden: fehlende Test-Registrierung, `componentid` auf
+  der falschen Aktivität (scheiterte nur im Kurskontext) und die Pflichtfelder
+  `intro`/`attemptfeedback` der `adaptivequiz`-Tabelle.
+- **9 Playwright-Tests grün** über drei Specs.
+- **`doc/load-test-results.md`**: k6 und JMeter mit 25 Nutzern, null Fehler,
+  CAT-Manager 127 ms Median, Statistik 229 ms – mit dem ausdrücklichen Hinweis, dass
+  die zugrunde liegende Datenmenge nicht dokumentiert ist.
+
 ## 1.1.6 (interne Version 2026083010)
 
 > Behat-Fix, Gruppen im Kurskontext (#18), Playwright entblockt.

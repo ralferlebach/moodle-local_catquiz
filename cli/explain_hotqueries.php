@@ -231,8 +231,28 @@ $report[] = '';
 $markdown = implode("\n", $report) . "\n";
 
 if ($options['out']) {
-    file_put_contents($options['out'], $markdown);
-    cli_writeln('Written to ' . $options['out']);
+    // The path is relative to the current working directory, which is normally the
+    // Moodle root - so "doc/x.md" lands next to Moodle, not in the plugin. Resolve it
+    // and report the absolute path, so nobody has to guess where the file went.
+    $target = $options['out'];
+    $directory = dirname($target);
+
+    if (!is_dir($directory)) {
+        cli_error(sprintf(
+            'Directory %s does not exist. Paths are relative to the current directory; '
+                . 'from the Moodle root use local/catquiz/doc/... .',
+            $directory
+        ));
+    }
+
+    // A failed write returns false. Reporting success regardless is
+    // worse than failing: it was doing exactly that, right after PHP had warned that
+    // the stream could not be opened.
+    if (file_put_contents($target, $markdown) === false) {
+        cli_error('Could not write to ' . $target);
+    }
+
+    cli_writeln('Written to ' . realpath($target));
 } else {
     cli_writeln($markdown);
 }

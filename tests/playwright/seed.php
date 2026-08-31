@@ -50,7 +50,14 @@ const CATQUIZ_SEED_MISSING_TERM = 'quxnotpresentqux';
  * @param int $matchingid
  * @return void
  */
-function catquiz_seed_export(string $wwwroot, int $scaleid, int $contextid, int $matchingid): void {
+function catquiz_seed_export(
+    string $wwwroot,
+    int $scaleid,
+    int $contextid,
+    int $matchingid,
+    int $courseid = 0,
+    int $statscmid = 0
+): void {
     echo "export CATQUIZ_BASE_URL='" . $wwwroot . "'\n";
     echo "export CATQUIZ_SCALEID='" . $scaleid . "'\n";
     echo "export CATQUIZ_CONTEXTID='" . $contextid . "'\n";
@@ -62,6 +69,8 @@ function catquiz_seed_export(string $wwwroot, int $scaleid, int $contextid, int 
     echo "export CATQUIZ_PILOT_QUESTION='Playwright pilot question'\n";
     echo "export CATQUIZ_ADMIN_USER='admin'\n";
     echo "export CATQUIZ_ADMIN_PASS='Admin!23'\n";
+    echo "export CATQUIZ_COURSEID='" . $courseid . "'\n";
+    echo "export CATQUIZ_STATSPAGE_CMID='" . $statscmid . "'\n";
 }
 
 $now = time();
@@ -77,10 +86,36 @@ $existing = $existing ? reset($existing) : false;
 if ($existing) {
     $contextid = (int) $existing->contextid;
     $scaleid = (int) $existing->id;
-    catquiz_seed_export($CFG->wwwroot, $scaleid, $contextid, (int) $DB->get_field_sql(
-        "SELECT MIN(componentid) FROM {local_catquiz_items} WHERE catscaleid = :id",
-        ['id' => $scaleid]
-    ));
+    $course = $DB->get_record('course', ['shortname' => 'playwright-stats']);
+    $cmid = 0;
+    if ($course) {
+        $page = $DB->get_record('page', ['course' => $course->id, 'name' => 'Playwright statistics']);
+        if ($page) {
+            // Keep the shortcode pointing at the scale that exists now. The page
+            // survives a fixture reset, the scale does not - a stale id renders an
+            // error instead of charts and would look like a product defect.
+            $DB->set_field(
+                'page',
+                'content',
+                '[catquizstatistics globalscale=' . $scaleid . ']',
+                ['id' => $page->id]
+            );
+            $cm = get_coursemodule_from_instance('page', $page->id, $course->id, false, IGNORE_MISSING);
+            $cmid = $cm ? (int) $cm->id : 0;
+        }
+    }
+
+    catquiz_seed_export(
+        $CFG->wwwroot,
+        $scaleid,
+        $contextid,
+        (int) $DB->get_field_sql(
+            "SELECT MIN(componentid) FROM {local_catquiz_items} WHERE catscaleid = :id",
+            ['id' => $scaleid]
+        ),
+        $course ? (int) $course->id : 0,
+        $cmid
+    );
     exit(0);
 }
 
@@ -243,4 +278,151 @@ $pilotid = catquiz_seed_question(
     null
 );
 
-catquiz_seed_export($CFG->wwwroot, $scaleid, $contextid, $matchingid);
+// Issue #23: the charts are rendered by the [catquizstatistics] shortcode, not by
+// the CAT manager, so a browser test needs a page that carries it. Without attempt
+// data the shortcode would only ever show its "no data" state, which would make the
+// test pass without exercising the aggregation at all.
+require_once($CFG->dirroot . '/course/lib.php');
+require_once($CFG->dirroot . '/lib/enrollib.php');
+
+$course = $DB->get_record('course', ['shortname' => 'playwright-stats']);
+if (!$course) {
+    $course = create_course((object) [
+        'fullname' => 'Playwright statistics course',
+        'shortname' => 'playwright-stats',
+        'category' => 1,
+        'format' => 'topics',
+    ]);
+}
+
+// The filter_shortcodes plugin must be active, otherwise the page shows the raw shortcode text.
+filter_set_global_state('shortcodes', TEXTFILTER_ON);
+
+$module = $DB->get_record('modules', ['name' => 'page'], '*', MUST_EXIST);
+$pageinstance = $DB->get_record('page', ['course' => $course->id, 'name' => 'Playwright statistics']);
+if (!$pageinstance) {
+    $pageid = (int) $DB->insert_record('page', (object) [
+        'course' => $course->id,
+        'name' => 'Playwright statistics',
+        'intro' => '',
+        'introformat' => FORMAT_HTML,
+        'content' => '[catquizstatistics globalscale=' . $scaleid . ']',
+        'contentformat' => FORMAT_HTML,
+        'display' => 0,
+        'timemodified' => $now,
+    ]);
+    $newcm = (object) [
+        'course' => $course->id,
+        'module' => $module->id,
+        'instance' => $pageid,
+        'section' => 0,
+        'visible' => 1,
+        'visibleold' => 1,
+        'added' => $now,
+    ];
+    $cmid = add_course_module($newcm);
+    course_add_cm_to_section($course->id, $cmid, 0);
+} else {
+    // The page is created once, but the scale id changes whenever the fixtures are
+    // reset. Keeping the content in step is part of being idempotent: a page that
+    // points at a scale which no longer exists renders an error instead of charts,
+    // and the test would report a product defect that is not one.
+    $DB->set_field(
+        'page',
+        'content',
+        '[catquizstatistics globalscale=' . $scaleid . ']',
+        ['id' => $pageinstance->id]
+    );
+    $cm = get_coursemodule_from_instance('page', $pageinstance->id, $course->id, false, IGNORE_MISSING);
+    $cmid = $cm ? (int) $cm->id : 0;
+}
+
+// The shortcode resolves the scale through a registered test; without one it reports
+// "no tests can be found for the given arguments" and never reaches the charts.
+//
+// componentid must be a real adaptivequiz instance: get_heading() builds a link with
+// get_course_and_cm_from_instance($test->componentid, 'adaptivequiz'), which fails
+// with "Can't find data record in database" for anything else. Pointing it at the
+// page's course module - the obvious shortcut - produced exactly that, and only in
+// the course context, because without a course the heading takes a different branch.
+//
+// json->name is read as well; a payload without it throws on decoding.
+if (!$DB->record_exists('local_catquiz_tests', ['catscaleid' => $scaleid])) {
+    $aqmodule = $DB->get_record('modules', ['name' => 'adaptivequiz']);
+    $aqinstanceid = 0;
+
+    if ($aqmodule) {
+        $aqinstanceid = (int) $DB->insert_record('adaptivequiz', (object) [
+            'course' => $course->id,
+            'name' => 'Playwright adaptive quiz',
+            'intro' => '',
+            'introformat' => FORMAT_HTML,
+            // The attemptfeedback field is NOT NULL without a default - the same field that
+            // breaks adaptivequiz_add_instance() in integration tests (engineering
+            // guide, dependencies section). Omitting it aborts the seed.
+            'attemptfeedback' => '',
+            'attemptfeedbackformat' => FORMAT_HTML,
+            'attempts' => 0,
+            'highestlevel' => 100,
+            'lowestlevel' => 1,
+            'startinglevel' => 50,
+            'stopingcondition' => 0,
+            'minimumquestions' => 1,
+            'maximumquestions' => 10,
+            'standarderror' => 5.0,
+            'showabilitymeasure' => 0,
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+        $aqcm = (object) [
+            'course' => $course->id,
+            'module' => $aqmodule->id,
+            'instance' => $aqinstanceid,
+            'section' => 0,
+            'visible' => 1,
+            'visibleold' => 1,
+            'added' => $now,
+        ];
+        $aqcmid = add_course_module($aqcm);
+        course_add_cm_to_section($course->id, $aqcmid, 0);
+    }
+
+    $DB->insert_record('local_catquiz_tests', (object) [
+        'componentid' => $aqinstanceid,
+        'component' => 'mod_adaptivequiz',
+        'catscaleid' => $scaleid,
+        'contextid' => $contextid,
+        'courseid' => $course->id,
+        'name' => 'Playwright test',
+        'description' => '',
+        'descriptionformat' => FORMAT_HTML,
+        'json' => json_encode(['name' => 'Playwright test', 'catscaleid' => $scaleid]),
+        'status' => 1,
+        'timecreated' => $now,
+        'timemodified' => $now,
+    ]);
+}
+
+// A handful of attempts with differing answer counts and abilities, so the histogram
+// has something to classify rather than a single bar.
+$existingattempts = $DB->count_records('local_catquiz_attempts', ['scaleid' => $scaleid]);
+if (!$existingattempts) {
+    for ($i = 0; $i < 12; $i++) {
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => 2,
+            'scaleid' => $scaleid,
+            'contextid' => $contextid,
+            'courseid' => $course->id,
+            'attemptid' => 900000 + $i,
+            'component' => 'mod_adaptivequiz',
+            'instanceid' => $cmid,
+            'status' => 1,
+            'timecreated' => $now - (86400 * $i),
+            'timemodified' => $now,
+            'endtime' => $now,
+            'json' => json_encode(['attemptid' => 900000 + $i]),
+        ]);
+    }
+}
+
+catquiz_seed_export($CFG->wwwroot, $scaleid, $contextid, $matchingid, (int) $course->id, (int) $cmid);
