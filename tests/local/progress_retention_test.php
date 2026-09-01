@@ -233,4 +233,56 @@ final class progress_retention_test extends advanced_testcase {
         ob_end_clean();
         $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => 9101]));
     }
+    /**
+     * Only the levels the site permits are offered in the activity form.
+     *
+     * Showing an option that would be capped away on save would be misleading: the
+     * form would accept a choice that silently does not take effect.
+     *
+     * @return void
+     */
+    public function test_form_offers_only_permitted_levels(): void {
+        $this->resetAfterTest();
+
+        set_config('progressretention', progress_retention::KEEP, 'local_catquiz');
+
+        $offered = array_values(array_filter(
+            progress_retention::levels(),
+            fn ($level) => progress_retention::effective_level($level) === $level
+        ));
+
+        $this->assertContains(progress_retention::MINIMAL, $offered);
+        $this->assertContains(progress_retention::KEEP, $offered);
+        $this->assertNotContains(
+            progress_retention::TRACE,
+            $offered,
+            'A level above the site cap must not be offered.'
+        );
+    }
+
+    /**
+     * The activity setting decides whether the progress row survives the attempt.
+     *
+     * @return void
+     */
+    public function test_activity_setting_controls_deletion(): void {
+        $this->resetAfterTest();
+
+        // Site allows tracing, so the activity may choose freely.
+        set_config('progressretention', progress_retention::TRACE, 'local_catquiz');
+
+        $this->assertTrue(
+            progress_retention::should_delete(progress_retention::MINIMAL),
+            'An activity may be stricter than the site.'
+        );
+        $this->assertFalse(progress_retention::should_delete(progress_retention::KEEP));
+        $this->assertFalse(progress_retention::should_delete(progress_retention::TRACE));
+
+        // Site is strict: the activity cannot loosen it.
+        set_config('progressretention', progress_retention::MINIMAL, 'local_catquiz');
+        $this->assertTrue(
+            progress_retention::should_delete(progress_retention::TRACE),
+            'A strict site setting must win over a permissive activity.'
+        );
+    }
 }

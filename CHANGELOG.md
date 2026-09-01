@@ -1,5 +1,18 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083013)
+
+> Issue #56 vollständig: Aufbewahrung auch je CAT-Test einstellbar.
+
+- **Formularfeld je CAT-Test**: bietet nur die Stufen an, die die Website zulässt,
+  und ist im Finalizer angebunden – ohne die Anbindung wäre die Einstellung
+  folgenlos geblieben.
+- Fail-safe beim Lesen: Ist die Einstellung nicht lesbar, gilt der
+  Website-Standard. Die Aufbewahrungsstufe darf nie verhindern, dass ein beendeter
+  Versuch abgeschlossen wird.
+- **Behat** `catquiz_progress_retention`: 2 Szenarien, 23 Steps grün.
+- PHPUnit `progress_retention_test`: 8 Tests, 25 Assertions.
+
 ## 1.1.6 (interne Version 2026083012)
 
 > Issue #56 umgesetzt; Skalierungsbefund zu „Frage hinzufügen" erfasst.
