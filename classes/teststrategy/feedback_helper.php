@@ -460,7 +460,7 @@ class feedback_helper {
      */
     public function get_color_for_personability(array $quizsettings, float $personability, int $catscaleid): string {
         $default = LOCAL_CATQUIZ_DEFAULT_GREY;
-        $abilityrange = $this->get_ability_range($catscaleid);
+        $abilityrange = $this->get_ability_range((int) $catscaleid);
         if (
             !$quizsettings ||
             $personability < (float) $abilityrange['minscalevalue'] ||
@@ -496,7 +496,7 @@ class feedback_helper {
      * @return array
      *
      */
-    public function get_ability_range($catscaleid): array {
+    public function get_ability_range(int $catscaleid): array {
         $cs = new catscale($catscaleid);
         // Ability range is the same for all scales with same root scale.
         return $cs->get_ability_range();

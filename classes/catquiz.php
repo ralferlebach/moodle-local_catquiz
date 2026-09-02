@@ -424,7 +424,12 @@ class catquiz {
                 qtype,
                 categoryname,
                 'question' as component,
-                contextattempts as questioncontextattempts";
+                -- Issue #58: the attempt count is no longer part of this query. It
+                -- was produced by aggregating every question attempt of the context -
+                -- 2.1 million steps in the measured instance, roughly eight seconds -
+                -- and then thrown away for all but the ten rows on screen. The table
+                -- fetches it for the visible page instead.
+                0 as questioncontextattempts";
         // Issue #22: the list of scales a question belongs to used to be built with
         // GROUP_CONCAT into a string like '-3--7-' and then filtered with
         // LIKE '%-3-%'. That string was never displayed - it existed only to express
@@ -433,7 +438,7 @@ class catquiz {
         // GROUP BY over the whole result. NOT EXISTS states the same condition
         // directly and is served by the (catscaleid, componentname, componentid)
         // index added in issue #25.
-        $from = "( SELECT q.id, qbe.idnumber, q.name, q.qtype, qc.name as categoryname, s2.contextattempts
+        $from = "( SELECT q.id, qbe.idnumber, q.name, q.qtype, qc.name as categoryname
             FROM {question} q
                 -- Issue #22: the current version used to be found by numbering EVERY
                 -- row of question_versions with a window function and then keeping
@@ -456,17 +461,6 @@ class catquiz {
                    )
                 JOIN {question_bank_entries} qbe ON qv.questionbankentryid=qbe.id
                 JOIN {question_categories} qc ON qc.id=qbe.questioncategoryid
-                LEFT JOIN (
-                    -- Issue #21: COUNT(*) over the join to question_attempt_steps
-                    -- counted one row per interaction step, so a question answered
-                    -- once was reported as several attempts. The same defect was
-                    -- fixed in the scale question list.
-                    SELECT ccc1.id contextid, qa.questionid,
-                        COUNT(DISTINCT qa.id) contextattempts
-                    FROM $contextfrom
-                    WHERE $contextfilter
-                    GROUP BY ccc1.id, qa.questionid
-                ) s2 ON q.id = s2.questionid
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM {local_catquiz_items} lci
@@ -1601,6 +1595,52 @@ class catquiz {
         );
 
         return self::get_max_from_subquery($inner, $params, 'attempts');
+    }
+
+    /**
+     * Returns the number of attempts per question, for the given questions only.
+     *
+     * Issue #58: the add-questions dialog used to obtain this by aggregating every
+     * question attempt of the context and joining the result onto all candidates. The
+     * aggregate is driven by the number of attempt steps, not by the page size, so it
+     * cost the same whether ten rows or none were shown.
+     *
+     * Restricting it to the questions actually on screen turns a full aggregation
+     * into an indexed lookup of a handful of ids.
+     *
+     * @param array $questionids
+     * @param int $contextid
+     * @return array Attempt count keyed by question id.
+     */
+    public static function get_contextattempts_for_questions(array $questionids, int $contextid): array {
+        global $DB;
+
+        if (empty($questionids)) {
+            return [];
+        }
+
+        [, $contextfrom, , $params] = self::get_sql_for_stat_base_request();
+        $contextfilter = $contextid > 0
+            ? 'ccc1.id = :contextid'
+            : $DB->sql_like('ccc1.json', ':default', false, false);
+        $params['contextid'] = $contextid;
+        $params['default'] = '%"default":true%';
+
+        [$insql, $inparams] = $DB->get_in_or_equal($questionids, SQL_PARAMS_NAMED, 'visibleq');
+        $params = array_merge($params, $inparams);
+
+        $sql = "SELECT qa.questionid, COUNT(DISTINCT qa.id) contextattempts
+                  FROM $contextfrom
+                 WHERE $contextfilter
+                   AND qa.questionid $insql
+              GROUP BY qa.questionid";
+
+        $counts = [];
+        foreach ($DB->get_records_sql($sql, $params) as $row) {
+            $counts[(int) $row->questionid] = (int) $row->contextattempts;
+        }
+
+        return $counts;
     }
 
     /**

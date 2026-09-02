@@ -38,6 +38,32 @@ use renderable;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class managecatscaledashboard implements renderable, templatable {
+    /**
+     * Tabs of the manager, in the order the template renders them.
+     *
+     * Issue #29: the constructor used to build every one of these regardless of which
+     * was on screen - eight displays, each with its own queries, for one visible tab.
+     * The list is kept here so the tab parameter can be validated against it rather
+     * than trusted.
+     *
+     * @var string[]
+     */
+    const TABS = [
+        'summary',
+        'catscales',
+        'questions',
+        'testsandtemplates',
+        'quizattempts',
+        'importer',
+        'calculations',
+        'versioning',
+    ];
+
+    /**
+     * The tab currently being rendered.
+     * @var string
+     */
+    private string $activetab = 'summary';
     /** @var int of testitemid */
     public int $testitemid = 0;
 
@@ -143,8 +169,14 @@ class managecatscaledashboard implements renderable, templatable {
         int $catscaleid,
         int $scaledetailview,
         int $usesubs,
-        string $componentname
+        string $componentname,
+        string $activetab = ''
     ) {
+
+        // Issue #29: an unknown or absent value falls back to the first tab rather
+        // than building everything. Validating against the list keeps a crafted URL
+        // parameter from selecting something that does not exist.
+        $this->activetab = in_array($activetab, self::TABS, true) ? $activetab : self::TABS[0];
 
         $this->testitemid = $testitemid;
         $this->contextid = $contextid;
@@ -152,33 +184,49 @@ class managecatscaledashboard implements renderable, templatable {
         $this->usesubs = $usesubs;
         $this->componentname = $componentname;
 
-        $catscales = new catscales($this->catscaleid, $scaledetailview, $this->contextid);
+        if ($this->activetab === 'catscales') {
+            $catscales = new catscales($this->catscaleid, $scaledetailview, $this->contextid);
+        }
         $this->catscalesarray = $catscales->return_as_array();
         $this->catscalesdetailview = $catscales->return_detailview();
 
-        $catscalemanagers = new catscalemanagers();
+        if ($this->activetab === 'catscales') {
+            $catscalemanagers = new catscalemanagers();
+        }
         $this->catscalemanagersarray = $catscalemanagers->return_as_array();
 
-        $questionsdisplay = new questionsdisplay(
-            $this->testitemid,
-            $this->contextid,
-            $this->catscaleid,
-            $this->usesubs,
-            $this->componentname
-        );
+        if ($this->activetab === 'questions') {
+            $questionsdisplay = new questionsdisplay(
+                $this->testitemid,
+                $this->contextid,
+                $this->catscaleid,
+                $this->usesubs,
+                $this->componentname
+            );
+        }
         $this->questionsdisplayarray = $questionsdisplay->export_data_array();
 
-        $testenvironmentdashboard = new testsandtemplatesdisplay($this->catscaleid, $this->usesubs, $this->componentname);
+        if ($this->activetab === 'testsandtemplates') {
+            $testenvironmentdashboard = new testsandtemplatesdisplay($this->catscaleid, $this->usesubs, $this->componentname);
+        }
         $this->testsandtemplatesdisplay = $testenvironmentdashboard->export_data_array();
 
-        $quizattempts = new quizattemptsdisplay();
+        if ($this->activetab === 'quizattempts') {
+            $quizattempts = new quizattemptsdisplay();
+        }
         $this->quizattemptsdisplay = $quizattempts->export_data_array();
 
-        $catscalestats = new catscalestats();
+        if ($this->activetab === 'summary') {
+            $catscalestats = new catscalestats();
+        }
         $this->catscalestatsarray = $catscalestats->export_data_array();
 
+        // The item detail belongs to the questions tab: it is reached by selecting a
+        // question there. The existing conditions stay - they guard against building
+        // it without a selection - and the tab is added to them.
         if (
-            !empty($this->catscaleid)
+            $this->activetab === 'questions'
+            && !empty($this->catscaleid)
             && !empty($this->testitemid)
             && !empty($this->contextid)
         ) {
@@ -191,13 +239,19 @@ class managecatscaledashboard implements renderable, templatable {
                 $this->testitemdashboardarray = $testitemdashboard->return_as_array();
         }
 
-        $eventlogtable = new eventlogtableinstance();
+        if ($this->activetab === 'summary') {
+            $eventlogtable = new eventlogtableinstance();
+        }
         $this->eventlogtable = $eventlogtable->render_event_log_table();
 
-        $calculationsdisplay = new calculationsdisplay();
+        if ($this->activetab === 'calculations') {
+            $calculationsdisplay = new calculationsdisplay();
+        }
         $this->calculationsdisplay = $calculationsdisplay->export_data_array();
 
-        $versioningdisplay = new catcontextdashboard();
+        if ($this->activetab === 'versioning') {
+            $versioningdisplay = new catcontextdashboard();
+        }
         $this->versioningdisplay = $versioningdisplay->return_array();
     }
 
@@ -217,6 +271,19 @@ class managecatscaledashboard implements renderable, templatable {
         }
 
         $data = [
+            // Issue #29: the template needs to know which tab is active so it can
+            // mark it, and each tab needs its own URL for reload and back.
+            'activetab' => $this->activetab,
+            'tabs' => array_map(fn ($tab) => [
+                'id' => $tab,
+                'active' => $tab === $this->activetab,
+                'url' => (new \moodle_url('/local/catquiz/manage_catscales.php', [
+                    'tab' => $tab,
+                    'contextid' => $this->contextid,
+                    'scaleid' => $this->catscaleid,
+                    'usesubs' => $this->usesubs,
+                ]))->out(false),
+            ], self::TABS),
             'itemtree' => $this->catscalesarray,
             'catscaledetailview' => $this->catscalesdetailview,
             'catscalemanagers' => $this->catscalemanagersarray,

@@ -282,6 +282,12 @@ class catscalequestions_table extends wunderbyte_table {
     private ?array $countcontext = null;
 
     /**
+     * Context whose attempt counts are shown, or null when the column is not used.
+     * @var int|null
+     */
+    private ?int $contextattemptscontext = null;
+
+    /**
      * Remembers what the light count query needs to know.
      *
      * @param array $catscaleids
@@ -329,6 +335,60 @@ class catscalequestions_table extends wunderbyte_table {
         }
 
         parent::query_db($pagesize, $useinitialsbar);
+
+        $this->attach_contextattempts();
+    }
+
+    /**
+     * Enables loading the attempt count for the visible page.
+     *
+     * @param int $contextid
+     * @return void
+     */
+    public function set_contextattempts_context(int $contextid): void {
+        $this->contextattemptscontext = $contextid;
+    }
+
+    /**
+     * Fills in the attempt count for the rows on this page.
+     *
+     * Issue #58: the count used to come from the main query, which produced it by
+     * aggregating every question attempt of the context and joining the result onto
+     * all candidates. That aggregate is driven by the number of attempt steps rather
+     * than by the page size, so it cost the same whether ten rows were shown or none
+     * - about eight seconds of a twelve second query in the measured instance.
+     *
+     * One additional query for the visible ids replaces it. Not one per row: that
+     * would trade a slow page for a slower one.
+     *
+     * @return void
+     */
+    private function attach_contextattempts(): void {
+        if ($this->contextattemptscontext === null || empty($this->rawdata)) {
+            return;
+        }
+
+        $questionids = [];
+        foreach ($this->rawdata as $row) {
+            if (isset($row->id)) {
+                $questionids[] = (int) $row->id;
+            }
+        }
+
+        if (empty($questionids)) {
+            return;
+        }
+
+        $counts = catquiz::get_contextattempts_for_questions(
+            $questionids,
+            $this->contextattemptscontext
+        );
+
+        foreach ($this->rawdata as $row) {
+            // Absent means the question has no attempts in this context, which is
+            // zero - not "unknown". The previous LEFT JOIN said the same thing.
+            $row->questioncontextattempts = $counts[(int) $row->id] ?? 0;
+        }
     }
 
     /**
