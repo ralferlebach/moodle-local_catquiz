@@ -1134,7 +1134,11 @@ class catquiz {
     ): array {
 
         $sql = "SELECT
-        attemptid, contextid, userid, endtime, timemodified, json, debug_info
+        attemptid, contextid, userid, endtime, timemodified, json, debug_info,
+        -- The strategy is a column of its own. Reading it only from the JSON payload
+        -- fails for attempts whose payload predates that field, and the feedback then
+        -- cannot be built at all.
+        teststrategy
         FROM {local_catquiz_attempts} ";
 
         $wherearray = [];
@@ -1474,6 +1478,7 @@ class catquiz {
      * @param int $contextid
      * @param int $scaleid
      * @param int|null $courseid
+     * @param array|null $alloweduserids Restriction from the group rules, or null.
      * @return int
      */
     public static function get_max_questions_answered_per_person(
@@ -1516,6 +1521,7 @@ class catquiz {
      * @param int|null $courseid
      * @param int $classwidth Width of one class; must be at least 1.
      * @param array $ranges List of ['lower' => float, 'upper' => float], 1-based order.
+     * @param array|null $alloweduserids Restriction from the group rules, or null.
      * @return array<int, array<int, int>> Count keyed by range index, then class.
      */
     public static function get_answers_per_person_histogram(
@@ -1549,6 +1555,7 @@ class catquiz {
      * @param int|null $courseid
      * @param int $classwidth
      * @param array $ranges
+     * @param array|null $alloweduserids Restriction from the group rules, or null.
      * @return array<int, array<int, int>>
      */
     public static function get_attempts_per_person_histogram(
@@ -1577,6 +1584,7 @@ class catquiz {
      * @param int $contextid
      * @param int $scaleid
      * @param int|null $courseid
+     * @param array|null $alloweduserids Restriction from the group rules, or null.
      * @return int
      */
     public static function get_max_attempts_per_person(
@@ -2458,6 +2466,7 @@ class catquiz {
      * @param ?int $starttime
      * @param ?int $endtime
      * @param bool $enrolled
+     * @param string $fields Columns to select; defaults to all.
      *
      * @return array
      */
@@ -2947,6 +2956,7 @@ class catquiz {
      * @param int $contextid
      * @param int $scaleid
      * @param ?int $courseid
+     * @param array|null $alloweduserids Restriction from the group rules, or null.
      *
      * @return array
      *
@@ -3025,6 +3035,7 @@ class catquiz {
      * @param int $contextid
      * @param int $scaleid
      * @param ?int $courseid
+     * @param array|null $alloweduserids Restriction from the group rules, or null.
      */
     public static function get_sql_for_attempts_per_person(
         int $contextid,

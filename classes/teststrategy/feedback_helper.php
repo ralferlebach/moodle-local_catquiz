@@ -349,7 +349,23 @@ class feedback_helper {
                     continue;
                 }
             }
-            $strategyid = $attemptdata->teststrategy;
+            // The strategy comes from the payload where present, otherwise from the
+            // column. Attempts written before the field existed have it only in the
+            // column; passing the missing value straight into the constructor raised
+            // a TypeError and broke the whole course page, not just this one card.
+            $strategyid = (int) ($attemptdata->teststrategy ?? $record->teststrategy ?? 0);
+            if ($strategyid <= 0) {
+                // Without a strategy there is nothing to build feedback from. Skipped
+                // like an unreadable payload above, rather than failing the page.
+                if ($CFG->debug > 0) {
+                    debugging(
+                        sprintf('Attempt %d has no test strategy, skipping.', $record->attemptid),
+                        DEBUG_DEVELOPER
+                    );
+                }
+                continue;
+            }
+
             $feedbacksettings = new feedbacksettings($strategyid);
 
             $attemptfeedback = new attemptfeedback($record->attemptid, $record->contextid, $feedbacksettings);

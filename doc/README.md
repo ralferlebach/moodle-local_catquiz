@@ -92,6 +92,7 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | Aufbewahrung des Fortschritts (#56), Skalierungsbefund | 099 |
 | Externes Review: acht Sicherheits- und Korrektheitsbefunde | 100 |
 | #54-Reste, #23-Reste, JSON-Aggregations-Issue | 101 |
+| Kursseiten-TypeError, Docblocks | 102 |
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

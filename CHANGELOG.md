@@ -1,5 +1,29 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083023)
+
+> Kursseiten-Fehler behoben, Docblocks vervollständigt.
+
+- **TypeError beim Kursaufruf behoben**: Der Feedback-Shortcode las die Teststrategie
+  nur aus dem JSON. Fehlte sie dort, brach die **gesamte Kursseite** ab, weil die
+  Ausnahme über den Shortcode-Filter bis in den Kursformat-Renderer wanderte. Die
+  Abfrage lädt jetzt die vorhandene Spalte `teststrategy` als Rückfallebene; ein
+  Versuch ohne Strategie wird übersprungen statt die Seite zu beenden.
+- **Sieben unvollständige Docblocks** in `catquiz.php` ergänzt – die Methoden, die
+  zuvor um `$alloweduserids` bzw. `$fields` erweitert wurden.
+
+## 1.1.6 (interne Version 2026083022)
+
+> Kursseiten-Fehler beim Feedback-Shortcode behoben.
+
+- Das Öffnen eines Kurses mit eingebettetem Feedback-Shortcode brach mit einem
+  `TypeError` ab, wenn das JSON eines Versuchs keine Teststrategie enthielt. Die
+  Ausnahme wanderte über den Shortcode-Filter bis in den Kursformat-Renderer und
+  legte die **gesamte Kursseite** lahm.
+- Die Abfrage lädt jetzt die vorhandene Spalte `teststrategy`, die Strategie wird
+  ersatzweise von dort gelesen, und ein Versuch ohne Strategie wird übersprungen
+  statt die Seite scheitern zu lassen.
+
 ## 1.1.6 (interne Version 2026083021)
 
 > #54-Reste und #23-Reste aus dem externen Review.
