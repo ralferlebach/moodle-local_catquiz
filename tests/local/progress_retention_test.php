@@ -345,4 +345,51 @@ final class progress_retention_test extends advanced_testcase {
             'A running attempt must keep its progress even in the data-sparing mode.'
         );
     }
+    /**
+     * Trace mode actually records, instead of failing on the estimation path.
+     *
+     * Reported from a live attempt: set_ability() called a get_step() that does not
+     * exist, so switching trace mode on broke every running test. The method sits on
+     * the hot path of the ability estimation, not in a rarely used branch - which is
+     * exactly why no existing test touched it.
+     *
+     * @return void
+     */
+    public function test_trace_mode_records_without_failing(): void {
+        $this->resetAfterTest();
+        set_config('progressretention', progress_retention::TRACE, 'local_catquiz');
+
+        $progress = \local_catquiz\teststrategy\progress::load(9301, 'mod_adaptivequiz', 1, new \stdClass());
+
+        // The call that broke live attempts.
+        $progress->set_ability(0.5, 7);
+        $progress->set_ability(0.8, 7);
+
+        $trace = $progress->get_ability_trace();
+
+        $this->assertArrayHasKey(7, $trace, 'Trace mode must record per scale.');
+        $this->assertCount(2, $trace[7], 'Every estimate is appended, not overwritten.');
+        $this->assertEqualsWithDelta(0.5, $trace[7][0]['ability'], 0.0001);
+        $this->assertEqualsWithDelta(0.8, $trace[7][1]['ability'], 0.0001);
+        $this->assertArrayHasKey('step', $trace[7][0], 'Each entry carries its step.');
+    }
+
+    /**
+     * The other modes keep the scalar and record nothing.
+     *
+     * @return void
+     */
+    public function test_other_modes_do_not_record_a_trace(): void {
+        $this->resetAfterTest();
+        set_config('progressretention', progress_retention::KEEP, 'local_catquiz');
+
+        $progress = \local_catquiz\teststrategy\progress::load(9302, 'mod_adaptivequiz', 1, new \stdClass());
+        $progress->set_ability(0.5, 7);
+
+        $this->assertSame(
+            [],
+            $progress->get_ability_trace(),
+            'Without trace mode nothing is recorded, and the stored JSON stays as before.'
+        );
+    }
 }

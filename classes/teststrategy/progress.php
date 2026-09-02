@@ -886,7 +886,11 @@ class progress implements JsonSerializable {
                 $this->abilitytrace[$catscaleid] = [];
             }
             $this->abilitytrace[$catscaleid][] = [
-                'step' => $this->get_step(),
+                // The number of questions played so far identifies the step. There is
+                // no get_step(); calling it broke every running attempt as soon as
+                // trace mode was switched on, because set_ability() is on the hot path
+                // of the estimation, not in some rarely used branch.
+                'step' => $this->get_num_playedquestions(),
                 'ability' => $ability,
             ];
         }
