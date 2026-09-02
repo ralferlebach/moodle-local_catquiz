@@ -79,9 +79,17 @@ class feedback_tab_clicked extends external_api {
         $ctx = context_resolver::for_attempt($attemptid);
         self::validate_context($ctx);
 
-        $role = has_capability('local/catquiz:canmanage', \context_system::instance())
-            ? 'catmanager'
-            : 'student';
+        // Review finding: every non-manager was logged as "student", so a teacher
+        // looking at feedback appeared in the event log as the learner. The role is
+        // now decided in the context of the attempt, which is where teaching rights
+        // actually live - a site-wide manage right says nothing about a course.
+        if (has_capability('local/catquiz:canmanage', \context_system::instance())) {
+            $role = 'catmanager';
+        } else if (has_capability('local/catquiz:view_teacher_feedback', $ctx)) {
+            $role = 'teacher';
+        } else {
+            $role = 'student';
+        }
 
         $event = feedbacktab_clicked::create([
             'context' => $ctx,

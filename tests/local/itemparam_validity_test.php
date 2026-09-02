@@ -493,4 +493,198 @@ final class itemparam_validity_test extends advanced_testcase {
             'Without parameters it is a classic pilot item, not a broken one.'
         );
     }
+    /**
+     * Writing through the model layer stamps the flag, whatever the caller.
+     *
+     * Eight places write item parameters, and the import and the recalibration reach
+     * the table through model_item_param::save() rather than by inserting directly.
+     * A test that only calls stamp() would miss whether those paths use it at all -
+     * this one writes the way the application does and reads the flag back from the
+     * database.
+     *
+     * @return void
+     */
+    public function test_model_save_stamps_the_flag(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $now = time();
+        $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
+            'name' => 'Write path context',
+            'description' => '',
+            'descriptionformat' => FORMAT_HTML,
+            'starttimestamp' => $now - 100,
+            'endtimestamp' => $now + 10000,
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'usermodified' => 0,
+        ]);
+
+        // A 2PL item with discrimination 0 is mute and must be stored as unusable.
+        $mute = new \local_catquiz\local\model\model_item_param(1, 'raschbirnbaum');
+        $mute->set_parameters(['difficulty' => 0.5, 'discrimination' => 0.0]);
+        $mute->set_status(LOCAL_CATQUIZ_STATUS_CALCULATED);
+        $mute->set_contextid($contextid);
+        $mute->save();
+
+        $stored = $DB->get_record('local_catquiz_itemparams', ['id' => $mute->get_id()], 'usable');
+        $this->assertNotFalse($stored, 'The parameter must have been written.');
+        $this->assertEquals(0, (int) $stored->usable, 'A mute 2PL item must be stored as unusable.');
+
+        // Recalibration updates the same row; the flag has to follow the new values.
+        $mute->set_parameters(['difficulty' => 0.5, 'discrimination' => 1.2]);
+        $mute->save();
+
+        $this->assertEquals(
+            1,
+            (int) $DB->get_field('local_catquiz_itemparams', 'usable', ['id' => $mute->get_id()]),
+            'After recalibration the flag must reflect the new parameters.'
+        );
+    }
+
+    /**
+     * After any write the consistency check finds nothing to fix.
+     *
+     * The stronger statement: not "the flag looks right" but "recomputing it from
+     * the rule changes nothing".
+     *
+     * @return void
+     */
+    public function test_no_drift_after_writing(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        require_once($CFG->dirroot . '/local/catquiz/db/upgrade.php');
+
+        $now = time();
+        foreach (
+            [
+            ['model' => 'rasch', 'difficulty' => 0.1, 'discrimination' => 0.0],
+            ['model' => 'raschbirnbaum', 'difficulty' => 0.5, 'discrimination' => 0.0],
+            ['model' => 'raschbirnbaum', 'difficulty' => 0.5, 'discrimination' => 1.4],
+            ] as $index => $values
+        ) {
+            $record = (object) array_merge([
+                'itemid' => 100 + $index,
+                'componentname' => 'question',
+                'contextid' => 1,
+                'status' => 4,
+                'timecreated' => $now,
+                'timemodified' => $now,
+            ], $values);
+            \local_catquiz\catquiz::save_item_param($record);
+        }
+
+        $this->assertEquals(
+            0,
+            local_catquiz_upgrade_backfill_usable(true),
+            'Recomputing the flag after a write must not change anything.'
+        );
+    }
+    /**
+     * The visible column is sortable and the query provides it.
+     *
+     * Review finding: only the underlying field "usable" was registered, while the
+     * header sends the visible name. The click referred to a column the table did not
+     * know as sortable, and an ORDER BY on it would have hit a column the query does
+     * not select either.
+     *
+     * @return void
+     */
+    public function test_visible_validity_column_is_sortable(): void {
+        global $CFG, $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $now = time();
+        $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
+            'name' => 'Sortable context',
+            'description' => '',
+            'descriptionformat' => FORMAT_HTML,
+            'starttimestamp' => $now - 100,
+            'endtimestamp' => $now + 10000,
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'usermodified' => 0,
+        ]);
+        $scaleid = (int) $DB->insert_record('local_catquiz_catscales', (object) [
+            'parentid' => 0,
+            'name' => 'Sortable scale',
+            'contextid' => $contextid,
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+
+        // The outer select is "*"; the columns are named in the derived table, so
+        // that is where the alias has to appear.
+        [, $from] = \local_catquiz\catquiz::return_sql_for_catscalequestions([$scaleid], $contextid, []);
+
+        $this->assertStringContainsString(
+            'itemparamvalidity',
+            $from,
+            'The query must provide the column the header sorts by.'
+        );
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/output/catscalemanager/questions/questionsdisplay.php'
+        );
+        $this->assertStringNotContainsString(
+            "unset(\$sortcolumns['itemparamvalidity'])",
+            $source,
+            'Removing the visible column from the sortable set makes the header inert.'
+        );
+    }
+
+    /**
+     * The per scale aggregate is restricted to the context being looked at.
+     *
+     * Review finding: the call passed no context, so counts from every context of the
+     * installation were mixed into one number - not what the page shows.
+     *
+     * @return void
+     */
+    public function test_aggregate_is_restricted_to_the_context(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $now = time();
+        $scaleid = 4242;
+
+        // The same scale with one unusable item in each of two contexts.
+        foreach ([501, 502] as $contextid) {
+            $itemid = (int) $DB->insert_record('local_catquiz_items', (object) [
+                'componentid' => 8000 + $contextid,
+                'componentname' => 'question',
+                'catscaleid' => $scaleid,
+                'contextid' => $contextid,
+                'activeparamid' => 0,
+                'status' => 0,
+            ]);
+            $paramid = (int) $DB->insert_record('local_catquiz_itemparams', (object) [
+                'itemid' => $itemid,
+                'componentname' => 'question',
+                'contextid' => $contextid,
+                'model' => 'raschbirnbaum',
+                'difficulty' => 0.5,
+                'discrimination' => 0.0,
+                'usable' => 0,
+                'status' => 4,
+                'timecreated' => $now,
+                'timemodified' => $now,
+            ]);
+            $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $itemid]);
+        }
+
+        $all = \local_catquiz\catquiz::get_unusable_item_counts_per_scale();
+        $one = \local_catquiz\catquiz::get_unusable_item_counts_per_scale(501);
+
+        $this->assertEquals(2, $all[$scaleid] ?? 0, 'Without a context both are counted.');
+        $this->assertEquals(1, $one[$scaleid] ?? 0, 'With a context only that one counts.');
+    }
 }

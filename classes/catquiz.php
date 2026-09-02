@@ -278,6 +278,10 @@ class catquiz {
             -- Issue #54: persisted so the backend can filter and sort on it; NULL for
             -- items in piloting, which have no active parameter row at all.
             lcip.usable,
+            -- The visible column carries this name, and the table sorts by whatever
+            -- the clicked header is called. Without the alias an ORDER BY on it would
+            -- refer to a column that does not exist.
+            lcip.usable AS itemparamvalidity,
             lcip.contextid AS lcipcontextid,
             -- Information about usage statisitcs
             COALESCE(astat.numberattempts,0) attempts,
@@ -1475,11 +1479,17 @@ class catquiz {
     public static function get_max_questions_answered_per_person(
         int $contextid,
         int $scaleid,
-        ?int $courseid = null
+        ?int $courseid = null,
+        ?array $alloweduserids = null
     ): int {
         global $DB;
 
-        [$inner, $params] = self::get_sql_for_questions_answered_per_person($contextid, $scaleid, $courseid);
+        [$inner, $params] = self::get_sql_for_questions_answered_per_person(
+            $contextid,
+            $scaleid,
+            $courseid,
+            $alloweduserids
+        );
 
         return self::get_max_from_subquery($inner, $params, 'total_answered');
     }
@@ -1513,9 +1523,15 @@ class catquiz {
         int $scaleid,
         ?int $courseid,
         int $classwidth,
-        array $ranges
+        array $ranges,
+        ?array $alloweduserids = null
     ): array {
-        [$inner, $params] = self::get_sql_for_questions_answered_per_person($contextid, $scaleid, $courseid);
+        [$inner, $params] = self::get_sql_for_questions_answered_per_person(
+            $contextid,
+            $scaleid,
+            $courseid,
+            $alloweduserids
+        );
 
         // Unmatched abilities are dropped here, as the chart did before: a value
         // outside every configured range had no bar to go into.
@@ -1540,9 +1556,15 @@ class catquiz {
         int $scaleid,
         ?int $courseid,
         int $classwidth,
-        array $ranges
+        array $ranges,
+        ?array $alloweduserids = null
     ): array {
-        [$inner, $params] = self::get_sql_for_attempts_per_person($contextid, $scaleid, $courseid);
+        [$inner, $params] = self::get_sql_for_attempts_per_person(
+            $contextid,
+            $scaleid,
+            $courseid,
+            $alloweduserids
+        );
 
         // Unlike the answers chart, this one puts an unmatched ability into range 0
         // rather than dropping it - that is what the PHP version did.
@@ -1557,8 +1579,18 @@ class catquiz {
      * @param int|null $courseid
      * @return int
      */
-    public static function get_max_attempts_per_person(int $contextid, int $scaleid, ?int $courseid = null): int {
-        [$inner, $params] = self::get_sql_for_attempts_per_person($contextid, $scaleid, $courseid);
+    public static function get_max_attempts_per_person(
+        int $contextid,
+        int $scaleid,
+        ?int $courseid = null,
+        ?array $alloweduserids = null
+    ): int {
+        [$inner, $params] = self::get_sql_for_attempts_per_person(
+            $contextid,
+            $scaleid,
+            $courseid,
+            $alloweduserids
+        );
 
         return self::get_max_from_subquery($inner, $params, 'attempts');
     }
@@ -2437,7 +2469,8 @@ class catquiz {
         ?int $contextid = null,
         ?int $starttime = null,
         ?int $endtime = null,
-        bool $enrolled = true
+        bool $enrolled = true,
+        string $fields = '*'
     ) {
         global $DB;
 
@@ -2458,7 +2491,11 @@ class catquiz {
             SQL;
         }
 
-        $sql = "$with SELECT * FROM {local_catquiz_attempts} a $join WHERE 1=1";
+        // Issue #23: the caller decides which columns it needs. SELECT * always
+        // carried debug_info along - a field that can hold the full trace of an
+        // attempt and that none of the charts ever reads. On a large cohort that is
+        // the bulk of the transferred bytes, thrown away right after loading.
+        $sql = "$with SELECT $fields FROM {local_catquiz_attempts} a $join WHERE 1=1";
 
         if (!is_null($userid)) {
             $sql .= " AND userid = :userid";
@@ -2914,7 +2951,12 @@ class catquiz {
      * @return array
      *
      */
-    public static function get_sql_for_questions_answered_per_person(int $contextid, int $scaleid, ?int $courseid = null) {
+    public static function get_sql_for_questions_answered_per_person(
+        int $contextid,
+        int $scaleid,
+        ?int $courseid = null,
+        ?array $alloweduserids = null
+    ) {
         global $DB;
 
         $catscaleids = [$scaleid, ...catscale::get_subscale_ids($scaleid)];
@@ -2929,6 +2971,27 @@ class catquiz {
             $where2 .= ' AND e.courseid = :courseid';
             $where3 .= ' AND a.course = :courseid2';
             $params = array_merge($params, ['courseid' => $courseid, 'courseid2' => $courseid]);
+        }
+
+        // Review finding on issue #18: the group restriction reached the CSV export
+        // only, so the charts could still aggregate over members of other groups. It
+        // belongs to the cohort itself - every consumer then inherits it.
+        //
+        // Null means no restriction applies; an empty array means nothing is visible
+        // and must yield no rows rather than all of them.
+        $userfilter = '';
+        if ($alloweduserids !== null) {
+            if (empty($alloweduserids)) {
+                $userfilter = ' AND 1=0 ';
+            } else {
+                [$useridsql, $useridparams] = $DB->get_in_or_equal(
+                    $alloweduserids,
+                    SQL_PARAMS_NAMED,
+                    'alloweduser'
+                );
+                $userfilter = " AND ue.userid $useridsql ";
+                $params = array_merge($params, $useridparams);
+            }
         }
 
         $sql = "SELECT DISTINCT ue.userid, COALESCE(answercount, 0) total_answered, lcp.ability
@@ -2952,7 +3015,7 @@ class catquiz {
                     GROUP BY s1.userid
                 ) s2 ON ue.userid = s2.userid
                 LEFT JOIN {local_catquiz_personparams} lcp ON ue.userid = lcp.userid AND lcp.catscaleid = :catscaleid
-                WHERE $where2";
+                WHERE $where2 $userfilter";
         return [$sql, $params];
     }
 
@@ -2963,12 +3026,35 @@ class catquiz {
      * @param int $scaleid
      * @param ?int $courseid
      */
-    public static function get_sql_for_attempts_per_person(int $contextid, int $scaleid, ?int $courseid) {
+    public static function get_sql_for_attempts_per_person(
+        int $contextid,
+        int $scaleid,
+        ?int $courseid,
+        ?array $alloweduserids = null
+    ) {
+        global $DB;
+
         $where = "1 = 1";
-        $params = [
+
+        // Review finding on issue #18: the same restriction as in the answers query -
+        // null means no restriction, an empty array means nothing is visible and must
+        // yield no rows rather than all of them.
+        if ($alloweduserids !== null) {
+            if (empty($alloweduserids)) {
+                $where .= ' AND 1=0 ';
+            } else {
+                [$useridsql, $useridparams] = $DB->get_in_or_equal(
+                    $alloweduserids,
+                    SQL_PARAMS_NAMED,
+                    'alloweduser'
+                );
+                $where .= " AND s2.userid $useridsql ";
+            }
+        }
+        $params = array_merge($useridparams ?? [], [
             'catscaleid' => $scaleid,
             'contextid' => $contextid,
-        ];
+        ]);
         if ($courseid) {
             $where = "e.courseid = :courseid";
             $params = array_merge($params, ['courseid' => $courseid]);

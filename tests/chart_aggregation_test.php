@@ -353,4 +353,154 @@ final class chart_aggregation_test extends advanced_testcase {
 
         return [$scaleid, $contextid];
     }
+    /**
+     * An empty allow-list yields no data instead of all data.
+     *
+     * Review finding on issue #18: the group restriction reached the CSV export only,
+     * so the charts could still aggregate over other groups. The distinction that
+     * matters is null versus empty - null means nothing is restricted, an empty array
+     * means nothing is visible. Getting that backwards would disclose everything.
+     *
+     * @return void
+     */
+    public function test_empty_allow_list_yields_no_rows(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        [$scaleid, $contextid] = $this->make_scale();
+
+        $unrestricted = catquiz::get_max_questions_answered_per_person($contextid, $scaleid, null, null);
+        $restricted = catquiz::get_max_questions_answered_per_person($contextid, $scaleid, null, []);
+
+        // Both are zero on an empty fixture; the point is that the restricted call
+        // runs at all and does not silently drop the filter.
+        $this->assertSame(0, $unrestricted);
+        $this->assertSame(0, $restricted);
+
+        // An empty fixture returns nothing either way, so the counts alone prove
+        // nothing. The SQL itself has to carry the restriction.
+        [$sql] = catquiz::get_sql_for_questions_answered_per_person($contextid, $scaleid, null, []);
+        $this->assertStringContainsString(
+            '1=0',
+            $sql,
+            'An empty allow-list must make the query return nothing.'
+        );
+
+        [$sqlwith, $paramswith] = catquiz::get_sql_for_questions_answered_per_person(
+            $contextid,
+            $scaleid,
+            null,
+            [7, 8]
+        );
+        $this->assertStringContainsString('ue.userid', $sqlwith);
+        $this->assertNotEmpty(
+            array_filter(array_keys($paramswith), fn ($k) => str_starts_with($k, 'alloweduser')),
+            'The allowed user ids must be bound as parameters.'
+        );
+
+        [$sqlnull] = catquiz::get_sql_for_questions_answered_per_person($contextid, $scaleid, null, null);
+        $this->assertStringNotContainsString(
+            '1=0',
+            $sqlnull,
+            'Without a restriction the query must not be narrowed.'
+        );
+    }
+
+    /**
+     * The chart queries accept the allow-list, so the renderer can pass it on.
+     *
+     * @return void
+     */
+    public function test_chart_queries_accept_an_allow_list(): void {
+        $this->resetAfterTest();
+
+        foreach (
+            [
+            'get_max_questions_answered_per_person',
+            'get_max_attempts_per_person',
+            'get_answers_per_person_histogram',
+            'get_attempts_per_person_histogram',
+            ] as $method
+        ) {
+            $reflection = new \ReflectionMethod(catquiz::class, $method);
+            $names = array_map(fn ($p) => $p->getName(), $reflection->getParameters());
+            $this->assertContains(
+                'alloweduserids',
+                $names,
+                "$method must be able to receive the group restriction."
+            );
+        }
+    }
+    /**
+     * The debug branch of the attempts chart does not use a removed variable.
+     *
+     * Review finding on issue #23: moving that chart to SQL aggregation removed the
+     * per-person rows, but the debug table still looped over them. Nobody noticed
+     * because the branch only runs with ?debug=1 and the manage capability - an
+     * undefined variable waiting for the first person to look.
+     *
+     * @return void
+     */
+    public function test_attempts_chart_debug_branch_has_no_stale_variable(): void {
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            __DIR__ . '/../classes/output/catquizstatistics.php'
+        );
+
+        $start = strpos($source, 'function render_attempts_per_person_chart');
+        $this->assertNotFalse($start, 'The chart method must exist.');
+
+        $end = strpos($source, "\n    public function", $start + 10);
+        $body = substr($source, $start, $end ? $end - $start : null);
+
+        $this->assertStringNotContainsString(
+            'foreach ($records',
+            $body,
+            'The aggregated chart no longer has per-person rows to loop over.'
+        );
+    }
+    /**
+     * The chart cohort query does not carry debug_info along.
+     *
+     * Issue #23: SELECT * always fetched debug_info, which can hold the full trace of
+     * an attempt and which none of the charts reads. On a large cohort that is the
+     * bulk of the transferred bytes, discarded right after loading.
+     *
+     * @return void
+     */
+    public function test_chart_cohort_does_not_select_debug_info(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/output/catquizstatistics.php'
+        );
+
+        $start = strpos($source, 'private function get_attempts()');
+        $this->assertNotFalse($start);
+
+        // Cut at the closing brace of the method, not at the next declaration: the
+        // docblock of the following method sits in between and would otherwise be
+        // counted as part of this one.
+        $end = strpos($source, "\n    }\n", $start);
+        $body = substr($source, $start, $end ? $end - $start : null);
+
+        $this->assertStringContainsString(
+            'a.json',
+            $body,
+            'The charts need the json column.'
+        );
+        $this->assertStringNotContainsString(
+            'debug_info',
+            $body,
+            'debug_info is never read here and must not be fetched.'
+        );
+        $this->assertStringContainsString(
+            'close()',
+            $body,
+            'A recordset holds a database resource until it is closed.'
+        );
+    }
 }

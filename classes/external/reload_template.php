@@ -70,6 +70,11 @@ class reload_template extends external_api {
 
         $context = context_system::instance();
         $PAGE->set_context($context);
+
+        // Review finding: this endpoint acted without checking anything. Being logged
+        // in is not authorisation - the same gate as on the pages offering it.
+        self::validate_context($context);
+        require_capability('local/catquiz:manage_catscales', $context);
         $dataobject = json_decode($data);
 
         // Make sure, the element triggering the reload includes all necessary data.

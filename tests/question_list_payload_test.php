@@ -203,4 +203,74 @@ final class question_list_payload_test extends advanced_testcase {
         $this->expectException(\required_capability_exception::class);
         get_question_preview::execute($question->id);
     }
+    /**
+     * The preview rewrites file URLs against the question's own context.
+     *
+     * Review finding on issue #20: the endpoint used the system context, so an image
+     * in a question text resolved to nothing and simply did not appear. A text-only
+     * preview test never noticed - this one uses a real @@PLUGINFILE@@ reference.
+     *
+     * @return void
+     */
+    public function test_preview_uses_the_question_context_for_files(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // The category deliberately lives in a course context: the default generator
+        // puts it in the system context, where the wrong and the right answer are the
+        // same id and the test could not tell them apart.
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = \context_course::instance($course->id);
+        $category = $this->getDataGenerator()->get_plugin_generator('core_question')
+            ->create_question_category(['contextid' => $coursecontext->id]);
+        $now = time();
+
+        $questionid = (int) $DB->insert_record('question', (object) [
+            'name' => 'With an image',
+            'questiontext' => '<p>See <img src="@@PLUGINFILE@@/diagram.png" alt="d"></p>',
+            'questiontextformat' => FORMAT_HTML,
+            'qtype' => 'truefalse',
+            'generalfeedback' => '',
+            'generalfeedbackformat' => FORMAT_HTML,
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'createdby' => 2,
+            'modifiedby' => 2,
+        ]);
+        $entryid = (int) $DB->insert_record('question_bank_entries', (object) [
+            'questioncategoryid' => $category->id,
+            'idnumber' => null,
+            'ownerid' => 2,
+        ]);
+        $DB->insert_record('question_versions', (object) [
+            'questionbankentryid' => $entryid,
+            'version' => 1,
+            'questionid' => $questionid,
+            'status' => 'ready',
+        ]);
+
+        $result = \local_catquiz\external\get_question_preview::execute($questionid);
+
+        // The placeholder must be gone - it is rewritten into a pluginfile URL.
+        $this->assertStringNotContainsString('@@PLUGINFILE@@', $result['questiontext']);
+
+        // And the URL must carry the category's context, not the system context.
+        $this->assertStringContainsString(
+            '/' . $category->contextid . '/',
+            $result['questiontext'],
+            'File URLs must be built against the question category context.'
+        );
+        $this->assertStringNotContainsString(
+            '/' . \context_system::instance()->id . '/question/questiontext/',
+            $result['questiontext'],
+            'The system context is the wrong place to look for question files.'
+        );
+        $this->assertStringContainsString(
+            '/' . $coursecontext->id . '/question/questiontext/',
+            $result['questiontext'],
+            'The URL must carry the course context the category lives in.'
+        );
+    }
 }

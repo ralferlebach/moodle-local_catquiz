@@ -158,8 +158,10 @@ class catscales implements renderable, templatable {
 
         // Issue #24: one grouped query instead of one count per scale.
         $counts = catquiz::get_number_of_questions_per_scale();
-        // Issue #54: how many items of this scale carry unusable parameters.
-        $unusable = catquiz::get_unusable_item_counts_per_scale();
+        // Issue #54: how many items of this scale carry unusable parameters, in the
+        // context being looked at. Without the context the count mixed every context
+        // of the installation into one number, which is not what the page shows.
+        $unusable = catquiz::get_unusable_item_counts_per_scale($this->contextid ?: null);
 
         foreach ($out as &$item) {
             $item['image'] = $output->get_generated_image_for_id($item['id']);
@@ -167,6 +169,13 @@ class catscales implements renderable, templatable {
             $item['numberofquestions'] = $counts[(int) $item['id']] ?? 0;
             $item['numberofunusableitems'] = $unusable[(int) $item['id']] ?? 0;
             $item['hasunusableitems'] = !empty($unusable[(int) $item['id']]);
+            // Deep link into the question list, pre-filtered to the unusable items:
+            // a number without a way to act on it makes somebody hunt for the rows.
+            $item['unusablelink'] = (new \moodle_url('/local/catquiz/manage_catscales.php', [
+                'scaleid' => (int) $item['id'],
+                'contextid' => $this->contextid,
+                'usable' => 0,
+            ]))->out(false);
         }
         return $out;
     }
@@ -180,14 +189,23 @@ class catscales implements renderable, templatable {
 
         // Issue #24: one grouped query instead of one count per scale.
         $counts = catquiz::get_number_of_questions_per_scale();
-        // Issue #54: how many items of this scale carry unusable parameters.
-        $unusable = catquiz::get_unusable_item_counts_per_scale();
+        // Issue #54: how many items of this scale carry unusable parameters, in the
+        // context being looked at. Without the context the count mixed every context
+        // of the installation into one number, which is not what the page shows.
+        $unusable = catquiz::get_unusable_item_counts_per_scale($this->contextid ?: null);
 
         foreach ($out as &$item) {
             $item['numberofchildren'] = count($item['children']);
             $item['numberofquestions'] = $counts[(int) $item['id']] ?? 0;
             $item['numberofunusableitems'] = $unusable[(int) $item['id']] ?? 0;
             $item['hasunusableitems'] = !empty($unusable[(int) $item['id']]);
+            // Deep link into the question list, pre-filtered to the unusable items:
+            // a number without a way to act on it makes somebody hunt for the rows.
+            $item['unusablelink'] = (new \moodle_url('/local/catquiz/manage_catscales.php', [
+                'scaleid' => (int) $item['id'],
+                'contextid' => $this->contextid,
+                'usable' => 0,
+            ]))->out(false);
         }
 
         return $out;

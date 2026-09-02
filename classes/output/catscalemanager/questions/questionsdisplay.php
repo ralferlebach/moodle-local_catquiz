@@ -155,12 +155,18 @@ class questionsdisplay {
 
         $sortcolumns = $columnsarray;
         unset($sortcolumns['action']);
-        // Issue #54: the column renders the state, but sorting has to happen on the
-        // persisted flag - "usable" is a real database column, "itemparamvalidity" is
-        // only the rendered label.
-        unset($sortcolumns['itemparamvalidity']);
+        // Issue #54: the visible column is named itemparamvalidity, so that is the
+        // name the header sends when it is clicked. Registering only the underlying
+        // field "usable" left the visible header unsortable - the click referred to a
+        // column the table did not know as sortable.
+        //
+        // Both are registered: the visible name for the header, and the field itself
+        // for anything that sorts by it directly. The column renderer derives its
+        // output from the same row, so either name yields the same order.
         $sortablecolumns = array_keys($sortcolumns);
-        $sortablecolumns[] = 'usable';
+        if (!in_array('usable', $sortablecolumns, true)) {
+            $sortablecolumns[] = 'usable';
+        }
         $table->define_sortablecolumns($sortablecolumns);
 
         $standardfilter = new standardfilter('qtype', get_string('questiontype', 'local_catquiz'));

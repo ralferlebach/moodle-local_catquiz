@@ -1,5 +1,39 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083021)
+
+> #54-Reste und #23-Reste aus dem externen Review.
+
+- **#54**: Die sichtbare Spalte „Parametergültigkeit" ist jetzt sortierbar (Alias in
+  der Abfrage ergänzt), das Aggregat je Skala wird angezeigt – mit Sprung in die
+  gefilterte Liste – und wird auf den betrachteten Kontext eingeschränkt statt über
+  alle Kontexte der Installation zu summieren.
+- **#23**: Der Recordset des gemeinsamen Ladepfads wurde nie geschlossen und hielt
+  eine Datenbankressource offen. Die Abfrage lud zudem per `SELECT *` das
+  Debug-Trace-Feld, das keiner der Renderer liest; die Spaltenliste ist jetzt
+  explizit.
+- **Neuer Issue** `doc/issue-chart-json-aggregation.md`: Die verbleibenden Diagramme
+  können nicht ohne Weiteres serverseitig aggregieren, weil die Fähigkeitswerte nur
+  im JSON der Attempt-Zeile stehen.
+
+## 1.1.6 (interne Version 2026083019)
+
+> Externes Review: acht Befunde geprüft, alle bestätigt, alle behoben.
+
+- **Sicherheit**: `local/catquiz:canaccess` war nie deklariert – eine unbekannte
+  Capability liefert `false` für jeden, auch den Administrator, sodass drei
+  Attempt-Endpunkte jede Anfrage abwiesen. Vier weitere External Services prüften
+  gar nichts. `subscribe` akzeptierte fremde Nutzer-IDs hinter einer einzigen
+  Verwaltungsprüfung.
+- **Datenschutz**: Der Gruppenfilter wirkte nur im CSV-Export; die Diagramme luden
+  die Kohorte ungefiltert. Jetzt in beiden Kohorten-Abfragen.
+- **Korrektheit**: Der Detailrenderer (#19) nutzte die Einschränkung nicht, die
+  Fragevorschau (#20) baute Datei-URLs gegen den falschen Kontext, und der
+  Debug-Zweig eines Diagramms (#23) griff auf eine entfernte Variable zu.
+- **Neue Tests gegen die Fehlerklasse**: `capability_declaration_test` prüft, dass
+  jede geprüfte Capability deklariert ist, jede deklarierte einen Sprachstring hat
+  und jeder External Service überhaupt prüft.
+
 ## 1.1.6 (interne Version 2026083013)
 
 > Issue #56 vollständig: Aufbewahrung auch je CAT-Test einstellbar.

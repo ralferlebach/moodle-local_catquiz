@@ -354,6 +354,19 @@ class catquizstatistics {
     }
 
     /**
+     * Returns the users whose data may be shown, or null when nothing is restricted.
+     *
+     * Review finding on issue #18: the restriction was applied to the CSV export
+     * only, so the charts could still aggregate over members of other groups. Every
+     * cohort query now receives it.
+     *
+     * @return array|null
+     */
+    private function get_allowed_userids_for_charts(): ?array {
+        return feedback_access::get_allowed_userids($this->get_statistics_context());
+    }
+
+    /**
      * Render chart for histogram of person abilities
      *
      * @return array
@@ -635,7 +648,8 @@ class catquizstatistics {
         $maxattempts = catquiz::get_max_questions_answered_per_person(
             $this->contextid,
             $this->scaleid,
-            $this->courseid
+            $this->courseid,
+            $this->get_allowed_userids_for_charts()
         );
 
         if ($maxattempts === 0) {
@@ -654,7 +668,8 @@ class catquizstatistics {
             $this->scaleid,
             $this->courseid,
             $classwidth,
-            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : []
+            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : [],
+            $this->get_allowed_userids_for_charts()
         );
 
         if (empty($counts)) {
@@ -744,20 +759,28 @@ class catquizstatistics {
         }
 
         $attempts = [];
-        foreach (
-            catquiz::get_attempts(
-                null,
-                $this->scaleid,
-                $this->courseid,
-                $this->testid,
-                $this->contextid,
-                $this->starttime,
-                $this->endtime,
-                // Issue #16: historical cohorts must not change when a person is
+        // The get_attempts() helper returns a recordset, which holds a database resource until
+        // it is closed. Iterating it with foreach and walking away leaves that
+        // resource open for the rest of the request - on a page that renders several
+        // charts, several at once.
+        $recordset = catquiz::get_attempts(
+            null,
+            $this->scaleid,
+            $this->courseid,
+            $this->testid,
+            $this->contextid,
+            $this->starttime,
+            $this->endtime,
+            // Issue #16: historical cohorts must not change when a person is
                 // later unenrolled -> include by historical participation.
-                false
-            ) as $record
-        ) {
+                false,
+            // Issue #23: only the columns the charts actually read. The debug
+                // trace field in particular is never used here and can be large.
+                'a.id, a.userid, a.scaleid, a.contextid, a.courseid, a.attemptid, '
+                    . 'a.starttime, a.endtime, a.json, a.timecreated'
+        );
+
+        foreach ($recordset as $record) {
             $json = json_decode($record->json);
             $prunedrecord = $record;
             $prunedrecord->json = json_encode((object) [
@@ -766,6 +789,8 @@ class catquizstatistics {
             ]);
             $attempts[] = $prunedrecord;
         }
+        $recordset->close();
+
         $this->attempts = $attempts;
         return $attempts;
     }
@@ -1077,7 +1102,8 @@ class catquizstatistics {
         $maxattempts = catquiz::get_max_attempts_per_person(
             $this->contextid,
             $this->scaleid,
-            $this->courseid
+            $this->courseid,
+            $this->get_allowed_userids_for_charts()
         );
         if ($maxattempts == 0) {
             $maxattempts = self::DEFAULT_MAX_ATTEMPTS;
@@ -1092,7 +1118,8 @@ class catquizstatistics {
             $this->scaleid,
             $this->courseid,
             $classwidth,
-            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : []
+            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : [],
+            $this->get_allowed_userids_for_charts()
         );
 
         if (empty($counts)) {
@@ -1163,18 +1190,23 @@ class catquizstatistics {
             optional_param('debug', false, PARAM_BOOL)
             && has_capability('local/catquiz:manage_catscales', context_system::instance())
         ) {
+            // Issue #23 moved this chart to SQL aggregation, and $records - the row
+            // per person - no longer exists. The debug table now shows what the chart
+            // actually draws: the counts per range and class. Leaving the old loop in
+            // place was an undefined variable waiting for someone to append ?debug=1.
             $thead = "
                 <thead>
                   <tr>
-                    <th>userid</th>
-                    <th>ability</th>
-                    <th>attempts</th>
+                    <th>range</th>
+                    <th>class</th>
+                    <th>people</th>
                   </tr>
                 </thead>";
             $tr = "";
-            foreach ($records as $r) {
-                $ability = $r->ability ?? '-';
-                $tr .= "<tr><td>$r->userid</td><td>$ability</td><td>$r->attempts</td></tr>";
+            foreach ($chartdata as $range => $bins) {
+                foreach ($bins as $bin => $frequency) {
+                    $tr .= "<tr><td>$range</td><td>$bin</td><td>$frequency</td></tr>";
+                }
             }
             $table = "<table class=\"table\">$thead<tbody>$tr</tbody></table>";
             $out .= $table;

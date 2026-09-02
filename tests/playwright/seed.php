@@ -48,6 +48,8 @@ const CATQUIZ_SEED_MISSING_TERM = 'quxnotpresentqux';
  * @param int $scaleid
  * @param int $contextid
  * @param int $matchingid
+ * @param int $courseid
+ * @param int $statscmid
  * @return void
  */
 function catquiz_seed_export(

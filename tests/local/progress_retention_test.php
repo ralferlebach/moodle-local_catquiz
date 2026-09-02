@@ -125,6 +125,9 @@ final class progress_retention_test extends advanced_testcase {
         global $DB;
 
         $this->resetAfterTest();
+        // The retention period only applies in a retaining mode: with "minimal" every
+        // finished attempt is swept, and there would be no period to test.
+        set_config('progressretention', progress_retention::KEEP, 'local_catquiz');
         set_config('progressretentiondays', 30, 'local_catquiz');
 
         $now = time();
@@ -190,6 +193,8 @@ final class progress_retention_test extends advanced_testcase {
         global $DB;
 
         $this->resetAfterTest();
+        // As above: "unlimited" is only meaningful in a retaining mode.
+        set_config('progressretention', progress_retention::KEEP, 'local_catquiz');
 
         $now = time();
         $old = $now - (40 * DAYSECS);
@@ -283,6 +288,61 @@ final class progress_retention_test extends advanced_testcase {
         $this->assertTrue(
             progress_retention::should_delete(progress_retention::TRACE),
             'A strict site setting must win over a permissive activity.'
+        );
+    }
+    /**
+     * In the data-sparing mode the task sweeps finished attempts without a period.
+     *
+     * The deletion deliberately does not happen during finalisation: the feedback
+     * path loads the progress again right afterwards, and a row removed there made
+     * load() fall through to create_new() without quiz settings. The task takes
+     * over, which costs minutes rather than a request.
+     *
+     * @return void
+     */
+    public function test_minimal_mode_sweeps_finished_attempts(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        set_config('progressretention', progress_retention::MINIMAL, 'local_catquiz');
+        // No retention period configured on purpose - "minimal" must not depend on one.
+        set_config('progressretentiondays', 0, 'local_catquiz');
+
+        $now = time();
+        foreach ([['id' => 9201, 'endtime' => $now - 60], ['id' => 9202, 'endtime' => null]] as $case) {
+            $DB->insert_record('local_catquiz_attempts', (object) [
+                'userid' => 2,
+                'scaleid' => 1,
+                'contextid' => 1,
+                'courseid' => 1,
+                'attemptid' => $case['id'],
+                'component' => 'mod_adaptivequiz',
+                'instanceid' => 1,
+                'status' => 1,
+                'timecreated' => $now - 120,
+                'timemodified' => $now,
+                'endtime' => $case['endtime'],
+            ]);
+            $DB->insert_record('local_catquiz_progress', (object) [
+                'attemptid' => $case['id'],
+                'contextid' => 1,
+                'json' => '{}',
+                'timecreated' => $now - 120,
+                'timemodified' => $now,
+            ]);
+        }
+
+        ob_start();
+        (new cleanup_attempt_progress())->execute();
+        ob_end_clean();
+
+        $this->assertFalse(
+            $DB->record_exists('local_catquiz_progress', ['attemptid' => 9201]),
+            'A finished attempt must be swept in the data-sparing mode.'
+        );
+        $this->assertTrue(
+            $DB->record_exists('local_catquiz_progress', ['attemptid' => 9202]),
+            'A running attempt must keep its progress even in the data-sparing mode.'
         );
     }
 }

@@ -86,13 +86,19 @@ class get_question_preview extends external_api {
             MUST_EXIST
         );
 
+        // Files attached to a question live in the context of its question category,
+        // not in the system context. Rewriting the URLs against the system context
+        // produced links that resolve to nothing, so an image in a question text
+        // simply did not appear - and a text-only preview never noticed.
+        $filecontext = self::get_question_context($questionid) ?? $context;
+
         // Rewrite pluginfile URLs so images resolve, then format. This is the work
         // that used to happen for every row of every page; now it happens once, for
         // the one question the user asked to see.
         $text = question_rewrite_question_urls(
             $question->questiontext,
             'pluginfile.php',
-            $context->id,
+            $filecontext->id,
             'question',
             'questiontext',
             [],
@@ -102,8 +108,47 @@ class get_question_preview extends external_api {
         return [
             'questionid' => $question->id,
             'name' => format_string($question->name),
-            'questiontext' => format_text($text, $question->questiontextformat, ['context' => $context]),
+            'questiontext' => format_text(
+                $text,
+                $question->questiontextformat,
+                ['context' => $filecontext]
+            ),
         ];
+    }
+
+    /**
+     * Returns the context a question's files belong to.
+     *
+     * Resolved through question_versions and question_bank_entries to the question
+     * category, which carries the context id. Returns null when the chain cannot be
+     * followed, so the caller can fall back rather than fail: a preview without
+     * images is still useful, an exception is not.
+     *
+     * @param int $questionid
+     * @return \context|null
+     */
+    private static function get_question_context(int $questionid): ?\context {
+        global $DB;
+
+        $contextid = $DB->get_field_sql(
+            "SELECT qc.contextid
+               FROM {question_versions} qv
+               JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+               JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
+              WHERE qv.questionid = :questionid",
+            ['questionid' => $questionid],
+            IGNORE_MULTIPLE
+        );
+
+        if (!$contextid) {
+            return null;
+        }
+
+        try {
+            return \context::instance_by_id($contextid, IGNORE_MISSING) ?: null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**

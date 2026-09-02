@@ -149,17 +149,14 @@ final class attempt_finalizer {
                     $preattempt = [];
                 }
 
-                // Issue #56: the row is removed only after the pre-attempt abilities
-                // have been read - deleting earlier would lose exactly the value this
-                // block needs. In the retaining modes it stays, and the scheduled
-                // task applies the retention period.
-                if (
-                    \local_catquiz\local\progress_retention::should_delete(
-                        self::get_activity_retention($catattempt)
-                    )
-                ) {
-                    progress::delete($adaptiveattemptid);
-                }
+                // Issue #56: the progress row is NOT removed here. Finalisation is
+                // not the end of the request - the feedback path loads the progress
+                // again afterwards, and a row deleted at this point made load() fall
+                // through to create_new() without quiz settings, which fails with a
+                // type error.
+                //
+                // In the data-sparing mode the scheduled task sweeps it instead,
+                // which is a matter of minutes rather than of a single request.
             }
 
             foreach ($result->get_scale_results() as $scaleresult) {
@@ -194,40 +191,5 @@ final class attempt_finalizer {
         $transaction->allow_commit();
 
         return true;
-    }
-
-    /**
-     * Returns the retention level configured for the test of an attempt.
-     *
-     * Returns null when the test has no own setting, which makes the site default
-     * apply. Any failure to read the setting also yields null rather than an
-     * exception: the retention level must never be the reason a finished attempt
-     * cannot be closed.
-     *
-     * @param \stdClass $catattempt A row of local_catquiz_attempts.
-     * @return string|null
-     */
-    private static function get_activity_retention(\stdClass $catattempt): ?string {
-        global $DB;
-
-        try {
-            $test = $DB->get_record(
-                'local_catquiz_tests',
-                ['catscaleid' => $catattempt->scaleid, 'courseid' => $catattempt->courseid],
-                'json',
-                IGNORE_MULTIPLE
-            );
-            if (!$test || empty($test->json)) {
-                return null;
-            }
-
-            $settings = json_decode($test->json);
-
-            return isset($settings->catquiz_progressretention) && $settings->catquiz_progressretention !== ''
-                ? (string) $settings->catquiz_progressretention
-                : null;
-        } catch (\Throwable $e) {
-            return null;
-        }
     }
 }

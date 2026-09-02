@@ -27,6 +27,23 @@ defined('MOODLE_INTERNAL') || die();
 
 $capabilities = [
 
+        // Guards the attempt web services (start_new_attempt, get_next_question,
+        // submit_result). Those checked this capability while it was never declared
+        // here, and an undeclared capability evaluates to false for everyone - the
+        // admin included - so the endpoints denied every request.
+        //
+        // Module level, because taking a test happens in an activity, and allowed for
+        // the roles that take or supervise one.
+        'local/catquiz:canaccess' => [
+            'captype' => 'read',
+            'contextlevel' => CONTEXT_MODULE,
+            'archetypes' => [
+                'student' => CAP_ALLOW,
+                'teacher' => CAP_ALLOW,
+                'editingteacher' => CAP_ALLOW,
+                'manager' => CAP_ALLOW,
+            ],
+        ],
         'local/catquiz:canmanage' => [
             'captype' => 'write',
             'contextlevel' => CONTEXT_SYSTEM,

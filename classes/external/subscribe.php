@@ -78,12 +78,18 @@ class subscribe extends external_api {
         require_login();
 
         $context = context_system::instance();
-        if (!has_capability('local/catquiz:canmanage', $context)) {
-            throw new moodle_exception('norighttoaccess', 'local_catquiz');
-        }
+        self::validate_context($context);
 
         if (empty($params['userid'])) {
-            $params['userid'] = (int)$USER->id;
+            $params['userid'] = (int) $USER->id;
+        }
+
+        // Review finding: the endpoint accepted any user id behind a single manage
+        // check, so one capability covered two very different actions. Subscribing
+        // yourself is the ordinary case and needs no management right; subscribing
+        // somebody else is an administrative act and does.
+        if ((int) $params['userid'] !== (int) $USER->id) {
+            require_capability('local/catquiz:canmanage', $context);
         }
 
         // The transformation of the userid will be done in the start_new_attempt function.

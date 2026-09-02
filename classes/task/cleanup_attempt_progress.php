@@ -61,13 +61,19 @@ class cleanup_attempt_progress extends scheduled_task {
         global $DB;
 
         $days = progress_retention::retention_days();
-        if ($days <= 0) {
-            // Unlimited retention: nothing to do, and saying so is cheaper than
+        $minimal = progress_retention::should_delete();
+
+        if ($days <= 0 && !$minimal) {
+            // Unlimited retention and nothing to sweep: saying so is cheaper than
             // scanning the table.
             return;
         }
 
-        $cutoff = time() - ($days * DAYSECS);
+        // In the data-sparing mode every finished attempt is swept, regardless of a
+        // retention period - that is what "minimal" means. The deletion cannot happen
+        // during finalisation itself: the feedback path loads the progress again
+        // right afterwards, so a row removed there breaks the attempt.
+        $cutoff = $minimal ? time() : time() - ($days * DAYSECS);
 
         $sql = "SELECT p.attemptid
                   FROM {local_catquiz_progress} p
