@@ -118,6 +118,12 @@ $functions = [
                 'type' => 'write',
                 'ajax' => 1,
         ],
+        'local_catquiz_get_question_preview' => [
+                'classname' => 'local_catquiz\\external\\get_question_preview',
+                'description' => 'Returns the rendered text of one question for the lazy loaded preview',
+                'type' => 'read',
+                'ajax' => 1,
+        ],
         'local_catquiz_render_question_with_response' => [
                 'classname' => 'local_catquiz\external\render_question_with_response',
                 'description' => 'Renders a question with a response',

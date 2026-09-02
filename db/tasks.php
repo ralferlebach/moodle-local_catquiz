@@ -24,6 +24,7 @@
 
 use local_catquiz\task\cancel_expired_attempts;
 use local_catquiz\task\recalculate_cat_model_params;
+use local_catquiz\task\cleanup_attempt_progress;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -47,6 +48,16 @@ $tasks = [
         'blocking' => 0,
         'minute' => '*/5', // Runs every 5 minutes.
         'hour' => '*',
+        'day' => '*',
+        'dayofweek' => '*',
+        'month' => '*',
+    ],
+    [
+        // Issue #56: applies the configured retention period to attempt progress.
+        'classname' => cleanup_attempt_progress::class,
+        'blocking' => 0,
+        'minute' => '30',
+        'hour' => '3',
         'day' => '*',
         'dayofweek' => '*',
         'month' => '*',

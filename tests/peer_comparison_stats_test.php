@@ -78,8 +78,15 @@ final class peer_comparison_stats_test extends advanced_testcase {
         $this->pp(1, 0.0, $this->contextid);
         $this->pp(2, 1.0, $this->contextid);
         $this->pp(3, 1.0, $this->contextid);
-        // User u4: an older row (5.0) then a newer row (2.0). Only the newer counts.
-        $this->pp(4, 5.0, $this->contextid);
+        // Issue #25: u4 used to carry an older, superseded row (5.0) in addition to
+        // the current one (2.0). That state is now structurally impossible - the
+        // unique index on (userid, contextid, catscaleid) rejects it, the upgrade
+        // removes pre-existing duplicates, and both write paths
+        // (model_person_param_list::save_to_db and catquiz::update_personparam)
+        // look up by exactly this triple and update instead of inserting.
+        // The expected results are unchanged, because only the newer row ever
+        // counted; the one-per-person guarantee is now enforced by the schema
+        // rather than by the query.
         $this->pp(4, 2.0, $this->contextid);
         // The compared user is also in the table but must be excluded.
         $this->pp(10, 1.0, $this->contextid);
@@ -101,7 +108,7 @@ final class peer_comparison_stats_test extends advanced_testcase {
         $this->resetAfterTest();
         $this->seed();
         $stats = catquiz::get_peer_comparison_stats($this->contextid, $this->scaleid, 1.0, 10);
-        // Distinct peers: u1, u2, u3, u4 -> 4 (u10 excluded, u4 counted once,
+        // Distinct peers: u1, u2, u3, u4 -> 4 (u10 excluded,
         // other-context users ignored).
         $this->assertSame(4, $stats->n);
         // Mean of {0.0, 1.0, 1.0, 2.0} = 1.0.

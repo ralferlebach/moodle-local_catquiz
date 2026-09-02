@@ -92,7 +92,7 @@ class questionsdisplay {
      * @return ?string
      */
     public function renderquestionstable() {
-        global $DB;
+        global $DB, $PAGE;
         if ($this->scale === -1) {
             return $this->get_no_table_string();
         }
@@ -104,6 +104,10 @@ class questionsdisplay {
         $table = new catscalequestions_table(
             'catscale_' . $catscale . 'context' . $catcontext . ' questionstable'
         );
+
+        // Issue #20: the question text is fetched on demand when a preview is
+        // opened, instead of being embedded into every row.
+        $PAGE->requires->js_call_amd('local_catquiz/questionpreview', 'init');
         $table->set_catscaleid_and_contextid($catscale, $catcontext);
 
         // If we integrate questions from subscales, we add different ids.
@@ -132,6 +136,8 @@ class questionsdisplay {
             'difficulty' => get_string('difficulty', 'local_catquiz'),
             'discrimination' => get_string('discrimination', 'local_catquiz'),
             'guessing' => get_string('guessing', 'local_catquiz'),
+            // Issue #54: whether these parameters can actually be used for the model.
+            'itemparamvalidity' => get_string('itemparamvalidity', 'local_catquiz'),
             'action' => get_string('action', 'local_catquiz'),
         ];
         $table->define_columns(array_keys($columnsarray));
@@ -142,7 +148,6 @@ class questionsdisplay {
             'catscalename',
             'categoryname',
             'questionname',
-            'questiontext',
             'qtype',
             'model',
             'astatlastattempttime',
@@ -150,13 +155,35 @@ class questionsdisplay {
 
         $sortcolumns = $columnsarray;
         unset($sortcolumns['action']);
-        $table->define_sortablecolumns(array_keys($sortcolumns));
+        // Issue #54: the visible column is named itemparamvalidity, so that is the
+        // name the header sends when it is clicked. Registering only the underlying
+        // field "usable" left the visible header unsortable - the click referred to a
+        // column the table did not know as sortable.
+        //
+        // Both are registered: the visible name for the header, and the field itself
+        // for anything that sorts by it directly. The column renderer derives its
+        // output from the same row, so either name yields the same order.
+        $sortablecolumns = array_keys($sortcolumns);
+        if (!in_array('usable', $sortablecolumns, true)) {
+            $sortablecolumns[] = 'usable';
+        }
+        $table->define_sortablecolumns($sortablecolumns);
 
         $standardfilter = new standardfilter('qtype', get_string('questiontype', 'local_catquiz'));
         $table->add_filter($standardfilter);
 
         $standardfilter = new standardfilter('model', get_string('model', 'local_catquiz'));
         $table->add_filter($standardfilter);
+
+        // Issue #54: filtering on the persisted flag, so that a maintainer can pull
+        // up exactly the items whose parameters cannot be used. The labels spell the
+        // states out; the stored values are 1 and 0.
+        $usablefilter = new standardfilter('usable', get_string('itemparamvalidity', 'local_catquiz'));
+        $usablefilter->add_options([
+            '1' => get_string('itemparams_usable', 'local_catquiz'),
+            '0' => get_string('itemparams_unusable', 'local_catquiz'),
+        ]);
+        $table->add_filter($usablefilter);
 
         $table->addcheckboxes = true;
 
@@ -204,11 +231,17 @@ class questionsdisplay {
      *
      */
     private function render_addtestitems_table(int $catscaleid) {
+        global $PAGE;
+
         $id = $catscaleid > -1 ? $catscaleid : 0;
 
         $catcontextid = empty($this->catcontextid) ? optional_param('contextid', 0, PARAM_INT) : $this->catcontextid;
 
         $table = new catscalequestions_table('catscaleid_' . $id . 'context' . $catcontextid . '_additems');
+
+        // Issue #20: the question text is fetched on demand when a preview is
+        // opened, instead of being embedded into every row.
+        $PAGE->requires->js_call_amd('local_catquiz/questionpreview', 'init');
         $table->set_catscaleid_and_contextid($id, $catcontextid);
 
         [$select, $from, $where, $filter, $params]
@@ -226,7 +259,7 @@ class questionsdisplay {
         ]);
         $table->define_headers([
             get_string('label', 'local_catquiz'),
-            get_string('questiontext', 'local_catquiz'),
+            get_string('name', 'core'),
             get_string('questiontype', 'local_catquiz'),
             get_string('questioncategories', 'local_catquiz'),
             get_string('questioncontextattempts', 'local_catquiz'),
@@ -249,11 +282,10 @@ class questionsdisplay {
         ]);
         $table->add_filter($standardfilter);
 
-        $table->define_fulltextsearchcolumns(['idnumber', 'name', 'questiontext', 'qtype']);
+        $table->define_fulltextsearchcolumns(['idnumber', 'name', 'qtype']);
         $table->define_sortablecolumns([
             'idnunber',
             'name',
-            'questiontext',
             'qtype',
             'questioncontextattempts',
         ]);
@@ -323,6 +355,38 @@ class questionsdisplay {
     }
 
     /**
+     * Returns the page parameters that a GET form has to carry over.
+     *
+     * These are read from the request rather than from $PAGE->url, because the
+     * scale manager passes them as optional_param and does not register them on the
+     * page URL - $PAGE->url->params() is empty here. Without carrying them,
+     * submitting the search would drop the selected scale and context and silently
+     * show a different list than the one the user was looking at.
+     *
+     * @return array
+     */
+    private static function current_page_params(): array {
+        $definitions = [
+            'contextid' => PARAM_INT,
+            'scaleid' => PARAM_INT,
+            'usesubs' => PARAM_INT,
+            'sdv' => PARAM_INT,
+            'component' => PARAM_TEXT,
+        ];
+
+        $params = [];
+        foreach ($definitions as $name => $type) {
+            $value = optional_param($name, null, $type);
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $params[] = ['name' => $name, 'value' => $value];
+        }
+
+        return $params;
+    }
+
+    /**
      * Return the item tree of all catscales.
      * @return array
      */
@@ -345,6 +409,14 @@ class questionsdisplay {
             $data['table'] = $this->check_tabledisplay()['output'];
             $data['notable'] = $this->check_tabledisplay()['notable'];
             $data['modaltable'] = $this->render_addtestitems_table($this->scale);
+
+            // Issue #20: the question texts are no longer part of the list, so
+            // searching them runs as its own step with its own input field.
+            $qtsearch = trim(optional_param('qtsearch', '', PARAM_TEXT));
+            $data['qtsearch'] = $qtsearch;
+            $data['qtsearchtoomany'] = $qtsearch !== ''
+                && catscalequestions_table::resolve_questiontext_matches($qtsearch) === null;
+            $data['hiddenparams'] = self::current_page_params();
         }
         return $data;
     }

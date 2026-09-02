@@ -18,7 +18,9 @@
             "^core/modal_factory$": "<rootDir>/tests/jest/mocks/modal_factory.js",
             "^core/loadingicon$": "<rootDir>/tests/jest/mocks/loadingicon.js",
             "^core/templates$": "<rootDir>/tests/jest/mocks/templates.js",
-            "^core/notification$": "<rootDir>/tests/jest/mocks/notification.js"
+            "^core/notification$": "<rootDir>/tests/jest/mocks/notification.js",
+            "^core/modal$": "<rootDir>/tests/jest/mocks/modal.js",
+            "^core/str$": "<rootDir>/tests/jest/mocks/str.js"
         }
     },
     "devDependencies": {

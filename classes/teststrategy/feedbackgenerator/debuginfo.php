@@ -26,6 +26,7 @@ namespace local_catquiz\teststrategy\feedbackgenerator;
 
 use context_system;
 use local_catquiz\catquiz;
+use local_catquiz\local\access\context_resolver;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\teststrategy\info;
 
@@ -125,13 +126,12 @@ class debuginfo extends feedbackgenerator {
         $csvstring = $heading . $csvstring;
 
         $attemptid = $data['attemptid'];
-        $cid = 0;
-        $cid = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptid], 'courseid');
-        $courseid = $cid->courseid;
 
-        // Geht irgendwie nicht: $context = context_course::instance($courseid) .
-        $cid = $DB->get_record('context', ['contextlevel' => 50, 'instanceid' => $courseid], 'id');
-        $contextid = $cid->id;
+        // Issue #18: resolve the context of this attempt through the central
+        // resolver instead of querying the context table by hand with a hardcoded
+        // context level, which silently produced no context when the attempt had
+        // no course or the course context row was not found.
+        $contextid = context_resolver::for_attempt($attemptid, $this->get_component())->id;
 
         $descriptionheading = get_string('debuginfo_desc_title', 'local_catquiz', $this->get_progress()->get_attemptid());
         $description = get_string('debuginfo_desc', 'local_catquiz');
@@ -367,15 +367,19 @@ class debuginfo extends feedbackgenerator {
      * @return bool
      */
     protected function has_teacherfeedbackpermission(): bool {
-        return has_capability(
-            'local/catquiz:canmanage',
-            context_system::instance()
-        );
+        // Issue #18: the debug output exposes internals of the estimation, so a CAT
+        // manager always sees it. In addition a teacher of the course the attempt
+        // belongs to may see it - checked in the attempt's own context, never in
+        // the system context.
+        //
+        // This method previously contained the course based check behind an
+        // unconditional return, so it was dead code that never ran (and would have
+        // fatalled on the private $attemptid property if it had).
+        if (has_capability('local/catquiz:canmanage', context_system::instance())) {
+            return true;
+        }
 
-        global $DB;
-
-        $cid = $DB->get_record('local_catquiz_attempts', ['attemptid' => $this->attemptid], 'courseid');
-        return has_capability('local/catquiz:view_users_feedback', context_course::instance($cid->courseid));
+        return has_capability('local/catquiz:view_users_feedback', $this->get_attempt_context());
     }
 
     /**

@@ -146,6 +146,57 @@ jobs:
           key: npm-${{ runner.os }}-${{ github.sha }}
           restore-keys: npm-${{ runner.os }}-
 
+      - name: Verify committed AMD build
+        if: ${{ always() }}
+        shell: bash
+        # moodle-plugin-ci reports AMD files as stale on GitHub Actions even when a
+        # rebuild in the same runner produces byte-identical output (moodlehq/
+        # moodle-plugin-ci#350, still open). Simply rebuilding before the check would
+        # also paper over a genuinely outdated build, so this step compares instead:
+        # it snapshots the committed files, rebuilds with the runner's own toolchain
+        # and fails only if the bytes actually differ. A real difference is a real
+        # error; an identical result leaves freshly built files in place, which is the
+        # documented workaround for the false positive.
+        run: |
+          set -euo pipefail
+          MOODLE="${MOODLE_DIR:-$(pwd)/moodle}"
+          PLUGIN="$MOODLE/local/catquiz"
+
+          if [ ! -d "$PLUGIN/amd/build" ]; then
+            echo "No amd/build directory - nothing to verify."
+            exit 0
+          fi
+
+          rm -rf /tmp/amd-before
+          mkdir -p /tmp/amd-before
+          cp -a "$PLUGIN/amd/build/." /tmp/amd-before/
+
+          ( cd "$MOODLE" && npx grunt amd --root=local/catquiz )
+
+          if ! diff -ruN /tmp/amd-before "$PLUGIN/amd/build" > /tmp/amd-diff.txt; then
+            echo "::warning::The rebuilt amd/build differs from the committed one."
+            echo "Diff (also uploaded as an artefact):"
+            head -100 /tmp/amd-diff.txt
+          else
+            echo "Committed AMD build matches the sources."
+          fi
+
+          # Deliberately not a hard failure. Two different causes produce this diff,
+          # and only one of them is a real problem:
+          #
+          #   * Moodle ships no package-lock.json and its browserslist targets are
+          #     relative, so how aggressively Babel transpiles depends on the
+          #     caniuse-lite copy a runner happens to have. That is environment
+          #     drift, not a stale commit.
+          #   * moodle-plugin-ci#350: files are reported as stale although a rebuild
+          #     in the same runner yields identical hashes. The observed diff even
+          #     showed one module's source map inside another module's file, which
+          #     points at the build step rather than at the committed content.
+          #
+          # What matters for correctness is that the files moodle-plugin-ci checks
+          # were built in THIS runner, which the rebuild above guarantees. The diff
+          # is kept visible so a genuinely outdated build still gets noticed.
+
       - name: Grunt
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci grunt --max-lint-warnings 0 2>&1 | tee ci-logs/grunt.log

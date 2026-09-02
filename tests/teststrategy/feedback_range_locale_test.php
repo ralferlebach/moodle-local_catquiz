@@ -35,6 +35,8 @@ namespace local_catquiz\teststrategy;
  * Regression test for locale-robust feedback range parsing.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\teststrategy\feedback_helper::parse_range_limit
+ * @covers \local_catquiz\teststrategy\feedback_helper::get_feedback_range_index
  */
 final class feedback_range_locale_test extends \advanced_testcase {
     /**

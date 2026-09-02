@@ -40,6 +40,7 @@ use local_catquiz\teststrategy\info;
 use local_catquiz\teststrategy\progress;
 use MoodleQuickForm;
 use stdClass;
+use local_catquiz\local\progress_retention;
 
 /**
  * Class catquiz
@@ -206,6 +207,29 @@ class catquiz_handler {
         }
         $subscales = \local_catquiz\data\dataapi::get_catscale_and_children($selectedparentscale, true);
         self::generate_subscale_checkboxes($subscales, $elements, $mform);
+
+        // Issue #56: how long the working state of an attempt is kept, per test.
+        //
+        // Only the levels the site permits are offered. A site configured for data
+        // minimisation must not be overridden here, and an option that would be
+        // capped away on save would be misleading to show at all.
+        $retentionoptions = [
+            '' => get_string('progressretention_default', 'local_catquiz'),
+        ];
+        foreach (progress_retention::levels() as $level) {
+            if (progress_retention::effective_level($level) !== $level) {
+                continue;
+            }
+            $retentionoptions[$level] = get_string('progressretention_' . $level, 'local_catquiz');
+        }
+        $elements[] = $mform->addElement(
+            'select',
+            'catquiz_progressretention',
+            get_string('progressretention', 'local_catquiz'),
+            $retentionoptions
+        );
+        $mform->setType('catquiz_progressretention', PARAM_ALPHA);
+        $mform->addHelpButton('catquiz_progressretention', 'progressretention', 'local_catquiz');
 
         // Button to attach JavaScript to reload the form.
         $mform->registerNoSubmitButton('submitcatscaleoption');

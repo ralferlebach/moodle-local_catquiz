@@ -4,6 +4,8 @@ Zwei Arten von Dokumenten:
 
 ## Dauerhaft (sitzungsübergreifend, vor der Arbeit lesen)
 
+- **decision-attempt-identity.md** – Warum `local_catquiz_attempts` bei
+  `UNIQUE(attemptid)` bleibt und kein zusammengesetzter Schlüssel eingeführt wird.
 - **engineering-guide.md** – Wiederverwendbare Lehren: numerische Stabilität der
   IRT-Ableitungen, Verifikationsdisziplin (FD-Harness, Bitgenau-Abgleich,
   Sättigungs-Stresstest, Zahn-Test, toleranzbasierte Trajektorientests), die
@@ -75,6 +77,22 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | CAT-Simulationsmatrix reaktiviert (referenzfreie Invarianten) | 079, 080 |
 | Behat-Abdeckung #5–#9, Nachbesserung, zwei UI-Sackgassen | 081, 082, 083 |
 | Adapter: Report-Callback, Workflows, Tests, toter Code | 084 |
+| Rechte im tatsächlichen Kurs-/Modulkontext (#18), Kontext-Resolver | 087 |
+| DB-Indizes (#25), NULL-sichere Dubletten-Bereinigung, redundante Indizes | 088 |
+| Fragelisten entschlackt, Lazy-Vorschau (#20) | 089 |
+| Fragetext-Suche, Detailansicht (#19), CI-Grunt/browserslist | 090 |
+| Statistik eingeschränkt (#21), Add-Items ohne GROUP_CONCAT (#22) | 091 |
+| Skalenbaum ohne N+1 und quadratischen Aufbau (#24) | 092 |
+| Itemparameter-Gültigkeit sichtbar, Pilotitems gelistet (#54) | 093 |
+| CI-Grunt entschärft, Playwright eingeführt | 094 |
+| Diagrammdaten serverseitig aggregiert (#23) | 095 |
+| Review-Befunde: Upgrade-Ausgabe, Kontextauflösung | 096 |
+| Behat-Fix, Gruppen im Kurskontext (#18), Playwright | 097 |
+| #23 im Browser, Lasttest-Ergebnisse | 098 |
+| Aufbewahrung des Fortschritts (#56), Skalierungsbefund | 099 |
+| Externes Review: acht Sicherheits- und Korrektheitsbefunde | 100 |
+| #54-Reste, #23-Reste, JSON-Aggregations-Issue | 101 |
+| Kursseiten-TypeError, Docblocks | 102 |
 
-Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.5),
+Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).

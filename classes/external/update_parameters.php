@@ -32,6 +32,7 @@ use core_external\external_function_parameters;
 use core_external\external_value;
 use core_external\external_single_structure;
 use local_catquiz\catmodel_info;
+use context_system;
 
 
 /**
@@ -64,6 +65,14 @@ class update_parameters extends external_api {
      * @return array
      */
     public static function execute(int $contextid, int $catscaleid): array {
+
+        // Review finding: this endpoint acted without checking anything. Being logged
+        // in is not authorisation - the pages offering these actions are guarded by
+        // the CAT manager capability, and the service behind them has to apply the
+        // same gate rather than trusting the caller to have come from there.
+        $context = context_system::instance();
+        self::validate_context($context);
+        require_capability('local/catquiz:manage_catscales', $context);
         self::validate_parameters(self::execute_parameters(), [
             'contextid' => $contextid,
             'catscaleid' => $catscaleid,

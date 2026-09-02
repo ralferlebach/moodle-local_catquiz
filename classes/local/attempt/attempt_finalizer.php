@@ -148,6 +148,15 @@ final class attempt_finalizer {
                 } catch (\Throwable $e) {
                     $preattempt = [];
                 }
+
+                // Issue #56: the progress row is NOT removed here. Finalisation is
+                // not the end of the request - the feedback path loads the progress
+                // again afterwards, and a row deleted at this point made load() fall
+                // through to create_new() without quiz settings, which fails with a
+                // type error.
+                //
+                // In the data-sparing mode the scheduled task sweeps it instead,
+                // which is a matter of minutes rather than of a single request.
             }
 
             foreach ($result->get_scale_results() as $scaleresult) {

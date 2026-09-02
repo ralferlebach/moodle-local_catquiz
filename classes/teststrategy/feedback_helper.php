@@ -349,7 +349,23 @@ class feedback_helper {
                     continue;
                 }
             }
-            $strategyid = $attemptdata->teststrategy;
+            // The strategy comes from the payload where present, otherwise from the
+            // column. Attempts written before the field existed have it only in the
+            // column; passing the missing value straight into the constructor raised
+            // a TypeError and broke the whole course page, not just this one card.
+            $strategyid = (int) ($attemptdata->teststrategy ?? $record->teststrategy ?? 0);
+            if ($strategyid <= 0) {
+                // Without a strategy there is nothing to build feedback from. Skipped
+                // like an unreadable payload above, rather than failing the page.
+                if ($CFG->debug > 0) {
+                    debugging(
+                        sprintf('Attempt %d has no test strategy, skipping.', $record->attemptid),
+                        DEBUG_DEVELOPER
+                    );
+                }
+                continue;
+            }
+
             $feedbacksettings = new feedbacksettings($strategyid);
 
             $attemptfeedback = new attemptfeedback($record->attemptid, $record->contextid, $feedbacksettings);
@@ -772,6 +788,43 @@ class feedback_helper {
         // Issue #14: delegate to the single half-open resolver so a score is
         // assigned to exactly one range everywhere.
         return self::get_feedback_range_index($quizsettings, $scaleid, $value);
+    }
+
+    /**
+     * Returns the configured feedback ranges as plain lower/upper bounds.
+     *
+     * Issue #23: the histogram assigns the range in SQL now, so the boundaries have
+     * to leave PHP as numbers. They are read here from the same settings and with
+     * the same parser that get_feedback_range_index() uses, so the two cannot end up
+     * describing different ranges.
+     *
+     * @param stdClass|array $quizsettings
+     * @param int $scaleid
+     * @return array List of ['lower' => float, 'upper' => float], in range order.
+     */
+    public static function get_feedback_range_bounds($quizsettings, int $scaleid): array {
+        $settings = (array) $quizsettings;
+        $n = (int) ($settings['numberoffeedbackoptionsselect'] ?? 0);
+        if ($n < 1) {
+            while (isset($settings[sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $n + 1)])) {
+                $n++;
+            }
+        }
+
+        $bounds = [];
+        for ($j = 1; $j <= $n; $j++) {
+            $lowerkey = sprintf('feedback_scaleid_limit_lower_%d_%d', $scaleid, $j);
+            $upperkey = sprintf('feedback_scaleid_limit_upper_%d_%d', $scaleid, $j);
+            if (!isset($settings[$lowerkey]) || !isset($settings[$upperkey])) {
+                continue;
+            }
+            $bounds[] = [
+                'lower' => self::parse_range_limit($settings[$lowerkey]),
+                'upper' => self::parse_range_limit($settings[$upperkey]),
+            ];
+        }
+
+        return $bounds;
     }
 
     /**

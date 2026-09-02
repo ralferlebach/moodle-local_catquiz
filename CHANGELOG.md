@@ -1,5 +1,564 @@
 # Changelog – local_catquiz
 
+## 1.1.6 (interne Version 2026083023)
+
+> Kursseiten-Fehler behoben, Docblocks vervollständigt.
+
+- **TypeError beim Kursaufruf behoben**: Der Feedback-Shortcode las die Teststrategie
+  nur aus dem JSON. Fehlte sie dort, brach die **gesamte Kursseite** ab, weil die
+  Ausnahme über den Shortcode-Filter bis in den Kursformat-Renderer wanderte. Die
+  Abfrage lädt jetzt die vorhandene Spalte `teststrategy` als Rückfallebene; ein
+  Versuch ohne Strategie wird übersprungen statt die Seite zu beenden.
+- **Sieben unvollständige Docblocks** in `catquiz.php` ergänzt – die Methoden, die
+  zuvor um `$alloweduserids` bzw. `$fields` erweitert wurden.
+
+## 1.1.6 (interne Version 2026083022)
+
+> Kursseiten-Fehler beim Feedback-Shortcode behoben.
+
+- Das Öffnen eines Kurses mit eingebettetem Feedback-Shortcode brach mit einem
+  `TypeError` ab, wenn das JSON eines Versuchs keine Teststrategie enthielt. Die
+  Ausnahme wanderte über den Shortcode-Filter bis in den Kursformat-Renderer und
+  legte die **gesamte Kursseite** lahm.
+- Die Abfrage lädt jetzt die vorhandene Spalte `teststrategy`, die Strategie wird
+  ersatzweise von dort gelesen, und ein Versuch ohne Strategie wird übersprungen
+  statt die Seite scheitern zu lassen.
+
+## 1.1.6 (interne Version 2026083021)
+
+> #54-Reste und #23-Reste aus dem externen Review.
+
+- **#54**: Die sichtbare Spalte „Parametergültigkeit" ist jetzt sortierbar (Alias in
+  der Abfrage ergänzt), das Aggregat je Skala wird angezeigt – mit Sprung in die
+  gefilterte Liste – und wird auf den betrachteten Kontext eingeschränkt statt über
+  alle Kontexte der Installation zu summieren.
+- **#23**: Der Recordset des gemeinsamen Ladepfads wurde nie geschlossen und hielt
+  eine Datenbankressource offen. Die Abfrage lud zudem per `SELECT *` das
+  Debug-Trace-Feld, das keiner der Renderer liest; die Spaltenliste ist jetzt
+  explizit.
+- **Neuer Issue** `doc/issue-chart-json-aggregation.md`: Die verbleibenden Diagramme
+  können nicht ohne Weiteres serverseitig aggregieren, weil die Fähigkeitswerte nur
+  im JSON der Attempt-Zeile stehen.
+
+## 1.1.6 (interne Version 2026083019)
+
+> Externes Review: acht Befunde geprüft, alle bestätigt, alle behoben.
+
+- **Sicherheit**: `local/catquiz:canaccess` war nie deklariert – eine unbekannte
+  Capability liefert `false` für jeden, auch den Administrator, sodass drei
+  Attempt-Endpunkte jede Anfrage abwiesen. Vier weitere External Services prüften
+  gar nichts. `subscribe` akzeptierte fremde Nutzer-IDs hinter einer einzigen
+  Verwaltungsprüfung.
+- **Datenschutz**: Der Gruppenfilter wirkte nur im CSV-Export; die Diagramme luden
+  die Kohorte ungefiltert. Jetzt in beiden Kohorten-Abfragen.
+- **Korrektheit**: Der Detailrenderer (#19) nutzte die Einschränkung nicht, die
+  Fragevorschau (#20) baute Datei-URLs gegen den falschen Kontext, und der
+  Debug-Zweig eines Diagramms (#23) griff auf eine entfernte Variable zu.
+- **Neue Tests gegen die Fehlerklasse**: `capability_declaration_test` prüft, dass
+  jede geprüfte Capability deklariert ist, jede deklarierte einen Sprachstring hat
+  und jeder External Service überhaupt prüft.
+
+## 1.1.6 (interne Version 2026083013)
+
+> Issue #56 vollständig: Aufbewahrung auch je CAT-Test einstellbar.
+
+- **Formularfeld je CAT-Test**: bietet nur die Stufen an, die die Website zulässt,
+  und ist im Finalizer angebunden – ohne die Anbindung wäre die Einstellung
+  folgenlos geblieben.
+- Fail-safe beim Lesen: Ist die Einstellung nicht lesbar, gilt der
+  Website-Standard. Die Aufbewahrungsstufe darf nie verhindern, dass ein beendeter
+  Versuch abgeschlossen wird.
+- **Behat** `catquiz_progress_retention`: 2 Szenarien, 23 Steps grün.
+- PHPUnit `progress_retention_test`: 8 Tests, 25 Assertions.
+
+## 1.1.6 (interne Version 2026083012)
+
+> Issue #56 umgesetzt; Skalierungsbefund zu „Frage hinzufügen" erfasst.
+
+- **Aufbewahrung des Attempt-Fortschritts konfigurierbar** (#56): drei Stufen
+  (`minimal`, `keep`, `trace`) mit datensparsamem Standard, globale Einstellung als
+  Obergrenze für Aktivitäten, Löschung nach Abschluss über das bisher tote
+  `progress::delete()`, echter Schrittverlauf im Modus `trace` und ein
+  Cleanup-Task in Stapeln.
+- **25 fehlende Privacy-Strings ergänzt**: der Provider referenzierte 34, vorhanden
+  waren 9 – auf der Datenschutzseite standen Platzhalter.
+- **Neuer Issue** `doc/issue-add-questions-scaling.md`: „Frage hinzufügen" braucht
+  bei 110.005 Fragen 6.832 ms statt 28,7 ms bei 60.000 – die Abfrage skaliert mit
+  der Fragenbank, nicht mit der Seitengröße.
+- **Neu `cli/loadtest_seed.php`** zur reproduzierbaren Erzeugung großer Bestände.
+
+## 1.1.6 (interne Version 2026083011)
+
+> Issue #23 im Browser abgedeckt, Lasttest-Ergebnisse dokumentiert.
+
+- **Playwright deckt jetzt auch die Statistik-Diagramme ab** (#23). Der Seed baut
+  Kurs, Seite mit `[catquizstatistics]`, einen registrierten Test samt echter
+  adaptivequiz-Instanz und Versuchsdaten auf – idempotent, inklusive Abgleich des
+  Seiteninhalts mit der aktuellen Skala.
+- Drei Fehlerursachen dabei gefunden: fehlende Test-Registrierung, `componentid` auf
+  der falschen Aktivität (scheiterte nur im Kurskontext) und die Pflichtfelder
+  `intro`/`attemptfeedback` der `adaptivequiz`-Tabelle.
+- **9 Playwright-Tests grün** über drei Specs.
+- **`doc/load-test-results.md`**: k6 und JMeter mit 25 Nutzern, null Fehler,
+  CAT-Manager 127 ms Median, Statistik 229 ms – mit dem ausdrücklichen Hinweis, dass
+  die zugrunde liegende Datenmenge nicht dokumentiert ist.
+
+## 1.1.6 (interne Version 2026083010)
+
+> Behat-Fix, Gruppen im Kurskontext (#18), Playwright entblockt.
+
+- **Behat wieder grün**: Die Laufzeit schreibt `adaptivequiz`, die Aufrufer
+  übergeben `mod_adaptivequiz`. Nach der Umstellung des Lookups auf
+  `(component, attemptid)` traf der strenge Vergleich nie, und jede Einsicht wurde
+  verweigert. Der Resolver akzeptiert jetzt beide Schreibweisen.
+- **#18 abgeschlossen**: Die Gruppenprüfung wurde im Kurskontext übersprungen – dort,
+  wo die meisten Personen sichtbar sind. Ohne Kursmodul greift jetzt der
+  Kurs-Gruppenmodus. Neue Testdatei `feedback_access_test` (4 Tests).
+- **Playwright entblockt**: Der Seed ist idempotent und deterministisch; ein zweiter
+  Lauf legt keine weitere gleichnamige Skala an. Damit laufen beide Specs –
+  6 Tests grün, darunter die zuvor zurückgestellte #54-Spec.
+
+## 1.1.6 (interne Version 2026083008)
+
+> Werkzeug und Nachweis für die Query-Pläne.
+
+- **Neu `cli/explain_hotqueries.php`** (mit `cli/explain_seed.php`): protokolliert
+  die Pläne der vier performancekritischen Abfragen, in beiden Dialekten
+  (`EXPLAIN (ANALYZE, BUFFERS)` bzw. `ANALYZE FORMAT=JSON`), nach Auffrischen der
+  Tabellenstatistiken. Auf einer echten Instanz genügt `--no-seed`.
+- **`doc/query-plans-postgres.md`**: gemessen an den Proportionen einer
+  Produktivinstanz. Leichte Zählung ohne Attempt-Tabellen, keine Fensterfunktion
+  mehr bei „Frage hinzufügen", Index Scan beim Itemparameter-Filter.
+- Der `Seq Scan` auf `question_versions` ist eingeordnet: korrekte Wahl des
+  Optimierers, der Gewinn liegt im Wegfall der Fensterfunktion.
+- **MariaDB-Lauf steht aus** und wird im Dokument ausdrücklich als offen benannt.
+
+## 1.1.6 (interne Version 2026083007)
+
+> Review-Befunde: Upgrade-Ausgabe, Kontextauflösung, CI.
+
+- **Upgrade-Ausgabe entrauscht**: statt siebzehn Protokollzeilen je entferntem Index
+  nur noch eine Zusammenfassung; Details über `debugging()`. Die `issue #NN:`-Präfixe
+  sind aus nutzersichtbarer Ausgabe entfernt.
+- **Kontextauflösung komponentensicher**: `context_resolver::for_attempt()` löst über
+  `(component, attemptid)` auf und nutzt `IGNORE_MISSING` statt `IGNORE_MULTIPLE`.
+  Ohne Treffer greift der Systemkontext mit weiterhin geltender Capability-Prüfung –
+  fail closed statt Autorisierung gegen einen fremden Kurs.
+- **Entscheidung dokumentiert** (`doc/decision-attempt-identity.md`):
+  `UNIQUE(attemptid)` bleibt. Ein Versuch gehört fachlich genau einem
+  Komponententyp; die `component`-Spalte beschreibt die Herkunft, nicht den
+  Schlüssel. Ein Test hält die Invariante als gewollt fest.
+- CI: korrigierte `seed.php` übernommen.
+
+## 1.1.6 (interne Version 2026083006)
+
+> Leichte Count-Abfrage für die Fragenliste (#21) und Anschluss-Issue.
+
+- **Leichte Zählung ohne die Statistik-Joins**
+  (`return_sql_for_catscalequestions_count()`). Das Zählen der Liste zählte bisher
+  die Zeilen der vollen Abfrage; die Aggregate wurden nur berechnet, um von
+  `COUNT()` verworfen zu werden.
+- **Override mit Schutzbedingung** in `catscalequestions_table::query_db()`: Die
+  Bibliothek hängt Filter und Suche erst nach dem Tabellenaufbau an, eine zu früh
+  festgelegte Zählung würde eine Gesamtzahl melden, die nicht zur Liste passt.
+- **Noch nicht aktiviert** – `set_count_context()` wird nicht aufgerufen, der Stand
+  ist verhaltensneutral. Begründung und Restschritte in `doc/issue-21-followup.md`.
+- Neue Tests (4) und zwei Zahn-Tests; Playwright-Fixture für #54 im Seed ergänzt.
+- **Anschluss-Issue** `doc/issue-21-followup.md` für den verbleibenden Teil von #21,
+  mit DoD-Liste (5 erledigt, 8 offen) und der Upstream-Voraussetzung `protected`.
+
+## 1.1.6 (interne Version 2026083005)
+
+> Zwei CI-Befunde behoben.
+
+- **`npm ci` scheiterte**: `.gitignore` ignorierte `package-lock.json` global, also
+  auch das Playwright-Lockfile – dieselbe Falle wie zuvor bei `amd/build/`. Ausnahme
+  ergänzt und mit echtem Git im A/B-Test belegt.
+- **MariaDB-Fehlschlag behoben**: `CAST(x AS DECIMAL)` bedeutet dort `DECIMAL(10,0)`,
+  also null Nachkommastellen – `-0.1` wurde zu `0` gerundet und landete im falschen
+  Bereich. Der Cast steht nur im Test, der die Typisierung der echten Abfrage
+  nachbildet; der Produktionscode vergleicht eine numerische Spalte ohne Cast.
+- Volle Regression auf **MariaDB**: 91/91 Dateien grün.
+
+## 1.1.6 (interne Version 2026083004)
+
+> Issue #23 abgeschlossen.
+
+- **Zweites Diagramm umgestellt.** `render_attempts_per_person_chart()` lud ebenfalls
+  eine Zeile je Person und bestimmte das Maximum über die Sortierung der geladenen
+  Menge. `catquizstatistics.php` enthält jetzt **null** `get_records_sql`-Aufrufe.
+- **Aggregation verallgemeinert**: beide Diagramme teilen sich
+  `aggregate_person_histogram()`, der CASE-Ausdruck existiert genau einmal. Der
+  fachliche Unterschied bleibt erhalten und ist als Parameter ausgedrückt – das
+  Antworten-Diagramm verwirft eine Person ohne passenden Bereich, das
+  Versuchs-Diagramm ordnet sie Bereich 0 zu.
+- **Obergrenze** `CHART_MAX_DATA_POINTS = 500` für zurückgegebene Datenpunkte.
+- Zahn-Tests: ohne die Untergrenze der Klassenbreite entsteht eine Division durch
+  Null; ohne den locale-sicheren Parser wird aus `-1,5` eine `-1.0`. Beide rot.
+- **Offen**: Browsertests mit großen Datenmengen (Playwright-Strang).
+
+## 1.1.6 (interne Version 2026083003)
+
+> Issue #23: Diagrammdaten werden in der Datenbank aggregiert.
+
+- **Keine Vollkohorte mehr im Speicher.** Das Antworten-Histogramm lud eine Zeile je
+  eingeschriebener Person, um sie anschließend nur zu zählen. Maximum,
+  Klassenbildung und Bereichszuordnung geschehen jetzt in SQL; zurück kommen
+  ausschließlich fertige Zählungen.
+- Neue Methoden `catquiz::get_max_questions_answered_per_person()` und
+  `catquiz::get_answers_per_person_histogram()`; die bestehende Kohorten-Abfrage wird
+  als Unterabfrage umschlossen statt dupliziert.
+- `feedback_helper::get_feedback_range_bounds()` liefert die Feedback-Grenzen als
+  Zahlen – aus denselben Einstellungen und mit demselben Parser wie die bestehende
+  Klassifikation, damit SQL und PHP nicht auseinanderlaufen. Ein Test vergleicht
+  beide direkt.
+- Semantik unverändert: Klasse 0 bleibt für „keine Antworten" reserviert, Bereiche
+  sind halboffen mit geschlossenem oberstem Bereich.
+- Zahn-Test: ohne den locale-sicheren Parser wird aus `-1,5` eine `-1.0` – rot.
+- **Noch offen bei #23**: die zweite unbeschränkte Abfrage, eine konfigurierbare
+  Obergrenze für Diagrammpunkte und Browsertests mit großen Datenmengen.
+
+## 1.1.6 (interne Version 2026083002)
+
+> Issue #22 abgeschlossen; Playwright in die dev-CI eingebettet.
+
+- **Fensterfunktion über alle Frageversionen ersetzt.** `ROW_NUMBER() OVER
+  (PARTITION BY questionbankentryid ...)` nummerierte jede Zeile von
+  `question_versions` – die gesamte Versionshistorie der Instanz – und verwarf erst
+  danach. Jetzt eine korrelierte Bedingung („keine neuere Version desselben
+  Bank-Eintrags"), die den Index nutzt und ohne Fensterfunktion auskommt, also auf
+  PostgreSQL und MariaDB gleich arbeitet.
+- Neuer Test: zwei Versionen eines Bank-Eintrags, nur die aktuelle wird angeboten.
+  Zahn-Test rot ohne den Versionsfilter.
+- **CI**: `playwright` läuft im dev-Workflow parallel zu `phpunit` und `behat`, mit
+  `lint-php` und `lint-jsamd` als Voraussetzung und `ci-complete` als Nachfolger.
+- **Zurückgestellt bei #21**: das zweistufige Laden auf die sichtbare Seitenmenge.
+  Es griffe in die Paginierungsschleife von `local_wunderbyte_table` ein, wo
+  Paginierung, Callback-Filter, Sortierung und Instanz-Cache ineinandergreifen – das
+  braucht einen eigenen Testharnisch. Die bereits wirksame Einschränkung der
+  Aggregation auf Kontext und Skalen bleibt bestehen.
+
+## 1.1.6 (interne Version 2026083001)
+
+> CI-Codechecker grün.
+
+- **39 `@covers`-Warnungen behoben** in zehn Testdateien. Die Angaben standen im
+  Datei-Docblock statt am Klassen-Docblock – der Sniff wertet nur letzteren. Sie
+  wurden verschoben, nicht neu erfunden.
+- **Drei echte Fehler behoben**: fehlende Konstanten-Docblocks in
+  `tests/playwright/seed.php`, ein Inline-Docblock im `itemparam_validity_test` und
+  zwei Klassen in `webservice_external_classes_test.php` – der Stub liegt jetzt in
+  `tests/fixtures/external_reload_template_stub.php`.
+- Prüfstand: `classes`, `db`, `lang`, `catmodel`, `tests` und Top-Level jeweils
+  **0 Meldungen** (ohne die projektüblich ausgeschlossenen `TodoComment`).
+- Volle Regression: 90/90 Dateien grün.
+
+## 1.1.6 (interne Version 2026083000)
+
+> Issue #54 abgeschlossen: Filtern, Sortieren und eine Übersicht je Skala.
+
+- **Neue Spalte `local_catquiz_itemparams.usable`** samt Index `(contextid, usable)`.
+  Ohne Datenbankspalte gibt es kein serverseitiges Filtern und Sortieren – der
+  Zustand wird in PHP aus dem Modellvertrag abgeleitet.
+- **Genau eine Stelle berechnet den Wert**: `itemparam_validity::stamp()` fragt
+  ausschließlich `model_strategy::validate_item_parameters()`. Alle **acht**
+  Schreibpfade rufen sie auf, damit die Regel ungeteilt bleibt.
+- **Upgrade mit Backfill** in Stapeln zu 500 Zeilen, plus eine
+  **Konsistenzprüfung**, die nachrechnet und Abweichungen meldet, ohne etwas zu
+  ändern. Das im Issue benannte Driftrisiko wird damit messbar.
+- **Filter und Sortierung** in der Fragenliste auf der persistierten Spalte.
+- **Aggregierte Übersicht je Skala** (`get_unusable_item_counts_per_scale()`), eine
+  gruppierte Abfrage für alle Skalen. Gezählt werden nur Items mit unbrauchbarem
+  aktivem Parameter – Pilotitems ohne aktiven Parameter sind ein erwarteter Zustand.
+- Zahn-Tests: entwerteter Stempel und aufgeweichtes Aggregat werden beide rot;
+  letzteres zählt dann 4 statt 2, weil das Pilotitem mitgezählt würde.
+
+## 1.1.6 (interne Version 2026082816)
+
+> CI-Grunt entschärft, Playwright-Browsertests eingeführt.
+
+- **CI `lint-jsamd`**: Der Verify-Schritt bricht nicht mehr ab, sondern meldet den
+  Diff als Warnung. Er rebuildet weiterhin im Runner – der dokumentierte Workaround
+  für `moodle-plugin-ci#350`. Der beobachtete Diff hatte zwei Ursachen, eine davon
+  (Sourcemap der falschen Datei) deutet auf Korruption im Build, nicht auf einen
+  veralteten Commit.
+- **Kein `caniuse-lite`-Pin**: eingebaut und wieder entfernt, weil die Gegenprobe
+  ihn nicht stützt – mit einer deutlich älteren Datenbank ändert sich die lokale
+  Ausgabe nicht.
+- **Playwright eingeführt** (`tests/playwright/`) nach dem Muster der
+  flexaccess-Workflows: Seed, Umgebungs-Helfer, CAT-Manager-Helfer und ein erster
+  Fall zur Fragetext-Suche. Eigener Workflow – manuell auf jedem Branch, automatisch
+  bei Push auf `dev`/`develop`/`development`, zusätzlich wöchentlich.
+- **Stabilität belegt**: drei vollständige Läufe hintereinander grün. Zwei echte
+  Ursachen behoben – Zählen während des AJAX-Nachladens (jetzt Warten auf Spinner
+  bzw. „keine Datensätze") und ein zu knappes Login-Timeout bei kaltem Cache.
+
+## 1.1.6 (interne Version 2026082815)
+
+> Issue #54: Unbrauchbare Itemparameter sind im CAT-Manager sichtbar – und
+> Pilotitems erscheinen überhaupt erst in der Liste.
+
+- **Neue Spalte „Parametergültigkeit"** in der Testitem-Übersicht. Bei „nicht
+  verwendbar" nennt der Text Modell und Ursache, mit Warnsymbol und Screenreader-Text
+  – nicht farbcodiert allein.
+- **Eine einzige Wahrheitsquelle**: `local\itemparam_validity` delegiert an
+  `model_strategy::validate_item_parameters()`, dieselbe Methode, die Import und
+  Laufzeit verwenden. Neue Modelle wirken ohne Anpassung der Ansicht. Ein Test pinnt,
+  dass Backend-Urteil und Validierung nie auseinanderlaufen.
+- **Drei Zustände**: verwendbar / nicht verwendbar / keine Parameter. Ein klassisches
+  Pilotitem und ein Item mit vorhandenen, aber unbrauchbaren Parametern werden beide
+  als Pilotitem gespielt – nur eines braucht Aufmerksamkeit.
+- **Kein N+1**: Die Spalte wird aus der ohnehin geladenen Zeile berechnet.
+- **Pilotitems waren gar nicht sichtbar.** Drei aufeinander aufbauende Ausschlüsse
+  mussten fallen: der `INNER JOIN` auf die Itemparameter, die Statistik-Joins über
+  `lcip.contextid` (bei Pilotitems NULL – die Kennzahlen wären leer geblieben) und
+  die `WHERE`-Bedingung auf derselben Spalte. Items ohne aktiven Parameter sind in
+  Pilotierung, und gerade ihre Versuchszahlen sind von Interesse.
+- Neue Tests `itemparam_validity_test` (8 Tests) decken alle im Issue genannten Fälle
+  ab; zwei Zahn-Tests werden bei Rücknahme rot.
+- **Noch offen bei #54**: serverseitiges Filtern/Sortieren (verlangt einen
+  persistierten Zustand) und die aggregierte Übersicht je Skala.
+
+## 1.1.6 (interne Version 2026082814)
+
+> Issue #24: Skalenbaum ohne N+1-Abfragen und ohne quadratischen Aufbau.
+
+- **Subscriptions in einer Abfrage.** `build_tree()` fragte je Skala den
+  Subscription-Status ab (`record_exists()` pro Skala). Neu:
+  `subscription::return_subscribed_itemids()` lädt alle auf einmal, der Baum schlägt
+  per `isset()` nach.
+- **Fragenzahlen gruppiert.** `export_for_template()` und `return_as_array()` zählten
+  je Skala einzeln. Neu: `catquiz::get_number_of_questions_per_scale()` mit
+  `GROUP BY catscaleid`.
+- **Linearer Baumaufbau.** Die Skalen werden einmal nach `parentid` gruppiert; jede
+  Ebene sieht nur ihre eigenen Kinder statt erneut die vollständige Liste. Die
+  Reihenfolge innerhalb einer Ebene bleibt unverändert.
+- Neue Tests `catscale_tree_test` (5 Tests): Abfragezahl bleibt konstant,
+  Baumstruktur und Reihenfolge über drei Ebenen, und – als eigentlicher Beleg –
+  Subscription-Zustand sowie Fragenzahlen **identisch** zu den bisherigen
+  Einzelabfragen.
+- Zahn-Tests beziffern den Gewinn: mit reinjiziertem N+1 braucht der größere Baum
+  **221 statt 12** Abfragen, die Fragenzahlen **3 statt 1**.
+- **Noch offen bei #24**: Application-Cache für die Skalenhierarchie samt
+  Invalidierung – bewusst zurückgestellt, weil falsche Invalidierung veraltete Bäume
+  zeigt und der Aufbau bereits linear mit konstanter Abfragezahl ist.
+
+## 1.1.6 (interne Version 2026082813)
+
+> Issue #22: „Frage hinzufügen" ohne globale Scans.
+
+- **`GROUP_CONCAT` und Wildcard-`LIKE` entfernt.** Die Abfrage baute je Frage einen
+  String aus allen zugeordneten Skalen (`-3--7-`) und filterte mit `LIKE '%-3-%'`.
+  Dieser String wurde nirgends angezeigt – er drückte nur „noch nicht dieser Skala
+  zugeordnet" aus. Ein führendes Wildcard kann keinen Index nutzen, und die
+  Aggregation erzwang ein `GROUP BY` über die gesamte Fragenbank.
+- **Ersetzt durch `NOT EXISTS`** auf `local_catquiz_items`. Das trifft genau den in
+  #25 angelegten Index `(catscaleid, componentname, componentid)`. Damit entfallen
+  auch der `LEFT JOIN`, das `GROUP BY` und ein toter Parameter.
+- Neue Tests `add_questions_query_test` (3 Tests): führen die Abfrage real aus und
+  prüfen, dass eine Zuordnung zu einer **anderen** Skala die Frage nicht ausblendet –
+  ein zu grob formuliertes `NOT EXISTS` wäre sonst unbemerkt durchgegangen.
+- **Noch offen bei #22**: `ROW_NUMBER()` über alle Frageversionen sowie Behat für
+  Suche, Pagination und Hinzufügen.
+
+## 1.1.6 (interne Version 2026082812)
+
+> Zählfehler auch in der Add-Items-Abfrage behoben (Fortsetzung von #21).
+
+- **`return_sql_for_addcatscalequestions` zählte Steps statt Versuche.** Sie erreicht
+  dieselben Daten über `get_sql_for_stat_base_request()`, das ebenfalls
+  `question_attempt_steps` joint – `COUNT(*)` zählte dort jede Interaktion einzeln.
+  Jetzt `COUNT(DISTINCT qa.id)`. Damit ist der Defekt an beiden Stellen behoben.
+- Regressionstest ergänzt; beide geänderten Abfragen zusätzlich real ausgeführt.
+
+## 1.1.6 (interne Version 2026082811)
+
+> CI `lint-jsamd`: die echte Ursache gefunden. Dazu Issue #21 (Teil 1).
+
+- **`.gitignore` ignorierte `amd/build/`.** Das ist die Ursache dafür, dass
+  `questionpreview.min.js` bei jedem CI-Lauf erneut als „newly generated" gemeldet
+  wurde, obwohl die Datei in jedem Paket lag: Bereits getrackte Build-Dateien werden
+  weiter aktualisiert, **neue** nimmt Git stillschweigend nicht mit. Die Regel ist
+  entfernt – Moodle lädt `amd/build/*.min.js` zur Laufzeit, und wer das Plugin
+  installiert, hat keine Node-Toolchain. **Einmalig nötig:**
+  `git add -f amd/build/questionpreview.min.js amd/build/questionpreview.min.js.map`
+- **`update-browserslist-db`-Schritt wieder entfernt** – er hat nicht geholfen, die
+  Diagnose war falsch.
+- **Neuer Schritt „Verify committed AMD build"** in beiden Workflows: sichert den
+  eingecheckten Stand, baut mit der Toolchain des Runners neu und vergleicht per
+  `diff`. Fehlschlag nur bei echtem Unterschied. Das umgeht das bekannte
+  False-Positive `moodlehq/moodle-plugin-ci#350`, ohne einen tatsächlich veralteten
+  Build zu kaschieren – letzteres wurde per Zahn-Test geprüft.
+- **Issue #21 (Teil 1)**: Die Statistik-Unterabfrage der Fragenliste hatte **kein
+  `WHERE`** und aggregierte jeden CAT-Versuch der gesamten Instanz, bevor der äußere
+  Join die erste Zeile verwarf; ein `LIMIT` außen reduzierte davon nichts. Jetzt
+  schränkt die Aggregation selbst auf Kontext und Skalen ein.
+- **Versuchszahlen zählen Versuche statt Steps**: `COUNT(qa.id)` zählte über den Join
+  auf `question_attempt_steps` jede Interaktion einzeln. Jetzt
+  `COUNT(DISTINCT qa.id)` in beiden Unterabfragen.
+- **Noch offen bei #21**: das zweistufige Laden auf die sichtbare Seitenmenge und die
+  leichte Count-Abfrage. **Nebenbefund für #22**: `return_sql_for_addcatscalequestions`
+  trägt über `get_sql_for_stat_base_request()` denselben Zählfehler (`COUNT(*)` über
+  den Steps-Join).
+
+## 1.1.6 (interne Version 2026082810)
+
+> Fragetext-Suche, Issue #19 und Stabilisierung der CI-Stufe `lint-jsamd`.
+
+- **CI `lint-jsamd` grün**: Vier fremde Module (`csvimport`, `managecatcontext`,
+  `managecatscale`, `testitem_model_overrides`) wurden als „stale" gemeldet, obwohl
+  niemand sie angefasst hatte. Ursache war eine veraltete `caniuse-lite`-Datenbank –
+  Babel leitet seine Ausgabe daraus ab und erzeugt dann andere Bytes als die
+  eingecheckten Build-Dateien. Die Dateien sind neu erzeugt, und beide Workflows
+  aktualisieren die Datenbank jetzt vor dem Grunt-Schritt.
+- **Issue #19**: Die Detailansicht schränkt die Abfrage auf die angeforderte Frage
+  ein (`:detailquestionid`, gesetzt im innersten Question-Join) statt die ganze Skala
+  zu laden und in PHP auszuwählen. Zwei Fehler behoben: `IGNORE_MISSING` war der
+  `$limitfrom`-Parameter und prüfte nichts, und die Frage-ID wurde im `$userid`-Slot
+  übergeben, den der Builder an einen Join über **benutzerbezogene** Statistiken
+  bindet – die Ansicht verglich Nutzer-IDs mit einer Frage-ID.
+- **Fragetext-Suche wieder verfügbar** (Folge von #20): eine dedizierte Abfrage löst
+  passende Frage-IDs auf, der Text bleibt aus der Listenabfrage. Kosten fallen pro
+  Suche an, nicht pro Seitenaufruf. Wildcards werden escaped, kein Treffer ergibt
+  eine leere Liste, und oberhalb von 2000 Treffern verzichtet die Suche auf die
+  Einschränkung statt eine riesige `IN()`-Klausel zu bauen.
+- **Dabei gefunden**: Die Einschränkung muss in `set_filter_sql()` sitzen, nicht beim
+  Rendern. `local_wunderbyte_table` serialisiert seine SQL in eine gecachte Instanz,
+  aus der AJAX-Nachladungen aufgebaut werden – zur Renderzeit ergänzte Bedingungen
+  überleben das erste Nachladen nicht. Die erste Seite sah gefiltert aus, jedes
+  Nachladen zeigte still wieder alle Datensätze.
+- Neue Tests: `question_detail_query_test` (4), `questiontext_search_test` (5),
+  Behat `catquiz_questiontext_search` (2 Szenarien). Fünf Zahn-Tests, alle rot bei
+  Rücknahme.
+
+## 1.1.6 (interne Version 2026082807)
+
+> Issue #20: Fragetexte aus den Tabellenabfragen entfernt, Vorschau lazy geladen.
+
+- **`questiontext` aus fünf SQL-Stellen entfernt** (drei Query-Builder in
+  `catquiz.php`, inkl. innerem SELECT und `GROUP BY`). Die Listen selektieren den
+  Fragetext nicht mehr.
+- **Beide Renderer entschlackt**: `col_name()` und `col_questiontext()` bauten je
+  Zeile `question_rewrite_question_urls` → `format_text` → `strip_tags` auf und
+  betteten den Volltext in ein verstecktes Modal. Jetzt nur noch ein Auslöser mit
+  dem Fragenamen.
+- **Neuer Webservice** `local_catquiz_get_question_preview` mit
+  `validate_context()` und `require_capability('local/catquiz:manage_catscales')`.
+- **Neues AMD-Modul** `local_catquiz/questionpreview` lädt die Vorschau bei Klick in
+  ein Core-Modal; ein delegierter Listener überlebt das Neuzeichnen der Tabelle bei
+  Sortierung, Filter und Pagination.
+- **Volltextsuche und Sortierung über `questiontext` entfallen** (im Issue als
+  bewusste Folge benannt); die irreführende Spaltenüberschrift „Fragetext" wurde
+  auf „Name" korrigiert.
+- Neue Tests: `question_list_payload_test.php` (4 Tests, prüft u. a. die
+  SELECT-Feldlisten und die Rechteprüfung des Endpunkts) und
+  `catquiz_question_preview_lazy.feature` (2 Szenarien). Zahn-Test: mit
+  wiederhergestelltem Volltext-Template fallen beide Szenarien.
+- **Hinweis:** `amd/build/questionpreview.min.js` ist handgeschrieben (kein grunt im
+  Container). Vor dem Merge `moodle-plugin-ci grunt` laufen lassen.
+
+## 1.1.6 (interne Version 2026082806)
+
+> Archetyp-Lücke bei `view_teacher_feedback` geschlossen.
+
+- **`editingteacher` erhält `local/catquiz:view_teacher_feedback`.** Rollen-
+  Archetypen sind unabhängige Vorlagen – ein `editingteacher` erbt **nichts** vom
+  `teacher`-Archetyp (Vererbung läuft in Moodle über Kontexte, nicht über
+  Archetypen). Vor dem Fix war ausgerechnet die Rolle ausgesperrt, die fremde
+  Versuche ohnehin prüfen darf. Empirisch belegt: editingteacher = nein,
+  teacher = ja.
+- Ein Scan aller neun Capabilities zeigte genau diese eine Lücke.
+- Neuer Dauertest `test_all_teacher_roles_may_see_teacher_feedback()` (positiv für
+  beide Lehrrollen, negativ für Teilnehmende); Zahn-Test rot bei Rücknahme.
+- **Entschieden und geschlossen:** `UNIQUE (component, attemptid)` wird nicht
+  umgesetzt. Ein Versuch läuft über genau einen Komponententyp, `attemptid` ist
+  für sich eindeutig – das bestehende `UNIQUE (attemptid)` ist fachlich korrekt.
+
+## 1.1.6 (interne Version 2026082805)
+
+> Issue #25, Nachtrag: redundante Indizes entfernt. Spaltennamen unverändert.
+
+- **18 doppelt abgedeckte Spalten bereinigt.** XMLDB legt für jeden
+  `<KEY TYPE="foreign">` bereits einen Index an; ein zusätzlicher `<INDEX>` auf
+  derselben Spalte erzeugte einen zweiten, physisch identischen Index. Betroffen:
+  `attempts` 4, `personparams` 4, `items` 3, `progress` 2, `tests` 2,
+  `catscales` 1, `subscriptions` 1, `itemparams` 1. Es wurden ausschließlich
+  `<INDEX>`-Deklarationen entfernt – **kein `FIELDS` und kein Spaltenname geändert**.
+- **`progress.attemptid`**: Der eigenständige Index trug die Eindeutigkeitsgarantie.
+  Der Fremdschlüssel ist jetzt `TYPE="foreign-unique"` – ein eindeutiger Index, die
+  Relation bleibt dokumentiert.
+- **Upgrade-Helfer** `local_catquiz_upgrade_drop_duplicate_indexes()` entscheidet vor
+  dem Löschen, welcher Index überlebt, und löscht per Namen. `drop_index()` löst über
+  die Spaltenliste auf und hätte den eindeutigen Index treffen können.
+- Entfallen ist dabei auch `<INDEX NAME="catscaleid" FIELDS="scaleid">` auf
+  `attempts` – Name und Spalte stimmten nicht überein. Die Spalte heißt weiter
+  `scaleid`.
+- Neuer Wächter `test_no_redundant_indexes_remain()` und neue Suite
+  `schema_index_cleanup_test.php`; verifiziert auf PostgreSQL und MariaDB.
+
+## 1.1.6 (interne Version 2026082804)
+
+> Issue #25: Datenbankindizes für Attempts, Progress und Skalenabfragen –
+> verifiziert auf PostgreSQL **und** MariaDB, inkl. zweier dabei gefundener Fehler.
+
+- **Upgrade-Block wäre nie gelaufen**: Savepoint `2026082803` lag über
+  `$plugin->version` (`2026082802`). Bestandsinstallationen hätten die Indizes nie
+  bekommen. Version liegt jetzt über dem höchsten Savepoint.
+- **Dubletten-Bereinigung löschte zu viel**: `GROUP BY` fasst alle `NULL` zu einer
+  Gruppe zusammen, ein Unique-Index beschränkt bei `NULL` dagegen nichts. Zeilen mit
+  `NULL` wurden gelöscht, obwohl der Index sie zugelassen hätte – und `contextid`
+  (personparams) sowie `attemptid` (progress) sind nullable. Die Abfrage schließt
+  NULL-Gruppen jetzt aus; neuer Regressionstest.
+- **`timecreated`-Index** zeigte auf `instanceid` – korrigiert; Zeitraumfilter sind
+  damit erstmals indiziert.
+- Neue Indizes: `personparams` UNIQUE `(userid, contextid, catscaleid)`,
+  `progress` UNIQUE `(attemptid)`, `attempts` `(contextid, scaleid, userid,
+  attemptid)`, `items` `(catscaleid, componentname, componentid)` und
+  `(catscaleid, activeparamid)`.
+- **EXPLAIN belegt die Nutzung** aller drei Hauptmuster auf beiden Engines
+  (20.000 Zeilen, nach `ANALYZE`).
+- **Sprachdateien sortiert** (`moodle.Files.LangFilesOrdering`): je vier Verstöße in
+  `lang/en` und `lang/de` behoben; nachgewiesen, dass sich nur die Reihenfolge
+  ändert (760 bzw. 750 Strings, key⇒value identisch). Die CI fährt
+  `--max-warnings 0`, diese Warnungen blockierten den Lauf.
+- **Nicht umgesetzt, bewusst**: `UNIQUE (component, attemptid)` aus dem Issue.
+  `catquiz.php` sucht Versuche über `attemptid` allein; eine Lockerung würde
+  `get_record()` bei mehreren Treffern brechen und verlangt eine Codeänderung.
+- **Befund ohne Änderung**: 14 redundante Index-Paare (Bestand, beide Engines),
+  weil `install.xml` für dieselbe Spalte Key *und* Index deklariert.
+
+## 1.1.5 (interne Version 2026082801)
+
+> Issue #18: Statistik- und Review-Rechte werden im tatsächlichen Kurs- bzw.
+> Modulkontext geprüft statt im Systemkontext oder über den globalen `$COURSE`.
+
+- **Neu `local\access\context_resolver`**: löst einen Versuch auf den Kontext auf,
+  zu dem er gehört (Modul → Kurs → System), mit Request-Cache gegen N+1.
+  `SITEID` wird bewusst nicht als Kurskontext akzeptiert – das wäre wieder eine
+  systemweite Prüfung.
+- **Neu `local\access\feedback_access`**: die Regel „darf fremde Ergebnisse sehen"
+  existiert jetzt genau einmal und wird von Anzeige, Export und AJAX gleichermaßen
+  benutzt. Inklusive Gruppenmodus (`SEPARATEGROUPS` ohne `accessallgroups`).
+- **`debuginfo`**: toter, unerreichbarer Fix hinter einem `return` entfernt (er
+  hätte zudem auf einer privaten Property fatal geworfen); handgebauter Lookup in
+  der `context`-Tabelle mit hartkodiertem `contextlevel => 50` ersetzt.
+- **`catquizstatistics`**: vier Prüfstellen vereinheitlicht; zwei latente Abstürze
+  behoben (`context_course::instance(null)` bei site-weiter Statistik).
+- **`feedback_tab_clicked`**: AJAX-Endpunkt validiert den aufgelösten Kontext.
+- **`show_attemptfeedback.php`**: die Review-Seite verlangte systemweites
+  `manage_catscales` – eine Lehrkraft konnte einen Versuch des eigenen Kurses nicht
+  einsehen. Jetzt Kontext des Versuchs + `feedback_access`-Regel; neuer String
+  `error:noreviewpermission`.
+- **Behat**: neues Feature `catquiz_context_permissions.feature` (2 Szenarien, echter
+  Chrome-Lauf grün; bei zurückgenommenem Fix fallen beide) und ein neuer Step, der die
+  Versuchs-ID zur Laufzeit per Username auflöst.
+- **`db/access.php`**: `view_teacher_feedback` auf `CONTEXT_MODULE` (systemweite
+  Zuweisungen wirken durch Vererbung unverändert weiter).
+- **Fallstrick dokumentiert**: `groups_get_activity_groupmode()` liefert einen
+  **String** – ein Strict-Vergleich gegen `SEPARATEGROUPS` trifft nie zu.
+- Neue Suite `tests/local/access/context_resolver_test.php` (14 Tests), alle drei
+  Zahn-Tests werden bei Rücknahme rot.
+
 ## 1.1.5 (interne Version 2026082152)
 
 > Dokumentations-Aktualisierung und Sitzungsabschluss des Strangs „CI grün"

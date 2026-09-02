@@ -44,29 +44,8 @@ use require_login_exception;
 
 defined('MOODLE_INTERNAL') || die();
 
-/**
- * Simple render stub for reload_template test.
- */
-class external_reload_template_stub {
-    /**
-     * Accept any constructor params from webservice payload.
-     *
-     * @param mixed ...$params
-     */
-    public function __construct(...$params) {
-    }
-
-    /**
-     * Mimic template export function.
-     *
-     * @return array
-     */
-    public function export_for_template(): array {
-        return [
-            'ok' => true,
-        ];
-    }
-}
+global $CFG;
+require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/external_reload_template_stub.php');
 
 /**
  * Behaviour-level tests for each external class execute() implementation.
@@ -101,6 +80,9 @@ final class webservice_external_classes_test extends advanced_testcase {
      */
     public function test_execute_action_execute_returns_failure_for_unknown_method(): void {
         $this->resetAfterTest(true);
+        // These endpoints now require the CAT manager capability. The tests
+        // ran without any user, which only worked while nothing was checked.
+        $this->setAdminUser();
 
         $result = execute_action::execute('method_does_not_exist', '{}');
 
@@ -156,6 +138,9 @@ final class webservice_external_classes_test extends advanced_testcase {
         global $DB;
 
         $this->resetAfterTest(true);
+        // This endpoint now requires the CAT manager capability. The test ran without
+        // any user, which only worked while nothing was checked.
+        $this->setAdminUser();
 
         $result = manage_catscale::execute(
             'WS Created Scale',
@@ -211,6 +196,9 @@ final class webservice_external_classes_test extends advanced_testcase {
      */
     public function test_reload_template_execute_returns_failure_for_unknown_method(): void {
         $this->resetAfterTest(true);
+        // These endpoints now require the CAT manager capability. The tests
+        // ran without any user, which only worked while nothing was checked.
+        $this->setAdminUser();
 
         $payload = json_encode([
             'admethodname' => 'method_does_not_exist',
@@ -306,6 +294,9 @@ final class webservice_external_classes_test extends advanced_testcase {
      */
     public function test_update_parameters_execute_returns_failure_for_invalid_ids(): void {
         $this->resetAfterTest(true);
+        // These endpoints now require the CAT manager capability. The tests
+        // ran without any user, which only worked while nothing was checked.
+        $this->setAdminUser();
 
         $result = update_parameters::execute(0, 0);
 
@@ -332,5 +323,29 @@ final class webservice_external_classes_test extends advanced_testcase {
         ]);
 
         return dataapi::create_catscale($catscalestructure);
+    }
+    /**
+     * Subscribing yourself needs no management right; subscribing others does.
+     *
+     * Review finding: one capability covered two very different actions, so the
+     * endpoint accepted any user id behind a single manage check.
+     *
+     * @covers \local_catquiz\external\subscribe::execute
+     * @return void
+     */
+    public function test_subscribe_separates_self_from_foreign(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+
+        // Own subscription: allowed without any management right.
+        $result = \local_catquiz\external\subscribe::execute($user->id, 'catscale', 1);
+        $this->assertArrayHasKey('subscribed', $result);
+
+        // Somebody else's: refused for a user without the management right.
+        $this->expectException(\required_capability_exception::class);
+        \local_catquiz\external\subscribe::execute($other->id, 'catscale', 1);
     }
 }

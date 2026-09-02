@@ -31,6 +31,7 @@ use core_external\external_function_parameters;
 use core_external\external_value;
 use core_external\external_single_structure;
 use local_catquiz\event\feedbacktab_clicked;
+use local_catquiz\local\access\context_resolver;
 
 
 /**
@@ -72,13 +73,26 @@ class feedback_tab_clicked extends external_api {
             'feedbacktranslated' => $translatedfeedback,
         ]);
 
-        $ctx = \context_system::instance();
-        $role = has_capability('local/catquiz:canmanage', $ctx)
-            ? 'catmanager'
-            : 'student';
+        // Issue #18: AJAX endpoints must resolve and validate the context of the
+        // attempt they act on, so that they apply exactly the same rules as a
+        // normal page request instead of judging everything in the system context.
+        $ctx = context_resolver::for_attempt($attemptid);
+        self::validate_context($ctx);
+
+        // Review finding: every non-manager was logged as "student", so a teacher
+        // looking at feedback appeared in the event log as the learner. The role is
+        // now decided in the context of the attempt, which is where teaching rights
+        // actually live - a site-wide manage right says nothing about a course.
+        if (has_capability('local/catquiz:canmanage', \context_system::instance())) {
+            $role = 'catmanager';
+        } else if (has_capability('local/catquiz:view_teacher_feedback', $ctx)) {
+            $role = 'teacher';
+        } else {
+            $role = 'student';
+        }
 
         $event = feedbacktab_clicked::create([
-            'context' => \context_system::instance(),
+            'context' => $ctx,
             'other' => [
                 'attemptid' => $attemptid,
                 'feedback' => $feedback,

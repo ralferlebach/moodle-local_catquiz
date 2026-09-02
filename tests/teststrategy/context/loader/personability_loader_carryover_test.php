@@ -40,6 +40,7 @@ use stdClass;
  * Guards the carry-over source of person abilities.
  *
  * @package    local_catquiz
+ * @covers \local_catquiz\teststrategy\context\loader\personability_loader
  */
 final class personability_loader_carryover_test extends advanced_testcase {
     /**

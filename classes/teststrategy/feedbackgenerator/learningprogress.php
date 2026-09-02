@@ -689,7 +689,10 @@ class learningprogress extends feedbackgenerator {
             );
             $series->set_labels([0 => $stringforchartlegend]);
 
-            $colorvalue = $this->get_color_for_personability(
+            // The method lives on the feedback helper, which the base class provides;
+            // calling it on $this raised "undefined method" as soon as this branch
+            // ran. The four other call sites in the plugin get it right.
+            $colorvalue = $this->feedbackhelper->get_color_for_personability(
                 $quizsettings,
                 floatval($subscaleability),
                 intval($primarycatscaleid)

@@ -24,6 +24,8 @@ use core\chart_series;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
+use local_catquiz\local\access\context_resolver;
+use local_catquiz\local\access\feedback_access;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\info;
@@ -95,6 +97,13 @@ class catquizstatistics {
      * @var ?int $testid
      */
     private ?int $testid;
+
+    /**
+     * Resolved context these statistics refer to (issue #18).
+     *
+     * @var ?\context
+     */
+    private ?\context $statisticscontext = null;
 
     /**
      * @var ?int $scaleid
@@ -201,6 +210,23 @@ class catquizstatistics {
         foreach ($tests as $test) {
             $this->quizsettings[$test->componentid] = json_decode($test->json);
         }
+    }
+
+    /**
+     * Returns the context these statistics refer to.
+     *
+     * Issue #18: resolved once from the most specific scope available (test
+     * instance, otherwise course, otherwise system) so that the rendered page,
+     * the export button and the exported CSV all judge access identically.
+     *
+     * @return \context
+     */
+    public function get_statistics_context(): \context {
+        if ($this->statisticscontext === null) {
+            $this->statisticscontext = context_resolver::for_statistics($this->courseid, $this->testid);
+        }
+
+        return $this->statisticscontext;
     }
 
     /**
@@ -328,6 +354,19 @@ class catquizstatistics {
     }
 
     /**
+     * Returns the users whose data may be shown, or null when nothing is restricted.
+     *
+     * Review finding on issue #18: the restriction was applied to the CSV export
+     * only, so the charts could still aggregate over members of other groups. Every
+     * cohort query now receives it.
+     *
+     * @return array|null
+     */
+    private function get_allowed_userids_for_charts(): ?array {
+        return feedback_access::get_allowed_userids($this->get_statistics_context());
+    }
+
+    /**
      * Render chart for histogram of person abilities
      *
      * @return array
@@ -395,13 +434,9 @@ class catquizstatistics {
         $chart = new chart_bar();
 
         // Teachers and CAT managers can see the test information in addition to the ability.
-        $canviewcourse = false;
-        if ($this->courseid) {
-            $context = context_course::instance($this->courseid);
-            $canviewcourse = has_capability('local/catquiz:view_users_feedback', $context);
-        }
-        $ismanager = has_capability('local/catquiz:canmanage', context_system::instance());
-        $canviewall = $ismanager || $canviewcourse;
+        // Issue #18: judged in the context these statistics refer to (the quiz module
+        // or the course), never in the system context alone.
+        $canviewall = feedback_access::can_view_other_users($this->get_statistics_context());
         if ($canviewall) {
             $chart->add_series($tiseries);
         }
@@ -603,25 +638,24 @@ class catquizstatistics {
      * @return array
      */
     public function render_responses_by_users_chart() {
-        global $DB, $OUTPUT;
-        [$sql, $params] = catquiz::get_sql_for_questions_answered_per_person($this->contextid, $this->scaleid, $this->courseid);
-        if (!$results = $DB->get_records_sql($sql, $params)) {
-            return [
-                'charttitle' => get_string('responsesbyusercharttitle', 'local_catquiz'),
-                'chart' => $this->get_nodata_body(),
-            ];
-        }
-        $maxattempts = 0;
-        foreach ($results as $r) {
-            if ($r->total_answered > $maxattempts) {
-                $maxattempts = $r->total_answered;
-            }
-        }
+        global $OUTPUT;
+
+        // Issue #23: the chart only ever needed the number of people per range and
+        // class - it counted the rows it had loaded. Loading one row per enrolled
+        // person just to count them made memory and runtime grow with the cohort.
+        // Both the maximum and the classification now happen in the database, and
+        // only the finished counts come back.
+        $maxattempts = catquiz::get_max_questions_answered_per_person(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid,
+            $this->get_allowed_userids_for_charts()
+        );
 
         if ($maxattempts === 0) {
             $maxattempts = self::DEFAULT_MAX_ATTEMPTS;
         }
-        $classwidth = ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
+        $classwidth = (int) ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
 
         if (!$qs = $this->get_quizsettings()) {
             $numranges = 1;
@@ -629,33 +663,43 @@ class catquizstatistics {
             $numranges = $qs->numberoffeedbackoptionsselect;
         }
 
+        $counts = catquiz::get_answers_per_person_histogram(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid,
+            $classwidth,
+            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : [],
+            $this->get_allowed_userids_for_charts()
+        );
+
+        if (empty($counts)) {
+            return [
+                'charttitle' => get_string('responsesbyusercharttitle', 'local_catquiz'),
+                'chart' => $this->get_nodata_body(),
+            ];
+        }
+
         // Initialize the data to 0 for all ranges and bins.
+        $data = [];
         for ($i = 0; $i <= $numranges; $i++) {
             for ($j = 0; $j <= self::ATTEMPTS_PER_PERSON_CLASSES; $j++) {
-                $data[$i][$j] = [];
+                $data[$i][$j] = 0;
             }
         }
 
-        foreach ($results as $r) {
-            if (intval($r->total_answered) === 0) {
-                $bin = 0;
-            } else {
-                $bin = feedback_helper::get_histogram_bin($r->total_answered, $classwidth);
-                // Bar 0 is reserved for 0 answers. Spread the rest across bin 1 ... n.
-                $bin = $bin + 1;
+        foreach ($counts as $range => $bins) {
+            // Without usable quiz settings everything with an ability goes to the
+            // fallback range, exactly as before.
+            if ($range > 0 && !$qs) {
+                $range = self::FALLBACK_RANGE;
             }
-            if (!$r->ability) {
-                $data[0][$bin][] = $r;
-            } else {
-                // If we have incompatible quiz settings, assing all values to the fallback range.
-                $range = $qs
-                    ? feedback_helper::get_range_of_value($qs, $this->scaleid, $r->ability)
-                    : self::FALLBACK_RANGE;
-                if (!$range) {
-                    // Ability is outside defined range. TODO: how to handle?
+            foreach ($bins as $bin => $frequency) {
+                if (!isset($data[$range][$bin])) {
+                    // A class beyond the configured number of classes; the previous
+                    // implementation dropped these silently as well.
                     continue;
                 }
-                $data[$range][$bin][] = $r;
+                $data[$range][$bin] += $frequency;
             }
         }
 
@@ -675,7 +719,7 @@ class catquizstatistics {
             $color = $colors[$range - 1];
             $series = new \core\chart_series(
                 $serieslabel,
-                array_map(fn ($x) => count($x), $data[$range])
+                array_values($data[$range])
             );
             $series->set_color($color);
             $chart->add_series($series);
@@ -715,20 +759,28 @@ class catquizstatistics {
         }
 
         $attempts = [];
-        foreach (
-            catquiz::get_attempts(
-                null,
-                $this->scaleid,
-                $this->courseid,
-                $this->testid,
-                $this->contextid,
-                $this->starttime,
-                $this->endtime,
-                // Issue #16: historical cohorts must not change when a person is
+        // The get_attempts() helper returns a recordset, which holds a database resource until
+        // it is closed. Iterating it with foreach and walking away leaves that
+        // resource open for the rest of the request - on a page that renders several
+        // charts, several at once.
+        $recordset = catquiz::get_attempts(
+            null,
+            $this->scaleid,
+            $this->courseid,
+            $this->testid,
+            $this->contextid,
+            $this->starttime,
+            $this->endtime,
+            // Issue #16: historical cohorts must not change when a person is
                 // later unenrolled -> include by historical participation.
-                false
-            ) as $record
-        ) {
+                false,
+            // Issue #23: only the columns the charts actually read. The debug
+                // trace field in particular is never used here and can be large.
+                'a.id, a.userid, a.scaleid, a.contextid, a.courseid, a.attemptid, '
+                    . 'a.starttime, a.endtime, a.json, a.timecreated'
+        );
+
+        foreach ($recordset as $record) {
             $json = json_decode($record->json);
             $prunedrecord = $record;
             $prunedrecord->json = json_encode((object) [
@@ -737,6 +789,8 @@ class catquizstatistics {
             ]);
             $attempts[] = $prunedrecord;
         }
+        $recordset->close();
+
         $this->attempts = $attempts;
         return $attempts;
     }
@@ -864,10 +918,7 @@ class catquizstatistics {
                 ) {
                     $this->quizsettingcompatibility[$level] = false;
                     if (
-                        $CFG->debug > 0 && has_capability(
-                            'local/catquiz:view_users_feedback',
-                            context_course::instance($this->courseid)
-                        )
+                        $CFG->debug > 0 && feedback_access::can_view_other_users($this->get_statistics_context())
                     ) {
                         if (round($qs->$startkey, 3) !== round($rangestart, 3) || round($qs->$endkey, 3) !== round($rangeend, 3)) {
                             echo sprintf(
@@ -1032,15 +1083,11 @@ class catquizstatistics {
      * @return array
      */
     public function render_attempts_per_person_chart(): array {
-        global $DB, $OUTPUT;
-        [$sql, $params] = catquiz::get_sql_for_attempts_per_person($this->contextid, $this->scaleid, $this->courseid);
-        if (!$records = $DB->get_records_sql($sql, $params)) {
-            return [
-                'charttitle' => get_string('catquizstatistics_numattemptsperperson_title', 'local_catquiz'),
-                'chart' => $this->get_nodata_body(),
-            ];
-        }
+        global $OUTPUT;
 
+        // Issue #23: this chart loaded one row per person only to count them per
+        // range and class. Both the maximum and the classification happen in the
+        // database now; only the finished counts come back.
         $chartdata = [];
         if (!$qs = $this->get_quizsettings()) {
             // Use range 0 for missing person ability and range 1 for everything else.
@@ -1051,14 +1098,36 @@ class catquizstatistics {
             $colors = array_values(feedbackclass::get_array_of_colors($qs->numberoffeedbackoptionsselect));
         }
         $colors[-1] = LOCAL_CATQUIZ_DEFAULT_GREY;
-        $maxattempts = $records[array_key_last($records)]->attempts;
+
+        $maxattempts = catquiz::get_max_attempts_per_person(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid,
+            $this->get_allowed_userids_for_charts()
+        );
         if ($maxattempts == 0) {
             $maxattempts = self::DEFAULT_MAX_ATTEMPTS;
         }
 
         // Display a maximum of self::ATTEMPTS_PER_PERSON_CLASSES bars. This
         // means, that each bar covers a range of $classwidth attempts.
-        $classwidth = ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
+        $classwidth = (int) ceil($maxattempts / self::ATTEMPTS_PER_PERSON_CLASSES);
+
+        $counts = catquiz::get_attempts_per_person_histogram(
+            $this->contextid,
+            $this->scaleid,
+            $this->courseid,
+            $classwidth,
+            $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : [],
+            $this->get_allowed_userids_for_charts()
+        );
+
+        if (empty($counts)) {
+            return [
+                'charttitle' => get_string('catquizstatistics_numattemptsperperson_title', 'local_catquiz'),
+                'chart' => $this->get_nodata_body(),
+            ];
+        }
 
         // Initialize all ranges of all possible attempt counts to 0.
         for ($i = 0; $i <= $maxrange; $i++) {
@@ -1067,18 +1136,19 @@ class catquizstatistics {
             }
         }
 
-        // Set the number of attempts per range.
-        foreach ($records as $r) {
-            if (!$qs) {
-                $range = $r->ability ? 1 : 0;
-            } else if (!$range = feedback_helper::get_range_of_value($this->get_quizsettings(), $this->scaleid, $r->ability)) {
-                $range = 0;
+        foreach ($counts as $range => $bins) {
+            // Without usable quiz settings everything with an ability goes to range 1,
+            // exactly as the previous implementation did.
+            if ($range > 0 && !$qs) {
+                $range = 1;
             }
-            if ($r->attempts == 0) {
-                $chartdata[$range][0]++;
-            } else {
-                $bin = feedback_helper::get_histogram_bin($r->attempts, $classwidth);
-                $chartdata[$range][$bin + 1]++;
+            foreach ($bins as $bin => $frequency) {
+                if (!isset($chartdata[$range][$bin])) {
+                    // A class beyond the configured number of classes; the previous
+                    // implementation dropped these as well.
+                    continue;
+                }
+                $chartdata[$range][$bin] += $frequency;
             }
         }
 
@@ -1120,18 +1190,23 @@ class catquizstatistics {
             optional_param('debug', false, PARAM_BOOL)
             && has_capability('local/catquiz:manage_catscales', context_system::instance())
         ) {
+            // Issue #23 moved this chart to SQL aggregation, and $records - the row
+            // per person - no longer exists. The debug table now shows what the chart
+            // actually draws: the counts per range and class. Leaving the old loop in
+            // place was an undefined variable waiting for someone to append ?debug=1.
             $thead = "
                 <thead>
                   <tr>
-                    <th>userid</th>
-                    <th>ability</th>
-                    <th>attempts</th>
+                    <th>range</th>
+                    <th>class</th>
+                    <th>people</th>
                   </tr>
                 </thead>";
             $tr = "";
-            foreach ($records as $r) {
-                $ability = $r->ability ?? '-';
-                $tr .= "<tr><td>$r->userid</td><td>$ability</td><td>$r->attempts</td></tr>";
+            foreach ($chartdata as $range => $bins) {
+                foreach ($bins as $bin => $frequency) {
+                    $tr .= "<tr><td>$range</td><td>$bin</td><td>$frequency</td></tr>";
+                }
             }
             $table = "<table class=\"table\">$thead<tbody>$tr</tbody></table>";
             $out .= $table;
@@ -1169,13 +1244,7 @@ class catquizstatistics {
      * @return string
      */
     public function render_export_button(): string {
-        $hasglobalaccess = has_capability('local/catquiz:canmanage', context_system::instance());
-        $haslocalaccess = $this->courseid && has_capability(
-            'local/catquiz:view_users_feedback',
-            context_course::instance($this->courseid)
-        );
-
-        if (!$hasglobalaccess && !$haslocalaccess) {
+        if (!feedback_access::can_view_other_users($this->get_statistics_context())) {
             return sprintf(
                 '<div class="alert alert-primary mt-1" role="alert">%s</div>',
                 get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback')
@@ -1207,10 +1276,11 @@ class catquizstatistics {
     public function get_export_data(): array {
         global $DB;
 
-        if (
-            !has_capability('local/catquiz:canmanage', context_system::instance()) &&
-            !has_capability('local/catquiz:view_users_feedback', context_course::instance($this->courseid))
-        ) {
+        // Issue #18: the previous check called context_course::instance($this->courseid)
+        // unconditionally, which threw as soon as the statistics were not scoped to a
+        // course (site wide shortcode). The resolver degrades to the system context
+        // instead, and the rule itself now lives in one place.
+        if (!feedback_access::can_view_other_users($this->get_statistics_context())) {
             return [];
         }
 
@@ -1227,7 +1297,14 @@ class catquizstatistics {
          );
 
         $data = [];
+        // Issue #18: in separate groups mode a teacher without accessallgroups may
+        // only export members of their own groups. Null means "no restriction", so
+        // the common case costs nothing.
+        $alloweduserids = feedback_access::get_allowed_userids($this->get_statistics_context());
         foreach ($DB->get_recordset_sql($sql, $params) as $r) {
+            if ($alloweduserids !== null && !in_array((int) $r->userid, $alloweduserids, true)) {
+                continue;
+            }
             $r->status = get_string('attemptstatus_' . $r->status, 'local_catquiz');
             // phpcs:disable
             // TODO: To be implemented: 'Ergebnis-Range', 'N global', 'frac global', 'N Ergebnisskala', 'frac Ergebnisskala'.

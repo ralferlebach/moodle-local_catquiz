@@ -31,6 +31,47 @@ require_once(__DIR__ . '/../../../../lib/behat/behat_base.php');
  */
 class behat_catquiz extends behat_base {
     /**
+     * Opens the CAT attempt feedback review page for a user's most recent attempt.
+     *
+     * Issue #18: reviewing another user's attempt is the situation in which the
+     * permission context matters. The attempt id is generated at runtime, so it
+     * cannot be written into a feature file; this step looks it up by username.
+     *
+     * @Given /^I visit the CAT attempt feedback page for the last attempt of "([^"]*)"$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function i_visit_the_cat_attempt_feedback_page_for_the_last_attempt_of(string $username): void {
+        global $DB;
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempt = $DB->get_records(
+            'local_catquiz_attempts',
+            ['userid' => $userid],
+            'id DESC',
+            'attemptid, contextid',
+            0,
+            1
+        );
+
+        if (empty($attempt)) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'No CAT attempt found for user ' . $username,
+                $this->getSession()
+            );
+        }
+
+        $attempt = reset($attempt);
+        $url = new moodle_url('/local/catquiz/show_attemptfeedback.php', [
+            'attemptid' => $attempt->attemptid,
+            'contextid' => $attempt->contextid,
+        ]);
+
+        $this->execute('behat_general::i_visit', [$url->out_as_local_url(false)]);
+    }
+
+    /**
      * Fill specified HTMLQuickForm element by its number under goven xpath with a value.
      * @When /^I fill in the "([^"]*)" element number "([^"]*)" with the dynamic identifier "([^"]*)" with "([^"]*)"$/
      *
