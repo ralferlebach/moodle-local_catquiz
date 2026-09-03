@@ -135,14 +135,31 @@ final class question_statistics_scope_test extends advanced_testcase {
 
         [$scaleid, $contextid] = $this->make_scale();
 
+        // Issue #58 moved this aggregate out of the candidate query: computing it for
+        // every candidate cost the same whether ten rows were shown or none. It is now
+        // fetched for the visible page only, so that is where the counting rule has
+        // to be checked.
         [, $from] = catquiz::return_sql_for_addcatscalequestions($scaleid, $contextid);
 
         $this->assertStringNotContainsString(
-            'COUNT(*) contextattempts',
+            'contextattempts',
             $from,
-            'COUNT(*) over the steps join reports interaction steps as attempts.'
+            'The candidate query must not aggregate attempts for every candidate.'
         );
-        $this->assertStringContainsString('COUNT(DISTINCT qa.id) contextattempts', $from);
+
+        // The rule itself is unchanged and still has to hold: question attempts, not
+        // interaction steps.
+        $reflection = new \ReflectionMethod(catquiz::class, 'get_contextattempts_for_questions');
+        $source = file_get_contents($reflection->getFileName());
+        $start = strpos($source, 'function get_contextattempts_for_questions');
+        $body = substr($source, $start, strpos($source, "\n    }\n", $start) - $start);
+
+        $this->assertStringContainsString(
+            'COUNT(DISTINCT qa.id)',
+            $body,
+            'COUNT(*) over the steps join would report interaction steps as attempts.'
+        );
+        $this->assertStringNotContainsString('COUNT(*)', $body);
     }
 
     /**

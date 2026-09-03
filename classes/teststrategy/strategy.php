@@ -182,12 +182,16 @@ abstract class strategy {
             // attempt time).
             $this->cache->set('endtime', $maxtime);
             $this->cache->set('catquizerror', status::EXCEEDED_MAX_ATTEMPT_TIME);
+            $this->persist_stage_counts();
+
             return result::err(status::EXCEEDED_MAX_ATTEMPT_TIME);
         }
 
         try {
             $this->check_item_params();
         } catch (Exception $e) {
+            $this->persist_stage_counts();
+
             return result::err(status::ERROR_GENERAL, $e->getMessage());
         }
 
@@ -195,11 +199,15 @@ abstract class strategy {
         // that we should display again after a page reload.
         $checkbreakres = $this->check_break();
         if ($checkbreakres->unwrap()) {
+            $this->persist_stage_counts();
+
             return $checkbreakres;
         }
 
         $res = $this->check_page_reload();
         if ($res->unwrap()) {
+            $this->persist_stage_counts();
+
             return $res;
         }
 
@@ -213,6 +221,8 @@ abstract class strategy {
         // Othewise, it contains the updated $context array with the ability and standarderror set in such a way, that the
         // teststrategy will return the correct question (e.g. the question corresponding to mean ability of all students).
         if (is_object($val)) {
+            $this->persist_stage_counts();
+
             return $res;
         }
 
@@ -227,6 +237,8 @@ abstract class strategy {
                 ->expect();
             $this->record_stage('fisherinformation');
         } catch (Exception $e) {
+            $this->persist_stage_counts();
+
             return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
         }
 
@@ -234,6 +246,8 @@ abstract class strategy {
         $val = $res->unwrap();
         // If the value is an object, it is the pilot question that should be returned.
         if (is_object($val)) {
+            $this->persist_stage_counts();
+
             return $res;
         }
 
@@ -251,6 +265,7 @@ abstract class strategy {
                     function ($res) {
                         $this->progress->save();
                         $this->update_attemptfeedback($this->context);
+                        $this->persist_stage_counts();
                         return $res;
                     }
                 )
@@ -258,10 +273,14 @@ abstract class strategy {
                 ->expect()
                 ->unwrap();
         } catch (Exception $e) {
+            $this->persist_stage_counts();
+
             return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
         }
 
         if (!$selectedquestion) {
+            $this->persist_stage_counts();
+
             return result::err();
         }
 
@@ -276,6 +295,8 @@ abstract class strategy {
             $context['includesubscales'],
             $context['progress']->get_selected_subscales()
         );
+        $this->persist_stage_counts();
+
         return result::ok($selectedquestion);
     }
 
@@ -292,11 +313,11 @@ abstract class strategy {
         $this->cache->set('endtime', time());
         $this->cache->set('catquizerror', $result->get_status());
 
-        // Issue #64: the status alone says that no question was found, not why. The
-        // candidate count after each stage says which one emptied the pool, and it is
-        // recorded together with the error rather than being reconstructed afterwards
-        // from outside the request, where the numbers no longer match.
-        $this->cache->set('catquizstagecounts', $this->stagecounts);
+        // Issue #64: the counts are written by persist_stage_counts(), which runs on
+        // every completed selection - not only here. The reported abort never reaches
+        // the error path at all: the selection reports no error, so after_error() does
+        // not run, and a diagnosis that only wrote here stayed empty for exactly the
+        // case it was built for.
         $this->result = $result;
         return $result;
     }
@@ -706,6 +727,35 @@ abstract class strategy {
      * Issue #64: the count is taken before the next stage runs, so a stage that
      * empties the pool can be named. Without this the only observable fact was that
      * the pool ended up empty.
+     *
+     * @param string $stage Name of the stage that has just finished.
+     * @param result|null $result Result of the following stage, passed through.
+     * @return result
+     */
+    /**
+     * Writes the recorded counts to the attempt cache.
+     *
+     * Issue #64: called at every exit of the selection, successful or not. The
+     * reported attempt ended without the selection reporting an error - the pool was
+     * simply empty - so writing only in the error path left no trace of the one thing
+     * worth knowing.
+     *
+     * @return void
+     */
+    private function persist_stage_counts(): void {
+        if (empty($this->stagecounts) || !isset($this->cache)) {
+            return;
+        }
+
+        $this->cache->set('catquizstagecounts', $this->stagecounts);
+    }
+
+    /**
+     * Notes how many candidates remain after a stage, and passes the result through.
+     *
+     * The count is taken before the next stage runs, so a stage that empties the pool
+     * can be named. Without this the only observable fact was that the pool ended up
+     * empty.
      *
      * @param string $stage Name of the stage that has just finished.
      * @param result|null $result Result of the following stage, passed through.

@@ -161,6 +161,7 @@ class managecatscaledashboard implements renderable, templatable {
      * @param int $scaledetailview
      * @param int $usesubs
      * @param string $componentname
+     * @param string $activetab
      *
      */
     public function __construct(

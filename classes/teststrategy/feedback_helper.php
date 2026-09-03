@@ -491,7 +491,7 @@ class feedback_helper {
     /**
      * For testing this is called in seperate function.
      *
-     * @param mixed $catscaleid
+     * @param int $catscaleid
      *
      * @return array
      *

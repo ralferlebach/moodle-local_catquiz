@@ -1,5 +1,36 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090206)
+
+> Sicherheit: Kill-Switch für die Hub-Synchronisation (#65). Diagnose für #64
+> repariert.
+
+- **#65 – Kill-Switch serverseitig erzwungen.** Die Schalter `enable_sync_as_node`
+  und `enable_sync_as_hub` wurden ausserhalb von Einstellungen und Template
+  **nirgends** ausgewertet: Der geplante Task, die External Functions und die
+  HTTP-Schicht lasen sie nicht. Abschalten versteckte die Bedienelemente, während
+  jeder Ausführungspfad intakt blieb – mit weiterhin gespeicherten Zugangsdaten lief
+  der Sendepfad bis `curl->post()`.
+  - Zwei Policy-Klassen (`sync_policy`, `hub_policy`) als einzige Quelle der
+    Wahrheit; sie lesen die Konfiguration bei jedem Aufruf, damit ein Umlegen des
+    Schalters sofort wirkt.
+  - **Zuerst die unterste Egress-Schicht**: `response_submitter` und
+    `fetch_parameters` prüfen selbst. Ein Test belegt, dass der Guard *vor* dem
+    Request steht.
+  - Alle fünf External Functions prüfen Schalter, Kontext und Capability; die
+    Skalenlisten wirken als serverseitige Allowlists.
+  - Der geplante Task prüft den Schalter **vor** den Zugangsdaten. Ausgeschaltet ohne
+    Konfiguration ist ein erfolgreicher No-op – das beendet die gemeldeten
+    Dauerfehler mit einem `faildelay` von 86.400 Sekunden.
+  - Vier bestehende Testdateien setzten voraus, dass die Dienste bei ausgeschaltetem
+    Schalter arbeiten. Sie sind korrigiert, nicht die Guards abgeschwächt.
+- **#64 – Diagnose repariert.** Die Stufenzahlen wurden nur in `after_error()`
+  geschrieben. Der gemeldete Abbruch erreicht diesen Pfad nie: Die Auswahl meldet
+  keinen Fehler (`catquizerror = false`), der Pool ist schlicht leer. Die Diagnose
+  blieb also genau bei dem Fall stumm, für den sie gebaut wurde. Sie wird jetzt an
+  **allen elf** Ausstiegen der Auswahl geschrieben; ein Test meldet jeden Ausstieg,
+  der keine Diagnose hinterlässt.
+
 ## 1.1.7 (interne Version 2026090204)
 
 > Diagnose für #64: die Auswahlkette gibt Rechenschaft darüber, wo der Pool verloren

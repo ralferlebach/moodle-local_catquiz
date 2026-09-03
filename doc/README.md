@@ -94,6 +94,7 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 | #54-Reste, #23-Reste, JSON-Aggregations-Issue | 101 |
 | Review-Fixes, Aufrufpfad-Prüfung | 102 |
 | Arbeitspaket 1.1.7: #62, #59, #29 | 103 |
+| #65 Kill-Switch, #64-Diagnose repariert | 103 |
 | Kursseiten-TypeError, Docblocks | 102 |
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),

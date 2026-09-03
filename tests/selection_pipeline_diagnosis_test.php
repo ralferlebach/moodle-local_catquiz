@@ -127,10 +127,13 @@ final class selection_pipeline_diagnosis_test extends advanced_testcase {
             $body,
             'The status itself was already persisted.'
         );
+        // The counts used to be written here and only here. The reported abort never
+        // reaches this path - the selection returns without an error - so the write
+        // moved to persist_stage_counts(), which runs at every exit.
         $this->assertStringContainsString(
-            'catquizstagecounts',
-            $body,
-            'The status says that no question was found, not which stage lost it.'
+            'persist_stage_counts',
+            $source,
+            'The counts have to be written somewhere that the reported abort reaches.'
         );
     }
 
@@ -165,6 +168,78 @@ final class selection_pipeline_diagnosis_test extends advanced_testcase {
             'unset(',
             $body,
             'Recording must not touch the candidate pool.'
+        );
+    }
+    /**
+     * The counts are written on every exit, not only on the error path.
+     *
+     * Reported from a reproduction run: the attempt stopped after two questions with
+     * 22 unplayed items in the pool, and the cache held neither key. The engine row
+     * explained why - catquizerror was false. The selection never reported an error,
+     * so after_error() never ran, and that was the only place writing the counts.
+     *
+     * A diagnosis that is absent for exactly the abort it was built for is no
+     * diagnosis.
+     *
+     * @return void
+     */
+    public function test_counts_are_written_on_every_exit(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/teststrategy/strategy.php'
+        );
+
+        $start = strpos($source, 'public function return_next_testitem');
+        $this->assertNotFalse($start);
+        $end = strpos($source, "\n    /**", $start);
+        $body = substr($source, $start, $end - $start);
+
+        // Every way out of the selection has to leave the counts behind.
+        preg_match_all('/\n\s+return .+?;/', $body, $returns, PREG_OFFSET_CAPTURE);
+        $this->assertNotEmpty($returns[0], 'The selection must have exits at all.');
+
+        $unwritten = [];
+        foreach ($returns[0] as $return) {
+            $before = substr($body, max(0, $return[1] - 160), min(160, $return[1]));
+            if (!str_contains($before, 'persist_stage_counts')) {
+                $unwritten[] = trim($return[0]);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $unwritten,
+            'These exits leave no diagnosis behind, which is what made the reported '
+                . 'abort undiagnosable.'
+        );
+    }
+
+    /**
+     * Writing does not depend on an error having been reported.
+     *
+     * @return void
+     */
+    public function test_writing_is_independent_of_the_error_path(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/teststrategy/strategy.php'
+        );
+
+        $start = strpos($source, 'private function after_error');
+        $this->assertNotFalse($start);
+        $end = strpos($source, "\n    }\n", $start);
+        $body = substr($source, $start, $end - $start);
+
+        $this->assertStringNotContainsString(
+            "cache->set('catquizstagecounts'",
+            $body,
+            'Writing only here is what left the reported abort without any counts.'
         );
     }
 }
