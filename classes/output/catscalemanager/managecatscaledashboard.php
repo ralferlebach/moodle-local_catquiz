@@ -186,14 +186,14 @@ class managecatscaledashboard implements renderable, templatable {
 
         if ($this->activetab === 'catscales') {
             $catscales = new catscales($this->catscaleid, $scaledetailview, $this->contextid);
+            $this->catscalesarray = $catscales->return_as_array();
+            $this->catscalesdetailview = $catscales->return_detailview();
         }
-        $this->catscalesarray = $catscales->return_as_array();
-        $this->catscalesdetailview = $catscales->return_detailview();
 
         if ($this->activetab === 'catscales') {
             $catscalemanagers = new catscalemanagers();
+            $this->catscalemanagersarray = $catscalemanagers->return_as_array();
         }
-        $this->catscalemanagersarray = $catscalemanagers->return_as_array();
 
         if ($this->activetab === 'questions') {
             $questionsdisplay = new questionsdisplay(
@@ -203,23 +203,23 @@ class managecatscaledashboard implements renderable, templatable {
                 $this->usesubs,
                 $this->componentname
             );
+            $this->questionsdisplayarray = $questionsdisplay->export_data_array();
         }
-        $this->questionsdisplayarray = $questionsdisplay->export_data_array();
 
         if ($this->activetab === 'testsandtemplates') {
             $testenvironmentdashboard = new testsandtemplatesdisplay($this->catscaleid, $this->usesubs, $this->componentname);
+            $this->testsandtemplatesdisplay = $testenvironmentdashboard->export_data_array();
         }
-        $this->testsandtemplatesdisplay = $testenvironmentdashboard->export_data_array();
 
         if ($this->activetab === 'quizattempts') {
             $quizattempts = new quizattemptsdisplay();
+            $this->quizattemptsdisplay = $quizattempts->export_data_array();
         }
-        $this->quizattemptsdisplay = $quizattempts->export_data_array();
 
         if ($this->activetab === 'summary') {
             $catscalestats = new catscalestats();
+            $this->catscalestatsarray = $catscalestats->export_data_array();
         }
-        $this->catscalestatsarray = $catscalestats->export_data_array();
 
         // The item detail belongs to the questions tab: it is reached by selecting a
         // question there. The existing conditions stay - they guard against building
@@ -241,18 +241,18 @@ class managecatscaledashboard implements renderable, templatable {
 
         if ($this->activetab === 'summary') {
             $eventlogtable = new eventlogtableinstance();
+            $this->eventlogtable = $eventlogtable->render_event_log_table();
         }
-        $this->eventlogtable = $eventlogtable->render_event_log_table();
 
         if ($this->activetab === 'calculations') {
             $calculationsdisplay = new calculationsdisplay();
+            $this->calculationsdisplay = $calculationsdisplay->export_data_array();
         }
-        $this->calculationsdisplay = $calculationsdisplay->export_data_array();
 
         if ($this->activetab === 'versioning') {
             $versioningdisplay = new catcontextdashboard();
+            $this->versioningdisplay = $versioningdisplay->return_array();
         }
-        $this->versioningdisplay = $versioningdisplay->return_array();
     }
 
     /**
@@ -271,19 +271,25 @@ class managecatscaledashboard implements renderable, templatable {
         }
 
         $data = [
-            // Issue #29: the template needs to know which tab is active so it can
-            // mark it, and each tab needs its own URL for reload and back.
-            'activetab' => $this->activetab,
-            'tabs' => array_map(fn ($tab) => [
-                'id' => $tab,
-                'active' => $tab === $this->activetab,
-                'url' => (new \moodle_url('/local/catquiz/manage_catscales.php', [
-                    'tab' => $tab,
-                    'contextid' => $this->contextid,
-                    'scaleid' => $this->catscaleid,
-                    'usesubs' => $this->usesubs,
-                ]))->out(false),
-            ], self::TABS),
+            // Mustache cannot build names dynamically, so each tab gets its own flag
+            // and URL. The flag decides which pane is rendered at all - the others
+            // have no data behind them, because they were never built.
+            'issummary' => $this->activetab === 'summary',
+            'iscatscales' => $this->activetab === 'catscales',
+            'isquestions' => $this->activetab === 'questions',
+            'istestsandtemplates' => $this->activetab === 'testsandtemplates',
+            'isquizattempts' => $this->activetab === 'quizattempts',
+            'isimporter' => $this->activetab === 'importer',
+            'iscalculations' => $this->activetab === 'calculations',
+            'isversioning' => $this->activetab === 'versioning',
+            'summaryurl' => $this->tab_url('summary'),
+            'catscalesurl' => $this->tab_url('catscales'),
+            'questionsurl' => $this->tab_url('questions'),
+            'testsandtemplatesurl' => $this->tab_url('testsandtemplates'),
+            'quizattemptsurl' => $this->tab_url('quizattempts'),
+            'importerurl' => $this->tab_url('importer'),
+            'calculationsurl' => $this->tab_url('calculations'),
+            'versioningurl' => $this->tab_url('versioning'),
             'itemtree' => $this->catscalesarray,
             'catscaledetailview' => $this->catscalesdetailview,
             'catscalemanagers' => $this->catscalemanagersarray,
@@ -299,5 +305,22 @@ class managecatscaledashboard implements renderable, templatable {
             'catcontextdisplay' => $this->versioningdisplay,
         ];
         return $data;
+    }
+    /**
+     * Returns the URL of a tab, carrying the state the manager is looking at.
+     *
+     * Without context, scale and usesubs in the link, switching tabs would silently
+     * reset what the user had selected.
+     *
+     * @param string $tab
+     * @return string
+     */
+    private function tab_url(string $tab): string {
+        return (new \moodle_url('/local/catquiz/manage_catscales.php', [
+            'tab' => $tab,
+            'contextid' => $this->contextid,
+            'scaleid' => $this->catscaleid,
+            'usesubs' => $this->usesubs,
+        ]))->out(false);
     }
 }

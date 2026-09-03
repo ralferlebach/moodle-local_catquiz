@@ -101,6 +101,19 @@ abstract class strategy {
     private $result;
 
     /**
+     * Candidate count after each pipeline stage, for issue #64.
+     *
+     * The pipeline narrows the pool step by step, and until now only the final
+     * outcome was visible. When an attempt ended with "no remaining questions"
+     * while items demonstrably existed, there was no way to tell which stage had
+     * emptied the pool - the report had to be reconstructed from outside the
+     * request, where the numbers no longer match.
+     *
+     * @var array
+     */
+    private array $stagecounts = [];
+
+    /**
      * These data provide the context for the selection of the next question.
      *
      * In a previous implementation, this object was passed between middlewares
@@ -204,13 +217,15 @@ abstract class strategy {
         }
 
         try {
+            $this->record_stage('start');
             $this->add_scale_standarderror()
-                ->and_then(fn () => $this->maximumquestionscheck())
-                ->and_then(fn () => $this->removeplayedquestions())
-                ->and_then(fn () => $this->noremainingquestions())
-                ->and_then(fn () => $this->fisherinformation())
+                ->and_then(fn () => $this->record_stage('add_scale_standarderror', $this->maximumquestionscheck()))
+                ->and_then(fn () => $this->record_stage('maximumquestionscheck', $this->removeplayedquestions()))
+                ->and_then(fn () => $this->record_stage('removeplayedquestions', $this->noremainingquestions()))
+                ->and_then(fn () => $this->record_stage('noremainingquestions', $this->fisherinformation()))
                 ->or_else(fn($res) => $this->after_error($res))
                 ->expect();
+            $this->record_stage('fisherinformation');
         } catch (Exception $e) {
             return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
         }
@@ -276,6 +291,12 @@ abstract class strategy {
         $this->update_attemptfeedback($this->context);
         $this->cache->set('endtime', time());
         $this->cache->set('catquizerror', $result->get_status());
+
+        // Issue #64: the status alone says that no question was found, not why. The
+        // candidate count after each stage says which one emptied the pool, and it is
+        // recorded together with the error rather than being reconstructed afterwards
+        // from outside the request, where the numbers no longer match.
+        $this->cache->set('catquizstagecounts', $this->stagecounts);
         $this->result = $result;
         return $result;
     }
@@ -678,5 +699,35 @@ abstract class strategy {
      */
     protected function filterbyquestionsperscale(): result {
         return result::ok($this->context);
+    }
+    /**
+     * Notes how many candidates remain after a stage, and passes the result through.
+     *
+     * Issue #64: the count is taken before the next stage runs, so a stage that
+     * empties the pool can be named. Without this the only observable fact was that
+     * the pool ended up empty.
+     *
+     * @param string $stage Name of the stage that has just finished.
+     * @param result|null $result Result of the following stage, passed through.
+     * @return result
+     */
+    private function record_stage(string $stage, ?result $result = null): result {
+        $this->stagecounts[$stage] = isset($this->context['questions'])
+            ? count($this->context['questions'])
+            : null;
+
+        return $result ?? result::ok($this->context);
+    }
+
+    /**
+     * Returns the candidate count after each stage of the selection pipeline.
+     *
+     * Empty until a selection has run. Intended for diagnosis and for the tests that
+     * pin the behaviour; nothing in the selection depends on it.
+     *
+     * @return array
+     */
+    public function get_stage_counts(): array {
+        return $this->stagecounts;
     }
 }

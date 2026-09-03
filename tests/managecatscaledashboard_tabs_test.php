@@ -157,4 +157,80 @@ final class managecatscaledashboard_tabs_test extends advanced_testcase {
             'Without reading the parameter the tab cannot survive a reload.'
         );
     }
+    /**
+     * The template navigates by URL and renders only the active pane.
+     *
+     * Building one tab on the server is only half the change: as long as the markup
+     * switched tabs with Bootstrap anchors, the other panes were still emitted - now
+     * without any data behind them, because they were never built.
+     *
+     * @return void
+     */
+    public function test_template_uses_server_side_tabs(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $template = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/templates/catscalemanager/'
+                . 'managecatscaledashboard.mustache'
+        );
+
+        $this->assertStringNotContainsString(
+            'data-toggle="tab"',
+            $template,
+            'Client-side switching would show panes that were never rendered.'
+        );
+        $this->assertStringNotContainsString(
+            'href="#lcq_',
+            $template,
+            'An anchor cannot carry the tab to the server.'
+        );
+
+        // Each tab is guarded, so exactly one pane is emitted per request.
+        foreach (['issummary', 'isquestions', 'isversioning'] as $flag) {
+            $this->assertStringContainsString(
+                '{{#' . $flag . '}}',
+                $template,
+                "The $flag pane must be rendered conditionally."
+            );
+        }
+    }
+
+    /**
+     * Every flag and URL the template uses is exported.
+     *
+     * A missing key renders as empty in Mustache without any error, so a tab would
+     * simply stop working and nothing would say why.
+     *
+     * @return void
+     */
+    public function test_all_template_keys_are_exported(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $template = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/templates/catscalemanager/'
+                . 'managecatscaledashboard.mustache'
+        );
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/output/catscalemanager/'
+                . 'managecatscaledashboard.php'
+        );
+
+        preg_match_all('/\{\{[#^]?(is\w+|\w+url)\}\}/', $template, $matches);
+        $missing = [];
+        foreach (array_unique($matches[1]) as $key) {
+            if (!str_contains($source, "'" . $key . "' =>")) {
+                $missing[] = $key;
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $missing,
+            'These keys are used in the template but never exported.'
+        );
+    }
 }

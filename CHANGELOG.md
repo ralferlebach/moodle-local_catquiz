@@ -1,5 +1,112 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090204)
+
+> Diagnose für #64: die Auswahlkette gibt Rechenschaft darüber, wo der Pool verloren
+> geht.
+
+- **Kandidatenzahl je Stufe** wird während der Fragenauswahl festgehalten (`start`,
+  `add_scale_standarderror`, `maximumquestionscheck`, `removeplayedquestions`,
+  `noremainingquestions`, `fisherinformation`) und im Fehlerfall **zusammen mit dem
+  Status** persistiert. Der gemeldete Abbruch geschah in einem Request, der längst
+  vorbei war, als jemand nachsah – was dort nicht gespeichert wird, ist verloren.
+- **Kein Fix auf Verdacht.** Drei Kandidaten wurden am Code ausgeschlossen
+  (`maximumquestionscheck` zählt beantwortete Fragen und gibt bei 1 gegen 250 `ok`;
+  `removeplayedquestions` entfernt nur gespielte IDs; `max_attempts_per_scale` ist
+  bei einer Frage nicht erfüllt). Eine Ursache ließ sich nicht belegen – der Fehler
+  entsteht im Zusammenspiel von vier Plugins, eines davon hier nicht vorhanden.
+- Die Instrumentierung sitzt im Pfad jeder Frage jedes laufenden Tests. Abgesichert
+  durch einen Test, der prüft, dass das Ergebnis unverändert durchgereicht wird, und
+  durch die vollständige Strategie-Suite: 35 Tests, 2.537 Assertions, unverändert.
+
+## 1.1.7 (interne Version 2026090203)
+
+> #29 vollständig, #26 gemessen und begründet abgeschlossen.
+
+- **#29 abgeschlossen**: Das Template navigiert jetzt serverseitig – echte URLs statt
+  Bootstrap-Anker, und nur der aktive Bereich wird ausgegeben. Vorher wurden die
+  übrigen Bereiche weiterhin gerendert, inzwischen aber **ohne Daten dahinter**.
+- **Ein Fehler der eigenen Umsetzung, den Behat gefunden hat**: Die Reiter-Guards
+  umschlossen nur die Instanziierung, nicht die Auswertung danach – neun Stellen
+  lasen eine bedingt erzeugte Variable unbedingt. Die erste Seite des Managers wäre
+  mit einer Warnung erschienen. PHPUnit konnte das nicht sehen, weil der Konstruktor
+  einen vollständigen Seitenkontext braucht.
+- Behat `catquiz_manager_tabs`: 4 Szenarien, 23 Steps – Reiter aus der URL übersteht
+  das Neuladen, unbekannter Wert fällt zurück, Zustand bleibt beim Wechsel erhalten.
+- **#26 ohne Umbau abgeschlossen** (`doc/issue-26-finding.md`): Die Auswahl nutzt
+  tatsächlich die Manager-Abfrage und lädt 29 Spalten, von denen sie 15 liest. Die
+  vermutete Größenordnung trifft aber nicht zu – gemessen rund 85 ms bei 20.401
+  Items. Der zuerst gemessene Wert von 4.878 ms war ein Kaltstart-Artefakt.
+  Zwei der benötigten Felder stammen aus den Statistik-Joins, die sich daher nicht
+  weglassen lassen.
+
+## 1.1.7 (interne Version 2026090201)
+
+> Erste Auslieferung des neuen Arbeitspakets: zwei Laufzeitfehler im Feedback-Pfad,
+> und der CAT-Manager baut nur noch den sichtbaren Reiter auf.
+
+- **Issue #62**: `lastquestion` und `lastmiddleware` wurden in der Debug-Ausgabe
+  ungeprüft gelesen. Beide fehlen bei der ersten Frage jedes Versuchs
+  systematisch – `catquiz.php` entfernt `lastquestion` sogar ausdrücklich. Mit
+  `DEBUG_DEVELOPER` wurde daraus eine Ausnahme, die als „couldn't define the first
+  question" erschien und auf die Konfiguration zeigte. Debug-Informationen waren
+  damit ausgerechnet auf den Instanzen unerreichbar, die dafür eingerichtet sind.
+- **Issue #59**: `attemptfeedback::update_data()` kehrt ohne Fähigkeitswerte früh
+  zurück und setzt `catscales` nie. `array_key_first([])` ist `null`, was bis in
+  `catscale::__construct()` lief und dort scheiterte – eine Ebene unterhalb der
+  Ursache. Jetzt mit Rückfall auf die primäre Skala des Tests; die Signatur von
+  `get_ability_range()` verlangt ausdrücklich `int`.
+  Dabei mussten **drei weitere Aufrufstellen** abgesichert werden, die untypisierte
+  Werte übergaben – sonst hätte der Fix neue Fehler erzeugt statt sie zu beseitigen.
+- **Issue #29**: Der CAT-Manager erzeugte bei jedem Aufruf **acht** Displays samt
+  ihrer Abfragen, von denen das Template sieben verbarg. Jetzt wird nur der aktive
+  Reiter gebaut; er steht in der URL, sodass Neuladen und der Zurück-Button ihn
+  behalten. Jeder Reiter-Link trägt Kontext, Skala und `usesubs` mit, damit ein
+  Wechsel den betrachteten Zustand nicht zurücksetzt.
+- **Issue #56** ist bereits in 1.1.6 vollständig umgesetzt worden und entfällt aus
+  diesem Arbeitspaket.
+- Neue Tests: `feedback_path_robustness_test` (4) und
+  `managecatscaledashboard_tabs_test` (4). Letzterer prüft nicht ein einzelnes
+  Display, sondern dass **keines** unbedingt gebaut wird – ein neuntes ohne
+  Reiterbindung fiele auf. Er hat dabei eine Lücke der eigenen Umsetzung gefunden:
+  `testitemdashboard` war an `!empty()`-Bedingungen gebunden, nicht an den Reiter.
+
+### Noch offen in 1.1.7
+
+- Das Template nutzt weiterhin Bootstrap-Anker statt der neuen Reiter-URLs; die
+  Zustandserhaltung wirkt serverseitig, der Wechsel bleibt clientseitig.
+- Behat-Szenarien für Neuladen und Zurück-Button.
+- Issues #26, #27, #28 sind nicht begonnen.
+
+## 1.1.6 (interne Version 2026083025)
+
+> Alle Aufrufpfade geprüft; ein zweiter Laufzeitfehler derselben Art gefunden.
+
+- **Systematische Prüfung aller Methodenaufrufe** des Plugins per Reflection. Dabei
+  kam ein weiterer Fehler ans Licht: `learningprogress` rief
+  `get_color_for_personability()` auf sich selbst auf, obwohl die Methode zum
+  Feedback-Helfer gehört – vier andere Aufrufstellen machen es richtig. Er wäre beim
+  nächsten Lernfortschritt-Diagramm mit Subskalen aufgeschlagen.
+- **Neu `internal_method_calls_test`**: prüft, dass jeder `$this->x()`, `self::x()`
+  und jeder statische Aufruf auf eine Plugin-Klasse auflösbar ist. PHP löst
+  Methodennamen erst zur Laufzeit auf, ein erfundener Name fällt also erst auf,
+  wenn die Zeile erreicht wird.
+  Die erste Fassung dieses Tests hatte selbst eine Lücke – sie verlangte einen
+  Großbuchstaben am Klassennamen und hätte fast jeden Aufruf übersprungen. Nur der
+  Zahn-Test hat das aufgedeckt.
+
+## 1.1.6 (interne Version 2026083024)
+
+> Laufzeitfehler im Verlaufsmodus behoben.
+
+- **`progress::set_ability()` rief ein nicht existierendes `get_step()`** auf,
+  eingeführt mit dem Verlaufsmodus aus #56. Die Methode liegt auf dem heißen Pfad
+  der Fähigkeitsschätzung, sodass mit eingeschaltetem Verlaufsmodus **jeder
+  laufende Test** abbrach. Richtig ist `get_num_playedquestions()`.
+- Ursache für das späte Auffallen: Die sechs Tests zu #56 prüften Konfiguration und
+  Aufräum-Task, aber keiner rief `set_ability()` auf – getestet war die Einstellung,
+  nicht ihre Wirkung. Zwei neue Tests führen den Pfad jetzt aus.
+
 ## 1.1.6 (interne Version 2026083023)
 
 > Kursseiten-Fehler behoben, Docblocks vervollständigt.
