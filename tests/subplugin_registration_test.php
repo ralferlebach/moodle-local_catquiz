@@ -180,57 +180,80 @@ final class subplugin_registration_test extends advanced_testcase {
         $this->assertArrayHasKey('host', $plugins, 'The hub side is a subplugin.');
     }
     /**
-     * The hub plugins are attached as submodules, so no workflow may rely on a clone.
+     * Each hub plugin carries its own pipeline, and that pipeline handles the trap.
      *
-     * A plain clone of local_catquiz yields catquizcentralhub/client and
-     * catquizcentralhub/host as EMPTY directories: the paths exist, the code does
-     * not. Checks run against them then pass by having nothing to examine - which is
-     * indistinguishable from passing for the right reason.
-     *
-     * Every workflow therefore has to install them from their own repositories.
+     * A plain clone of local_catquiz yields catquizcentralhub/host and
+     * catquizcentralhub/client as EMPTY directories: the paths exist, the code does
+     * not. moodle-plugin-ci then refuses to install the real plugin, because it only
+     * checks whether the directory exists - not whether a plugin is in it.
      *
      * @return void
      */
-    public function test_workflows_fetch_the_hub_plugins_from_their_repositories(): void {
+    public function test_each_hub_plugin_has_its_own_ci(): void {
         global $CFG;
 
         $this->resetAfterTest();
 
-        $modules = $CFG->dirroot . '/local/catquiz/.gitmodules';
-        if (!file_exists($modules)) {
-            $this->markTestSkipped('No submodules configured in this checkout.');
-        }
+        // Deliberately not tied to .gitmodules: that file is export-ignored, so a
+        // released package does not contain it, and whether the directories are
+        // submodules or ignored local clones is a working-copy decision. What has to
+        // hold either way is that each plugin brings its own pipeline.
+        //
+        // The plugins have their own repositories, so their pipelines belong there:
+        // a workflow in the parent repository never runs when only the subplugin
+        // changes, which is most of the time.
+        $base = $CFG->dirroot . '/local/catquiz/catquizcentralhub';
+        foreach (['host', 'client'] as $part) {
+            $workflow = $base . '/' . $part . '/.github/workflows/moodle-subplugin-ci-'
+                . $part . '.yml';
 
-        $declared = file_get_contents($modules);
-        $this->assertStringContainsString('catquizcentralhub/host', $declared);
-        $this->assertStringContainsString('catquizcentralhub/client', $declared);
+            if (!is_dir($base . '/' . $part) || !glob($base . '/' . $part . '/*')) {
+                // Checked out without submodule contents - nothing to assert about.
+                continue;
+            }
 
-        $workflows = glob($CFG->dirroot . '/local/catquiz/.github/workflows/*.yml');
-        $this->assertNotEmpty($workflows);
+            $this->assertFileExists(
+                $workflow,
+                "catquizcentralhub_$part has no pipeline in its own repository."
+            );
 
-        $missing = [];
-        foreach ($workflows as $workflow) {
             $content = file_get_contents($workflow);
 
-            // Only workflows that install a Moodle site need the plugins at all.
-            if (!str_contains($content, 'add-plugin') && !str_contains($content, 'git clone')) {
-                continue;
-            }
-            if (!str_contains($content, 'catquizcentralhub')) {
-                continue;
-            }
-            foreach (['host', 'client'] as $part) {
-                if (!str_contains($content, 'moodle-catquizcentralhub_' . $part)) {
-                    $missing[] = basename($workflow) . ': ' . $part;
-                }
-            }
-        }
+            // The parent plugin is a hard dependency; without it the subplugin cannot
+            // even be installed.
+            $this->assertStringContainsString(
+                'moodle-local_catquiz',
+                $content,
+                'The parent plugin has to be installed for the subplugin to exist.'
+            );
 
-        $this->assertSame(
-            [],
-            $missing,
-            'These workflows mention the hub plugins but never fetch them from their '
-                . 'own repositories, so they would test empty directories.'
+            // Installing the parent brings the empty submodule directories along, and
+            // moodle-plugin-ci refuses to write into a directory that already exists.
+            $this->assertStringContainsString(
+                '-empty',
+                $content,
+                'Without removing the empty placeholders the install step aborts with '
+                    . '"Plugin is already installed in standard Moodle".'
+            );
+        }
+    }
+
+    /**
+     * The parent repository does not carry a pipeline for the subplugins.
+     *
+     * Two pipelines for the same component drift apart, and the one in the parent
+     * would run on changes that do not concern it while missing the ones that do.
+     *
+     * @return void
+     */
+    public function test_parent_has_no_subplugin_pipeline(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $this->assertFileDoesNotExist(
+            $CFG->dirroot . '/local/catquiz/.github/workflows/catquizcentralhub.yml',
+            'The subplugin pipelines live in the subplugin repositories.'
         );
     }
 }
