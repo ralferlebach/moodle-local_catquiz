@@ -1,5 +1,31 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090207)
+
+> Subplugin-Registrierung gepinnt, Submodul-Falle geschlossen, #65 abgeschlossen.
+
+- **CI-Layoutprüfung korrigiert.** Ein selbst geschriebener Guard erwartete *genau
+  eine* `version.php` unter `local/catquiz` und meldete damit die sieben catmodels
+  als Fehler – die Subplugins waren korrekt registriert, die Prüfung war es nicht.
+  Sie liest die erlaubten Pfade jetzt aus `db/subplugins.json`, statt zu zählen.
+- **Registrierung per Test gepinnt** (`subplugin_registration_test`): Deklaration,
+  vollständige catmodel-Verzeichnisse mit passendem Komponentennamen, und – der
+  entscheidende Teil – dass Moodle die Typen tatsächlich findet.
+- **Submodul-Falle geschlossen.** `catquizcentralhub/host` und `/client` sind eigene
+  Repositories, die als Submodule eingehängt sind. Ein normaler Klon liefert **zwei
+  leere Verzeichnisse**: Die Pfade existieren, der Code nicht. Prüfungen dagegen
+  bestehen, weil nichts zu prüfen ist – ununterscheidbar davon, aus dem richtigen
+  Grund zu bestehen. Ein Test verlangt, dass jeder Workflow, der die Plugins
+  erwähnt, sie aus ihren eigenen Repositories installiert.
+- **Eigene CI-Suite** `catquizcentralhub.yml`: Linting, Coding Style und PHPUnit über
+  beide Plugins, PHP 8.2 und 8.3. Bricht ab, wenn ein Plugin leer ist oder keine
+  Testdatei gefunden wird – ein Lauf ohne Treffer endet sonst mit Erfolg.
+- **#65 abgeschlossen.** Das Formular `remote_settings_form` schrieb `central_host`
+  und `central_token` unter `local_catquiz`, wo **niemand** sie las: ein zweiter
+  Ablageort für Zugangsdaten, ausserhalb der Reichweite des Kill-Switch, der zum
+  Client-Plugin gehört. Formular und Upgrade führen sie in
+  `catquizcentralhub_client` zusammen und entfernen die Altkopie.
+
 ## 1.1.7 (interne Version 2026090206)
 
 > Sicherheit: Kill-Switch für die Hub-Synchronisation (#65). Diagnose für #64
