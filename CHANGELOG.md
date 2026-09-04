@@ -1,5 +1,28 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090210)
+
+> CI-Installation repariert; #28 geprüft und begründet nicht umgesetzt.
+
+- **Alle Workflows entfernen die leeren Submodul-Platzhalter vor `install`.** Die
+  beiden Hub-Plugins hängen als Submodule am Repository, sodass ein Checkout
+  `catquizcentralhub/host` und `/client` als leere Verzeichnisse hinterlässt.
+  `moodle-plugin-ci` prüft `is_dir()` und nicht, ob ein Plugin darin liegt – und
+  bricht mit „Plugin is already installed in standard Moodle" ab. Der Fix war
+  zunächst nur in den Subplugin-Pipelines; die vier Eltern-Workflows fielen weiter
+  aus. Jetzt an allen **sieben** Stellen, abgesichert durch einen Test.
+- **#28 nicht umgesetzt.** Beide Teile wurden am Code geprüft und beide Befunde
+  treffen zu – aber:
+  - Das Entfernen der doppelten Progress-Speicherung ließ **14 von 35** Tests der
+    Kernauswahl fallen: Die Fähigkeiten blieben bei 0.0, weil Folgeschritte den
+    persistierten Fortschritt lesen. Die innere Speicherung ist tragend.
+  - Der Peer-Vergleich, den das Issue als teuersten Posten nennt, kostet gemessen
+    **3,3 ms** je Antwort (erster Aufruf 279 ms – ein Kaltstart-Artefakt wie schon
+    bei #26). Von sieben Feedback-Generatoren berühren nur drei die Datenbank.
+  - Die eigentliche Frage ist, warum Folgeschritte den Fortschritt aus der Datenbank
+    statt aus dem Objekt lesen. Das ist ein eigenes Arbeitspaket mit
+    Äquivalenznachweis.
+
 ## 1.1.7 (interne Version 2026090207)
 
 > Subplugin-Registrierung gepinnt, Submodul-Falle geschlossen, #65 abgeschlossen.

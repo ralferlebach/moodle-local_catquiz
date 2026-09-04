@@ -256,4 +256,48 @@ final class subplugin_registration_test extends advanced_testcase {
             'The subplugin pipelines live in the subplugin repositories.'
         );
     }
+    /**
+     * Every workflow that installs the hub plugins clears the placeholders first.
+     *
+     * The plugins are attached as submodules, so a checkout leaves
+     * catquizcentralhub/host and catquizcentralhub/client behind as empty directories.
+     * moodle-plugin-ci checks is_dir() rather than whether a plugin is present, so it
+     * aborts the install with "Plugin is already installed in standard Moodle".
+     *
+     * The fix belongs in every workflow that installs them - it was first applied to
+     * the subplugin pipelines only, and the parent ones kept failing.
+     *
+     * @return void
+     */
+    public function test_workflows_clear_the_submodule_placeholders(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $workflows = glob($CFG->dirroot . '/local/catquiz/.github/workflows/*.yml');
+        $this->assertNotEmpty($workflows);
+
+        $unprotected = [];
+        foreach ($workflows as $workflow) {
+            $content = file_get_contents($workflow);
+
+            // Only workflows that install the hub plugins are affected.
+            if (!str_contains($content, 'add-plugin ralferlebach/moodle-catquizcentralhub')) {
+                continue;
+            }
+
+            // The removal has to be restricted to empty directories: a checkout that
+            // does contain the plugins must not have them deleted.
+            if (!str_contains($content, '-type d -empty')) {
+                $unprotected[] = basename($workflow);
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $unprotected,
+            'These workflows install the hub plugins but leave the empty submodule '
+                . 'placeholders in place, which aborts the install step.'
+        );
+    }
 }
