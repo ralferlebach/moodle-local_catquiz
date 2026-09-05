@@ -453,6 +453,7 @@ $string['inferlowestskillgap'] = 'Infer lowest skill gap';
 $string['instance'] = 'Test';
 $string['integratequestions'] = 'Integrate questions from subscales';
 $string['intercepts'] = 'Intercepts';
+$string['invalidfeedbackname'] = 'The feedback identifier "{$a}" is not known.';
 $string['invalidquestionslot'] = 'The requested question could not be found in this attempt.';
 $string['invalidrenderclass'] = 'The render class "{$a}" is not permitted.';
 $string['invalidrenderparams'] = 'The parameters for the render class are invalid.';

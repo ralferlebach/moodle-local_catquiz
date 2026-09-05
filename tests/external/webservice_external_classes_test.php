@@ -101,7 +101,7 @@ final class webservice_external_classes_test extends advanced_testcase {
         $this->setAdminUser();
         $sink = $this->redirectEvents();
 
-        $result = feedback_tab_clicked::execute(42, 'raw feedback', 'translated feedback');
+        $result = feedback_tab_clicked::execute(42, 'personabilities', 'Person abilities');
 
         $events = $sink->get_events();
         $sink->close();
@@ -111,7 +111,7 @@ final class webservice_external_classes_test extends advanced_testcase {
         $this->assertInstanceOf(feedbacktab_clicked::class, end($events));
         $last = end($events);
         $this->assertSame(42, $last->other['attemptid']);
-        $this->assertSame('raw feedback', $last->other['feedback']);
+        $this->assertSame('personabilities', $last->other['feedback']);
     }
 
     /**
@@ -421,7 +421,7 @@ final class webservice_external_classes_test extends advanced_testcase {
         $this->add_attempt_for(8801, (int) $user->id);
 
         $sink = $this->redirectEvents();
-        feedback_tab_clicked::execute(8801, 'raw', 'translated');
+        feedback_tab_clicked::execute(8801, 'personabilities', 'Person abilities');
 
         $this->assertNotEmpty(
             $sink->get_events(),
@@ -450,7 +450,7 @@ final class webservice_external_classes_test extends advanced_testcase {
         $sink = $this->redirectEvents();
 
         try {
-            feedback_tab_clicked::execute(8802, 'raw', 'translated');
+            feedback_tab_clicked::execute(8802, 'personabilities', 'Person abilities');
             $this->fail('A foreign attempt must be refused.');
         } catch (\moodle_exception $e) {
             // Expected.
@@ -476,7 +476,33 @@ final class webservice_external_classes_test extends advanced_testcase {
 
         $this->expectException(\moodle_exception::class);
         try {
-            feedback_tab_clicked::execute(999999, 'raw', 'translated');
+            feedback_tab_clicked::execute(999999, 'personabilities', 'Person abilities');
+        } finally {
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
+    /**
+     * An identifier that names no feedback generator is refused.
+     *
+     * Both the identifier and its translation arrive from the client and were written
+     * into the event log as if they described what happened. A log entry whose subject
+     * the caller chose freely is not audit evidence.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_refuses_an_unknown_identifier(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $this->add_attempt_for(8803, (int) $user->id);
+
+        $sink = $this->redirectEvents();
+
+        $this->expectException(\moodle_exception::class);
+        try {
+            feedback_tab_clicked::execute(8803, 'not_a_generator', 'anything');
         } finally {
             $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
         }

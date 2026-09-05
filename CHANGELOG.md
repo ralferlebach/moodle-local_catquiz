@@ -1,5 +1,19 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090217)
+
+> Letzter offener Punkt aus Security-Issue C.
+
+- **Feedback-Bezeichner wird serverseitig geprüft.** Bezeichner und Übersetzung kamen
+  beide vom Client und wurden beide ins Ereignisprotokoll geschrieben, als
+  beschrieben sie, was geschehen ist. Ein Protokolleintrag, dessen Gegenstand der
+  Aufrufer frei wählt, ist kein Auditnachweis.
+  Der Bezeichner wird jetzt gegen die tatsächlich vorhandenen Feedback-Generatoren
+  geprüft – abgeleitet statt gepflegt, weil eine zweite Kopie derselben Menge
+  auseinanderdriftet und dann entweder gültige Reiter ablehnt oder nicht mehr
+  existierende zulässt. Die Übersetzung bleibt ergänzender Anzeigetext und
+  ausdrücklich nicht die maßgebliche Aufzeichnung.
+
 ## 1.1.7 (interne Version 2026090216)
 
 > Verhaltenstests zur Eigentumsprüfung – und ein Fehler, den sie sofort gefunden

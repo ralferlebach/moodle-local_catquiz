@@ -100,6 +100,16 @@ class feedback_tab_clicked extends external_api {
             $role = 'student';
         }
 
+        // Security: the identifier and its translation both arrive from the client, and
+        // both were written into the event log as if they described what happened.
+        // The identifier is validated against the feedback generators that exist, so
+        // the log records a known tab rather than whatever string was sent. The
+        // translation stays as supplementary display text and is explicitly not the
+        // authoritative record - a client-supplied label cannot be audit evidence.
+        if (!self::is_known_feedback_generator($feedback)) {
+            throw new moodle_exception('invalidfeedbackname', 'local_catquiz', '', $feedback);
+        }
+
         $event = feedbacktab_clicked::create([
             'context' => $ctx,
             'other' => [
@@ -149,5 +159,27 @@ class feedback_tab_clicked extends external_api {
         if ($ownerid === false || (int) $ownerid !== (int) $USER->id) {
             throw new moodle_exception('norighttoaccess', 'local_catquiz');
         }
+    }
+    /**
+     * Whether the identifier names a feedback generator that exists.
+     *
+     * Derived from the generator classes rather than kept as a hand-written list: a
+     * second copy of the same set drifts, and then the guard either rejects a valid
+     * tab or accepts one that no longer exists.
+     *
+     * @param string $feedback
+     * @return bool
+     */
+    private static function is_known_feedback_generator(string $feedback): bool {
+        global $CFG;
+
+        if ($feedback === '' || !preg_match('/^[a-z_]+$/', $feedback)) {
+            return false;
+        }
+
+        return file_exists(
+            $CFG->dirroot . '/local/catquiz/classes/teststrategy/feedbackgenerator/'
+                . $feedback . '.php'
+        );
     }
 }

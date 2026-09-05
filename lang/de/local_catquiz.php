@@ -467,6 +467,7 @@ $string['inferlowestskillgap'] = 'Unterste Kompetenzlücke diagnostizieren';
 $string['instance'] = 'Test';
 $string['integratequestions'] = 'Fragen aus untergeordneten Skalen einbeziehen';
 $string['intercepts'] = 'Intercepts';
+$string['invalidfeedbackname'] = 'Der Feedback-Bezeichner „{$a}" ist unbekannt.';
 $string['invalidquestionslot'] = 'Die angeforderte Frage wurde in diesem Versuch nicht gefunden.';
 $string['invalidrenderclass'] = 'Die Render-Klasse „{$a}" ist nicht zugelassen.';
 $string['invalidrenderparams'] = 'Die Parameter für die Render-Klasse sind ungültig.';
