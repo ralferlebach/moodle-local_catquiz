@@ -300,4 +300,54 @@ final class subplugin_registration_test extends advanced_testcase {
                 . 'placeholders in place, which aborts the install step.'
         );
     }
+    /**
+     * Both hub plugins pin the parent version they were built against.
+     *
+     * They are subplugins of local_catquiz and use its classes directly. Without the
+     * pin Moodle installs them against any version of the parent, including one that
+     * predates the interfaces they rely on - and the failure then appears at run time
+     * instead of at install time.
+     *
+     * The pin also has to be maintained: one left at an old version stops protecting
+     * anything, quietly. This test fails once the parent has moved on, which is the
+     * reminder to raise it deliberately.
+     *
+     * @return void
+     */
+    public function test_hub_plugins_pin_the_parent_version(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $parent = new \stdClass();
+        $plugin = $parent;
+        include($CFG->dirroot . '/local/catquiz/version.php');
+        $parentversion = (int) $plugin->version;
+
+        $base = $CFG->dirroot . '/local/catquiz/catquizcentralhub';
+
+        foreach (['host', 'client'] as $part) {
+            $file = $base . '/' . $part . '/version.php';
+
+            if (!file_exists($file)) {
+                // Checked out without submodule contents - nothing to assert about.
+                continue;
+            }
+
+            $plugin = new \stdClass();
+            include($file);
+
+            $this->assertNotEmpty(
+                $plugin->dependencies['local_catquiz'] ?? null,
+                "catquizcentralhub_$part must declare the parent it was built against."
+            );
+
+            $this->assertSame(
+                $parentversion,
+                (int) $plugin->dependencies['local_catquiz'],
+                "The pin in catquizcentralhub_$part is behind the parent version. "
+                    . 'Raise it together with the parent, or it stops protecting anything.'
+            );
+        }
+    }
 }

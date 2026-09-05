@@ -1,5 +1,24 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090218)
+
+> Versionierung der Hub-Subplugins.
+
+- **`catquizcentralhub_client` und `_host` stehen auf `2026090500`** (vorher
+  `2026081900`).
+- **Beide pinnen die Elternversion**, gegen die sie gebaut wurden. Sie nutzen
+  Klassen aus `local_catquiz` direkt; ohne den Pin installiert Moodle sie gegen jede
+  beliebige Version des Elternplugins – auch gegen eine, die die verwendeten
+  Schnittstellen noch nicht hat. Der Fehler zeigt sich dann zur Laufzeit statt bei
+  der Installation.
+- **Ein Test hält den Pin aktuell.** Ein stehengebliebener Pin schützt nichts mehr,
+  und zwar unbemerkt; der Test schlägt fehl, sobald das Elternplugin weiterzieht, und
+  erzwingt damit ein bewusstes Nachziehen.
+- **Die Subplugin-CI zieht jetzt einen Branch, der den Pin erfüllt.** `main` steht
+  auf `2026083025` und liegt damit hinter der gepinnten Version – die Pipeline wäre
+  an der Abhängigkeit gescheitert. Das ist beabsichtigtes Verhalten des Pins, kein
+  Defekt der Pipeline, aber der Branch muss dazu passen.
+
 ## 1.1.7 (interne Version 2026090217)
 
 > Letzter offener Punkt aus Security-Issue C.
