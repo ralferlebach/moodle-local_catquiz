@@ -239,6 +239,10 @@ class questionsdisplay {
 
         $table = new catscalequestions_table('catscaleid_' . $id . 'context' . $catcontextid . '_additems');
 
+        // Issue #58: the attempt count is loaded for the visible page instead of
+        // being aggregated over the whole context inside the main query.
+        $table->set_contextattempts_context((int) $catcontextid);
+
         // Issue #20: the question text is fetched on demand when a preview is
         // opened, instead of being embedded into every row.
         $PAGE->requires->js_call_amd('local_catquiz/questionpreview', 'init');
@@ -367,6 +371,11 @@ class questionsdisplay {
      */
     private static function current_page_params(): array {
         $definitions = [
+            // Issue #29 moved tab selection to the server: only the active tab is
+            // built, and the tab travels in the URL. A form that does not carry it
+            // therefore returns to the default tab, and the question list the user
+            // was working in is simply gone from the response.
+            'tab' => PARAM_ALPHA,
             'contextid' => PARAM_INT,
             'scaleid' => PARAM_INT,
             'usesubs' => PARAM_INT,

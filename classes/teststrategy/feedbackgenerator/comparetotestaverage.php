@@ -363,7 +363,7 @@ class comparetotestaverage extends feedbackgenerator {
         if (isset($initialcontext['personabilities_abilities'][$primarycatscale['id']]['abilityrange'])) {
             $abilityrange = $initialcontext['personabilities_abilities'][$primarycatscale['id']]['abilityrange'];
         } else {
-            $abilityrange = $this->feedbackhelper->get_ability_range($primarycatscale['id']);
+            $abilityrange = $this->feedbackhelper->get_ability_range((int) $primarycatscale['id']);
         };
 
         $ul = (float) $abilityrange['maxscalevalue'];

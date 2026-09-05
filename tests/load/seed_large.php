@@ -42,7 +42,7 @@ require(__DIR__ . '/../../../../config.php');
 require_once($CFG->libdir . '/clilib.php');
 
 [$options, $unrecognised] = cli_get_params(
-    ['users' => 2000, 'scales' => 8, 'help' => false],
+    ['users' => 2000, 'scales' => 8, 'items' => 20000, 'help' => false],
     ['h' => 'help']
 );
 
@@ -50,6 +50,10 @@ if ($options['help']) {
     cli_writeln("Seed a large CAT manager / statistics profile.\n");
     cli_writeln("  --users=N   Number of distinct persons (default 2000).");
     cli_writeln("  --scales=N  Number of subscales under the root (default 8).");
+    cli_writeln("  --items=N   Questions with item parameters (default 20000).");
+    cli_writeln("              Without these the manager and the statistics pages are");
+    cli_writeln("              measured against an empty item pool, which is not what");
+    cli_writeln("              the load tests are meant to find out.");
     exit(0);
 }
 
@@ -133,6 +137,129 @@ cli_writeln("# seeded $numusers users x " . count($scaleids) . " scales = $total
 
 // 5. Make sure the admin account has a known password so the load plan can log
 // in. The value comes from the LOAD_ADMIN_PASS env var (default Admin!23).
+// 4. Questions and item parameters.
+//
+// Without them the load plans measure the manager and the statistics pages against
+// an empty item pool - rendering, sessions and concurrency, but none of the queries
+// that grow with the pool. A JMeter run reported 60 ms for the CAT manager that way,
+// while the same page over 50.000 items needs an order of magnitude more.
+$numitems = max(0, (int) $options['items']);
+
+if ($numitems > 0) {
+    $now = time();
+
+    // One question category is enough: the pool is selected by scale and context, not
+    // by category, so more categories would add rows without adding realism.
+    $categoryid = (int) $DB->insert_record('question_categories', (object) [
+        'name' => 'Load test questions',
+        'contextid' => \context_system::instance()->id,
+        'info' => '',
+        'infoformat' => FORMAT_HTML,
+        'stamp' => 'loadtest' . $now,
+        'parent' => 0,
+        'sortorder' => 0,
+    ]);
+
+    $questionbatch = [];
+    $questionids = [];
+    $flushquestions = function () use (&$questionbatch, &$questionids, $DB, $categoryid) {
+        if (empty($questionbatch)) {
+            return;
+        }
+        foreach ($questionbatch as $record) {
+            $questionid = (int) $DB->insert_record('question', $record);
+            $entryid = (int) $DB->insert_record('question_bank_entries', (object) [
+                'questioncategoryid' => $categoryid,
+                'idnumber' => null,
+                'ownerid' => 2,
+            ]);
+            $DB->insert_record('question_versions', (object) [
+                'questionbankentryid' => $entryid,
+                'version' => 1,
+                'questionid' => $questionid,
+                'status' => 'ready',
+            ]);
+            $questionids[] = $questionid;
+        }
+        $questionbatch = [];
+    };
+
+    for ($i = 1; $i <= $numitems; $i++) {
+        $questionbatch[] = (object) [
+            'name' => 'Load item ' . $i,
+            'questiontext' => 'Load test question ' . $i,
+            'questiontextformat' => FORMAT_HTML,
+            'qtype' => 'truefalse',
+            'generalfeedback' => '',
+            'generalfeedbackformat' => FORMAT_HTML,
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'createdby' => 2,
+            'modifiedby' => 2,
+        ];
+        if (count($questionbatch) >= 500) {
+            $flushquestions();
+        }
+    }
+    $flushquestions();
+
+    // Item and parameter rows, spread across the subscales so that a scale tree walk
+    // has something to walk.
+    $itembatch = [];
+    $flushitems = function () use (&$itembatch, $DB) {
+        if (empty($itembatch)) {
+            return;
+        }
+        foreach ($itembatch as $pair) {
+            $itemid = (int) $DB->insert_record('local_catquiz_items', $pair[0]);
+            $pair[1]->itemid = $itemid;
+            $paramid = (int) $DB->insert_record('local_catquiz_itemparams', $pair[1]);
+            $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $itemid]);
+        }
+        $itembatch = [];
+    };
+
+    foreach ($questionids as $index => $questionid) {
+        $scaleid = $scaleids[$index % count($scaleids)];
+
+        // Difficulties spread over a realistic range rather than a constant: a pool in
+        // which every item has the same difficulty makes the selection degenerate and
+        // would measure a case that does not occur.
+        $difficulty = round(-3.0 + (6.0 * ($index % 100) / 100), 4);
+
+        $itembatch[] = [
+            (object) [
+                'componentid' => $questionid,
+                'componentname' => 'question',
+                'catscaleid' => $scaleid,
+                'contextid' => $contextid,
+                'activeparamid' => 0,
+                'status' => 4,
+            ],
+            (object) [
+                'itemid' => 0,
+                'componentname' => 'question',
+                'contextid' => $contextid,
+                'model' => 'raschbirnbaum',
+                'difficulty' => $difficulty,
+                'discrimination' => 1.0,
+                'guessing' => 0.0,
+                'usable' => 1,
+                'status' => 4,
+                'timecreated' => $now,
+                'timemodified' => $now,
+            ],
+        ];
+
+        if (count($itembatch) >= 500) {
+            $flushitems();
+        }
+    }
+    $flushitems();
+
+    cli_writeln("# seeded $numitems questions with item parameters", STDERR);
+}
+
 $adminpass = getenv('LOAD_ADMIN_PASS') ?: 'Admin!23';
 $admin = get_admin();
 if ($admin) {

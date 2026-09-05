@@ -101,7 +101,7 @@ final class webservice_external_classes_test extends advanced_testcase {
         $this->setAdminUser();
         $sink = $this->redirectEvents();
 
-        $result = feedback_tab_clicked::execute(42, 'raw feedback', 'translated feedback');
+        $result = feedback_tab_clicked::execute(42, 'personabilities', 'Person abilities');
 
         $events = $sink->get_events();
         $sink->close();
@@ -111,7 +111,7 @@ final class webservice_external_classes_test extends advanced_testcase {
         $this->assertInstanceOf(feedbacktab_clicked::class, end($events));
         $last = end($events);
         $this->assertSame(42, $last->other['attemptid']);
-        $this->assertSame('raw feedback', $last->other['feedback']);
+        $this->assertSame('personabilities', $last->other['feedback']);
     }
 
     /**
@@ -203,8 +203,14 @@ final class webservice_external_classes_test extends advanced_testcase {
         $payload = json_encode([
             'admethodname' => 'method_does_not_exist',
             'adparams' => '',
-            'tdparams' => '',
-            'classlocation' => '\\local_catquiz\\external_reload_template_stub',
+            // The datacard renderer takes ints; an empty tdparams string explodes into [''] and the
+            // typed constructor rejects it. The endpoint is being tested, not the
+            // renderer, so plausible ids are passed.
+            'tdparams' => '1,1,1,question',
+            // The stub is no longer accepted: the render class is now chosen from a
+            // server-side allowlist rather than from the request. The real card class
+            // is used, which is what the endpoint exists to render.
+            'classlocation' => \local_catquiz\output\catscalemanager\questions\cards\datacard::class,
         ]);
 
         $result = reload_template::execute($payload);
@@ -347,5 +353,158 @@ final class webservice_external_classes_test extends advanced_testcase {
         // Somebody else's: refused for a user without the management right.
         $this->expectException(\required_capability_exception::class);
         \local_catquiz\external\subscribe::execute($other->id, 'catscale', 1);
+    }
+    /**
+     * A render class outside the allowlist is refused.
+     *
+     * The endpoint used to construct whatever class the request named. The stub this
+     * test file defines is exactly such a class - harmless here, but it stands for
+     * any autoloadable class a caller might name.
+     *
+     * @covers \local_catquiz\external\reload_template::execute
+     * @return void
+     */
+    public function test_reload_template_refuses_a_class_outside_the_allowlist(): void {
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $payload = json_encode([
+            'admethodname' => 'method_does_not_exist',
+            'adparams' => '',
+            'tdparams' => '',
+            'classlocation' => '\\local_catquiz\\external_reload_template_stub',
+        ]);
+
+        $this->expectException(\moodle_exception::class);
+        reload_template::execute($payload);
+    }
+    /**
+     * Inserts an attempt owned by a user.
+     *
+     * @param int $attemptid
+     * @param int $userid
+     * @return void
+     */
+    private function add_attempt_for(int $attemptid, int $userid): void {
+        global $DB;
+
+        $now = time();
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $userid,
+            'scaleid' => 1,
+            'contextid' => 1,
+            'courseid' => 1,
+            'attemptid' => $attemptid,
+            'component' => 'mod_adaptivequiz',
+            'instanceid' => 1,
+            'teststrategy' => 4,
+            'status' => 1,
+            'json' => '{}',
+            'debug_info' => '',
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'endtime' => $now,
+        ]);
+    }
+
+    /**
+     * A participant may act on their own attempt.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_allows_the_own_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $this->add_attempt_for(8801, (int) $user->id);
+
+        $sink = $this->redirectEvents();
+        feedback_tab_clicked::execute(8801, 'personabilities', 'Person abilities');
+
+        $this->assertNotEmpty(
+            $sink->get_events(),
+            'Acting on your own attempt has to keep working.'
+        );
+    }
+
+    /**
+     * A participant may not act on somebody else's attempt.
+     *
+     * validate_context() establishes where a request acts, not whether this user may
+     * act on this object. Without the ownership check any authenticated user could
+     * pass a foreign attempt id - and was then logged as that attempt's "student".
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_denies_a_foreign_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $owner = $this->getDataGenerator()->create_user();
+        $intruder = $this->getDataGenerator()->create_user();
+        $this->add_attempt_for(8802, (int) $owner->id);
+        $this->setUser($intruder);
+
+        $sink = $this->redirectEvents();
+
+        try {
+            feedback_tab_clicked::execute(8802, 'personabilities', 'Person abilities');
+            $this->fail('A foreign attempt must be refused.');
+        } catch (\moodle_exception $e) {
+            // Expected.
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
+
+    /**
+     * An attempt that does not exist is refused rather than allowed.
+     *
+     * An unknown object is not a permitted one - the check has to fail closed.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_denies_an_unknown_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+
+        $sink = $this->redirectEvents();
+
+        $this->expectException(\moodle_exception::class);
+        try {
+            feedback_tab_clicked::execute(999999, 'personabilities', 'Person abilities');
+        } finally {
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
+    /**
+     * An identifier that names no feedback generator is refused.
+     *
+     * Both the identifier and its translation arrive from the client and were written
+     * into the event log as if they described what happened. A log entry whose subject
+     * the caller chose freely is not audit evidence.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_refuses_an_unknown_identifier(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $this->add_attempt_for(8803, (int) $user->id);
+
+        $sink = $this->redirectEvents();
+
+        $this->expectException(\moodle_exception::class);
+        try {
+            feedback_tab_clicked::execute(8803, 'not_a_generator', 'anything');
+        } finally {
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
     }
 }

@@ -1,5 +1,404 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090221)
+
+> Lasttests messen jetzt den Fragenpool, nicht die leere Installation.
+
+- **`tests/load/seed_large.php` legt Fragen und Itemparameter an.** Bisher erzeugte
+  es Kontext, Skalen und Personparameter – aber **keine Fragen und keine
+  Itemparameter**. Die Lastpläne prüften damit Rendering, Sessions und
+  Nebenläufigkeit, während die Abfragen, die mit dem Pool wachsen, gegen nichts
+  liefen. Ein JMeter-Lauf meldete so 60 ms für den CAT-Manager; dieselbe Seite
+  braucht über 50.000 Items eine Größenordnung mehr. Die Zahlen sahen beruhigend aus
+  und maßen etwas anderes.
+- **`load-k6.yml` und `load-jmeter.yml` übergeben `--items`** (Vorgabe 20.000, über
+  „Run workflow" einstellbar, `0` schaltet ab).
+- Die Schwierigkeiten sind über einen realistischen Bereich verteilt statt konstant:
+  Ein Pool mit lauter gleich schweren Items lässt die Auswahl entarten und misst
+  einen Fall, der nicht vorkommt.
+- **Ein Test hält beides fest**: dass der Seeder in die Item-Tabellen schreibt und
+  dass die Lastworkflows einen Pool anfordern.
+
+## 1.1.7 (interne Version 2026090220)
+
+> Subplugin-Pipelines brachen vor dem ersten Test ab.
+
+- **Kein fehlendes Sprachpaket, sondern ein fehlendes System-Locale.** Moodles
+  PHPUnit-Bootstrap verweigert den Start ohne `en_AU.UTF-8`; die Runner-Images
+  liefern es nicht mit. Die Meldung „Required locale 'en_AU.UTF-8' is not installed"
+  liest sich wie ein Sprachproblem und führt die Suche in die falsche Richtung.
+  `local_catquiz` erzeugt das Locale seit jeher an vier Stellen – den neuen
+  Workflows fehlte genau dieser Schritt.
+- Ergänzt in beiden Subplugin-Pipelines und im Lasttest-Workflow.
+- **Ein Test prüft die Fehlerklasse**: Jeder Workflow, der die PHPUnit-Umgebung
+  initialisiert, muss das Locale erzeugen – über alle drei Repository-Ebenen hinweg.
+
+## 1.1.7 (interne Version 2026090219)
+
+> Korrektur: Der Pin folgt `main`, nicht der Arbeitsversion.
+
+- **Beide Hub-Subplugins pinnen `local_catquiz` auf `2026083025`** – die Version auf
+  `main`. Ein Pin auf die gerade in Arbeit befindliche Version hätte die Subplugins
+  überall unauffindbar gemacht ausser auf dem Entwicklungsbranch.
+- **Die Subplugin-Pipelines ziehen wieder `main`.** Pin und Branch gehören zusammen:
+  Ein Pin oberhalb von `main` lässt den Installationsschritt mit einem
+  Abhängigkeitsfehler scheitern – das ist der Pin bei der Arbeit, kein Defekt der
+  Pipeline.
+- **Der Test prüft jetzt die richtige Bedingung**: nicht Gleichheit mit der lokalen
+  Version, sondern dass ein Pin existiert und die gebaute Elternversion **nicht
+  überschreitet**. Gleichheit zu verlangen hiesse, einen Pin auf eine Version zu
+  fordern, die noch niemand installieren kann.
+
+## 1.1.7 (interne Version 2026090218)
+
+> Versionierung der Hub-Subplugins.
+
+- **`catquizcentralhub_client` und `_host` stehen auf `2026090500`** (vorher
+  `2026081900`).
+- **Beide pinnen die Elternversion**, gegen die sie gebaut wurden. Sie nutzen
+  Klassen aus `local_catquiz` direkt; ohne den Pin installiert Moodle sie gegen jede
+  beliebige Version des Elternplugins – auch gegen eine, die die verwendeten
+  Schnittstellen noch nicht hat. Der Fehler zeigt sich dann zur Laufzeit statt bei
+  der Installation.
+- **Ein Test hält den Pin aktuell.** Ein stehengebliebener Pin schützt nichts mehr,
+  und zwar unbemerkt; der Test schlägt fehl, sobald das Elternplugin weiterzieht, und
+  erzwingt damit ein bewusstes Nachziehen.
+- **Die Subplugin-CI zieht jetzt einen Branch, der den Pin erfüllt.** `main` steht
+  auf `2026083025` und liegt damit hinter der gepinnten Version – die Pipeline wäre
+  an der Abhängigkeit gescheitert. Das ist beabsichtigtes Verhalten des Pins, kein
+  Defekt der Pipeline, aber der Branch muss dazu passen.
+
+## 1.1.7 (interne Version 2026090217)
+
+> Letzter offener Punkt aus Security-Issue C.
+
+- **Feedback-Bezeichner wird serverseitig geprüft.** Bezeichner und Übersetzung kamen
+  beide vom Client und wurden beide ins Ereignisprotokoll geschrieben, als
+  beschrieben sie, was geschehen ist. Ein Protokolleintrag, dessen Gegenstand der
+  Aufrufer frei wählt, ist kein Auditnachweis.
+  Der Bezeichner wird jetzt gegen die tatsächlich vorhandenen Feedback-Generatoren
+  geprüft – abgeleitet statt gepflegt, weil eine zweite Kopie derselben Menge
+  auseinanderdriftet und dann entweder gültige Reiter ablehnt oder nicht mehr
+  existierende zulässt. Die Übersetzung bleibt ergänzender Anzeigetext und
+  ausdrücklich nicht die maßgebliche Aufzeichnung.
+
+## 1.1.7 (interne Version 2026090216)
+
+> Verhaltenstests zur Eigentumsprüfung – und ein Fehler, den sie sofort gefunden
+> haben.
+
+- **`moodle_exception` war im Namensraum nicht importiert.** Die in der
+  Vorversion ergänzte Eigentumsprüfung in `feedback_tab_clicked` hätte in Produktion
+  nicht abgelehnt, sondern mit „Class not found" abgebrochen. Der Quelltext-Scan
+  hatte nur belegt, dass der Aufruf **dasteht** – nicht, dass er wirkt.
+- **Drei Verhaltenstests** decken die DoD aus Security-Issue C ab: eigener Versuch
+  erlaubt, fremder abgelehnt, unbekannter fail-closed abgelehnt. Jeder prüft
+  zusätzlich, dass bei Ablehnung **kein Event** ausgelöst wird.
+
+## 1.1.7 (interne Version 2026090215)
+
+> Lasttest-Matrix als externer Workflow; #58 bei 50.000 Items belegt.
+
+- **Neuer Workflow `load-runtime-pool.yml`**: fährt die von #26 und #58 verbindlich
+  geforderte Matrix auf GitHub-Runnern – 50k/100k/250k Items × PostgreSQL und
+  MariaDB, sechs Jobs, Ergebnisse als Artefakt. Die Verifikationsumgebung hat dafür
+  zu wenig Platz; die Messung findet dort statt, wo sie möglich ist, statt dort
+  geschätzt zu werden, wo sie es nicht ist.
+- **`measure_runtime_pool.php` misst jetzt auch den Add-Questions-Dialog** (#58) –
+  im selben Werkzeug, damit beide dieselbe Definition von Cold, Warm, Median und p95
+  benutzen. Zwei getrennte Harnesse driften auseinander und ihre Zahlen hören auf,
+  vergleichbar zu sein.
+- **#58 bei 50.000 Items belegt**: warm Median **3 ms**, p95 3 ms, zwei Queries –
+  gegenüber 12.732 ms im Ausgangszustand. Die Akzeptanzschwelle des Reviews
+  (warm p95 < 500 ms) ist bei dieser Stufe deutlich erfüllt.
+
+## 1.1.7 (interne Version 2026090214)
+
+> Belastungstest zu #26 nach dem vom Review geforderten Protokoll.
+
+- **Neues Messwerkzeug** `cli/measure_runtime_pool.php`: Cold- und Warm-Lauf getrennt,
+  Median und p95, SQL-Zeit, Gesamtzeit inkl. Hydration, Query-Zahl, Zusatzspeicher und
+  Größe des serialisierten Cache-Payloads.
+- **Gemessen bei 50.000 Items** (`doc/issue-26-loadtest-report.md`): warme Gesamtzeit
+  493 ms bei 2 Queries – tragbar. Auffällig sind **208 MB Zusatzspeicher und 42 MB
+  Cache-Payload** je Skala und Kontext, beides linear skalierend. Der überschrittene
+  Grenzwert ist damit die Datenmenge je Zeile, nicht die Abfrage.
+- **#27 nicht reaktiviert**: Der Poolaufbau braucht 2 Queries; die Zeit liegt in der
+  einen Abfrage und der Hydration, nicht in nachgelagerten Skalenberechnungen. Damit
+  ist die vom Review genannte Bedingung für #27 nicht erfüllt.
+- **Der Kaltstart-Effekt ist jetzt beziffert**: bei 20.401 Items 4.803 ms kalt gegen
+  57 ms warm – Faktor 84. Genau diese Verwechslung hätte bei der ersten Bewertung von
+  #26 fast zu einem Umbau des heißen Auswahlpfades geführt.
+- **Eine Maßnahme versucht und zurückgenommen**: Die Spaltenreduktion bringt belegte
+  −65 % Payload, als Feldfilter über die geladenen Zeilen umgesetzt aber 28 Fehler in
+  der Strategie-Suite (`Undefined property: stdClass::$attempts`). Eine statisch
+  gepflegte Feldliste ist hier das falsche Mittel; der belastbare Weg ist eine eigene
+  Auswahl-Abfrage mit Bitgenau-Äquivalenznachweis. Vollständig zurückgenommen, Suite
+  wieder grün (35 Tests, 2.537 Assertions).
+
+## 1.1.7 (interne Version 2026090214)
+
+> Belastungstest-Werkzeug für #26 nach dem geforderten Protokoll, erste Größenstufe
+> gemessen.
+
+- **Neu `cli/measure_runtime_pool.php`**: misst den Laufzeit-Fragenpool nach der im
+  Review vorgegebenen Matrix – Cold- und Warm-Lauf getrennt, Median und p95 über
+  Wiederholungen, SQL-Zeit, Gesamtzeit inkl. Hydration, Query-Zahl, Zusatzspeicher
+  und Größe des serialisierten Cache-Payloads.
+- **Der Kaltstart-Effekt ist jetzt belegt**: bei 20.401 Items 4.803 ms kalt gegen
+  57 ms warm – Faktor 84. Genau diese Verwechslung hätte in einer früheren Sitzung
+  beinahe zu einem Umbau des heißen Auswahlpfads geführt. Das Werkzeug mittelt beide
+  Werte nie zusammen.
+- **Befund bei 50.000 Items** (`doc/loadtest-runtime-pool.md`): Laufzeit unkritisch
+  (Median 493 ms, zwei Queries), **kritisch sind Speicher und Payload** – 208 MB
+  Zusatzspeicher und 42 MB serialisierter Cache je Skala und Kontext, linear
+  wachsend. Damit ist erstmals belegt, wofür die Reduktion der 14 nicht gelesenen
+  Spalten tatsächlich zahlt: nicht für die Abfragezeit, sondern für den Speicher.
+- **Bewusst nicht umgesetzt**: die Spaltenreduktion selbst. Die Matrix ist
+  unvollständig (100k und 250k sind in der Verifikationsumgebung mangels
+  Plattenplatz nicht herstellbar), und derselbe Pfad hat zuletzt 14 Tests der
+  Kernauswahl fallen lassen. Der Bericht nennt die Reproduktionsbefehle.
+- **#27 bleibt zurückgestellt**: Die Messung zeigt den Aufwand im Datentransport und
+  im Speicher, nicht in skalenbezogenen Berechnungen. Die im Review genannte
+  Bedingung für eine Reaktivierung ist nicht erfüllt.
+
+## 1.1.7 (interne Version 2026090213)
+
+> Drei Security-Befunde aus dem Review umgesetzt. Alle wurden vorab am Code
+> verifiziert und trafen zu.
+
+- **Clientgesteuerte Klasseninstanziierung beseitigt (P1).**
+  `reload_template` konstruierte die Renderklasse aus dem Request – der Aufrufer
+  entschied also, welche autoloadbare PHP-Klasse der Server baut, mit
+  clientkontrollierten Konstruktorargumenten. Die Capability-Prüfung schränkt den
+  Kreis ein, macht den Dispatch aber nicht sicher. Zulässige Klassen stehen jetzt
+  serverseitig fest; genau eine wird real verwendet.
+  Zusätzlich wird ein nicht baubarer Renderer als Fehlerergebnis gemeldet, statt
+  einen rohen `TypeError` aus dem Webservice zu tragen.
+- **Falscher Capability-Kontext und fehlende Eigentumsbindung.**
+  `local/catquiz:canaccess` ist als `CONTEXT_MODULE` deklariert, wurde aber im
+  Systemkontext geprüft. `start_new_attempt` akzeptierte zudem eine beliebige
+  `userid`: Versuche im Namen anderer zu eröffnen war damit kein administrativer
+  Akt mehr. Fremde Nutzer erfordern jetzt `canmanage`.
+  Dabei gefunden: `$params['categorid']` – ein Tippfehler, der bei **jedem** Aufruf
+  `null` statt der Kategorie übergab. `get_next_question` deklarierte `quizid` und
+  `component` nicht, obwohl `execute()` sie erwartet; sie erreichten den Code
+  ungeprüft.
+- **Fehlende Objektautorisierung in `feedback_tab_clicked`.**
+  `validate_context()` legt fest, *wo* eine Anfrage wirkt, nicht *ob* dieser Nutzer
+  auf dieses Objekt zugreifen darf. Ohne Eigentumsprüfung konnte jeder angemeldete
+  Nutzer Events für fremde Versuche auslösen – und wurde dabei als deren „student"
+  protokolliert. Nicht auflösbare Versuche werden abgelehnt, nicht zugelassen.
+- Neue Tests halten beide Fehlerklassen fest: kein Endpunkt instanziiert eine vom
+  Request benannte Klasse, und Endpunkte mit Attempt-ID prüfen das Eigentum.
+
+## 1.1.7 (interne Version 2026090211)
+
+> Zwei Folgefehler der #29-Umstellung behoben – beide traten weit entfernt von ihrer
+> Ursache auf.
+
+- **Behat (7 Szenarien) schlug an „I press Catquiz" fehl.** Ursache war der
+  CSV-Importer: Das Formular wurde bei **jedem** Reiter serverseitig gebaut, und
+  Moodle registriert dafür ein Validierungsskript, das das Formular beim Laden per
+  ID sucht. Seit nur noch der aktive Reiter gerendert wird, fehlt das Element – die
+  Suche liefert `null`, das Skript wirft, und die Seite gilt dauerhaft als „nicht
+  bereit". Das Formular wird jetzt nur auf seinem Reiter gebaut.
+- **Playwright (3 Tests) fand `#lcq_questions` nicht.** Sechs Stellen verlinkten
+  weiter per URL-Fragment auf Panes, die es ohne ihren Reiter nicht mehr gibt; das
+  Suchformular trug den Reiter nicht mit und landete nach dem Absenden auf dem
+  Standardreiter, ohne die Liste. Alle auf den `tab`-Parameter umgestellt.
+- `csvimport.js` prüft jetzt auf ein fehlendes Formular-Element, statt mit `null`
+  weiterzuarbeiten.
+- Drei neue Tests halten die Fehlerklasse fest: keine Fragment-Links auf Panes, der
+  `tab` in den Formularparametern, und kein Formularbau für einen inaktiven Reiter.
+
+## 1.1.7 (interne Version 2026090210)
+
+> CI-Installation repariert; #28 geprüft und begründet nicht umgesetzt.
+
+- **Alle Workflows entfernen die leeren Submodul-Platzhalter vor `install`.** Die
+  beiden Hub-Plugins hängen als Submodule am Repository, sodass ein Checkout
+  `catquizcentralhub/host` und `/client` als leere Verzeichnisse hinterlässt.
+  `moodle-plugin-ci` prüft `is_dir()` und nicht, ob ein Plugin darin liegt – und
+  bricht mit „Plugin is already installed in standard Moodle" ab. Der Fix war
+  zunächst nur in den Subplugin-Pipelines; die vier Eltern-Workflows fielen weiter
+  aus. Jetzt an allen **sieben** Stellen, abgesichert durch einen Test.
+- **#28 nicht umgesetzt.** Beide Teile wurden am Code geprüft und beide Befunde
+  treffen zu – aber:
+  - Das Entfernen der doppelten Progress-Speicherung ließ **14 von 35** Tests der
+    Kernauswahl fallen: Die Fähigkeiten blieben bei 0.0, weil Folgeschritte den
+    persistierten Fortschritt lesen. Die innere Speicherung ist tragend.
+  - Der Peer-Vergleich, den das Issue als teuersten Posten nennt, kostet gemessen
+    **3,3 ms** je Antwort (erster Aufruf 279 ms – ein Kaltstart-Artefakt wie schon
+    bei #26). Von sieben Feedback-Generatoren berühren nur drei die Datenbank.
+  - Die eigentliche Frage ist, warum Folgeschritte den Fortschritt aus der Datenbank
+    statt aus dem Objekt lesen. Das ist ein eigenes Arbeitspaket mit
+    Äquivalenznachweis.
+
+## 1.1.7 (interne Version 2026090207)
+
+> Subplugin-Registrierung gepinnt, Submodul-Falle geschlossen, #65 abgeschlossen.
+
+- **CI-Layoutprüfung korrigiert.** Ein selbst geschriebener Guard erwartete *genau
+  eine* `version.php` unter `local/catquiz` und meldete damit die sieben catmodels
+  als Fehler – die Subplugins waren korrekt registriert, die Prüfung war es nicht.
+  Sie liest die erlaubten Pfade jetzt aus `db/subplugins.json`, statt zu zählen.
+- **Registrierung per Test gepinnt** (`subplugin_registration_test`): Deklaration,
+  vollständige catmodel-Verzeichnisse mit passendem Komponentennamen, und – der
+  entscheidende Teil – dass Moodle die Typen tatsächlich findet.
+- **Submodul-Falle geschlossen.** `catquizcentralhub/host` und `/client` sind eigene
+  Repositories, die als Submodule eingehängt sind. Ein normaler Klon liefert **zwei
+  leere Verzeichnisse**: Die Pfade existieren, der Code nicht. Prüfungen dagegen
+  bestehen, weil nichts zu prüfen ist – ununterscheidbar davon, aus dem richtigen
+  Grund zu bestehen. Ein Test verlangt, dass jeder Workflow, der die Plugins
+  erwähnt, sie aus ihren eigenen Repositories installiert.
+- **Eigene CI-Suite** `catquizcentralhub.yml`: Linting, Coding Style und PHPUnit über
+  beide Plugins, PHP 8.2 und 8.3. Bricht ab, wenn ein Plugin leer ist oder keine
+  Testdatei gefunden wird – ein Lauf ohne Treffer endet sonst mit Erfolg.
+- **#65 abgeschlossen.** Das Formular `remote_settings_form` schrieb `central_host`
+  und `central_token` unter `local_catquiz`, wo **niemand** sie las: ein zweiter
+  Ablageort für Zugangsdaten, ausserhalb der Reichweite des Kill-Switch, der zum
+  Client-Plugin gehört. Formular und Upgrade führen sie in
+  `catquizcentralhub_client` zusammen und entfernen die Altkopie.
+
+## 1.1.7 (interne Version 2026090206)
+
+> Sicherheit: Kill-Switch für die Hub-Synchronisation (#65). Diagnose für #64
+> repariert.
+
+- **#65 – Kill-Switch serverseitig erzwungen.** Die Schalter `enable_sync_as_node`
+  und `enable_sync_as_hub` wurden ausserhalb von Einstellungen und Template
+  **nirgends** ausgewertet: Der geplante Task, die External Functions und die
+  HTTP-Schicht lasen sie nicht. Abschalten versteckte die Bedienelemente, während
+  jeder Ausführungspfad intakt blieb – mit weiterhin gespeicherten Zugangsdaten lief
+  der Sendepfad bis `curl->post()`.
+  - Zwei Policy-Klassen (`sync_policy`, `hub_policy`) als einzige Quelle der
+    Wahrheit; sie lesen die Konfiguration bei jedem Aufruf, damit ein Umlegen des
+    Schalters sofort wirkt.
+  - **Zuerst die unterste Egress-Schicht**: `response_submitter` und
+    `fetch_parameters` prüfen selbst. Ein Test belegt, dass der Guard *vor* dem
+    Request steht.
+  - Alle fünf External Functions prüfen Schalter, Kontext und Capability; die
+    Skalenlisten wirken als serverseitige Allowlists.
+  - Der geplante Task prüft den Schalter **vor** den Zugangsdaten. Ausgeschaltet ohne
+    Konfiguration ist ein erfolgreicher No-op – das beendet die gemeldeten
+    Dauerfehler mit einem `faildelay` von 86.400 Sekunden.
+  - Vier bestehende Testdateien setzten voraus, dass die Dienste bei ausgeschaltetem
+    Schalter arbeiten. Sie sind korrigiert, nicht die Guards abgeschwächt.
+- **#64 – Diagnose repariert.** Die Stufenzahlen wurden nur in `after_error()`
+  geschrieben. Der gemeldete Abbruch erreicht diesen Pfad nie: Die Auswahl meldet
+  keinen Fehler (`catquizerror = false`), der Pool ist schlicht leer. Die Diagnose
+  blieb also genau bei dem Fall stumm, für den sie gebaut wurde. Sie wird jetzt an
+  **allen elf** Ausstiegen der Auswahl geschrieben; ein Test meldet jeden Ausstieg,
+  der keine Diagnose hinterlässt.
+
+## 1.1.7 (interne Version 2026090204)
+
+> Diagnose für #64: die Auswahlkette gibt Rechenschaft darüber, wo der Pool verloren
+> geht.
+
+- **Kandidatenzahl je Stufe** wird während der Fragenauswahl festgehalten (`start`,
+  `add_scale_standarderror`, `maximumquestionscheck`, `removeplayedquestions`,
+  `noremainingquestions`, `fisherinformation`) und im Fehlerfall **zusammen mit dem
+  Status** persistiert. Der gemeldete Abbruch geschah in einem Request, der längst
+  vorbei war, als jemand nachsah – was dort nicht gespeichert wird, ist verloren.
+- **Kein Fix auf Verdacht.** Drei Kandidaten wurden am Code ausgeschlossen
+  (`maximumquestionscheck` zählt beantwortete Fragen und gibt bei 1 gegen 250 `ok`;
+  `removeplayedquestions` entfernt nur gespielte IDs; `max_attempts_per_scale` ist
+  bei einer Frage nicht erfüllt). Eine Ursache ließ sich nicht belegen – der Fehler
+  entsteht im Zusammenspiel von vier Plugins, eines davon hier nicht vorhanden.
+- Die Instrumentierung sitzt im Pfad jeder Frage jedes laufenden Tests. Abgesichert
+  durch einen Test, der prüft, dass das Ergebnis unverändert durchgereicht wird, und
+  durch die vollständige Strategie-Suite: 35 Tests, 2.537 Assertions, unverändert.
+
+## 1.1.7 (interne Version 2026090203)
+
+> #29 vollständig, #26 gemessen und begründet abgeschlossen.
+
+- **#29 abgeschlossen**: Das Template navigiert jetzt serverseitig – echte URLs statt
+  Bootstrap-Anker, und nur der aktive Bereich wird ausgegeben. Vorher wurden die
+  übrigen Bereiche weiterhin gerendert, inzwischen aber **ohne Daten dahinter**.
+- **Ein Fehler der eigenen Umsetzung, den Behat gefunden hat**: Die Reiter-Guards
+  umschlossen nur die Instanziierung, nicht die Auswertung danach – neun Stellen
+  lasen eine bedingt erzeugte Variable unbedingt. Die erste Seite des Managers wäre
+  mit einer Warnung erschienen. PHPUnit konnte das nicht sehen, weil der Konstruktor
+  einen vollständigen Seitenkontext braucht.
+- Behat `catquiz_manager_tabs`: 4 Szenarien, 23 Steps – Reiter aus der URL übersteht
+  das Neuladen, unbekannter Wert fällt zurück, Zustand bleibt beim Wechsel erhalten.
+- **#26 ohne Umbau abgeschlossen** (`doc/issue-26-finding.md`): Die Auswahl nutzt
+  tatsächlich die Manager-Abfrage und lädt 29 Spalten, von denen sie 15 liest. Die
+  vermutete Größenordnung trifft aber nicht zu – gemessen rund 85 ms bei 20.401
+  Items. Der zuerst gemessene Wert von 4.878 ms war ein Kaltstart-Artefakt.
+  Zwei der benötigten Felder stammen aus den Statistik-Joins, die sich daher nicht
+  weglassen lassen.
+
+## 1.1.7 (interne Version 2026090201)
+
+> Erste Auslieferung des neuen Arbeitspakets: zwei Laufzeitfehler im Feedback-Pfad,
+> und der CAT-Manager baut nur noch den sichtbaren Reiter auf.
+
+- **Issue #62**: `lastquestion` und `lastmiddleware` wurden in der Debug-Ausgabe
+  ungeprüft gelesen. Beide fehlen bei der ersten Frage jedes Versuchs
+  systematisch – `catquiz.php` entfernt `lastquestion` sogar ausdrücklich. Mit
+  `DEBUG_DEVELOPER` wurde daraus eine Ausnahme, die als „couldn't define the first
+  question" erschien und auf die Konfiguration zeigte. Debug-Informationen waren
+  damit ausgerechnet auf den Instanzen unerreichbar, die dafür eingerichtet sind.
+- **Issue #59**: `attemptfeedback::update_data()` kehrt ohne Fähigkeitswerte früh
+  zurück und setzt `catscales` nie. `array_key_first([])` ist `null`, was bis in
+  `catscale::__construct()` lief und dort scheiterte – eine Ebene unterhalb der
+  Ursache. Jetzt mit Rückfall auf die primäre Skala des Tests; die Signatur von
+  `get_ability_range()` verlangt ausdrücklich `int`.
+  Dabei mussten **drei weitere Aufrufstellen** abgesichert werden, die untypisierte
+  Werte übergaben – sonst hätte der Fix neue Fehler erzeugt statt sie zu beseitigen.
+- **Issue #29**: Der CAT-Manager erzeugte bei jedem Aufruf **acht** Displays samt
+  ihrer Abfragen, von denen das Template sieben verbarg. Jetzt wird nur der aktive
+  Reiter gebaut; er steht in der URL, sodass Neuladen und der Zurück-Button ihn
+  behalten. Jeder Reiter-Link trägt Kontext, Skala und `usesubs` mit, damit ein
+  Wechsel den betrachteten Zustand nicht zurücksetzt.
+- **Issue #56** ist bereits in 1.1.6 vollständig umgesetzt worden und entfällt aus
+  diesem Arbeitspaket.
+- Neue Tests: `feedback_path_robustness_test` (4) und
+  `managecatscaledashboard_tabs_test` (4). Letzterer prüft nicht ein einzelnes
+  Display, sondern dass **keines** unbedingt gebaut wird – ein neuntes ohne
+  Reiterbindung fiele auf. Er hat dabei eine Lücke der eigenen Umsetzung gefunden:
+  `testitemdashboard` war an `!empty()`-Bedingungen gebunden, nicht an den Reiter.
+
+### Noch offen in 1.1.7
+
+- Das Template nutzt weiterhin Bootstrap-Anker statt der neuen Reiter-URLs; die
+  Zustandserhaltung wirkt serverseitig, der Wechsel bleibt clientseitig.
+- Behat-Szenarien für Neuladen und Zurück-Button.
+- Issues #26, #27, #28 sind nicht begonnen.
+
+## 1.1.6 (interne Version 2026083025)
+
+> Alle Aufrufpfade geprüft; ein zweiter Laufzeitfehler derselben Art gefunden.
+
+- **Systematische Prüfung aller Methodenaufrufe** des Plugins per Reflection. Dabei
+  kam ein weiterer Fehler ans Licht: `learningprogress` rief
+  `get_color_for_personability()` auf sich selbst auf, obwohl die Methode zum
+  Feedback-Helfer gehört – vier andere Aufrufstellen machen es richtig. Er wäre beim
+  nächsten Lernfortschritt-Diagramm mit Subskalen aufgeschlagen.
+- **Neu `internal_method_calls_test`**: prüft, dass jeder `$this->x()`, `self::x()`
+  und jeder statische Aufruf auf eine Plugin-Klasse auflösbar ist. PHP löst
+  Methodennamen erst zur Laufzeit auf, ein erfundener Name fällt also erst auf,
+  wenn die Zeile erreicht wird.
+  Die erste Fassung dieses Tests hatte selbst eine Lücke – sie verlangte einen
+  Großbuchstaben am Klassennamen und hätte fast jeden Aufruf übersprungen. Nur der
+  Zahn-Test hat das aufgedeckt.
+
+## 1.1.6 (interne Version 2026083024)
+
+> Laufzeitfehler im Verlaufsmodus behoben.
+
+- **`progress::set_ability()` rief ein nicht existierendes `get_step()`** auf,
+  eingeführt mit dem Verlaufsmodus aus #56. Die Methode liegt auf dem heißen Pfad
+  der Fähigkeitsschätzung, sodass mit eingeschaltetem Verlaufsmodus **jeder
+  laufende Test** abbrach. Richtig ist `get_num_playedquestions()`.
+- Ursache für das späte Auffallen: Die sechs Tests zu #56 prüften Konfiguration und
+  Aufräum-Task, aber keiner rief `set_ability()` auf – getestet war die Einstellung,
+  nicht ihre Wirkung. Zwei neue Tests führen den Pfad jetzt aus.
+
 ## 1.1.6 (interne Version 2026083023)
 
 > Kursseiten-Fehler behoben, Docblocks vervollständigt.

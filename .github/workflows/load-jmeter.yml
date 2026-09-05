@@ -29,6 +29,10 @@ on:
       users:
         description: Seeded persons
         default: '2000'
+      items:
+        description: 'Questions with item parameters to seed (0 disables)'
+        required: false
+        default: '20000'
   push:
     branches:
       - main
@@ -91,6 +95,19 @@ jobs:
           moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+
+          # The two hub plugins are attached to this repository as submodules, so the
+          # checkout leaves catquizcentralhub/host and catquizcentralhub/client behind
+          # as empty directories. moodle-plugin-ci refuses to install into a directory
+          # that already exists - it checks is_dir(), not whether a plugin is in it -
+          # and aborts with "Plugin is already installed in standard Moodle".
+          #
+          # The placeholders are removed from the checkout before install, so the real
+          # plugins fetched by add-plugin can be written to their proper paths.
+          for placeholder in $(find ./plugin/catquizcentralhub -mindepth 1 -maxdepth 1 -type d -empty 2>/dev/null); do
+            echo "leerer Submodul-Platzhalter entfernt: $placeholder"
+            rmdir "$placeholder"
+          done
           # Load tests need a normal live Moodle site, not PHPUnit/Behat databases.
           moodle-plugin-ci install --plugin ./plugin --moodle="$MOODLE_DIR" --db-host=127.0.0.1 --no-init
 
@@ -184,8 +201,13 @@ jobs:
 
       - name: Seed a large profile
         run: |
+          # --items is what makes this measure the plugin rather than Moodle's
+          # rendering: without an item pool the manager and the statistics pages run
+          # their pool queries against nothing, and the result says little about how
+          # they behave in an installation that is actually in use.
           php "$MOODLE_DIR/local/catquiz/tests/load/seed_large.php" \
-            --users='${{ github.event.inputs.users || 2000 }}' > /tmp/seed.env
+            --users='${{ github.event.inputs.users || 2000 }}' \
+            --items='${{ github.event.inputs.items || 20000 }}' > /tmp/seed.env
           cat /tmp/seed.env
           sed -n "s/^export \([A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/seed.env >> "$GITHUB_ENV"
 

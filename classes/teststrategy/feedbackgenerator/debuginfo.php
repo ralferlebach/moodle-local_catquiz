@@ -344,8 +344,16 @@ class debuginfo extends feedbackgenerator {
             'personabilities' => $personabilities,
             'questions' => $questions,
             'activescales' => '"' . implode(", ", $activescales) . '"',
-            'lastquestion' => (array) $newdata['lastquestion'],
-            'lastmiddleware' => $newdata['lastmiddleware'],
+            // Issue #62: on the first question of an attempt these keys do not exist,
+            // and catquiz.php removes lastquestion from the attempt data outright. On
+            // a normal instance (array) null is simply [], but with DEBUG_DEVELOPER
+            // Moodle turns the notice into an exception. It is caught in
+            // return_next_testitem() and reported as "couldn't define the first
+            // question", pointing at the configuration instead of at this diagnostic
+            // helper - so debug information was unobtainable exactly where it is
+            // wanted. The neighbouring fields have always been guarded.
+            'lastquestion' => (array) ($newdata['lastquestion'] ?? []),
+            'lastmiddleware' => $newdata['lastmiddleware'] ?? self::NA,
             'lastresponse' => isset($lastresponse) ? $lastresponse['fraction'] : self::NA,
             'numquestionsperscale' => '"'
                 . implode(", ", array_map(fn ($entry) => $entry['name'] . ": " . $entry['num'], $questionsperscale)) . '"',

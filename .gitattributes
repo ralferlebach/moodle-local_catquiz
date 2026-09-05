@@ -5,11 +5,18 @@
 # (git archive / export). Runtime code, language strings, templates, PHPUnit and
 # Behat tests, and the changelog are kept; development-only tooling and internal
 # session documentation are excluded.
-/.github/               export-ignore
-/doc/                   export-ignore
-/.gitignore             export-ignore
-/.gitattributes         export-ignore
-/erpnext.yml            export-ignore
-/cli/	export-ignore
-package.json export-ignore
-babel.config.js export-ignore
+/.github/                 export-ignore
+/doc/                     export-ignore
+/erpnext.yml              export-ignore
+/cli/	                  export-ignore
+package.json              export-ignore
+babel.config.js           export-ignore
+
+# Verhindert, dass die Submodule-Ordner im ZIP-Export landen
+catquizcentralhub/host/   export-ignore
+catquizcentralhub/client/ export-ignore
+
+# Schließt auch Git-Konfigurationsdateien aus dem ZIP aus
+.gitmodules               export-ignore
+.gitignore                export-ignore
+.gitattributes            export-ignore

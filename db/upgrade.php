@@ -1439,6 +1439,29 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026083000, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026090207) {
+        // Issue #65: remove the second, unread copy of the hub credentials. The
+        // remote settings form used to write central_host and central_token under
+        // local_catquiz, while everything that contacts a hub reads them from
+        // catquizcentralhub_client. Nothing consumed the copy - it only kept a host
+        // and a token on disk outside the reach of the client plugin's kill-switch.
+        //
+        // Carried over rather than dropped, so an installation that only ever used
+        // the old form keeps working; then removed from the old place.
+        foreach (['central_host', 'central_token'] as $name) {
+            $legacy = get_config('local_catquiz', $name);
+            if ($legacy === false || $legacy === '') {
+                continue;
+            }
+            if (!get_config('catquizcentralhub_client', $name)) {
+                set_config($name, $legacy, 'catquizcentralhub_client');
+            }
+            unset_config($name, 'local_catquiz');
+        }
+
+        upgrade_plugin_savepoint(true, 2026090207, 'local', 'catquiz');
+    }
+
     return true;
 }
 

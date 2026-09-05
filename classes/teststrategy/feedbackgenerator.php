@@ -425,7 +425,12 @@ abstract class feedbackgenerator {
             $this->structuredabilities = [];
             return [];
         }
-        $catscales = $newdata['catscales'];
+        // Issue #59: attemptfeedback::update_data() returns early when no person
+        // abilities exist yet and never sets 'catscales'. array_key_first([]) is null,
+        // which used to reach catscale::__construct() and fail there with a TypeError
+        // - one level below the mistake, and in place of the message that would have
+        // named the real cause.
+        $catscales = $newdata['catscales'] ?? [];
 
         // Make sure that only feedback defined by strategy is rendered.
         $personabilitiesfeedbackeditor = $this->select_scales_for_report(
@@ -442,8 +447,13 @@ abstract class feedbackgenerator {
            checkbox off), so every consumer had to know which combination meant
            what. is_displayable() asks the same object the validator uses. */
         $attemptresult = feedback_helper::build_attempt_result($personabilitiesfeedbackeditor, $newdata);
-        // Ability range is the same for all scales with same root scale.
-        $abiltiyrange = $this->feedbackhelper->get_ability_range(array_key_first($catscales));
+        // Ability range is the same for all scales with same root scale, so the test's
+        // primary scale is the right reference when no scale list is available.
+        $abiltiyrange = $this->feedbackhelper->get_ability_range(
+            $catscales === []
+                ? self::get_primary_catscaleid($newdata)
+                : (int) array_key_first($catscales)
+        );
         foreach ($personabilitiesfeedbackeditor as $catscale => $personability) {
             if (!feedback_helper::is_displayable($attemptresult, (int) $catscale)) {
                 continue;
@@ -526,5 +536,29 @@ abstract class feedbackgenerator {
             ->get_quiz_settings()
             ->catquiz_catscales;
         return catscale::return_catscale_object($globalscaleid);
+    }
+    /**
+     * Returns the primary scale of the test.
+     *
+     * Used when no scale list is available yet. Falls back to the first configured
+     * scale, and finally to zero, so the caller always receives an int - the point of
+     * issue #59 is that this value must never be null.
+     *
+     * @param array $newdata
+     * @return int
+     */
+    private static function get_primary_catscaleid(array $newdata): int {
+        if (!isset($newdata['progress'])) {
+            return 0;
+        }
+
+        $settings = $newdata['progress']->get_quiz_settings();
+        $scales = $settings->catquiz_catscales ?? null;
+
+        if (is_array($scales)) {
+            return (int) reset($scales);
+        }
+
+        return (int) ($scales ?? 0);
     }
 }

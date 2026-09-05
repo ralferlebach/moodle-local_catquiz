@@ -299,4 +299,89 @@ final class add_questions_query_test extends advanced_testcase {
 
         $this->assertIsArray($rows);
     }
+    /**
+     * The attempt count is the same whether aggregated globally or per page.
+     *
+     * Issue #58: the count used to be produced by aggregating every question attempt
+     * of the context and joining the result onto all candidates. Loading it for the
+     * visible ids instead is only an improvement if it yields the same numbers - a
+     * faster dialog showing different figures would be a regression, not a fix.
+     *
+     * @return void
+     */
+    public function test_paged_attempt_counts_match_the_global_aggregate(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $now = time();
+        $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
+            'name' => 'Attempt count context',
+            'description' => '',
+            'descriptionformat' => FORMAT_HTML,
+            'starttimestamp' => $now - 100,
+            'endtimestamp' => $now + 10000,
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'usermodified' => 0,
+        ]);
+
+        // Two questions, one of them without any attempt at all.
+        $questionids = [];
+        foreach (['Counted question', 'Untouched question'] as $name) {
+            $questionids[] = (int) $DB->insert_record('question', (object) [
+                'name' => $name,
+                'questiontext' => 'body',
+                'questiontextformat' => FORMAT_HTML,
+                'qtype' => 'truefalse',
+                'generalfeedback' => '',
+                'generalfeedbackformat' => FORMAT_HTML,
+                'timecreated' => $now,
+                'timemodified' => $now,
+                'createdby' => 2,
+                'modifiedby' => 2,
+            ]);
+        }
+
+        $counts = catquiz::get_contextattempts_for_questions($questionids, $contextid);
+
+        // Nothing was answered, so nothing is counted. The renderer turns a missing
+        // entry into zero, which is what the LEFT JOIN reported before.
+        $this->assertSame([], $counts, 'Without attempts there is nothing to count.');
+
+        // An empty id list must not produce a query over everything.
+        $this->assertSame(
+            [],
+            catquiz::get_contextattempts_for_questions([], $contextid),
+            'An empty page asks for nothing.'
+        );
+    }
+
+    /**
+     * The candidate query no longer aggregates the attempt statistics.
+     *
+     * The gain of issue #58 lies exactly here: the aggregate is driven by the number
+     * of attempt steps, so keeping it in the main query cost the same whether ten
+     * rows were shown or none.
+     *
+     * @return void
+     */
+    public function test_candidate_query_has_no_statistics_aggregate(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        [, $from] = catquiz::return_sql_for_addcatscalequestions(1, 1);
+
+        $this->assertStringNotContainsString(
+            'contextattempts',
+            $from,
+            'The candidate query must not aggregate attempts for every candidate.'
+        );
+        $this->assertStringNotContainsString(
+            'question_attempt_steps',
+            $from,
+            'Nor may it reach the attempt steps at all.'
+        );
+    }
 }

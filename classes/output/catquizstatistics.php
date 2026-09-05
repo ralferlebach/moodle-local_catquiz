@@ -378,7 +378,7 @@ class catquizstatistics {
         $stepsize = 0.25;
         $interval = $stepsize * 2;
         $feedbackhelper = new feedback_helper();
-        $abilityrange = $feedbackhelper->get_ability_range($this->scaleid);
+        $abilityrange = $feedbackhelper->get_ability_range((int) $this->scaleid);
 
         $ul = (float) $abilityrange['maxscalevalue'];
         $ll = (float) $abilityrange['minscalevalue'];

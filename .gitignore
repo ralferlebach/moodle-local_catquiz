@@ -78,3 +78,7 @@ project.properties
 tests/playwright/node_modules/
 tests/playwright/test-results/
 tests/playwright/playwright-report/
+
+# Subplugin folders
+catquizcentralhub/client
+catquizcentralhub/host

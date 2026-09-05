@@ -104,19 +104,45 @@ jobs:
 
       - name: Verify a clean plugin layout
         run: |
-          # A plugin root must contain exactly one version.php. More than one means a
-          # repository was copied into an existing plugin directory, in which case the
-          # tested ecosystem is not the one this workflow claims to test. The
-          # adaptivequiz tree is excluded because it legitimately contains catmodel
-          # subplugins with their own version.php.
+          # The guard exists to catch a repository copied into an existing plugin
+          # directory, which would mean the tested ecosystem is not the one this
+          # workflow claims to test.
+          #
+          # Counting version.php files was the wrong way to express that: local_catquiz
+          # legitimately contains subplugins - the seven catmodels and the two central
+          # hub plugins - each with its own version.php. The check reported exactly
+          # that legitimate layout as an error.
+          #
+          # What actually has to hold: a plugin root has its own version.php, and any
+          # further one lives inside a directory declared in db/subplugins.json.
           rc=0
           for dest in local/catquiz local/wunderbyte_table filter/shortcodes; do
-            count=$(find "moodle/$dest" -name version.php | wc -l)
-            if [ "$count" -ne 1 ]; then
-              echo "moodle/$dest enthaelt $count version.php (erwartet: genau 1)"
-              find "moodle/$dest" -name version.php
+            if [ ! -f "moodle/$dest/version.php" ]; then
+              echo "moodle/$dest hat keine version.php im Wurzelverzeichnis"
               rc=1
+              continue
             fi
+
+            # Declared subplugin roots, read from the plugin itself rather than
+            # hardcoded here - otherwise this guard drifts away from the plugin.
+            allowed=""
+            if [ -f "moodle/$dest/db/subplugins.json" ]; then
+              allowed=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(' '.join(d.get('plugintypes', d.get('subplugintypes', {})).values()))" "moodle/$dest/db/subplugins.json")
+            fi
+
+            while read -r found; do
+              [ "$found" = "moodle/$dest/version.php" ] && continue
+              relative=${found#moodle/$dest/}
+              ok=0
+              for root in $allowed; do
+                base=$(basename "$root")
+                case "$relative" in "$base"/*) ok=1 ;; esac
+              done
+              if [ "$ok" -ne 1 ]; then
+                echo "Unerwartete version.php ausserhalb der deklarierten Subplugins: $found"
+                rc=1
+              fi
+            done < <(find "moodle/$dest" -name version.php)
           done
           if [ "$rc" -ne 0 ]; then
             echo "Verschachtelte Plugin-Kopien gefunden - das getestete Oekosystem waere nicht reproduzierbar."

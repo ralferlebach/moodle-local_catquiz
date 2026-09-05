@@ -32,6 +32,7 @@ use core_external\external_function_parameters;
 use core_external\external_value;
 use core_external\external_single_structure;
 use local_catquiz\execute_method_from_webservice;
+use moodle_exception;
 
 
 /**
@@ -43,6 +44,18 @@ use local_catquiz\execute_method_from_webservice;
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class reload_template extends external_api {
+    /**
+     * Render classes this endpoint may construct.
+     *
+     * Kept here rather than derived from the request: a class name that arrives from
+     * the client is an instruction, not data. Adding an entry is a deliberate act and
+     * shows up in review.
+     *
+     * @var string[]
+     */
+    const ALLOWED_RENDER_CLASSES = [
+        \local_catquiz\output\catscalemanager\questions\cards\datacard::class,
+    ];
     /**
      * Describes the parameters this webservice.
      *
@@ -85,7 +98,33 @@ class reload_template extends external_api {
         // Get data for template.
         $tdparamsstring = $dataobject->tdparams;
         $paramsarray = explode(",", $tdparamsstring);
-        $renderclass = new $dataobject->classlocation(...$paramsarray);
+
+        // Security: the render class used to be taken straight from the request, so
+        // the client decided which autoloadable PHP class the server constructed -
+        // with client-controlled constructor arguments. The capability check narrows
+        // who can do that; it does not make the dispatch safe.
+        //
+        // The permitted classes are now fixed here. Exactly one template sends this
+        // value today, so the list is short by nature rather than by omission; a new
+        // render target has to be added deliberately.
+        $classlocation = (string) ($dataobject->classlocation ?? '');
+        if (!in_array($classlocation, self::ALLOWED_RENDER_CLASSES, true)) {
+            throw new moodle_exception('invalidrenderclass', 'local_catquiz', '', $classlocation);
+        }
+
+        // The parameters arrive as a comma-separated string and are spread into a
+        // typed constructor. A malformed list produced a raw TypeError travelling out
+        // of the web service; the endpoint reports a failure instead, which is what
+        // its own result structure is for.
+        try {
+            $renderclass = new $classlocation(...$paramsarray);
+        } catch (\Throwable $e) {
+            return [
+                'success' => 0,
+                'message' => get_string('invalidrenderparams', 'local_catquiz'),
+                'data' => '',
+            ];
+        }
         // To be able to render the data from the class, make sure the class implements the renderable interface.
         $datafortemplate = $renderclass->export_for_template();
         $templatedatajson = json_encode($datafortemplate);
