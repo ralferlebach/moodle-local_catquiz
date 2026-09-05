@@ -52,7 +52,7 @@ class start_new_attempt extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'userid'  => new external_value(PARAM_INT, 'userid', VALUE_REQUIRED),
-            'categoryid'  => new external_value(PARAM_INT, 'categorid', VALUE_REQUIRED),
+            'categoryid'  => new external_value(PARAM_INT, 'categoryid', VALUE_REQUIRED),
             ]);
     }
 
@@ -65,6 +65,8 @@ class start_new_attempt extends external_api {
      * @return array
      */
     public static function execute(int $userid, int $categoryid): array {
+        global $USER;
+
         $params = self::validate_parameters(self::execute_parameters(), [
             'userid' => $userid,
             'categoryid' => $categoryid,
@@ -72,13 +74,22 @@ class start_new_attempt extends external_api {
 
         require_login();
 
+        // Starting an attempt for somebody else is an administrative act, not the
+        // ordinary participant path. Accepting a free user id let any caller with the
+        // access capability open attempts in another person's name.
+        if ((int) $params['userid'] !== (int) $USER->id) {
+            require_capability('local/catquiz:canmanage', context_system::instance());
+        }
+
         $context = context_system::instance();
         if (!has_capability('local/catquiz:canaccess', $context)) {
             throw new moodle_exception('norighttoaccess', 'local_catquiz');
         }
 
         // The transformation of the userid will be done in the start_new_attempt function.
-        return catquiz::start_new_attempt($params['userid'], $params['categorid']);
+        // The typo made this null on every call: validate_parameters() returns the
+        // declared key 'categoryid', and 'categorid' does not exist.
+        return catquiz::start_new_attempt($params['userid'], $params['categoryid']);
     }
 
     /**

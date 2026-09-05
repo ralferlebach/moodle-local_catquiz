@@ -1,5 +1,35 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090213)
+
+> Drei Security-Befunde aus dem Review umgesetzt. Alle wurden vorab am Code
+> verifiziert und trafen zu.
+
+- **Clientgesteuerte Klasseninstanziierung beseitigt (P1).**
+  `reload_template` konstruierte die Renderklasse aus dem Request – der Aufrufer
+  entschied also, welche autoloadbare PHP-Klasse der Server baut, mit
+  clientkontrollierten Konstruktorargumenten. Die Capability-Prüfung schränkt den
+  Kreis ein, macht den Dispatch aber nicht sicher. Zulässige Klassen stehen jetzt
+  serverseitig fest; genau eine wird real verwendet.
+  Zusätzlich wird ein nicht baubarer Renderer als Fehlerergebnis gemeldet, statt
+  einen rohen `TypeError` aus dem Webservice zu tragen.
+- **Falscher Capability-Kontext und fehlende Eigentumsbindung.**
+  `local/catquiz:canaccess` ist als `CONTEXT_MODULE` deklariert, wurde aber im
+  Systemkontext geprüft. `start_new_attempt` akzeptierte zudem eine beliebige
+  `userid`: Versuche im Namen anderer zu eröffnen war damit kein administrativer
+  Akt mehr. Fremde Nutzer erfordern jetzt `canmanage`.
+  Dabei gefunden: `$params['categorid']` – ein Tippfehler, der bei **jedem** Aufruf
+  `null` statt der Kategorie übergab. `get_next_question` deklarierte `quizid` und
+  `component` nicht, obwohl `execute()` sie erwartet; sie erreichten den Code
+  ungeprüft.
+- **Fehlende Objektautorisierung in `feedback_tab_clicked`.**
+  `validate_context()` legt fest, *wo* eine Anfrage wirkt, nicht *ob* dieser Nutzer
+  auf dieses Objekt zugreifen darf. Ohne Eigentumsprüfung konnte jeder angemeldete
+  Nutzer Events für fremde Versuche auslösen – und wurde dabei als deren „student"
+  protokolliert. Nicht auflösbare Versuche werden abgelehnt, nicht zugelassen.
+- Neue Tests halten beide Fehlerklassen fest: kein Endpunkt instanziiert eine vom
+  Request benannte Klasse, und Endpunkte mit Attempt-ID prüfen das Eigentum.
+
 ## 1.1.7 (interne Version 2026090211)
 
 > Zwei Folgefehler der #29-Umstellung behoben – beide traten weit entfernt von ihrer

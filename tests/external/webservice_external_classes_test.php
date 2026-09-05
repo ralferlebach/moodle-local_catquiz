@@ -203,8 +203,14 @@ final class webservice_external_classes_test extends advanced_testcase {
         $payload = json_encode([
             'admethodname' => 'method_does_not_exist',
             'adparams' => '',
-            'tdparams' => '',
-            'classlocation' => '\\local_catquiz\\external_reload_template_stub',
+            // The datacard renderer takes ints; an empty tdparams string explodes into [''] and the
+            // typed constructor rejects it. The endpoint is being tested, not the
+            // renderer, so plausible ids are passed.
+            'tdparams' => '1,1,1,question',
+            // The stub is no longer accepted: the render class is now chosen from a
+            // server-side allowlist rather than from the request. The real card class
+            // is used, which is what the endpoint exists to render.
+            'classlocation' => \local_catquiz\output\catscalemanager\questions\cards\datacard::class,
         ]);
 
         $result = reload_template::execute($payload);
@@ -347,5 +353,29 @@ final class webservice_external_classes_test extends advanced_testcase {
         // Somebody else's: refused for a user without the management right.
         $this->expectException(\required_capability_exception::class);
         \local_catquiz\external\subscribe::execute($other->id, 'catscale', 1);
+    }
+    /**
+     * A render class outside the allowlist is refused.
+     *
+     * The endpoint used to construct whatever class the request named. The stub this
+     * test file defines is exactly such a class - harmless here, but it stands for
+     * any autoloadable class a caller might name.
+     *
+     * @covers \local_catquiz\external\reload_template::execute
+     * @return void
+     */
+    public function test_reload_template_refuses_a_class_outside_the_allowlist(): void {
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $payload = json_encode([
+            'admethodname' => 'method_does_not_exist',
+            'adparams' => '',
+            'tdparams' => '',
+            'classlocation' => '\\local_catquiz\\external_reload_template_stub',
+        ]);
+
+        $this->expectException(\moodle_exception::class);
+        reload_template::execute($payload);
     }
 }

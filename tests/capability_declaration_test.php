@@ -165,4 +165,83 @@ final class capability_declaration_test extends advanced_testcase {
             'External services without a capability check are open to any logged-in user.'
         );
     }
+    /**
+     * No endpoint constructs a class named by the request.
+     *
+     * reload_template took the render class straight from client JSON, so the caller
+     * decided which autoloadable PHP class the server built - with client-controlled
+     * constructor arguments. A capability check narrows who can do that; it does not
+     * make the dispatch safe. Permitted classes belong in a server-side list.
+     *
+     * @return void
+     */
+    public function test_no_endpoint_instantiates_a_client_named_class(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $directory = $CFG->dirroot . '/local/catquiz/classes/external';
+        $offenders = [];
+
+        foreach (glob($directory . '/*.php') as $file) {
+            $source = file_get_contents($file);
+
+            // A class name taken straight from the request object - "new $obj->prop(".
+            // A plain variable is fine when it was checked against an allowlist first,
+            // so the presence of that list is what distinguishes the two.
+            if (preg_match('/new\s+\$\w+->\w+\s*\(/', $source)) {
+                $offenders[] = basename($file) . ' (class taken from the request object)';
+                continue;
+            }
+
+            if (
+                preg_match('/new\s+\$\w+\s*\(/', $source)
+                    && !str_contains($source, 'ALLOWED_RENDER_CLASSES')
+            ) {
+                $offenders[] = basename($file) . ' (variable class without an allowlist)';
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'These endpoints construct a class taken from the request; the permitted '
+                . 'classes have to be fixed server-side.'
+        );
+    }
+
+    /**
+     * Endpoints that take an attempt id check who owns it.
+     *
+     * validate_context() establishes where a request acts, not whether this user may
+     * act on this object. Without an ownership check any authenticated user can pass
+     * somebody else's attempt id.
+     *
+     * @return void
+     */
+    public function test_attempt_endpoints_check_ownership(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/external/feedback_tab_clicked.php'
+        );
+
+        // The method being defined proves nothing - it has to be called. Checking the
+        // execute() body specifically: an earlier version of this test passed while
+        // the call had been removed, because the definition still matched.
+        // With the parenthesis: without it this matches execute_parameters(), whose
+        // body ends long before the check being looked for.
+        $start = strpos($source, 'public static function execute(');
+        $this->assertNotFalse($start);
+        $end = strpos($source, "\n    }\n", $start);
+        $body = substr($source, $start, $end - $start);
+
+        $this->assertStringContainsString(
+            'self::require_own_attempt(',
+            $body,
+            'An attempt id from the client needs an ownership check, not just a context.'
+        );
+    }
 }
