@@ -1,5 +1,21 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090224)
+
+> Der Lasttest-Workflow brach wortlos ab – an einer Zeile Shell.
+
+- **`read` ohne abschließenden Zeilenumbruch beendete den Schritt.** Das `php -r`
+  gab „110 111 250000" ohne `\n` aus; `read` meldet dann EOF mit Rückgabewert 1,
+  und unter `bash -e` endet der Schritt sofort – **bevor eine einzige Zeile Ausgabe
+  entsteht**. Der Fehlschlag sah aus, als sei die Abfrage gescheitert, während die
+  Werte tatsächlich korrekt gelesen waren. Nachgestellt und bestätigt: ohne
+  Zeilenumbruch Abbruch, mit Zeilenumbruch Durchlauf.
+- **Der `ANALYZE`-Fix wirkt**: Das Seeding von 250.000 Items samt Verknüpfung
+  läuft jetzt in **28 Sekunden** durch, statt nach 30 Minuten noch zu hängen.
+- **k6 liefert wieder Zahlen**: 5.610 Requests, p50 254 ms, p95 544 ms, 0 % Fehler –
+  `handleSummary()` schreibt die Zusammenfassung, die `--summary-export` in k6 v2
+  nicht mehr erzeugt.
+
 ## 1.1.7 (interne Version 2026090223)
 
 > Drei Befunde aus den externen Läufen.

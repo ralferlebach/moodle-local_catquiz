@@ -193,6 +193,11 @@ jobs:
           cd moodle
           # A seeder that silently wrote less than asked would make the whole run
           # report a smaller pool as if it were the target size.
+          # "read" returns non-zero when it reaches EOF without a trailing newline,
+          # and under "bash -e" that ends the step before a single line of output is
+          # produced - the failure then looks like the query broke, while the values
+          # were in fact read correctly. The php below prints a newline, and the read
+          # is allowed to report EOF without killing the step.
           read -r scaleid contextid count < <(php -r '
             define("CLI_SCRIPT", true);
             require("config.php");
@@ -203,8 +208,8 @@ jobs:
                GROUP BY catscaleid, contextid
                ORDER BY c DESC",
                 [], IGNORE_MULTIPLE);
-            echo $r->catscaleid, " ", $r->contextid, " ", $r->c;
-          ')
+            echo $r->catscaleid, " ", $r->contextid, " ", $r->c, "\n";
+          ') || true
 
           # An empty result means the query itself failed - process substitution hides
           # a failing php from "bash -e", and the comparison below then aborts with an
