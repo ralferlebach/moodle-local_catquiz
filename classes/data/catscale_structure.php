@@ -34,7 +34,6 @@ use moodle_url;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catscale_structure {
-
     /** @var ?int $id null means object is not yet initialised */
     public ?int $id = null;
 
@@ -94,17 +93,21 @@ class catscale_structure {
 
             if (array_key_exists('parentid', $data) && $data['parentid'] == 0) {
                 $this->minscalevalue = isset($data["minscalevalue"]) ?
-                    $data["minscalevalue"] : LOCAL_CATQUIZ_PERSONABILITY_LOWER_LIMIT;
+                    (float) $data["minscalevalue"] : LOCAL_CATQUIZ_PERSONABILITY_LOWER_LIMIT;
             }
             if (array_key_exists('parentid', $data) && $data['parentid'] == 0) {
                 $this->maxscalevalue = isset($data["maxscalevalue"]) ?
-                    $data["maxscalevalue"] : LOCAL_CATQUIZ_PERSONABILITY_UPPER_LIMIT;
+                    (float) $data["maxscalevalue"] : LOCAL_CATQUIZ_PERSONABILITY_UPPER_LIMIT;
             }
 
             if (!empty($data['id'])) {
+                // Issue #29: the tab is a request parameter. The fragment used
+                // before pointed at a pane that is only rendered when it is active,
+                // so the link landed on the default tab without the scale in view.
                 $url = new moodle_url('/local/catquiz/manage_catscales.php', [
+                    'tab' => 'catscales',
                     'scaleid' => $data['id'],
-                ], 'lcq_catscales');
+                ]);
 
                 // Add the link to the view php.
                 $this->viewlink = $url->out();

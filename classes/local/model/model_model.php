@@ -34,7 +34,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 abstract class model_model {
-
     /**
      * Holds model instances.
      *
@@ -117,7 +116,8 @@ abstract class model_model {
     abstract public function estimate_item_params(
         model_responses $responses,
         model_person_param_list $personparams,
-        ?model_item_param_list $olditemparams = null): model_item_param_list;
+        ?model_item_param_list $olditemparams = null
+    ): model_item_param_list;
 
     /**
      * Returns the paramter names of the model as strings.
@@ -133,6 +133,65 @@ abstract class model_model {
      * @return array
      */
     abstract public static function get_parameters_from_record(stdClass $record): array;
+
+    /**
+     * Validates the item parameters of a record for this model.
+     *
+     * Returns a list of human readable reasons why the parameters are NOT usable.
+     * An empty list means the parameters are valid for this model.
+     *
+     * The original rule stays intact: an item without any item parameter record is
+     * a pilot item. This guard extends that rule - an item whose stored parameters
+     * are not usable for its model must ALSO be treated as a pilot item instead of
+     * being played with meaningless values. Two production defects motivated this:
+     * a discrimination of exactly 0 makes a 2PL item mathematically mute (P = 0.5
+     * regardless of ability, Fisher information 0), so the ability estimate froze;
+     * and a difficulty of exactly 0 was previously mistaken for "no parameter".
+     *
+     * Subclasses override this to state their own contract. The base implementation
+     * enforces the rules that hold for every model.
+     *
+     * @param \stdClass $record The raw item parameter record.
+     * @return string[] Reasons the parameters are invalid; empty array if valid.
+     */
+    public static function validate_parameters(stdClass $record): array {
+        $reasons = [];
+
+        // Difficulty is a signed float and must be present and finite.
+        // Note: b = 0.0 and negative b are perfectly regular IRT values.
+        if (!self::is_valid_float($record->difficulty ?? null)) {
+            $reasons[] = 'difficulty is not a valid number';
+        }
+
+        return $reasons;
+    }
+
+    /**
+     * Checks that a value is a finite number (signed float).
+     *
+     * @param mixed $value
+     * @return bool
+     */
+    protected static function is_valid_float($value): bool {
+        if ($value === null || $value === '' || is_array($value)) {
+            return false;
+        }
+        if (!is_numeric($value)) {
+            return false;
+        }
+        return is_finite((float) $value);
+    }
+
+    /**
+     * Checks that a value is a finite number strictly greater than zero.
+     *
+     * @param mixed $value
+     * @return bool
+     */
+    protected static function is_valid_positive_float($value): bool {
+        return self::is_valid_float($value) && (float) $value > 0.0;
+    }
+
 
     /**
      * Fisher info.
@@ -160,7 +219,8 @@ abstract class model_model {
         string $criterion,
         model_person_param_list $personabilities,
         model_item_param $itemparams,
-        model_responses $k): float;
+        model_responses $k
+    ): float;
 
     /**
      * Return the difficulty as a single float.

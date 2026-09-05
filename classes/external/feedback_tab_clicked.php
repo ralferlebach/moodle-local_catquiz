@@ -26,15 +26,14 @@ declare(strict_types=1);
 
 namespace local_catquiz\external;
 
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\event\feedbacktab_clicked;
+use local_catquiz\local\access\context_resolver;
+use moodle_exception;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local catquiz.
@@ -45,7 +44,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class feedback_tab_clicked extends external_api {
-
     /**
      * Describes the parameters for update_parameters webservice.
      *
@@ -56,8 +54,7 @@ class feedback_tab_clicked extends external_api {
             'attemptid'  => new external_value(PARAM_INT, 'attemptid'),
             'feedback' => new external_value(PARAM_TEXT, 'feedback'),
             'feedbacktranslated' => new external_value(PARAM_TEXT, 'feedbacktranslated'),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -77,13 +74,44 @@ class feedback_tab_clicked extends external_api {
             'feedbacktranslated' => $translatedfeedback,
         ]);
 
-        $ctx = \context_system::instance();
-        $role = has_capability('local/catquiz:canmanage', $ctx)
-            ? 'catmanager'
-            : 'student';
+        // Issue #18: AJAX endpoints must resolve and validate the context of the
+        // attempt they act on, so that they apply exactly the same rules as a
+        // normal page request instead of judging everything in the system context.
+        $ctx = context_resolver::for_attempt($attemptid);
+        self::validate_context($ctx);
+
+        // Review finding: every non-manager was logged as "student", so a teacher
+        // looking at feedback appeared in the event log as the learner. The role is
+        // now decided in the context of the attempt, which is where teaching rights
+        // actually live - a site-wide manage right says nothing about a course.
+        if (has_capability('local/catquiz:canmanage', \context_system::instance())) {
+            $role = 'catmanager';
+        } else if (has_capability('local/catquiz:view_teacher_feedback', $ctx)) {
+            $role = 'teacher';
+        } else {
+            // Security: validate_context() establishes where the request acts, not
+            // whether this user may act on this object. Without an ownership check
+            // any authenticated user could raise events for someone else's attempt,
+            // and every such caller was logged as that attempt's "student".
+            //
+            // Managers and teachers are already covered above; everyone else may only
+            // act on their own attempt.
+            self::require_own_attempt($attemptid);
+            $role = 'student';
+        }
+
+        // Security: the identifier and its translation both arrive from the client, and
+        // both were written into the event log as if they described what happened.
+        // The identifier is validated against the feedback generators that exist, so
+        // the log records a known tab rather than whatever string was sent. The
+        // translation stays as supplementary display text and is explicitly not the
+        // authoritative record - a client-supplied label cannot be audit evidence.
+        if (!self::is_known_feedback_generator($feedback)) {
+            throw new moodle_exception('invalidfeedbackname', 'local_catquiz', '', $feedback);
+        }
 
         $event = feedbacktab_clicked::create([
-            'context' => \context_system::instance(),
+            'context' => $ctx,
             'other' => [
                 'attemptid' => $attemptid,
                 'feedback' => $feedback,
@@ -109,7 +137,49 @@ class feedback_tab_clicked extends external_api {
         return new external_single_structure([
             'success' => new external_value(PARAM_BOOL, 'Successful calculation', VALUE_REQUIRED),
             'message' => new external_value(PARAM_RAW, 'message if necessary', VALUE_OPTIONAL, ''),
-            ]
+            ]);
+    }
+    /**
+     * Throws unless the attempt belongs to the current user.
+     *
+     * The attempt id arrives from the client. Resolving its context says which
+     * activity it lives in; it says nothing about who owns it.
+     *
+     * @param int $attemptid
+     * @throws moodle_exception
+     * @return void
+     */
+    private static function require_own_attempt(int $attemptid): void {
+        global $DB, $USER;
+
+        $ownerid = $DB->get_field('local_catquiz_attempts', 'userid', ['attemptid' => $attemptid]);
+
+        // An attempt that cannot be resolved is refused rather than allowed: an
+        // unknown object is not a permitted one.
+        if ($ownerid === false || (int) $ownerid !== (int) $USER->id) {
+            throw new moodle_exception('norighttoaccess', 'local_catquiz');
+        }
+    }
+    /**
+     * Whether the identifier names a feedback generator that exists.
+     *
+     * Derived from the generator classes rather than kept as a hand-written list: a
+     * second copy of the same set drifts, and then the guard either rejects a valid
+     * tab or accepts one that no longer exists.
+     *
+     * @param string $feedback
+     * @return bool
+     */
+    private static function is_known_feedback_generator(string $feedback): bool {
+        global $CFG;
+
+        if ($feedback === '' || !preg_match('/^[a-z_]+$/', $feedback)) {
+            return false;
+        }
+
+        return file_exists(
+            $CFG->dirroot . '/local/catquiz/classes/teststrategy/feedbackgenerator/'
+                . $feedback . '.php'
         );
     }
 }

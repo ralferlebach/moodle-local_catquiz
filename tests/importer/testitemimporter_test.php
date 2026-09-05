@@ -29,6 +29,7 @@ use advanced_testcase;
 use coding_exception;
 use context_course;
 use context_module;
+use context_system;
 use core_question\local\bank\question_edit_contexts;
 use Exception;
 use local_catquiz\importer\testitemimporter;
@@ -98,7 +99,10 @@ final class testitemimporter_test extends advanced_testcase {
             $content
         );
         // Check that there are no errors.
-        $this->assertEquals(0, count($result['errors']), implode(', ', $result['errors']));
+        // Warnings (e.g. out-of-bounds calibration values) are nested under
+        // 'warnings' and are not import errors; assert only on real errors.
+        $realerrors = array_diff_key($result['errors'], ['warnings' => 1]);
+        $this->assertEquals(0, count($realerrors), var_export($realerrors, true));
     }
 
     /**
@@ -174,7 +178,9 @@ final class testitemimporter_test extends advanced_testcase {
      */
     private function create_qformat($filename, $course) {
         $qformat = new qformat_xml();
-        $qformat->setContexts((new question_edit_contexts(context_course::instance($course->id)))->all());
+        $contexts = (new question_edit_contexts(context_course::instance($course->id)))->all();
+        $contexts[] = context_system::instance();
+        $qformat->setContexts($contexts);
         $qformat->setCourse($course);
         $qformat->setFilename(__DIR__ . '/../fixtures/' . $filename);
         $qformat->setRealfilename($filename);

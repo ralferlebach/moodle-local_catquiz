@@ -29,31 +29,45 @@ $componentname = 'local_catquiz';
 
 // Default for users that have site config.
 if ($hassiteconfig) {
-    $settings = new admin_settingpage($componentname . '_settings',  get_string('pluginname', 'local_catquiz'));
+    $settings = new admin_settingpage($componentname . '_settings', get_string('pluginname', 'local_catquiz'));
     $ADMIN->add('localplugins', $settings);
 
     foreach (core_plugin_manager::instance()->get_plugins_of_type('catmodel') as $plugin) {
             $plugin->load_settings($ADMIN, 'localplugins', $hassiteconfig);
     }
 
+    foreach (core_plugin_manager::instance()->get_plugins_of_type('catquizcentralhub') as $plugin) {
+        $plugin->load_settings($ADMIN, 'localplugins', $hassiteconfig);
+    }
+
     $catscalelink = new moodle_url('/local/catquiz/manage_catscales.php');
     $actionlink = new action_link($catscalelink, get_string('catquizsettings', 'local_catquiz'));
     $settingslink = ['link' => $OUTPUT->render($actionlink)];
     $settings->add(
-            new admin_setting_heading(
-                    'local_catquiz/catscales',
-                    get_string('catscales', 'local_catquiz'),
-                    get_string('catscales:information', 'local_catquiz', $settingslink),
-            )
+        new admin_setting_heading(
+            'local_catquiz/catscales',
+            get_string('catscales', 'local_catquiz'),
+            get_string('catscales:information', 'local_catquiz', $settingslink),
+        )
+    );
+
+    $calclink = new moodle_url('/local/catquiz/manage_calculation.php');
+    $calcactionlink = new action_link($calclink, get_string('calculationmanagement', 'local_catquiz'));
+    $settings->add(
+        new admin_setting_heading(
+            'local_catquiz/calculationmanagement',
+            get_string('calculationmanagement', 'local_catquiz'),
+            $OUTPUT->render($calcactionlink),
+        )
     );
 
     $settings->add(
         new admin_setting_heading(
-                'local_catquiz/cattags',
-                get_string('cattags', 'local_catquiz'),
-                get_string('cattags:information', 'local_catquiz'),
+            'local_catquiz/cattags',
+            get_string('cattags', 'local_catquiz'),
+            get_string('cattags:information', 'local_catquiz'),
         )
-        );
+    );
 
     $sql = "SELECT DISTINCT t.id, t.name
             FROM {tag} t
@@ -85,23 +99,24 @@ if ($hassiteconfig) {
         get_string('tr_sd_ratio_name', 'local_catquiz'),
         get_string('tr_sd_ratio_desc', 'local_catquiz'),
         3.0,
-        PARAM_FLOAT)
-    );
+        PARAM_FLOAT
+    ));
     $settings->add(new admin_setting_configtext(
         'local_catquiz/minquestions_default',
         get_string('minquestions_default_name', 'local_catquiz'),
         get_string('minquestions_default_desc', 'local_catquiz'),
         3,
         '/^\d+$/'
-        )
-    );
+    ));
 
     $settings->add(
         new admin_setting_configcheckbox(
             'local_catquiz/automatic_reload_on_scale_selection',
             get_string('automatic_reload_on_scale_selection', 'local_catquiz'),
             get_string('automatic_reload_on_scale_selection_description', 'local_catquiz'),
-            1));
+            1
+        )
+    );
 
     $settings->add(new admin_setting_configtext(
         'local_catquiz/time_penalty_threshold',
@@ -109,15 +124,65 @@ if ($hassiteconfig) {
         get_string('time_penalty_threshold_desc', 'local_catquiz'),
         10,
         '/^[1-9]\d*$/'
-        )
-    );
+    ));
+
+    // Issue #14: optional measurement-uncertainty gating for categorical feedback.
+    // 0 disables it; a value like 1 requires the confidence interval
+    // [ability - k*SE, ability + k*SE] to lie fully within a single range before
+    // that range's feedback is shown.
+    $settings->add(new admin_setting_configtext(
+        'local_catquiz/feedback_uncertainty_factor',
+        get_string('feedback_uncertainty_factor_name', 'local_catquiz'),
+        get_string('feedback_uncertainty_factor_desc', 'local_catquiz'),
+        0,
+        '/^\d+(\.\d+)?$/'
+    ));
+
+    // Issue #15: minimum number of distinct peers required before the
+    // peer comparison is shown (small groups are suppressed identically in
+    // charts and exports).
+    $settings->add(new admin_setting_configtext(
+        'local_catquiz/minpeersforcomparison',
+        get_string('minpeersforcomparison_name', 'local_catquiz'),
+        get_string('minpeersforcomparison_desc', 'local_catquiz'),
+        3,
+        '/^[1-9]\d*$/'
+    ));
 
     $settings->add(
         new admin_setting_configcheckbox(
             'local_catquiz/store_debug_info',
             get_string('store_debug_info_name', 'local_catquiz'),
             get_string('store_debug_info_desc', 'local_catquiz'),
-            0));
+            0
+        )
+    );
+
+    // Issue #56: how long the progress of an attempt is kept. The default is the
+    // data-sparing option on purpose - a plugin should not accumulate personal
+    // answer data because nobody decided otherwise.
+    $settings->add(new admin_setting_configselect(
+        'local_catquiz/progressretention',
+        get_string('progressretention', 'local_catquiz'),
+        get_string('progressretention_desc', 'local_catquiz'),
+        \local_catquiz\local\progress_retention::MINIMAL,
+        [
+            \local_catquiz\local\progress_retention::MINIMAL =>
+                get_string('progressretention_minimal', 'local_catquiz'),
+            \local_catquiz\local\progress_retention::KEEP =>
+                get_string('progressretention_keep', 'local_catquiz'),
+            \local_catquiz\local\progress_retention::TRACE =>
+                get_string('progressretention_trace', 'local_catquiz'),
+        ]
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_catquiz/progressretentiondays',
+        get_string('progressretentiondays', 'local_catquiz'),
+        get_string('progressretentiondays_desc', 'local_catquiz'),
+        0,
+        PARAM_INT
+    ));
 
     // Add a setting for the default maximum attempt duration.
     $settings->add(new admin_setting_configtext(
@@ -127,43 +192,4 @@ if ($hassiteconfig) {
         24, // Default value.
         PARAM_INT // Expect integer type.
     ));
-
-    $settings->add(new admin_setting_configcheckbox(
-        'local_catquiz/enable_sync_as_node',
-        get_string('enable_sync_as_node', 'local_catquiz'),
-        get_string('enable_sync_as_node_desc', 'local_catquiz'),
-        false, // Default value.
-        PARAM_BOOL
-    ));
-    $settings->add(new admin_setting_configtext(
-        'local_catquiz/central_host',
-        get_string('central_host', 'local_catquiz'),
-        get_string('central_host_desc', 'local_catquiz'),
-        '',
-        PARAM_TEXT
-    ));
-    $settings->hide_if('local_catquiz/central_host', 'local_catquiz/enable_sync_as_node', 'notchecked', '0');
-    $settings->add(new admin_setting_configtext(
-        'local_catquiz/central_token',
-        get_string('central_token', 'local_catquiz'),
-        get_string('central_token_desc', 'local_catquiz'),
-        '',
-        PARAM_ALPHANUM
-    ));
-    $settings->hide_if('local_catquiz/central_token', 'local_catquiz/enable_sync_as_node', 'notchecked', '0');
-    $settings->add(new admin_setting_configcheckbox(
-        'local_catquiz/enable_sync_as_hub',
-        get_string('enable_sync_as_hub', 'local_catquiz'),
-        get_string('enable_sync_as_hub_desc', 'local_catquiz'),
-        false, // Default value.
-        PARAM_BOOL
-    ));
-    $settings->add(new admin_setting_configtextarea(
-        'local_catquiz/central_scale_labels',
-        get_string('central_scale_labels', 'local_catquiz'),
-        get_string('central_scale_labels_desc', 'local_catquiz'),
-        '', // Default value.
-        PARAM_TEXT
-    ));
-    $settings->hide_if('local_catquiz/central_scale_labels', 'local_catquiz/enable_sync_as_hub', 'notchecked', '0');
 }

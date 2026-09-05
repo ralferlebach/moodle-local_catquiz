@@ -27,16 +27,13 @@ declare(strict_types=1);
 namespace local_catquiz\external;
 
 use context_system;
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\catquiz;
 use moodle_exception;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local catquiz.
@@ -47,7 +44,6 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class submit_result extends external_api {
-
     /**
      * Describes the parameters for submit_result webservice.
      *
@@ -58,8 +54,7 @@ class submit_result extends external_api {
             'attemptid'  => new external_value(PARAM_TEXT, 'userid', VALUE_REQUIRED),
             'questionid'  => new external_value(PARAM_INT, 'userid', VALUE_REQUIRED),
             'score'  => new external_value(PARAM_INT, 'categorid', VALUE_REQUIRED),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -97,7 +92,6 @@ class submit_result extends external_api {
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
             'success' => new external_value(PARAM_INT, '1 for success', VALUE_REQUIRED),
-            ]
-        );
+            ]);
     }
 }

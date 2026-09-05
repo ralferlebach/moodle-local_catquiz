@@ -24,6 +24,7 @@
 
 use local_catquiz\task\cancel_expired_attempts;
 use local_catquiz\task\recalculate_cat_model_params;
+use local_catquiz\task\cleanup_attempt_progress;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -31,11 +32,16 @@ $tasks = [
     [
         'classname' => recalculate_cat_model_params::class,
         'blocking' => 0,
+        // Issue #44: safe defaults. The incremental recalculation must be a deliberate
+        // admin decision, so it ships disabled, and its default cadence is
+        // quarterly (1st of every third month) instead of daily. Admin changes to
+        // the schedule are preserved on upgrade (Moodle keeps customised tasks).
+        'disabled' => 1,
         'minute' => 'R',
         'hour' => '0',
-        'day' => '*',
+        'day' => '1',
         'dayofweek' => '*',
-        'month' => '*',
+        'month' => '*/3',
     ],
     [
         'classname' => cancel_expired_attempts::class,
@@ -47,22 +53,13 @@ $tasks = [
         'month' => '*',
     ],
     [
-        'classname' => 'local_catquiz\task\recalculate_remote_item_parameters',
+        // Issue #56: applies the configured retention period to attempt progress.
+        'classname' => cleanup_attempt_progress::class,
         'blocking' => 0,
-        'minute' => '0',
+        'minute' => '30',
         'hour' => '3',
-        'day' => '1',
-        'month' => '*',
-        'dayofweek' => '*',
-        'disabled' => 0,
-    ],
-    [
-        'classname' => 'local_catquiz\task\scheduled_submit_responses',
-        'blocking' => 0,
-        'minute' => '0',    // At the top of the hour.
-        'hour' => '3',      // Run daily at 3 AM.
         'day' => '*',
-        'month' => '*',
         'dayofweek' => '*',
+        'month' => '*',
     ],
 ];

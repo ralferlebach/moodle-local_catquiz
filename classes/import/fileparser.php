@@ -44,7 +44,6 @@ require_once($CFG->libdir . "/csvlib.class.php");
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class fileparser {
-
     /**
      * @var string
      */
@@ -194,8 +193,10 @@ class fileparser {
         // Check if first column is set mandatory and unique.
         // If unique column existis -> key.
         $firstcolumn = $this->fieldnames[0];
-        if ($this->get_param_value($firstcolumn, 'mandatory') == true
-        && $this->get_param_value($firstcolumn, 'unique') == true) {
+        if (
+            $this->get_param_value($firstcolumn, 'mandatory') == true
+            && $this->get_param_value($firstcolumn, 'unique') == true
+        ) {
             $this->uniquekey = $firstcolumn;
         }
 
@@ -209,6 +210,16 @@ class fileparser {
                 foreach ($csvrecord as $columnname => $value) {
                     // Convert some columns always to float values.
                     if (in_array($columnname, ['difficulty', 'discrimination', 'guessing'])) {
+                        // Moodle's csv_import_reader stores the parsed rows through
+                        // csv_export_writer::print_array(), whose add_data() applies
+                        // \core\dataformat::escape_spreadsheet_formula(). That helper
+                        // prefixes every value starting with '=', '+', '-' or '@' with
+                        // an apostrophe to neutralise spreadsheet formulas. A negative
+                        // IRT difficulty therefore arrives here as "'-5.81", and
+                        // floatval("'-5.81") is 0.0 - which silently turned every
+                        // negative difficulty into 0 while positive ones survived.
+                        // Strip that guard character before converting to a number.
+                        $value = self::strip_formula_escape($value);
                         // Check if there's a comma and no dot, assuming comma is decimal separator.
                         if (strpos($value, ',') !== false && strpos($value, '.') === false) {
                             // Replace the comma with a dot.
@@ -236,12 +247,10 @@ class fileparser {
                         $this->records[$firstcolumn] = [];
                     }
                     $this->records[$firstcolumn][$csvrecord[$firstcolumn]] = $data;
-
                 } else { // Without unique key, we build a sequential array.
                     array_push($this->records, $data);
                 }
             }
-
         }
         return $this->exit_and_return_records($cir);
     }
@@ -260,7 +269,6 @@ class fileparser {
         $cir->cleanup(true);
         $cir->close();
         return $this->records;
-
     }
 
 
@@ -290,13 +298,11 @@ class fileparser {
                 ];
             }
         } catch (Exception $e) {
-
             return [
                 'success' => 0,
                 'message' => $e->getMessage(),
             ];
         }
-
     }
 
     /**
@@ -311,7 +317,6 @@ class fileparser {
             // If data was parsed successfully, return 1, else return 0.
             $this->records['success'] = 1;
             $this->trigger_testitem_imported_event(count($this->records) - 1);
-
         } else {
             $this->records['success'] = 0;
         }
@@ -338,7 +343,6 @@ class fileparser {
     private function validate_data($csvrecord, $line) {
         // Validate data.
         foreach ($csvrecord as $column => $value) {
-
             // Value "0" counts as value and returns valueisset true.
             !$valueisset = (("" !== $value) && (null !== $value)) ? true : false;
 
@@ -356,13 +360,14 @@ class fileparser {
                 }
             } else {
                 // Validation of field type.
-                switch($this->get_param_value($column, "type")) {
+                switch ($this->get_param_value($column, "type")) {
                     case "date":
                         if (!$this->validate_datefields($value)) {
                             $format = $this->settings->dateformat;
                             $this->add_csvwarnings(
                                 "$value is not a valid date format in $column. Format should be Unix timestamp or like: $format",
-                                $line[0]);
+                                $line[0]
+                            );
                             break;
                         }
                         break;
@@ -370,7 +375,7 @@ class fileparser {
                         break;
                 }
                 // Validation of field format.
-                switch($this->get_param_value($column, "format")) {
+                switch ($this->get_param_value($column, "format")) {
                     case PARAM_INT:
                         $value = $this->cast_string_to_int($value);
                         if (is_string($value)) {
@@ -387,7 +392,6 @@ class fileparser {
                         break;
                 }
             }
-
         };
         return true;
     }
@@ -398,15 +402,52 @@ class fileparser {
      * @param string $value
      * @return * either float or the given value (string)
      */
+    /**
+     * Removes the spreadsheet-formula guard apostrophe from a value.
+     *
+     * Moodle prefixes values starting with '=', '+', '-' or '@' with an apostrophe
+     * (see \core\dataformat::escape_spreadsheet_formula) so that spreadsheets do not
+     * interpret them as formulas. That guard must be removed again before a value is
+     * converted to a number - otherwise a negative difficulty like "-5.81" arrives as
+     * "'-5.81" and floatval() yields 0.0.
+     *
+     * @param string $value
+     * @return string
+     */
+    public static function strip_formula_escape(string $value): string {
+        $trimmed = ltrim($value);
+        if ($trimmed === '' || $trimmed[0] !== "'") {
+            return $value;
+        }
+        // Only strip the guard when what follows really is a formula character,
+        // so that genuine apostrophes in text are left untouched.
+        $rest = substr($trimmed, 1);
+        if ($rest === '' || !in_array($rest[0], ['=', '+', '-', '@'], true)) {
+            return $value;
+        }
+        return $rest;
+    }
+
+    /**
+     * Check if the given string is a valid float and if possible, cast to float.
+     *
+     * If separated via comma, replace by dot and - if possible -, cast to float.
+     *
+     * @param string $value
+     * @return * either float or the given value (string)
+     */
     protected function cast_string_to_float($value) {
 
-        // Check if separated by comma.
-        $commacount = substr_count($value, ',');
-        if ($commacount == 1) {
-            $floatstring = str_replace(',', '.', $value);
+        $floatstring = trim((string)$value);
+        // Spreadsheet exports may wrap numbers or prefix them with apostrophes.
+        $floatstring = self::strip_formula_escape($floatstring);
+        $floatstring = trim($floatstring, "\"'");
+        $floatstring = preg_replace("/^'+/", '', $floatstring);
 
-        } else {
-            $floatstring = $value;
+        // Check if separated by comma.
+        $commacount = substr_count($floatstring, ',');
+        if ($commacount == 1) {
+            $floatstring = str_replace(',', '.', $floatstring);
         }
         $validation = filter_var($floatstring, FILTER_VALIDATE_FLOAT);
         if ($validation !== false) {
@@ -487,8 +528,10 @@ class fileparser {
         // Check if we have a readable string in correct format.
         $readablestring = false;
         $dateformat = !empty($this->settings->dateformat) ? $this->settings->dateformat : "j.n.Y H:i:s";
-        if (date_create_from_format($dateformat, $value) &&
-                strtotime($value)) {
+        if (
+            date_create_from_format($dateformat, $value) &&
+                strtotime($value)
+        ) {
                     $readablestring = true;
         }
         // Check accepts all ints.
@@ -544,7 +587,7 @@ class fileparser {
      *
      */
     protected function add_csverror($errorstring, $i) {
-        $this->csverrors[] = nl2br($errorstring.".\nIn line with values: $i ");
+        $this->csverrors[] = nl2br($errorstring . ".\nIn line with values: $i ");
     }
 
     /**
@@ -557,7 +600,7 @@ class fileparser {
      *
      */
     protected function add_csvwarnings($errorstring, $i) {
-        $this->csvwarnings[] = nl2br($errorstring.".\nIn line with values: $i ");
+        $this->csvwarnings[] = nl2br($errorstring . ".\nIn line with values: $i ");
     }
     /**
      * Get line errors.

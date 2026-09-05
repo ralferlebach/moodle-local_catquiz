@@ -44,7 +44,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class personabilities extends feedbackgenerator {
-
     /**
      *
      * @var int $primaryscaleid // The scale to be displayed in detail in the colorbar.
@@ -438,10 +437,18 @@ class personabilities extends feedbackgenerator {
             );
             $series->set_labels([0 => $stringforchartlegend]);
 
+            /* Bar value, bar colour and legend must all refer to the SAME quantity
+               and the SAME scale. The bar shows the DIFFERENCE to the global scale,
+               and the legend below is rendered for the GLOBAL scale - so colour the
+               bar by that same difference against the global scale's ranges.
+               Colouring by the absolute subscale ability against the subscale's own
+               ranges (as before) mixed three different reference points: a learner
+               could see a green bar under a legend whose green band starts far to
+               the right of that bar's value. */
             $colorvalue = $this->feedbackhelper->get_color_for_personability(
                 $quizsettings,
-                floatval($subscaleability),
-                intval($scaleid)
+                (float) $difference,
+                (int) $quizsettings['catquiz_catscales']
             );
             $series->set_colors([0 => $colorvalue]);
             $chart->add_series($series);

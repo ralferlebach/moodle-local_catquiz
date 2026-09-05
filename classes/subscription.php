@@ -37,7 +37,6 @@ require_once(__DIR__ . '/../lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class subscription {
-
     /**
      * Toggles the subscription and returns the state.
      *
@@ -54,12 +53,13 @@ class subscription {
 
         $now = time();
 
-        if (!$record = $DB->get_record('local_catquiz_subscriptions', [
+        if (
+            !$record = $DB->get_record('local_catquiz_subscriptions', [
             'userid' => $userid,
             'area' => $area,
             'itemid' => $itemid,
-            ])) {
-
+            ])
+        ) {
             $record = (object)[
                 'userid' => $userid,
                 'itemid' => $itemid,
@@ -91,6 +91,40 @@ class subscription {
     }
 
     /**
+     * Returns the ids of all items a user is subscribed to, in one query.
+     *
+     * Issue #24: the scale tree called return_subscription_state() for every single
+     * scale, and each of those is its own record_exists() - one query per scale.
+     * Callers that need the state of many items at once fetch the set once and look
+     * it up in memory instead.
+     *
+     * @param int $userid
+     * @param string $area
+     * @return array<int, bool> Subscribed item ids as keys, for isset() lookups.
+     */
+    public static function return_subscribed_itemids(int $userid, string $area): array {
+        global $DB;
+
+        $itemids = $DB->get_fieldset_select(
+            'local_catquiz_subscriptions',
+            'itemid',
+            'userid = :userid AND area = :area AND status = :status',
+            [
+                'userid' => $userid,
+                'area' => $area,
+                'status' => LOCAL_CATQUIZ_STATUS_SUBSCRIPTION_BOOKED,
+            ]
+        );
+
+        $subscribed = [];
+        foreach ($itemids as $itemid) {
+            $subscribed[(int) $itemid] = true;
+        }
+
+        return $subscribed;
+    }
+
+    /**
      * Toggles the subscription and returns the state.
      *
      * @param int $userid
@@ -105,12 +139,14 @@ class subscription {
         $status = 0;
         $booked = LOCAL_CATQUIZ_STATUS_SUBSCRIPTION_BOOKED;
 
-        if ($DB->record_exists('local_catquiz_subscriptions', [
+        if (
+            $DB->record_exists('local_catquiz_subscriptions', [
             'userid' => $userid,
             'itemid' => $itemid,
             'area' => $area,
             'status' => LOCAL_CATQUIZ_STATUS_SUBSCRIPTION_BOOKED,
-            ])) {
+            ])
+        ) {
             $status = 1;
         }
 

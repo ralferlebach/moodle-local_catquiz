@@ -32,6 +32,7 @@ use local_catquiz\catscale;
 use local_catquiz\testenvironment;
 use Random\RandomException;
 use stdClass;
+use local_catquiz\local\progress_retention;
 
 defined('MOODLE_INTERNAL') || die();
 // No login check is expected here because this is already done in the
@@ -130,6 +131,20 @@ class progress implements JsonSerializable {
     private array $abilities;
 
     /**
+     * Ability estimate per scale and step, recorded in trace mode only.
+     * @var array
+     */
+    private array $abilitytrace = [];
+
+    /**
+     * @var array Holds the person abilities as they were BEFORE this attempt,
+     * indexed by catscale. Captured once at the first question from the loaded
+     * priors, so a scale not validly measured in this attempt can be restored to
+     * its pre-attempt state at finalisation (issue #9, Phase 2).
+     */
+    private array $preattemptabilities = [];
+
+    /**
      * If the user is forced to take a break, this holds the timestamp of the end of the break.
      *
      * If no break is enforced, it has a value of null.
@@ -207,7 +222,7 @@ class progress implements JsonSerializable {
      */
     public static function load(int $attemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
         $instance = self::load_from_cache($attemptid)
-            ?: self::load_from_db($attemptid)
+            ?: self::load_from_db($attemptid, $contextid)
             ?: self::create_new($attemptid, $component, $contextid, $quizsettings);
 
         $instance->hasnewresponse = false;
@@ -235,23 +250,17 @@ class progress implements JsonSerializable {
             return $instance;
         }
 
-        // If there is no response for the last question that was shown to the
-        // user, do not count that question as part of the attempt and remove it
-        // from the progress. This can happen if a page is reloaded.
-        $instance->playedquestions = array_filter(
-            $instance->playedquestions,
-            fn($q) => $q->id != $instance->lastquestion->id
-        );
-        foreach ($instance->playedquestionsbyscale as $scaleid => $qps) {
-            $instance->playedquestionsbyscale[$scaleid] = array_filter(
-                $qps,
-                fn($q) => $q->id != $instance->lastquestion->id
-            );
-            if (count($instance->playedquestionsbyscale[$scaleid]) === 0) {
-                unset($instance->playedquestionsbyscale[$scaleid]);
-            }
-        }
-
+        /* The last administered question is still unanswered - typically after a
+           reload or a resume. It STAYS in playedquestions: it was displayed to the
+           user, and playedquestions is documented as exactly that ("the questions
+           that were already displayed"). Removing it made the structure contradict
+           itself, because lastquestion then pointed at a question that had
+           supposedly never been played, and it made get_num_playedquestions()
+           non-monotonic. The missing response identifies the item as pending, and
+           every place that needs "how many questions were ANSWERED" now asks
+           get_num_answered_productive_questions() instead of counting this array
+           (Issue #6). Keeping it also prevents the pending item from being selected
+           again as if it were a new question. */
         return $instance;
     }
 
@@ -272,9 +281,10 @@ class progress implements JsonSerializable {
      * Try to load a progress object from the database.
      *
      * @param int $attemptid
+     * @param int $contextid
      * @return progress|false
      */
-    private static function load_from_db(int $attemptid) {
+    private static function load_from_db(int $attemptid, int $contextid) {
         global $DB;
         $record = $DB->get_record(
             'local_catquiz_progress',
@@ -282,7 +292,7 @@ class progress implements JsonSerializable {
             '*'
         );
         if ($record) {
-            $instance = self::populate_from_object($record);
+            $instance = self::populate_from_object($record, $contextid);
             return $instance;
         }
         return false;
@@ -292,9 +302,10 @@ class progress implements JsonSerializable {
      * Populates the data from an object.
      *
      * @param stdClass $object
+     * @param int $contextid Fallback used for old records saved before contextid was persisted.
      * @return self
      */
-    private static function populate_from_object(stdClass $object): self {
+    private static function populate_from_object(stdClass $object, int $contextid): self {
         global $DB;
         $instance = new self();
         $instance->id = $object->id;
@@ -304,7 +315,8 @@ class progress implements JsonSerializable {
 
         // Set properties from json encoded data.
         $data = json_decode($object->json);
-        $instance->contextid = $data->contextid;
+        // Old records saved before contextid was part of the serialized state don't have it.
+        $instance->contextid = $data->contextid ?? $contextid;
         $instance->playedquestions = (array) $data->playedquestions;
         foreach ($instance->playedquestions as $pq) {
             if (!$pq->is_pilot) {
@@ -328,6 +340,9 @@ class progress implements JsonSerializable {
             $instance->responses[$id] = (array) $val;
         }
         $instance->abilities = (array) $data->abilities;
+        $instance->preattemptabilities = property_exists($data, 'preattemptabilities')
+            ? (array) $data->preattemptabilities
+            : [];
         $instance->forcedbreakend = intval($data->forcedbreakend) ?: null;
         $instance->lockedscales = property_exists($data, 'lockedscales') ? (array) $data->lockedscales : [];
         $instance->usageid = $data->usageid;
@@ -391,6 +406,7 @@ class progress implements JsonSerializable {
         $instance->droppedscales = [];
         $instance->responses = [];
         $instance->abilities = [];
+        $instance->preattemptabilities = [];
         $instance->forcedbreakend = null;
         $instance->lockedscales = [];
         $instance->usageid = null;
@@ -421,6 +437,7 @@ class progress implements JsonSerializable {
             'contextid' => $this->contextid,
             'responses' => $this->responses,
             'abilities' => $this->abilities,
+            'preattemptabilities' => $this->preattemptabilities,
             'forcedbreakend' => $this->forcedbreakend,
             'lockedscales' => $this->lockedscales,
             'usageid' => $this->usageid,
@@ -551,6 +568,54 @@ class progress implements JsonSerializable {
     }
 
     /**
+     * Returns the number of ANSWERED productive questions of this attempt.
+     *
+     * This is the authoritative measure for the configured test length. It is
+     * deliberately based on the responses: the played questions only record which
+     * items were displayed, and the questionsattempted counter on the adaptivequiz
+     * attempt is maintained outside this plugin and can drift across a resume.
+     * Pilot items never count towards the productive test length. Passing a scale
+     * id restricts the count to the answers attributed to that scale, which is the
+     * per-scale N used by the result validator.
+     *
+     * @param ?int $scaleid Restrict the count to this scale, or null for the whole attempt.
+     *
+     * @return int
+     */
+    public function get_num_answered_productive_questions(?int $scaleid = null): int {
+        $count = 0;
+        foreach (array_keys($this->responses) as $questionid) {
+            $question = $this->playedquestions[$questionid] ?? null;
+            if ($question !== null && !empty($question->is_pilot)) {
+                continue;
+            }
+            if ($scaleid !== null && !$this->question_belongs_to_scale($questionid, $scaleid)) {
+                continue;
+            }
+            $count++;
+        }
+        return $count;
+    }
+
+    /**
+     * Shows whether an answered question was counted towards the given scale.
+     *
+     * @param int $questionid
+     * @param int $scaleid
+     *
+     * @return bool
+     */
+    private function question_belongs_to_scale(int $questionid, int $scaleid): bool {
+        $inscale = $this->playedquestionsbyscale[$scaleid] ?? [];
+        foreach ($inscale as $question) {
+            if ((int) ($question->id ?? 0) === $questionid) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Returns a clone of the progress class with pilot questions removed
      *
      * @return self
@@ -604,7 +669,6 @@ class progress implements JsonSerializable {
         $q->userlastattempttime = $now;
 
         $this->playedquestions[$q->id] = $q;
-
         // Keep track of questions played per scale.
         $affectedscales = [
             $q->catscaleid,
@@ -810,12 +874,73 @@ class progress implements JsonSerializable {
      * @return self
      */
     public function set_ability(float $ability, int $catscaleid): self {
-        if (!isset($this->abilities[$catscaleid])) {
-            $this->abilities[$catscaleid] = [];
+        // Issue #56: the empty array initialisation used to be pointless - the very
+        // next line replaced it with a scalar, so abilities only ever held the last
+        // estimate per scale and no trajectory could be reconstructed.
+        //
+        // In trace mode the estimates are appended instead. The other modes keep the
+        // scalar, so nothing about the existing behaviour or the size of the stored
+        // JSON changes for them.
+        if (progress_retention::should_trace()) {
+            if (!isset($this->abilitytrace[$catscaleid])) {
+                $this->abilitytrace[$catscaleid] = [];
+            }
+            $this->abilitytrace[$catscaleid][] = [
+                // The number of questions played so far identifies the step. There is
+                // no get_step(); calling it broke every running attempt as soon as
+                // trace mode was switched on, because set_ability() is on the hot path
+                // of the estimation, not in some rarely used branch.
+                'step' => $this->get_num_playedquestions(),
+                'ability' => $ability,
+            ];
         }
+
         $this->abilities[$catscaleid] = $ability;
 
         return $this;
+    }
+
+    /**
+     * Returns the recorded ability trajectory per scale.
+     *
+     * Empty unless the retention level is trace. Each entry carries the step number
+     * and the estimate, so a trajectory can be reconstructed without depending on
+     * store_debug_info.
+     *
+     * @return array
+     */
+    public function get_ability_trace(): array {
+        return $this->abilitytrace;
+    }
+
+    /**
+     * Captures the person abilities as they are BEFORE this attempt.
+     *
+     * Called once at the first question with the loaded priors, before any
+     * during-attempt estimate has been written. Only fills scales not captured
+     * yet, so repeated calls are safe (issue #9, Phase 2).
+     *
+     * @param array $abilities Map of catscaleid => ability.
+     * @return self
+     */
+    public function capture_preattempt_abilities(array $abilities): self {
+        foreach ($abilities as $catscaleid => $ability) {
+            if (!array_key_exists((int) $catscaleid, $this->preattemptabilities)) {
+                $this->preattemptabilities[(int) $catscaleid] = (float) $ability;
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Returns the person abilities as they were before this attempt, indexed by
+     * catscale (issue #9, Phase 2).
+     *
+     * @return array
+     */
+    public function get_preattempt_abilities(): array {
+        return $this->preattemptabilities;
     }
 
     /**
@@ -909,25 +1034,20 @@ class progress implements JsonSerializable {
      * @return stdClass|bool
      */
     private function get_last_response_for_attempt() {
-        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $cachekey = sprintf(
-            'lastresponse_%d_%d',
-            $this->get_usage_id(),
-            $this->get_num_playedquestions()
-        );
-        if (!$response = $cache->get($cachekey)) {
-            $response = catquiz::get_last_response_for_attempt($this->get_usage_id());
-            $cache->set($cachekey, $response);
-            // Delete the cache entry for the previous number of questions answered.
-            if ($this->get_num_playedquestions() >= 1) {
-                $previouskey = sprintf(
-                    'lastresponse_%d_%d',
-                    $this->get_usage_id(),
-                    $this->get_num_playedquestions() - 1
-                );
-                $cache->delete($previouskey);
-            }
-        }
+        /* Deliberately NOT cached. The cache key used to be
+           "lastresponse_<usageid>_<numplayedquestions>", which silently assumed
+           that the number of played questions is a monotonically growing version
+           indicator of the response history. load() breaks that assumption: when
+           the last administered question is still unanswered it is removed from
+           playedquestions, so the counter goes 2 -> 1 and back to 2 once the item
+           IS answered. The second time the key "..._2" is hit, the cache returns
+           the OLD response (the one before the pending item), so the freshly given
+           answer never reaches the response accumulation. The attempt then keeps
+           administering items past the configured maximum.
+           This query is small and targeted (one row via LIMIT 1) and runs a few
+           dozen times per attempt at most, so correctness clearly outweighs the
+           saved lookup. */
+        $response = catquiz::get_last_response_for_attempt($this->get_usage_id());
         if ($response && $response->state === 'gaveup') {
             $response->fraction = 0.0;
         }
@@ -1121,8 +1241,10 @@ class progress implements JsonSerializable {
         // Get selected subscales from quizdata.
         $selectedsubscales = [];
         foreach ($this->quizsettings as $key => $value) {
-            if (strpos($key, 'catquiz_subscalecheckbox_') !== false
-                && $value == "1") {
+            if (
+                strpos($key, 'catquiz_subscalecheckbox_') !== false
+                && $value == "1"
+            ) {
                     $catscaleid = substr_replace($key, '', 0, 25);
                     $selectedsubscales[] = $catscaleid;
             }
@@ -1140,5 +1262,4 @@ class progress implements JsonSerializable {
         global $USER;
         return sprintf('progress_user_%d_id_%d', $USER->id, $attemptid);
     }
-
 }

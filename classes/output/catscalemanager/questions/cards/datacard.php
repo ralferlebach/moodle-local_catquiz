@@ -34,7 +34,6 @@ require_once($CFG->libdir . '/questionlib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class datacard implements renderable {
-
     /**
      * @var object
      */
@@ -73,7 +72,8 @@ class datacard implements renderable {
         int $contextid,
         int $catscaleid,
         string $component,
-        ?object $record = null) {
+        ?object $record = null
+    ) {
 
         $this->testitemid = $testitemid;
         $this->contextid = $contextid;
@@ -98,17 +98,26 @@ class datacard implements renderable {
         // If no context is set, get default context from DB.
         $catcontext = empty($this->contextid) ? catquiz::get_default_context_id() : $this->contextid;
 
-        // Get the record for the specific userid (fetched from optional param).
-        list($select, $from, $where, , $params) = catquiz::return_sql_for_catscalequestions([$this->catscaleid],
-                                                                                                    $catcontext,
-                                                                                                    [],
-                                                                                                    $this->testitemid);
-        $idcheck = "id=:userid";
-        $sql = "SELECT $select FROM $from WHERE $where AND $idcheck";
-        $recordinarray = $DB->get_records_sql($sql, $params, IGNORE_MISSING);
+        // Issue #19: fetch exactly this one question.
+        //
+        // The previous version loaded the scale through the shared list builder and
+        // picked the wanted row out of the result in PHP. Two things were wrong with
+        // it. IGNORE_MISSING is not a strictness flag for get_records_sql() - it is
+        // the $limitfrom argument, so it silently meant "start at row 0". And the
+        // question id was passed in the builder's $userid slot, which that builder
+        // binds to :userid in a per-user statistics join; the detail view therefore
+        // matched user statistics against a question id.
+        [$select, $from, $where, , $params] = catquiz::return_sql_for_catscalequestions(
+            [$this->catscaleid],
+            $catcontext,
+            [],
+            0,
+            null,
+            $this->testitemid
+        );
+        $sql = "SELECT $select FROM $from WHERE $where";
 
-        $record = $recordinarray[$this->testitemid];
-        return $record;
+        return $DB->get_record_sql($sql, $params, MUST_EXIST);
     }
 
     /**
@@ -184,6 +193,4 @@ class datacard implements renderable {
             'scaleid' => $this->catscaleid,
         ];
     }
-
-
 }

@@ -100,15 +100,15 @@
             require(['local_catquiz/calculatescales'], function(init) {
                 init.init();
             });
-            require(['local_catquiz/syncscale'], function(init) {
+            require(['catquizcentralhub_client/syncscale'], function(init) {
                 init.init({
                     centralHost: '{{centralhost}}'
                 });
             });
-            require(['local_catquiz/recalculateremote'], function(init) {
+            require(['catquizcentralhub_host/recalculateremote'], function(init) {
                 init.init();
             });
-            require(['local_catquiz/submit_responses'], function(init) {
+            require(['catquizcentralhub_client/submit_responses'], function(init) {
                 init.init();
             });
         {{/js}}

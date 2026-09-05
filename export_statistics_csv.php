@@ -25,6 +25,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use local_catquiz\local\access\context_resolver;
+use local_catquiz\local\access\feedback_access;
 use local_catquiz\output\catquizstatistics;
 
 require_once('../../config.php');
@@ -39,11 +41,14 @@ $endtime = optional_param('endtime', 0, PARAM_INT) ?: null;
 
 require_login();
 
-$PAGE->set_context(context_course::instance($cid));
+// Issue #18: resolve the context these statistics actually belong to (the quiz
+// module if the export is scoped to one test, otherwise the course) and apply the
+// same access rule the rendered statistics page uses, so that the export can never
+// hand out more than the page shows.
+$exportcontext = context_resolver::for_statistics($courseid ?: $cid, $testid);
+$PAGE->set_context($exportcontext);
 
-if (!has_capability('local/catquiz:view_users_feedback', context_course::instance($cid)) &&
-    !has_capability('local/catquiz:canmanage', context_system::instance())) {
-
+if (!feedback_access::can_view_other_users($exportcontext)) {
     die(get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback'));
 }
 
@@ -52,7 +57,7 @@ require_once($CFG->libdir . '/csvlib.class.php');
 
 $catquizstatistics = new catquizstatistics($courseid, $testid, $scaleid, $endtime, $starttime);
 
-$filename = date("Ymd Hi-")."export_attempts_scale_$scaleid";
+$filename = date("Ymd Hi-") . "export_attempts_scale_$scaleid";
 if ($courseid != 0) {
     $filename .= "_course_$courseid";
 }
@@ -60,15 +65,15 @@ if ($testid != 0) {
     $filename .= "_test_$testid";
 }
 if ($starttime && $starttime != 0) {
-    $filename .= "_from_".date("Ymd Hi", $starttime);
+    $filename .= "_from_" . date("Ymd Hi", $starttime);
 }
 if ($endtime && $endtime != 0) {
-    $filename .= "_till_".date("Ymd Hi", $endtime);
+    $filename .= "_till_" . date("Ymd Hi", $endtime);
 }
 
-$downloadfilename = clean_filename ( $filename );
-$csvexport = new csv_export_writer ( 'semicolon' );
-$csvexport->set_filename ( $downloadfilename );
+$downloadfilename = clean_filename($filename);
+$csvexport = new csv_export_writer('semicolon');
+$csvexport->set_filename($downloadfilename);
 
 $exporttitle = [
 // phpcs:disable
@@ -123,7 +128,6 @@ $csvexport->add_data($exporttitle);
 $decsep = get_string('decsep', 'langconfig');
 
 foreach ($catquizstatistics->get_export_data() as $row) {
-
     // phpcs:disable
     $csvexport->add_data(
         [
@@ -161,4 +165,4 @@ foreach ($catquizstatistics->get_export_data() as $row) {
     // phpcs:enable
 }
 
-$csvexport->download_file ();
+$csvexport->download_file();

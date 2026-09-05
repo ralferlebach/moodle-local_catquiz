@@ -41,7 +41,7 @@ use stdClass;
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
-require_once($CFG->dirroot.'/local/catquiz/lib.php');
+require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
 /**
  * Returns rendered learning progress.
@@ -51,7 +51,6 @@ require_once($CFG->dirroot.'/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class learningprogress extends feedbackgenerator {
-
     /**
      *
      * @var int $primaryscaleid // The scale to be displayed in detail in the colorbar.
@@ -80,18 +79,25 @@ class learningprogress extends feedbackgenerator {
     public function get_studentfeedback(array $feedbackdata): array {
         global $OUTPUT;
 
+        // Issue #11: the learning-progress charts communicate the development of
+        // the GLOBAL scale, so they must follow the global scale (catquiz_catscales)
+        // and never the primary scale of the current attempt, which can change
+        // between attempts and would produce a factually wrong trajectory.
+        $globalscale = catscale::return_catscale_object(
+            $this->get_progress()->get_quiz_settings()->catquiz_catscales
+        );
+
         // The charts showing past and present personabilities (in relation to peers).
         $abilityprogress = $this->render_abilityprogress(
             (array) $feedbackdata,
-            $feedbackdata['primaryscale']
+            $globalscale
         );
         if (!$abilityprogress) {
             return [];
         }
-        $globalscale = catscale::return_catscale_object($this->get_progress()->get_quiz_settings()->catquiz_catscales);
         $globalscalename = $globalscale->name;
         $feedback = $OUTPUT->render_from_template(
-        'local_catquiz/feedback/learningprogress',
+            'local_catquiz/feedback/learningprogress',
             [
             'description' => get_string(
                 'learningprogress_description',
@@ -132,9 +138,10 @@ class learningprogress extends feedbackgenerator {
      *
      */
     public function get_required_context_keys(): array {
-        return [
-            'primaryscale',
-        ];
+        // Issue #11: the learning-progress charts no longer depend on the
+        // primary scale of the attempt (they follow the global scale), so it is
+        // not a required context key any more.
+        return [];
     }
 
     /**
@@ -235,7 +242,6 @@ class learningprogress extends feedbackgenerator {
                     $catscales[$catscaleid]->name
                 ) ?? $catscales[$catscaleid]->name;
             };
-
         } else {
             $isselectedscale = false;
             $tooltiptitle = $catscales[$catscaleid]->name;
@@ -245,13 +251,16 @@ class learningprogress extends feedbackgenerator {
         $questionpreviews = "";
         if ($questionsinscale = $this->get_progress()->get_playedquestions(true, $catscaleid)) {
             $numberofitems = ['itemsplayed' => count($questionsinscale)];
-            $questionpreviews = array_map(fn($q) => [
+            $questionpreviews = array_map(
+                fn($q) => [
                 'preview' => $this->render_questionpreview((object) $q)['body']['question']],
                 $questionsinscale
             );
-        } else if ($this->feedbacksettings->displayscaleswithoutitemsplayed
+        } else if (
+            $this->feedbacksettings->displayscaleswithoutitemsplayed
             || $catscaleid == $selectedscaleid
-            || $catscales[$catscaleid]->parentid == 0) {
+            || $catscales[$catscaleid]->parentid == 0
+        ) {
             $numberofitems = ['noplayed' => 0];
         } else if ($catscaleid != $selectedscaleid) {
             $numberofitems = "";
@@ -272,7 +281,6 @@ class learningprogress extends feedbackgenerator {
             'isselectedscale' => $isselectedscale,
             'tooltiptitle' => $tooltiptitle,
         ];
-
     }
 
     /**
@@ -303,7 +311,8 @@ class learningprogress extends feedbackgenerator {
         // Compare to other courses.
         // Find all courses before the end of the day of this attempt.
         $records = [];
-        foreach (catquiz::get_attempts(
+        foreach (
+            catquiz::get_attempts(
                 null,
                 $initialcontext['catscaleid'],
                 $courseid,
@@ -311,7 +320,8 @@ class learningprogress extends feedbackgenerator {
                 $initialcontext['contextid'],
                 null,
                 $end
-        ) as $record) {
+            ) as $record
+        ) {
             $json = json_decode($record->json);
             $prunedrecord = $record;
             $prunedrecord->json = json_encode((object) [
@@ -351,16 +361,16 @@ class learningprogress extends feedbackgenerator {
             ];
         }
         $progresscomparison = $this->render_chart_for_comparison(
-                $attemptsofuser,
-                $attemptsofpeers,
-                (array) $primarycatscale,
-                $timerange,
-                [$beginningoftimerange, $endtime]);
+            $attemptsofuser,
+            $attemptsofpeers,
+            (array) $primarycatscale,
+            $timerange,
+            [$beginningoftimerange, $endtime]
+        );
         return [
             'individual' => $progressindividual,
             'comparison' => $progresscomparison,
         ];
-
     }
 
     /**
@@ -384,14 +394,10 @@ class learningprogress extends feedbackgenerator {
         $chart = new chart_line();
         $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
 
-        $personabilities = [];
-        foreach ($attemptsofuser as $attempt) {
-            $data = json_decode($attempt->json);
-            if (isset($data->personabilities->$scaleid)) {
-                $personabilities[] = $data->personabilities->$scaleid;
-            }
-        }
-        if (count($personabilities) < 2) {
+        $personabilities = $this->extract_scale_progress_values($attemptsofuser, $scaleid);
+        // At least two real data points are required to draw a trajectory.
+        $realvalues = array_filter($personabilities, fn($v) => $v !== null);
+        if (count($realvalues) < 2) {
             return '';
         }
 
@@ -410,7 +416,33 @@ class learningprogress extends feedbackgenerator {
             'chart' => $out,
             'charttitle' => get_string('learningprogresstitle', 'local_catquiz'),
         ];
+    }
 
+    /**
+     * Extracts one scale's ability value per attempt, in attempt order.
+     *
+     * Issue #11: the learning-progress trajectory follows the given (global)
+     * scale strictly. An attempt without a value for the scale yields null (a
+     * gap in the chart) rather than being skipped or substituted with another
+     * scale, and an ability of exactly 0.0 is kept (explicit null check, not
+     * empty()).
+     *
+     * @param array $attemptsofuser Attempt records, each with a ->json field.
+     * @param int|string $scaleid   The scale whose ability is extracted.
+     *
+     * @return array List of float|null, one entry per attempt.
+     */
+    protected function extract_scale_progress_values(array $attemptsofuser, $scaleid): array {
+        $values = [];
+        foreach ($attemptsofuser as $attempt) {
+            $data = json_decode($attempt->json);
+            if (isset($data->personabilities->$scaleid) && $data->personabilities->$scaleid !== null) {
+                $values[] = (float) $data->personabilities->$scaleid;
+            } else {
+                $values[] = null;
+            }
+        }
+        return $values;
     }
 
     /**
@@ -430,7 +462,8 @@ class learningprogress extends feedbackgenerator {
         array $attemptsofpeers,
         array $primarycatscale,
         int $timerange,
-        array $beginningandendofrange) {
+        array $beginningandendofrange
+    ) {
         global $OUTPUT;
 
         if (!isset($primarycatscale['name']) || !isset($primarycatscale['id'])) {
@@ -442,9 +475,23 @@ class learningprogress extends feedbackgenerator {
         $chart = new chart_line();
         $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
 
-        $orderedattemptspeers = feedback_helper::order_attempts_by_timerange($attemptsofpeers, $scaleid, $timerange);
+        // Issue #16: peers are weighted once per person and period so a peer with
+        // several attempts does not dominate the comparison.
+        $orderedattemptspeers = feedback_helper::order_attempts_by_timerange(
+            $attemptsofpeers,
+            $scaleid,
+            $timerange,
+            false,
+            true
+        );
         $pa = $this->assign_average_result_to_timerange($orderedattemptspeers);
-        $orderedattemptsuser = feedback_helper::order_attempts_by_timerange($attemptsofuser, $scaleid, $timerange);
+        $orderedattemptsuser = feedback_helper::order_attempts_by_timerange(
+            $attemptsofuser,
+            $scaleid,
+            $timerange,
+            false,
+            true
+        );
         $ua = $this->assign_average_result_to_timerange($orderedattemptsuser);
 
         $alldates = feedback_helper::get_timerangekeys($timerange, $beginningandendofrange);
@@ -452,7 +499,6 @@ class learningprogress extends feedbackgenerator {
         $userattemptsbydate = [];
         $firstvalue = true;
         foreach ($alldates as $index => $key) {
-
             if (!isset($pa[$key]) && !isset($ua[$key]) && $firstvalue) {
                 unset($alldates[$index]);
                 continue;
@@ -498,7 +544,6 @@ class learningprogress extends feedbackgenerator {
             'chart' => $out,
             'charttitle' => get_string('progress', 'local_catquiz', $scalename),
         ];
-
     }
 
     /**
@@ -538,7 +583,6 @@ class learningprogress extends feedbackgenerator {
             }
         }
         return $result;
-
     }
 
     /**
@@ -553,14 +597,16 @@ class learningprogress extends feedbackgenerator {
      */
     private function find_non_nullable_value(array $keys, array $attemptswithnulls, string $key) {
 
-        if (!empty($attemptswithnulls[$key])) {
+        // Issue #11: treat only genuine nulls as missing. empty() would discard a
+        // valid ability of exactly 0.0 and pull neighbouring averages towards it.
+        if (($attemptswithnulls[$key] ?? null) !== null) {
             return $attemptswithnulls[$key];
         }
         $prevkey = null;
         $nextkey = null;
         $stop = false;
         foreach ($keys as $k) {
-            if (!empty($attemptswithnulls[$k])) {
+            if (($attemptswithnulls[$k] ?? null) !== null) {
                 $pk = $k;
             }
             if ($key == $k) {
@@ -639,10 +685,14 @@ class learningprogress extends feedbackgenerator {
                 [
                     'ability' => strval($subscaleability),
                     'difference' => strval($difference),
-                ]);
+                ]
+            );
             $series->set_labels([0 => $stringforchartlegend]);
 
-            $colorvalue = $this->get_color_for_personability(
+            // The method lives on the feedback helper, which the base class provides;
+            // calling it on $this raised "undefined method" as soon as this branch
+            // ran. The four other call sites in the plugin get it right.
+            $colorvalue = $this->feedbackhelper->get_color_for_personability(
                 $quizsettings,
                 floatval($subscaleability),
                 intval($primarycatscaleid)
@@ -657,7 +707,6 @@ class learningprogress extends feedbackgenerator {
             'chart' => $out,
             'charttitle' => get_string('personabilitycharttitle', 'local_catquiz', $primarycatscale['name']),
         ];
-
     }
 
     /**

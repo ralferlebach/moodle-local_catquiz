@@ -27,18 +27,13 @@
 namespace local_catquiz\external;
 
 use context_system;
-use Exception;
-use external_api;
-use external_function_parameters;
-use external_value;
-use external_single_structure;
+use core_external\external_api;
+use core_external\external_function_parameters;
+use core_external\external_value;
+use core_external\external_single_structure;
 use local_catquiz\execute_method_from_webservice;
-use local_catquiz\output\catscalemanager\questions\cards\datacard;
-use moodle_url;
+use moodle_exception;
 
-defined('MOODLE_INTERNAL') || die();
-
-require_once($CFG->libdir . '/externallib.php');
 
 /**
  * External Service for local wunderbyte_table to (re)load data.
@@ -49,7 +44,18 @@ require_once($CFG->libdir . '/externallib.php');
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class reload_template extends external_api {
-
+    /**
+     * Render classes this endpoint may construct.
+     *
+     * Kept here rather than derived from the request: a class name that arrives from
+     * the client is an instruction, not data. Adding an entry is a deliberate act and
+     * shows up in review.
+     *
+     * @var string[]
+     */
+    const ALLOWED_RENDER_CLASSES = [
+        \local_catquiz\output\catscalemanager\questions\cards\datacard::class,
+    ];
     /**
      * Describes the parameters this webservice.
      *
@@ -58,8 +64,7 @@ class reload_template extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'data'  => new external_value(PARAM_RAW, 'Data package as json.', VALUE_REQUIRED),
-            ]
-        );
+            ]);
     }
 
     /**
@@ -71,12 +76,18 @@ class reload_template extends external_api {
      *
      */
     public static function execute(
-        string $data) {
+        string $data
+    ) {
 
         global $PAGE;
 
         $context = context_system::instance();
         $PAGE->set_context($context);
+
+        // Review finding: this endpoint acted without checking anything. Being logged
+        // in is not authorisation - the same gate as on the pages offering it.
+        self::validate_context($context);
+        require_capability('local/catquiz:manage_catscales', $context);
         $dataobject = json_decode($data);
 
         // Make sure, the element triggering the reload includes all necessary data.
@@ -87,7 +98,33 @@ class reload_template extends external_api {
         // Get data for template.
         $tdparamsstring = $dataobject->tdparams;
         $paramsarray = explode(",", $tdparamsstring);
-        $renderclass = new $dataobject->classlocation(...$paramsarray);
+
+        // Security: the render class used to be taken straight from the request, so
+        // the client decided which autoloadable PHP class the server constructed -
+        // with client-controlled constructor arguments. The capability check narrows
+        // who can do that; it does not make the dispatch safe.
+        //
+        // The permitted classes are now fixed here. Exactly one template sends this
+        // value today, so the list is short by nature rather than by omission; a new
+        // render target has to be added deliberately.
+        $classlocation = (string) ($dataobject->classlocation ?? '');
+        if (!in_array($classlocation, self::ALLOWED_RENDER_CLASSES, true)) {
+            throw new moodle_exception('invalidrenderclass', 'local_catquiz', '', $classlocation);
+        }
+
+        // The parameters arrive as a comma-separated string and are spread into a
+        // typed constructor. A malformed list produced a raw TypeError travelling out
+        // of the web service; the endpoint reports a failure instead, which is what
+        // its own result structure is for.
+        try {
+            $renderclass = new $classlocation(...$paramsarray);
+        } catch (\Throwable $e) {
+            return [
+                'success' => 0,
+                'message' => get_string('invalidrenderparams', 'local_catquiz'),
+                'data' => '',
+            ];
+        }
         // To be able to render the data from the class, make sure the class implements the renderable interface.
         $datafortemplate = $renderclass->export_for_template();
         $templatedatajson = json_encode($datafortemplate);
@@ -95,7 +132,7 @@ class reload_template extends external_api {
         if ($resultsuccess) {
             $result = [
                 'success' => 1,
-                'message' => get_string($admethodname."_message", 'local_catquiz'),
+                'message' => get_string($admethodname . "_message", 'local_catquiz'),
                 'data' => $templatedatajson,
             ];
         } else {
@@ -117,7 +154,6 @@ class reload_template extends external_api {
             'success' => new external_value(PARAM_INT, '1 is success, 0 isn\'t'),
             'message' => new external_value(PARAM_RAW, 'Message to be displayed', VALUE_OPTIONAL, ''),
             'data' => new external_value(PARAM_RAW, 'Data for the template to be rendered', VALUE_OPTIONAL, null),
-            ]
-        );
+            ]);
     }
 }

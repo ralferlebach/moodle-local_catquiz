@@ -30,7 +30,6 @@ use context_module;
 use dml_exception;
 use local_catquiz\catquiz;
 use local_catquiz\local\status;
-use mod_adaptivequiz\local\attempt\attempt;
 use mod_adaptivequiz\local\attempt\attempt_state;
 use stdClass;
 
@@ -48,7 +47,6 @@ require_once("$CFG->dirroot/mod/adaptivequiz/locallib.php");
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class cancel_expired_attempts extends \core\task\scheduled_task {
-
     /**
      * Allow some extra time before closing an expired attempt.
      * @var float
@@ -93,7 +91,7 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
      * @return void
      */
     public function execute() {
-        global $DB;
+        global $DB, $CFG;
         mtrace("Running cancel_expired_attempts task.");
 
         $this->initialize();
@@ -118,11 +116,27 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
             if (!$this->exceeds_maxtime($record)) {
                 continue;
             }
-            $attempt = attempt::get_by_id($record->id);
             $quiz = $this->get_adaptivequiz($record->instance);
             $cm = get_coursemodule_from_instance('adaptivequiz', $record->instance);
             $context = context_module::instance($cm->id);
-            $attempt->complete($quiz, $context, $statusmessage, $this->currenttime);
+            /* Issue #5: use the SAME authoritative completion path as a normal
+               finish. The task used to call local_catquiz\local\attempt\attempt
+               ::complete(), which only flips attemptstate/attemptstopcriteria and
+               saves - it never sets the immutable timefinished and never invokes
+               the CAT model's post_complete_attempt_callback. A cron-closed attempt
+               therefore skipped attempt_finalizer::finalize() entirely, so neither
+               the endtime nor the result (and with it resultvalid) were persisted.
+               adaptivequiz_complete_attempt() sets timefinished exactly once, calls
+               the catmodel callback and triggers the event, which keeps browser,
+               administrative and cron completion consistent. */
+            require_once($CFG->dirroot . '/mod/adaptivequiz/locallib.php');
+            adaptivequiz_complete_attempt(
+                (int) $record->uniqueid,
+                $quiz,
+                $context,
+                (int) $record->userid,
+                $statusmessage
+            );
             catquiz::set_final_attempt_status($record->id, status::CLOSED_BY_TIMELIMIT);
             cache_helper::purge_by_event('changesinquizattempts');
             $completed++;

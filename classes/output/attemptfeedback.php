@@ -27,6 +27,7 @@ use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\event\attempt_completed;
 use local_catquiz\teststrategy\feedbackgenerator;
+use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\teststrategy\info;
 use local_catquiz\teststrategy\progress;
@@ -42,7 +43,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class attemptfeedback implements renderable, templatable {
-
     /**
      * @var ?int
      */
@@ -96,7 +96,8 @@ class attemptfeedback implements renderable, templatable {
         int $attemptid,
         int $contextid = 0,
         ?feedbacksettings $feedbacksettings = null,
-        $courseid = null) {
+        $courseid = null
+    ) {
         global $USER;
         if ($attemptid === 0) {
             // This can still return nothing. In that case, we show a message that the user has no attempts yet.
@@ -232,7 +233,8 @@ class attemptfeedback implements renderable, templatable {
                 ),
                 true
             );
-            if ($feedbackdata
+            if (
+                $feedbackdata
                 && array_key_exists('primaryscale', $feedbackdata)
                 && is_array($feedbackdata['primaryscale'])
             ) {
@@ -260,16 +262,18 @@ class attemptfeedback implements renderable, templatable {
 
         // In newer versions, the debuginfo data are stored in a separate column that can be emptied in case it takes up too much
         // space.
-        if (!$debugdata && !$debugdata = $DB->get_field(
+        if (
+            !$debugdata && !$debugdata = $DB->get_field(
                 'local_catquiz_attempts',
                 'debug_info',
                 ['attemptid' => $this->attemptid]
-        )) {
+            )
+        ) {
             $this->save_to_cache($feedbackdata);
             return $feedbackdata;
         }
 
-        $debuginfo = json_decode( $debugdata, true) ?? [];
+        $debuginfo = json_decode($debugdata, true) ?? [];
         $feedbackdata['debuginfo'] = $debuginfo;
 
         $this->save_to_cache($feedbackdata);
@@ -481,21 +485,22 @@ class attemptfeedback implements renderable, templatable {
      *
      * @return array
      */
-    public function get_courses_to_enrol(
-    ): array {
+    public function get_courses_to_enrol(): array {
         $quizsettings = (array) $this->get_quiz_settings();
         $feedbackdata = $this->load_feedbackdata();
 
-        if (!array_key_exists('personabilities_abilities', $feedbackdata)
+        if (
+            !array_key_exists('personabilities_abilities', $feedbackdata)
             || !$feedbackdata['personabilities_abilities']
         ) {
             return [];
         }
 
-        // Use only the toreport scale.
-        $candidatescales = array_filter(
-            $feedbackdata['personabilities_abilities'],
-            fn($v) => array_key_exists('toreport', $v) && $v['toreport'] === true
+        // Issue #10: only reportable scales (toreport, not excluded/hidden) may
+        // trigger an automatic enrolment. An invalid result has no reportable
+        // scale, so no enrolment happens.
+        $candidatescales = feedback_helper::get_reportable_scales(
+            $feedbackdata['personabilities_abilities']
         );
 
         $coursestoenrol = [];
@@ -503,27 +508,26 @@ class attemptfeedback implements renderable, templatable {
             $coursestoenrol[$scaleid] = [
                 'course_ids' => [],
             ];
-            $i = 0;
-            while (isset($quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_'. ++$i])) {
-                $lowerlimit = $quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_'. $i];
-                $upperlimit = $quizsettings['feedback_scaleid_limit_upper_' . $scaleid. '_'. $i];
-                if ($data['value'] < (float) $lowerlimit || $data['value'] > (float) $upperlimit) {
-                    continue;
-                }
-                if (!($courses = $quizsettings['catquiz_courses_' . $scaleid . '_' . $i] ?? [])) {
-                    continue;
-                }
-                // The first element at array key 0 is a dummy value to
-                // display some message like "please select course" in the
-                // form and has a course ID of 0.
-                $courses = array_filter($courses, fn ($v) => $v != 0);
-                $showenrolmentmessage = !empty($quizsettings["enrolment_message_checkbox_" . $scaleid . "_" . $i]);
-                $coursestoenrol[$scaleid] = [
-                    'range' => $i,
-                    'show_message' => $showenrolmentmessage,
-                    'course_ids' => $courses,
-                ];
+            // Issue #14: a score falls into exactly one range (half-open), so the
+            // enrolment for a scale is driven by that single range instead of
+            // every range whose inclusive bounds contain the value.
+            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
+            if ($i === null) {
+                continue;
             }
+            if (!($courses = $quizsettings['catquiz_courses_' . $scaleid . '_' . $i] ?? [])) {
+                continue;
+            }
+            // The first element at array key 0 is a dummy value to
+            // display some message like "please select course" in the
+            // form and has a course ID of 0.
+            $courses = array_filter($courses, fn ($v) => $v != 0);
+            $showenrolmentmessage = !empty($quizsettings["enrolment_message_checkbox_" . $scaleid . "_" . $i]);
+            $coursestoenrol[$scaleid] = [
+                'range' => $i,
+                'show_message' => $showenrolmentmessage,
+                'course_ids' => $courses,
+            ];
         }
         return $coursestoenrol;
     }
@@ -542,35 +546,34 @@ class attemptfeedback implements renderable, templatable {
         $quizsettings = (array) $this->get_quiz_settings();
         $feedbackdata = $this->load_feedbackdata();
 
-        if (!array_key_exists('personabilities_abilities', $feedbackdata)
+        if (
+            !array_key_exists('personabilities_abilities', $feedbackdata)
             || !$feedbackdata['personabilities_abilities']
         ) {
             return [];
         }
 
-        // Use only the toreport scale.
-        $candidatescales = array_filter(
-            $feedbackdata['personabilities_abilities'],
-            fn($v) => array_key_exists('toreport', $v) && $v['toreport'] === true
+        // Issue #10: only reportable scales (toreport, not excluded/hidden) may
+        // trigger an automatic enrolment. An invalid result has no reportable
+        // scale, so no enrolment happens.
+        $candidatescales = feedback_helper::get_reportable_scales(
+            $feedbackdata['personabilities_abilities']
         );
 
         // Check if there is a course associated with that value and if so, return it.
         $groupstoenrol = [];
         foreach ($candidatescales as $scaleid => $data) {
             $groupstoenrol[$scaleid] = [];
-            $i = 0;
-            while (isset($quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_' . ++$i])) {
-                $lowerlimit = $quizsettings['feedback_scaleid_limit_lower_' . $scaleid . '_' . $i];
-                $upperlimit = $quizsettings['feedback_scaleid_limit_upper_' . $scaleid . '_' . $i];
-                if ($data['value'] < (float) $lowerlimit || $data['value'] > (float) $upperlimit) {
-                    continue;
-                }
-                if (!($groups = $quizsettings['catquiz_group_' . $scaleid . '_' . $i] ?? "")) {
-                    continue;
-                }
-                $groups = explode(",", $groups);
-                array_push($groupstoenrol[$scaleid], ...$groups);
+            // Issue #14: a score falls into exactly one range (half-open).
+            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
+            if ($i === null) {
+                continue;
             }
+            if (!($groups = $quizsettings['catquiz_group_' . $scaleid . '_' . $i] ?? "")) {
+                continue;
+            }
+            $groups = explode(",", $groups);
+            array_push($groupstoenrol[$scaleid], ...$groups);
         }
         return $groupstoenrol;
     }
@@ -591,7 +594,7 @@ class attemptfeedback implements renderable, templatable {
         $primaryfeedbackname = 'customscalefeedback';
 
         // Set primary generator element (customscalefeedback) first.
-        usort($generators, function($a, $b) use ($primaryfeedbackname) {
+        usort($generators, function ($a, $b) use ($primaryfeedbackname) {
             if ($a->get_generatorname() == $primaryfeedbackname) {
                 return -1;
             } else if ($b->get_generatorname() == $primaryfeedbackname) {
@@ -600,12 +603,32 @@ class attemptfeedback implements renderable, templatable {
                 return 0;
             }
         });
+        // Issue #10: determine result validity BEFORE running the generators, so
+        // that for an invalid result no per-scale STUDENT feedback (peer
+        // comparison, learning progress, ...) is assembled at all - the student
+        // only ever sees the single central notice below. Teacher feedback is
+        // still produced so teachers can inspect the (invalid) details.
+        $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
+        $hasvalidresult = !(is_array($abilities) && !feedback_helper::has_reportable_result($abilities));
+
         $context = [];
         foreach ($generators as $generator) {
+            // Issue #10: for an invalid result, do not execute the non-essential
+            // student-facing generators at all (peer comparison, learning
+            // progress, ...) - "don't run peer comparison / recommendations on an
+            // invalid result". Only customscalefeedback runs, because it carries
+            // the exclusion reason that feeds the central notice / teacher view.
+            if (!$hasvalidresult && $generator->get_generatorname() !== $primaryfeedbackname) {
+                continue;
+            }
             $feedbacks = $generator->get_feedback($feedbackdata);
             // Loop over studentfeedback and teacherfeedback.
             foreach ($feedbacks as $fbtype => $feedback) {
                 if (!$feedback || !is_array($feedback)) {
+                    continue;
+                }
+                // For an invalid result, do not emit student-facing scale feedback.
+                if (!$hasvalidresult && $fbtype === 'studentfeedback') {
                     continue;
                 }
 
@@ -617,6 +640,25 @@ class attemptfeedback implements renderable, templatable {
                 }
                 $context[$fbtype][] = $feedback;
             }
+        }
+
+        // Issue #10: bind the student feedback to a valid result. When the report
+        // pipeline produced no reportable scale (toreport, not excluded/hidden),
+        // the attempt has no valid result: show exactly one central notice that
+        // carries the rejection reason, instead of scattering "not available"/
+        // exclusion blocks across several tabs.
+        if (!$hasvalidresult && is_array($abilities)) {
+            $reason = feedback_helper::get_exclusion_reason_string($abilities);
+            $content = get_string('feedbacknovalidresult', 'local_catquiz');
+            if ($reason !== '') {
+                $content .= ' ' . $reason;
+            }
+            $context['studentfeedback'] = [[
+                'heading' => get_string('feedbacknovalidresultheading', 'local_catquiz'),
+                'content' => $content,
+                'generatorname' => 'novalidresult',
+                'frontpage' => '1',
+            ]];
         }
 
         return $context;

@@ -36,7 +36,6 @@ use local_catquiz\feedback\feedbackclass;
  * Event observer for local_catquiz.
  */
 class local_catquiz_observer {
-
     /**
      * Observer for the update_catscale event
      *
@@ -45,7 +44,7 @@ class local_catquiz_observer {
     public static function purge_event_cache(base $event) {
 
         $classname = get_class($event);
-        if (strpos($classname, 'local_catquiz') >= 0) {
+        if (str_contains($classname, 'local_catquiz')) {
             cache_helper::purge_by_event('changesineventlog');
         };
     }
@@ -96,6 +95,4 @@ class local_catquiz_observer {
         cache_helper::purge_by_event('changesintestitems');
         cache_helper::purge_by_event('changesineventlog');
     }
-
-
 }

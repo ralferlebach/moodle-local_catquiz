@@ -1,0 +1,510 @@
+<?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+/**
+ * Behaviour tests for local_catquiz external webservice classes.
+ *
+ * @package    local_catquiz
+ * @copyright  2026 Wunderbyte GmbH
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
+namespace local_catquiz;
+
+use advanced_testcase;
+use invalid_parameter_exception;
+use local_catquiz\data\catscale_structure;
+use local_catquiz\data\dataapi;
+use local_catquiz\event\feedbacktab_clicked;
+use local_catquiz\external\delete_catscale;
+use local_catquiz\external\execute_action;
+use local_catquiz\external\feedback_tab_clicked;
+use local_catquiz\external\get_next_question;
+use local_catquiz\external\manage_catscale;
+use local_catquiz\external\reload_template;
+use local_catquiz\external\render_question_with_response;
+use local_catquiz\external\start_new_attempt;
+use local_catquiz\external\submit_result;
+use local_catquiz\external\subscribe;
+use local_catquiz\external\update_parameters;
+use require_login_exception;
+
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/external_reload_template_stub.php');
+
+/**
+ * Behaviour-level tests for each external class execute() implementation.
+ */
+final class webservice_external_classes_test extends advanced_testcase {
+    /**
+     * delete_catscale::execute() should remove an existing catscale row.
+     *
+     * @return void
+     * @covers \local_catquiz\external\delete_catscale::execute
+     */
+    public function test_delete_catscale_execute_deletes_scale(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $catscaleid = $this->create_dummy_catscale('Delete me');
+        $this->assertTrue($DB->record_exists('local_catquiz_catscales', ['id' => $catscaleid]));
+
+        $result = delete_catscale::execute($catscaleid);
+
+        $this->assertTrue($result['success']);
+        $this->assertFalse($DB->record_exists('local_catquiz_catscales', ['id' => $catscaleid]));
+    }
+
+    /**
+     * execute_action::execute() should return failed status for unknown method.
+     *
+     * @return void
+     * @covers \local_catquiz\external\execute_action::execute
+     */
+    public function test_execute_action_execute_returns_failure_for_unknown_method(): void {
+        $this->resetAfterTest(true);
+        // These endpoints now require the CAT manager capability. The tests
+        // ran without any user, which only worked while nothing was checked.
+        $this->setAdminUser();
+
+        $result = execute_action::execute('method_does_not_exist', '{}');
+
+        $this->assertSame(0, $result['success']);
+        $this->assertNotEmpty($result['message']);
+    }
+
+    /**
+     * feedback_tab_clicked::execute() should trigger the feedbacktab_clicked event.
+     *
+     * @return void
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     */
+    public function test_feedback_tab_clicked_execute_triggers_event(): void {
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $sink = $this->redirectEvents();
+
+        $result = feedback_tab_clicked::execute(42, 'personabilities', 'Person abilities');
+
+        $events = $sink->get_events();
+        $sink->close();
+
+        $this->assertFalse($result['success']);
+        $this->assertNotEmpty($events);
+        $this->assertInstanceOf(feedbacktab_clicked::class, end($events));
+        $last = end($events);
+        $this->assertSame(42, $last->other['attemptid']);
+        $this->assertSame('personabilities', $last->other['feedback']);
+    }
+
+    /**
+     * get_next_question::execute() currently rejects arguments due execute_parameters mismatch.
+     *
+     * @return void
+     * @covers \local_catquiz\external\get_next_question::execute
+     */
+    public function test_get_next_question_execute_raises_invalid_parameter_exception(): void {
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $this->expectException(invalid_parameter_exception::class);
+        get_next_question::execute(1, 1, 'mod_adaptivequiz');
+    }
+
+    /**
+     * manage_catscale::execute() should create a new catscale.
+     *
+     * @return void
+     * @covers \local_catquiz\external\manage_catscale::execute
+     */
+    public function test_manage_catscale_execute_creates_scale(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        // This endpoint now requires the CAT manager capability. The test ran without
+        // any user, which only worked while nothing was checked.
+        $this->setAdminUser();
+
+        $result = manage_catscale::execute(
+            'WS Created Scale',
+            'Created via test',
+            'create',
+            -5.0,
+            5.0,
+            0,
+            0
+        );
+
+        $this->assertArrayHasKey('id', $result);
+        $this->assertGreaterThan(0, (int)$result['id']);
+        $this->assertTrue($DB->record_exists('local_catquiz_catscales', ['id' => (int)$result['id']]));
+    }
+
+    /**
+     * manage_catscale::execute() should update an existing catscale.
+     *
+     * @return void
+     * @covers \local_catquiz\external\manage_catscale::execute
+     */
+    public function test_manage_catscale_execute_updates_scale(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $catscaleid = $this->create_dummy_catscale('Original');
+
+        $result = manage_catscale::execute(
+            'Updated Name',
+            'Updated description',
+            'update',
+            -4.0,
+            4.0,
+            0,
+            $catscaleid
+        );
+
+        $updated = $DB->get_record('local_catquiz_catscales', ['id' => $catscaleid], '*', MUST_EXIST);
+
+        $this->assertArrayHasKey('id', $result);
+        $this->assertNotSame(0, $result['id']);
+        $this->assertSame('Updated Name', $updated->name);
+    }
+
+    /**
+     * reload_template::execute() should return failed status if action method does not exist.
+     *
+     * @return void
+     * @covers \local_catquiz\external\reload_template::execute
+     */
+    public function test_reload_template_execute_returns_failure_for_unknown_method(): void {
+        $this->resetAfterTest(true);
+        // These endpoints now require the CAT manager capability. The tests
+        // ran without any user, which only worked while nothing was checked.
+        $this->setAdminUser();
+
+        $payload = json_encode([
+            'admethodname' => 'method_does_not_exist',
+            'adparams' => '',
+            // The datacard renderer takes ints; an empty tdparams string explodes into [''] and the
+            // typed constructor rejects it. The endpoint is being tested, not the
+            // renderer, so plausible ids are passed.
+            'tdparams' => '1,1,1,question',
+            // The stub is no longer accepted: the render class is now chosen from a
+            // server-side allowlist rather than from the request. The real card class
+            // is used, which is what the endpoint exists to render.
+            'classlocation' => \local_catquiz\output\catscalemanager\questions\cards\datacard::class,
+        ]);
+
+        $result = reload_template::execute($payload);
+
+        if (!is_array($result)) {
+            $this->fail('reload_template::execute() must return an array result.');
+        }
+
+        $this->assertSame(0, $result['success']);
+        $this->assertNotEmpty($result['message']);
+    }
+
+    /**
+     * render_question_with_response::execute() should require login.
+     *
+     * @return void
+     * @covers \local_catquiz\external\render_question_with_response::execute
+     */
+    public function test_render_question_with_response_execute_requires_login(): void {
+        $this->resetAfterTest(true);
+
+        $this->expectException(\moodle_exception::class);
+        render_question_with_response::execute(1, 1);
+    }
+
+    /**
+     * start_new_attempt::execute() should require login.
+     *
+     * @return void
+     * @covers \local_catquiz\external\start_new_attempt::execute
+     */
+    public function test_start_new_attempt_execute_requires_login(): void {
+        $this->resetAfterTest(true);
+
+        $this->expectException(\moodle_exception::class);
+        start_new_attempt::execute(1, 1);
+    }
+
+    /**
+     * submit_result::execute() should require login.
+     *
+     * @return void
+     * @covers \local_catquiz\external\submit_result::execute
+     */
+    public function test_submit_result_execute_requires_login(): void {
+        $this->resetAfterTest(true);
+
+        $this->expectException(\moodle_exception::class);
+        submit_result::execute('1', 1, 1);
+    }
+
+    /**
+     * subscribe::execute() should toggle subscription state.
+     *
+     * @return void
+     * @covers \local_catquiz\external\subscribe::execute
+     */
+    public function test_subscribe_execute_toggles_subscription(): void {
+        global $DB;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $userid = get_admin()->id;
+        $area = 'catscale';
+        $itemid = 1234;
+
+        $first = subscribe::execute($userid, $area, $itemid);
+        $second = subscribe::execute($userid, $area, $itemid);
+
+        $record = $DB->get_record('local_catquiz_subscriptions', [
+            'userid' => $userid,
+            'area' => $area,
+            'itemid' => $itemid,
+        ], '*', MUST_EXIST);
+
+        $this->assertSame(1, $first['subscribed']);
+        $this->assertSame(0, $second['subscribed']);
+        $this->assertSame(0, (int)$record->status);
+    }
+
+    /**
+     * update_parameters::execute() should return failed status for invalid ids.
+     *
+     * @return void
+     * @covers \local_catquiz\external\update_parameters::execute
+     */
+    public function test_update_parameters_execute_returns_failure_for_invalid_ids(): void {
+        $this->resetAfterTest(true);
+        // These endpoints now require the CAT manager capability. The tests
+        // ran without any user, which only worked while nothing was checked.
+        $this->setAdminUser();
+
+        $result = update_parameters::execute(0, 0);
+
+        $this->assertFalse($result['success']);
+    }
+
+    /**
+     * Create a minimal catscale used in execute() tests.
+     *
+     * @param string $name
+     * @return int
+     */
+    private function create_dummy_catscale(string $name): int {
+        $catscalestructure = new catscale_structure([
+            'name' => $name,
+            'description' => 'Created for external test',
+            'action' => 'create',
+            'minscalevalue' => -5.0,
+            'maxscalevalue' => 5.0,
+            'parentid' => 0,
+            'id' => 0,
+            'timecreated' => time(),
+            'timemodified' => time(),
+        ]);
+
+        return dataapi::create_catscale($catscalestructure);
+    }
+    /**
+     * Subscribing yourself needs no management right; subscribing others does.
+     *
+     * Review finding: one capability covered two very different actions, so the
+     * endpoint accepted any user id behind a single manage check.
+     *
+     * @covers \local_catquiz\external\subscribe::execute
+     * @return void
+     */
+    public function test_subscribe_separates_self_from_foreign(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+
+        // Own subscription: allowed without any management right.
+        $result = \local_catquiz\external\subscribe::execute($user->id, 'catscale', 1);
+        $this->assertArrayHasKey('subscribed', $result);
+
+        // Somebody else's: refused for a user without the management right.
+        $this->expectException(\required_capability_exception::class);
+        \local_catquiz\external\subscribe::execute($other->id, 'catscale', 1);
+    }
+    /**
+     * A render class outside the allowlist is refused.
+     *
+     * The endpoint used to construct whatever class the request named. The stub this
+     * test file defines is exactly such a class - harmless here, but it stands for
+     * any autoloadable class a caller might name.
+     *
+     * @covers \local_catquiz\external\reload_template::execute
+     * @return void
+     */
+    public function test_reload_template_refuses_a_class_outside_the_allowlist(): void {
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        $payload = json_encode([
+            'admethodname' => 'method_does_not_exist',
+            'adparams' => '',
+            'tdparams' => '',
+            'classlocation' => '\\local_catquiz\\external_reload_template_stub',
+        ]);
+
+        $this->expectException(\moodle_exception::class);
+        reload_template::execute($payload);
+    }
+    /**
+     * Inserts an attempt owned by a user.
+     *
+     * @param int $attemptid
+     * @param int $userid
+     * @return void
+     */
+    private function add_attempt_for(int $attemptid, int $userid): void {
+        global $DB;
+
+        $now = time();
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $userid,
+            'scaleid' => 1,
+            'contextid' => 1,
+            'courseid' => 1,
+            'attemptid' => $attemptid,
+            'component' => 'mod_adaptivequiz',
+            'instanceid' => 1,
+            'teststrategy' => 4,
+            'status' => 1,
+            'json' => '{}',
+            'debug_info' => '',
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'endtime' => $now,
+        ]);
+    }
+
+    /**
+     * A participant may act on their own attempt.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_allows_the_own_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $this->add_attempt_for(8801, (int) $user->id);
+
+        $sink = $this->redirectEvents();
+        feedback_tab_clicked::execute(8801, 'personabilities', 'Person abilities');
+
+        $this->assertNotEmpty(
+            $sink->get_events(),
+            'Acting on your own attempt has to keep working.'
+        );
+    }
+
+    /**
+     * A participant may not act on somebody else's attempt.
+     *
+     * validate_context() establishes where a request acts, not whether this user may
+     * act on this object. Without the ownership check any authenticated user could
+     * pass a foreign attempt id - and was then logged as that attempt's "student".
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_denies_a_foreign_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $owner = $this->getDataGenerator()->create_user();
+        $intruder = $this->getDataGenerator()->create_user();
+        $this->add_attempt_for(8802, (int) $owner->id);
+        $this->setUser($intruder);
+
+        $sink = $this->redirectEvents();
+
+        try {
+            feedback_tab_clicked::execute(8802, 'personabilities', 'Person abilities');
+            $this->fail('A foreign attempt must be refused.');
+        } catch (\moodle_exception $e) {
+            // Expected.
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
+
+    /**
+     * An attempt that does not exist is refused rather than allowed.
+     *
+     * An unknown object is not a permitted one - the check has to fail closed.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_denies_an_unknown_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+
+        $sink = $this->redirectEvents();
+
+        $this->expectException(\moodle_exception::class);
+        try {
+            feedback_tab_clicked::execute(999999, 'personabilities', 'Person abilities');
+        } finally {
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
+    /**
+     * An identifier that names no feedback generator is refused.
+     *
+     * Both the identifier and its translation arrive from the client and were written
+     * into the event log as if they described what happened. A log entry whose subject
+     * the caller chose freely is not audit evidence.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_refuses_an_unknown_identifier(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $this->add_attempt_for(8803, (int) $user->id);
+
+        $sink = $this->redirectEvents();
+
+        $this->expectException(\moodle_exception::class);
+        try {
+            feedback_tab_clicked::execute(8803, 'not_a_generator', 'anything');
+        } finally {
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
+}
