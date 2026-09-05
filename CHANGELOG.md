@@ -1,5 +1,22 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090222)
+
+> Der Lasttest-Workflow installierte die Datenbank nicht.
+
+- **`load-runtime-pool.yml` richtet die Site jetzt vollständig ein.**
+  `moodle-plugin-ci install --no-init` spielt den Code ein, legt aber kein Schema an.
+  Der Seeder scheiterte deshalb auf **beiden** Engines mit „Table
+  mdl_local_catquiz_catscales doesn't exist" – einer Meldung, die auf das Plugin
+  zeigt, während die Ursache die fehlende Site-Installation ist. Ergänzt um
+  `install_database.php`, `upgrade.php` und `purge_caches.php`, wie es die
+  funktionierenden Lastworkflows seit jeher tun.
+- **Ein Schritt prüft das Live-Schema**, bevor gesät wird. Ein Seeder gegen eine
+  halb installierte Site scheitert tief in der DML-Schicht, wo die Meldung die
+  Ursache nicht mehr nennt.
+- Plattenplatz auf dem Runner: 86 GB frei – die 250.000-Item-Stufe ist dort
+  herstellbar, anders als in der Verifikationsumgebung.
+
 ## 1.1.7 (interne Version 2026090221)
 
 > Lasttests messen jetzt den Fragenpool, nicht die leere Installation.

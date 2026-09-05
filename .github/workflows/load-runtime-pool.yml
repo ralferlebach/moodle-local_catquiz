@@ -130,6 +130,45 @@ jobs:
           DB: ${{ matrix.db }}
           MOODLE_BRANCH: MOODLE_405_STABLE
 
+      - name: Install the site database
+        run: |
+          # --no-init installs the code but does not create the schema, so the plugin
+          # tables do not exist yet. The seeder then fails with "Table
+          # mdl_local_catquiz_catscales doesn't exist" - a message that points at the
+          # plugin while the cause is the missing site installation.
+          if [ "${{ matrix.db }}" = "pgsql" ]; then
+            dbtype=pgsql; dbuser=postgres; dbpass=postgres; dbport=5432
+          else
+            dbtype=mariadb; dbuser=root; dbpass=''; dbport=3306
+          fi
+
+          php moodle/admin/cli/install_database.php \
+            --agree-license --adminpass='Admin!23' \
+            --adminemail='admin@example.com' \
+            --fullname='CATquiz load' --shortname='catload' || true
+
+          # The plugin schema arrives with the upgrade, not with the install.
+          php moodle/admin/cli/upgrade.php --non-interactive
+          php moodle/admin/cli/purge_caches.php
+
+      - name: Verify the plugin schema exists
+        run: |
+          # Checking the live schema rather than trusting the previous step: a seeder
+          # run against a half-installed site fails deep inside the DML layer, where
+          # the message no longer names the cause.
+          php -r '
+            define("CLI_SCRIPT", true);
+            require "moodle/config.php";
+            $manager = $DB->get_manager();
+            foreach (["local_catquiz_catscales", "local_catquiz_items", "local_catquiz_itemparams"] as $table) {
+                if (!$manager->table_exists($table)) {
+                    fwrite(STDERR, "Tabelle $table fehlt - die Site ist nicht vollstaendig installiert\n");
+                    exit(1);
+                }
+            }
+            echo "Plugin-Schema vorhanden\n";
+          '
+
       - name: Seed ${{ matrix.items }} items
         run: |
           cd moodle
