@@ -206,6 +206,16 @@ jobs:
             echo $r->catscaleid, " ", $r->contextid, " ", $r->c;
           ')
 
+          # An empty result means the query itself failed - process substitution hides
+          # a failing php from "bash -e", and the comparison below then aborts with an
+          # arithmetic error that says nothing about the cause.
+          if [ -z "$count" ]; then
+            echo "Die Abfrage lieferte kein Ergebnis - vermutlich fehlt das Schema."
+            php -r 'define("CLI_SCRIPT", true); require "config.php"; global $DB;
+              echo "Items gesamt: ", $DB->count_records("local_catquiz_items"), "\n";' || true
+            exit 1
+          fi
+
           echo "Grösste Skala: $scaleid (Kontext $contextid) mit $count Items"
           if [ "$count" -lt "$(( ${{ matrix.items }} * 9 / 10 ))" ]; then
             echo "Seeding lieferte nur $count statt ${{ matrix.items }} Items."

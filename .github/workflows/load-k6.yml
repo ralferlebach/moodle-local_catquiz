@@ -223,7 +223,6 @@ jobs:
             -e CONTEXTID="$CONTEXTID" \
             -e VUS='${{ github.event.inputs.vus || 25 }}' \
             -e DURATION='${{ github.event.inputs.duration || '90s' }}' \
-            --summary-export=k6-summary.json \
             plugin/tests/load/catquiz-read-endpoints.js
 
       - name: Show Moodle diagnostics on failure

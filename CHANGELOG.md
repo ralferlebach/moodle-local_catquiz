@@ -1,5 +1,25 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090223)
+
+> Drei Befunde aus den externen Läufen.
+
+- **k6 lieferte eine leere Zusammenfassung, obwohl der Lauf korrekt war.** Das Log
+  zeigt 1.247 Iterationen und p50 144 ms; das hochgeladene Artefakt enthielt jede
+  Metrik auf null – das liest sich wie ein Lauf, der nie stattgefunden hat.
+  `--summary-export` schreibt in k6 v2 nichts mehr. Das Skript nutzt jetzt
+  `handleSummary()`, den unterstützten Weg, und das Flag ist entfernt.
+- **Der Verknüpfungsschritt des Lastseeders hing über eine halbe Stunde.** Nach dem
+  Masseneinfügen sind die Tabellenstatistiken veraltet – für den Planer sehen beide
+  Tabellen leer aus, und er plant die korrelierte Unterabfrage als verschachtelte
+  Schleife über sequenzielle Scans. Bei einer Viertelmillion Zeilen ist das
+  quadratisch. Ein `ANALYZE` davor lässt den vorhandenen Index auf
+  `itemparams.itemid` überhaupt erst nutzen: lokal **5,8 s** für 50.000 Items.
+- **Der Prüfschritt scheiterte stumm.** Prozesssubstitution verbirgt ein
+  fehlgeschlagenes `php` vor `bash -e`; die anschließende Zahlenprüfung brach dann
+  mit einem Rechenfehler ab, der die Ursache nicht nennt. Ein leeres Ergebnis wird
+  jetzt als solches gemeldet, samt Zählung zur Einordnung.
+
 ## 1.1.7 (interne Version 2026090222)
 
 > Der Lasttest-Workflow installierte die Datenbank nicht.
