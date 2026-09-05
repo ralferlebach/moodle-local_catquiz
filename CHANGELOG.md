@@ -1,5 +1,35 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090220)
+
+> Subplugin-Pipelines brachen vor dem ersten Test ab.
+
+- **Kein fehlendes Sprachpaket, sondern ein fehlendes System-Locale.** Moodles
+  PHPUnit-Bootstrap verweigert den Start ohne `en_AU.UTF-8`; die Runner-Images
+  liefern es nicht mit. Die Meldung „Required locale 'en_AU.UTF-8' is not installed"
+  liest sich wie ein Sprachproblem und führt die Suche in die falsche Richtung.
+  `local_catquiz` erzeugt das Locale seit jeher an vier Stellen – den neuen
+  Workflows fehlte genau dieser Schritt.
+- Ergänzt in beiden Subplugin-Pipelines und im Lasttest-Workflow.
+- **Ein Test prüft die Fehlerklasse**: Jeder Workflow, der die PHPUnit-Umgebung
+  initialisiert, muss das Locale erzeugen – über alle drei Repository-Ebenen hinweg.
+
+## 1.1.7 (interne Version 2026090219)
+
+> Korrektur: Der Pin folgt `main`, nicht der Arbeitsversion.
+
+- **Beide Hub-Subplugins pinnen `local_catquiz` auf `2026083025`** – die Version auf
+  `main`. Ein Pin auf die gerade in Arbeit befindliche Version hätte die Subplugins
+  überall unauffindbar gemacht ausser auf dem Entwicklungsbranch.
+- **Die Subplugin-Pipelines ziehen wieder `main`.** Pin und Branch gehören zusammen:
+  Ein Pin oberhalb von `main` lässt den Installationsschritt mit einem
+  Abhängigkeitsfehler scheitern – das ist der Pin bei der Arbeit, kein Defekt der
+  Pipeline.
+- **Der Test prüft jetzt die richtige Bedingung**: nicht Gleichheit mit der lokalen
+  Version, sondern dass ein Pin existiert und die gebaute Elternversion **nicht
+  überschreitet**. Gleichheit zu verlangen hiesse, einen Pin auf eine Version zu
+  fordern, die noch niemand installieren kann.
+
 ## 1.1.7 (interne Version 2026090218)
 
 > Versionierung der Hub-Subplugins.

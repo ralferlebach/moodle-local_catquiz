@@ -308,9 +308,9 @@ final class subplugin_registration_test extends advanced_testcase {
      * predates the interfaces they rely on - and the failure then appears at run time
      * instead of at install time.
      *
-     * The pin also has to be maintained: one left at an old version stops protecting
-     * anything, quietly. This test fails once the parent has moved on, which is the
-     * reminder to raise it deliberately.
+     * The pin names the released parent on main rather than the version in this
+     * working copy, which is normally ahead of it. A pin that exceeds the parent
+     * being built makes the subplugin uninstallable, and that is what is checked.
      *
      * @return void
      */
@@ -319,8 +319,15 @@ final class subplugin_registration_test extends advanced_testcase {
 
         $this->resetAfterTest();
 
-        $parent = new \stdClass();
-        $plugin = $parent;
+        // Deliberately not compared against the working copy's version: the pin
+        // follows the released parent on main, and the working copy is usually ahead
+        // of it. Requiring equality here would demand a pin to a version nobody can
+        // install yet.
+        //
+        // What has to hold is that a pin exists, is plausible, and never exceeds the
+        // version being built - a pin ahead of the parent makes these plugins
+        // uninstallable, which is the failure mode worth catching automatically.
+        $plugin = new \stdClass();
         include($CFG->dirroot . '/local/catquiz/version.php');
         $parentversion = (int) $plugin->version;
 
@@ -342,12 +349,59 @@ final class subplugin_registration_test extends advanced_testcase {
                 "catquizcentralhub_$part must declare the parent it was built against."
             );
 
-            $this->assertSame(
+            $this->assertLessThanOrEqual(
                 $parentversion,
                 (int) $plugin->dependencies['local_catquiz'],
-                "The pin in catquizcentralhub_$part is behind the parent version. "
-                    . 'Raise it together with the parent, or it stops protecting anything.'
+                "The pin in catquizcentralhub_$part is ahead of the parent in this "
+                    . 'tree, which makes the subplugin uninstallable.'
             );
         }
+    }
+    /**
+     * Every workflow that initialises PHPUnit generates the locale Moodle demands.
+     *
+     * Moodle's PHPUnit bootstrap refuses to run without en_AU.UTF-8, and the runner
+     * images do not ship it. The message it prints - "Required locale is not
+     * installed" - reads like a missing language pack, so the cause is easy to look
+     * for in the wrong place; the parent plugin's workflows have generated it for a
+     * long time, and the newer ones did not.
+     *
+     * @return void
+     */
+    public function test_workflows_generate_the_required_locale(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $roots = [
+            $CFG->dirroot . '/local/catquiz/.github/workflows',
+            $CFG->dirroot . '/local/catquiz/catquizcentralhub/host/.github/workflows',
+            $CFG->dirroot . '/local/catquiz/catquizcentralhub/client/.github/workflows',
+        ];
+
+        $missing = [];
+        foreach ($roots as $root) {
+            foreach (glob($root . '/*.yml') as $workflow) {
+                $content = file_get_contents($workflow);
+
+                // Only workflows that initialise the PHPUnit environment are affected.
+                if (
+                    !str_contains($content, 'admin/tool/phpunit/cli/init.php')
+                        && !str_contains($content, 'moodle-plugin-ci phpunit')
+                ) {
+                    continue;
+                }
+                if (!str_contains($content, 'locale-gen en_AU.UTF-8')) {
+                    $missing[] = basename($workflow);
+                }
+            }
+        }
+
+        $this->assertSame(
+            [],
+            array_values(array_unique($missing)),
+            'These workflows run PHPUnit but never generate en_AU.UTF-8, so the '
+                . 'bootstrap aborts before a single test runs.'
+        );
     }
 }
