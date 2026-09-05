@@ -32,6 +32,7 @@ use core_external\external_value;
 use core_external\external_single_structure;
 use local_catquiz\event\feedbacktab_clicked;
 use local_catquiz\local\access\context_resolver;
+use moodle_exception;
 
 
 /**

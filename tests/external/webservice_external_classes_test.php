@@ -378,4 +378,107 @@ final class webservice_external_classes_test extends advanced_testcase {
         $this->expectException(\moodle_exception::class);
         reload_template::execute($payload);
     }
+    /**
+     * Inserts an attempt owned by a user.
+     *
+     * @param int $attemptid
+     * @param int $userid
+     * @return void
+     */
+    private function add_attempt_for(int $attemptid, int $userid): void {
+        global $DB;
+
+        $now = time();
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $userid,
+            'scaleid' => 1,
+            'contextid' => 1,
+            'courseid' => 1,
+            'attemptid' => $attemptid,
+            'component' => 'mod_adaptivequiz',
+            'instanceid' => 1,
+            'teststrategy' => 4,
+            'status' => 1,
+            'json' => '{}',
+            'debug_info' => '',
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'endtime' => $now,
+        ]);
+    }
+
+    /**
+     * A participant may act on their own attempt.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_allows_the_own_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $this->add_attempt_for(8801, (int) $user->id);
+
+        $sink = $this->redirectEvents();
+        feedback_tab_clicked::execute(8801, 'raw', 'translated');
+
+        $this->assertNotEmpty(
+            $sink->get_events(),
+            'Acting on your own attempt has to keep working.'
+        );
+    }
+
+    /**
+     * A participant may not act on somebody else's attempt.
+     *
+     * validate_context() establishes where a request acts, not whether this user may
+     * act on this object. Without the ownership check any authenticated user could
+     * pass a foreign attempt id - and was then logged as that attempt's "student".
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_denies_a_foreign_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $owner = $this->getDataGenerator()->create_user();
+        $intruder = $this->getDataGenerator()->create_user();
+        $this->add_attempt_for(8802, (int) $owner->id);
+        $this->setUser($intruder);
+
+        $sink = $this->redirectEvents();
+
+        try {
+            feedback_tab_clicked::execute(8802, 'raw', 'translated');
+            $this->fail('A foreign attempt must be refused.');
+        } catch (\moodle_exception $e) {
+            // Expected.
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
+
+    /**
+     * An attempt that does not exist is refused rather than allowed.
+     *
+     * An unknown object is not a permitted one - the check has to fail closed.
+     *
+     * @covers \local_catquiz\external\feedback_tab_clicked::execute
+     * @return void
+     */
+    public function test_feedback_tab_clicked_denies_an_unknown_attempt(): void {
+        $this->resetAfterTest(true);
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+
+        $sink = $this->redirectEvents();
+
+        $this->expectException(\moodle_exception::class);
+        try {
+            feedback_tab_clicked::execute(999999, 'raw', 'translated');
+        } finally {
+            $this->assertSame([], $sink->get_events(), 'A refused call must raise no event.');
+        }
+    }
 }

@@ -1,5 +1,35 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090216)
+
+> Verhaltenstests zur Eigentumsprüfung – und ein Fehler, den sie sofort gefunden
+> haben.
+
+- **`moodle_exception` war im Namensraum nicht importiert.** Die in der
+  Vorversion ergänzte Eigentumsprüfung in `feedback_tab_clicked` hätte in Produktion
+  nicht abgelehnt, sondern mit „Class not found" abgebrochen. Der Quelltext-Scan
+  hatte nur belegt, dass der Aufruf **dasteht** – nicht, dass er wirkt.
+- **Drei Verhaltenstests** decken die DoD aus Security-Issue C ab: eigener Versuch
+  erlaubt, fremder abgelehnt, unbekannter fail-closed abgelehnt. Jeder prüft
+  zusätzlich, dass bei Ablehnung **kein Event** ausgelöst wird.
+
+## 1.1.7 (interne Version 2026090215)
+
+> Lasttest-Matrix als externer Workflow; #58 bei 50.000 Items belegt.
+
+- **Neuer Workflow `load-runtime-pool.yml`**: fährt die von #26 und #58 verbindlich
+  geforderte Matrix auf GitHub-Runnern – 50k/100k/250k Items × PostgreSQL und
+  MariaDB, sechs Jobs, Ergebnisse als Artefakt. Die Verifikationsumgebung hat dafür
+  zu wenig Platz; die Messung findet dort statt, wo sie möglich ist, statt dort
+  geschätzt zu werden, wo sie es nicht ist.
+- **`measure_runtime_pool.php` misst jetzt auch den Add-Questions-Dialog** (#58) –
+  im selben Werkzeug, damit beide dieselbe Definition von Cold, Warm, Median und p95
+  benutzen. Zwei getrennte Harnesse driften auseinander und ihre Zahlen hören auf,
+  vergleichbar zu sein.
+- **#58 bei 50.000 Items belegt**: warm Median **3 ms**, p95 3 ms, zwei Queries –
+  gegenüber 12.732 ms im Ausgangszustand. Die Akzeptanzschwelle des Reviews
+  (warm p95 < 500 ms) ist bei dieser Stufe deutlich erfüllt.
+
 ## 1.1.7 (interne Version 2026090214)
 
 > Belastungstest zu #26 nach dem vom Review geforderten Protokoll.

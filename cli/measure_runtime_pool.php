@@ -126,6 +126,51 @@ function percentile(array $values, float $percentile): float {
     return $values[max(0, min($index, count($values) - 1))];
 }
 
+/**
+ * Runs one "add questions" dialog query and returns its measurements.
+ *
+ * Issue #58 asks for the same protocol on this dialog. It is measured here rather
+ * than in a second script so that both use one definition of cold, warm, median and
+ * p95 - two harnesses drift apart and their numbers stop being comparable.
+ *
+ * @param int $scaleid
+ * @param int $contextid
+ * @param int $pagesize Rows the dialog shows; kept identical between pool sizes.
+ * @return array
+ */
+function measure_add_questions(int $scaleid, int $contextid, int $pagesize = 10): array {
+    global $DB;
+
+    $queriesbefore = $DB->perf_get_queries();
+
+    [$select, $from, $where, , $params] = \local_catquiz\catquiz::return_sql_for_addcatscalequestions(
+        $scaleid,
+        $contextid
+    );
+
+    $start = microtime(true);
+    $rows = $DB->get_records_sql("SELECT $select FROM $from WHERE $where", $params, 0, $pagesize);
+    $sqltime = (microtime(true) - $start) * 1000;
+
+    // The statistics of the visible rows are fetched separately since issue #58; that
+    // second query is part of what the dialog costs and belongs in the total.
+    $statstart = microtime(true);
+    $counts = \local_catquiz\catquiz::get_contextattempts_for_questions(
+        array_map(fn($row) => (int) $row->id, $rows),
+        $contextid
+    );
+    $stattime = (microtime(true) - $statstart) * 1000;
+
+    return [
+        'rows' => count($rows),
+        'sqlms' => $sqltime,
+        'totalms' => $sqltime + $stattime,
+        'statms' => $stattime,
+        'queries' => $DB->perf_get_queries() - $queriesbefore,
+        'counts' => count($counts),
+    ];
+}
+
 \core\session\manager::set_user(get_admin());
 
 $items = $DB->count_records('local_catquiz_items');
@@ -170,6 +215,33 @@ cli_writeln(sprintf(
     $last['queries'],
     $last['memorykb'],
     $last['payloadkb']
+));
+
+// Issue #58: the same protocol for the "add questions" dialog. The page size is
+// fixed so that the comparison across pool sizes shows how the query scales, not how
+// many rows happen to be displayed.
+purge_all_caches();
+$addcold = measure_add_questions($scaleid, $contextid);
+measure_add_questions($scaleid, $contextid);
+
+$addtotals = [];
+$addlast = null;
+for ($i = 0; $i < $repeats; $i++) {
+    $addlast = measure_add_questions($scaleid, $contextid);
+    $addtotals[] = $addlast['totalms'];
+}
+
+cli_writeln(sprintf("\nAdd-questions dialog (issue #58), page size 10:"));
+cli_writeln(sprintf('  Cold   total %.0f ms', $addcold['totalms']));
+cli_writeln(sprintf(
+    '  Warm   median %.0f ms   p95 %.0f ms',
+    percentile($addtotals, 0.5),
+    percentile($addtotals, 0.95)
+));
+cli_writeln(sprintf(
+    '  of which statistics of the visible rows: %.0f ms, %d queries',
+    $addlast['statms'],
+    $addlast['queries']
 ));
 
 if (!empty($options['out'])) {
