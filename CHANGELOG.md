@@ -1,5 +1,55 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090214)
+
+> Belastungstest zu #26 nach dem vom Review geforderten Protokoll.
+
+- **Neues Messwerkzeug** `cli/measure_runtime_pool.php`: Cold- und Warm-Lauf getrennt,
+  Median und p95, SQL-Zeit, Gesamtzeit inkl. Hydration, Query-Zahl, Zusatzspeicher und
+  Größe des serialisierten Cache-Payloads.
+- **Gemessen bei 50.000 Items** (`doc/issue-26-loadtest-report.md`): warme Gesamtzeit
+  493 ms bei 2 Queries – tragbar. Auffällig sind **208 MB Zusatzspeicher und 42 MB
+  Cache-Payload** je Skala und Kontext, beides linear skalierend. Der überschrittene
+  Grenzwert ist damit die Datenmenge je Zeile, nicht die Abfrage.
+- **#27 nicht reaktiviert**: Der Poolaufbau braucht 2 Queries; die Zeit liegt in der
+  einen Abfrage und der Hydration, nicht in nachgelagerten Skalenberechnungen. Damit
+  ist die vom Review genannte Bedingung für #27 nicht erfüllt.
+- **Der Kaltstart-Effekt ist jetzt beziffert**: bei 20.401 Items 4.803 ms kalt gegen
+  57 ms warm – Faktor 84. Genau diese Verwechslung hätte bei der ersten Bewertung von
+  #26 fast zu einem Umbau des heißen Auswahlpfades geführt.
+- **Eine Maßnahme versucht und zurückgenommen**: Die Spaltenreduktion bringt belegte
+  −65 % Payload, als Feldfilter über die geladenen Zeilen umgesetzt aber 28 Fehler in
+  der Strategie-Suite (`Undefined property: stdClass::$attempts`). Eine statisch
+  gepflegte Feldliste ist hier das falsche Mittel; der belastbare Weg ist eine eigene
+  Auswahl-Abfrage mit Bitgenau-Äquivalenznachweis. Vollständig zurückgenommen, Suite
+  wieder grün (35 Tests, 2.537 Assertions).
+
+## 1.1.7 (interne Version 2026090214)
+
+> Belastungstest-Werkzeug für #26 nach dem geforderten Protokoll, erste Größenstufe
+> gemessen.
+
+- **Neu `cli/measure_runtime_pool.php`**: misst den Laufzeit-Fragenpool nach der im
+  Review vorgegebenen Matrix – Cold- und Warm-Lauf getrennt, Median und p95 über
+  Wiederholungen, SQL-Zeit, Gesamtzeit inkl. Hydration, Query-Zahl, Zusatzspeicher
+  und Größe des serialisierten Cache-Payloads.
+- **Der Kaltstart-Effekt ist jetzt belegt**: bei 20.401 Items 4.803 ms kalt gegen
+  57 ms warm – Faktor 84. Genau diese Verwechslung hätte in einer früheren Sitzung
+  beinahe zu einem Umbau des heißen Auswahlpfads geführt. Das Werkzeug mittelt beide
+  Werte nie zusammen.
+- **Befund bei 50.000 Items** (`doc/loadtest-runtime-pool.md`): Laufzeit unkritisch
+  (Median 493 ms, zwei Queries), **kritisch sind Speicher und Payload** – 208 MB
+  Zusatzspeicher und 42 MB serialisierter Cache je Skala und Kontext, linear
+  wachsend. Damit ist erstmals belegt, wofür die Reduktion der 14 nicht gelesenen
+  Spalten tatsächlich zahlt: nicht für die Abfragezeit, sondern für den Speicher.
+- **Bewusst nicht umgesetzt**: die Spaltenreduktion selbst. Die Matrix ist
+  unvollständig (100k und 250k sind in der Verifikationsumgebung mangels
+  Plattenplatz nicht herstellbar), und derselbe Pfad hat zuletzt 14 Tests der
+  Kernauswahl fallen lassen. Der Bericht nennt die Reproduktionsbefehle.
+- **#27 bleibt zurückgestellt**: Die Messung zeigt den Aufwand im Datentransport und
+  im Speicher, nicht in skalenbezogenen Berechnungen. Die im Review genannte
+  Bedingung für eine Reaktivierung ist nicht erfüllt.
+
 ## 1.1.7 (interne Version 2026090213)
 
 > Drei Security-Befunde aus dem Review umgesetzt. Alle wurden vorab am Code

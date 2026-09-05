@@ -114,6 +114,18 @@ abstract class strategy {
     private array $stagecounts = [];
 
     /**
+     * Milliseconds per stage, for the profiling issues #26 and #27 ask for.
+     * @var array
+     */
+    private array $stagetimings = [];
+
+    /**
+     * Start of the stage currently running, or null before the first one.
+     * @var float|null
+     */
+    private ?float $stagestarted = null;
+
+    /**
      * These data provide the context for the selection of the next question.
      *
      * In a previous implementation, this object was passed between middlewares
@@ -748,6 +760,7 @@ abstract class strategy {
         }
 
         $this->cache->set('catquizstagecounts', $this->stagecounts);
+        $this->cache->set('catquizstagetimings', $this->stagetimings);
     }
 
     /**
@@ -762,11 +775,37 @@ abstract class strategy {
      * @return result
      */
     private function record_stage(string $stage, ?result $result = null): result {
+        $now = microtime(true);
+
         $this->stagecounts[$stage] = isset($this->context['questions'])
             ? count($this->context['questions'])
             : null;
 
+        // Issue #26/#27 ask for per-stage timing before any optimisation is
+        // attempted: the decision to rebuild the pool or the filters is only
+        // defensible once a stage is shown to carry the time. The counts alone say
+        // where candidates are lost, not where the time goes.
+        //
+        // Measured as the span since the previous stage, so the numbers add up to the
+        // selection rather than overlapping.
+        if ($this->stagestarted !== null) {
+            $this->stagetimings[$stage] = round(($now - $this->stagestarted) * 1000, 3);
+        }
+        $this->stagestarted = $now;
+
         return $result ?? result::ok($this->context);
+    }
+
+    /**
+     * Returns the milliseconds each stage of the selection took.
+     *
+     * Empty until a selection has run. Intended for the profiling that issues #26 and
+     * #27 require as evidence; nothing in the selection depends on it.
+     *
+     * @return array
+     */
+    public function get_stage_timings(): array {
+        return $this->stagetimings;
     }
 
     /**
