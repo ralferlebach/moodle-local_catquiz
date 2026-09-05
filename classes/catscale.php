@@ -621,7 +621,11 @@ class catscale {
             if (!empty($catscale->name)) {
                 $catscalename = $catscale->name;
 
-                $url = new moodle_url($url, ['scaleid' => $catscaleid], 'lcq_catscales');
+                // Issue #29: tab as a parameter, not as a fragment - see above.
+                $url = new moodle_url($url, [
+                    'tab' => 'catscales',
+                    'scaleid' => $catscaleid,
+                ]);
                 $linktoscale = html_writer::link($url, $catscalename);
 
                 return $linktoscale;

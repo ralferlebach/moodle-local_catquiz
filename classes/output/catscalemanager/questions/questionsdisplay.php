@@ -371,6 +371,11 @@ class questionsdisplay {
      */
     private static function current_page_params(): array {
         $definitions = [
+            // Issue #29 moved tab selection to the server: only the active tab is
+            // built, and the tab travels in the URL. A form that does not carry it
+            // therefore returns to the default tab, and the question list the user
+            // was working in is simply gone from the response.
+            'tab' => PARAM_ALPHA,
             'contextid' => PARAM_INT,
             'scaleid' => PARAM_INT,
             'usesubs' => PARAM_INT,

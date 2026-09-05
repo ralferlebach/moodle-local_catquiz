@@ -300,7 +300,15 @@ class managecatscaledashboard implements renderable, templatable {
             'catscalestats' => $this->catscalestatsarray,
             'testitemdashboard' => $this->testitemdashboardarray,
             'eventlogtable' => $this->eventlogtable,
-            'testitemsimporter' => catscaledashboard::render_testitem_importer(),
+            // Issue #29: building this form registers Moodle's form validation JS,
+            // which looks up the form by id on load. With only the active tab
+            // rendered the element is absent, the lookup returns null and the script
+            // throws - leaving the page permanently "not ready". That is what made
+            // seven Behat scenarios fail at a step that has nothing to do with the
+            // importer.
+            'testitemsimporter' => $this->activetab === 'importer'
+                ? catscaledashboard::render_testitem_importer()
+                : '',
             'testitemsimporterdemodata' => catscaledashboard::render_testitem_demodata(),
             'calculationsdisplay' => $this->calculationsdisplay,
             'catcontextdisplay' => $this->versioningdisplay,

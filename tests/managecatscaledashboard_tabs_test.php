@@ -233,4 +233,108 @@ final class managecatscaledashboard_tabs_test extends advanced_testcase {
             'These keys are used in the template but never exported.'
         );
     }
+    /**
+     * Nothing links to a tab pane by URL fragment any more.
+     *
+     * Before issue #29 every pane was rendered and hidden, so #lcq_questions was a
+     * valid anchor. Now only the active pane exists, and such a link lands on the
+     * default tab with the content it was pointing at simply absent. That is how the
+     * Playwright search tests began failing with "#lcq_questions not found".
+     *
+     * @return void
+     */
+    public function test_nothing_links_to_a_pane_by_fragment(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $root = $CFG->dirroot . '/local/catquiz/classes';
+        $offenders = [];
+
+        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root));
+        foreach ($iterator as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+            $source = file_get_contents($file->getPathname());
+
+            // A moodle_url built with an lcq_ fragment as its third argument.
+            if (preg_match("/,\s*'lcq_\w+'\s*\)/", $source)) {
+                $offenders[] = basename($file->getPathname());
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'These build links to a pane that is no longer rendered unless it is the '
+                . 'active tab; they have to pass the tab as a parameter instead.'
+        );
+    }
+
+    /**
+     * The question search form carries the tab, so submitting stays on the list.
+     *
+     * A form without it returns to the default tab, and the list the user was
+     * working in is not in the response at all.
+     *
+     * @return void
+     */
+    public function test_question_search_form_carries_the_tab(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/output/catscalemanager/questions/'
+                . 'questionsdisplay.php'
+        );
+
+        $start = strpos($source, 'private static function current_page_params');
+        $this->assertNotFalse($start, 'The form builds its hidden fields here.');
+        $end = strpos($source, "\n    }\n", $start);
+        $body = substr($source, $start, $end - $start);
+
+        $this->assertStringContainsString(
+            "'tab' => PARAM_ALPHA",
+            $body,
+            'Without the tab the search returns to the default tab and loses the list.'
+        );
+    }
+    /**
+     * No form is built for a tab that is not being rendered.
+     *
+     * Building a Moodle form registers its validation script, which looks the form up
+     * by id when the page loads. With only the active tab rendered the element is
+     * absent, the lookup returns null and the script throws - and a thrown script
+     * leaves the page permanently "not ready".
+     *
+     * That is how seven Behat scenarios came to fail at "I press Catquiz", a step
+     * that has nothing to do with the CSV importer whose form caused it. The symptom
+     * appeared nowhere near the cause, which is why this is pinned here.
+     *
+     * @return void
+     */
+    public function test_no_form_is_built_for_an_inactive_tab(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/output/catscalemanager/'
+                . 'managecatscaledashboard.php'
+        );
+
+        $start = strpos($source, 'public function export_for_template');
+        $this->assertNotFalse($start);
+        $body = substr($source, $start);
+
+        // The importer form may only be rendered on its own tab.
+        $this->assertMatchesRegularExpression(
+            "/activetab === 'importer'\s*\n?\s*\?\s*catscaledashboard::render_testitem_importer/",
+            $body,
+            'Building this form on every tab registers validation JS for an element '
+                . 'that is not in the document.'
+        );
+    }
 }

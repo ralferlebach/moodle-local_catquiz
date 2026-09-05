@@ -1,5 +1,25 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090211)
+
+> Zwei Folgefehler der #29-Umstellung behoben – beide traten weit entfernt von ihrer
+> Ursache auf.
+
+- **Behat (7 Szenarien) schlug an „I press Catquiz" fehl.** Ursache war der
+  CSV-Importer: Das Formular wurde bei **jedem** Reiter serverseitig gebaut, und
+  Moodle registriert dafür ein Validierungsskript, das das Formular beim Laden per
+  ID sucht. Seit nur noch der aktive Reiter gerendert wird, fehlt das Element – die
+  Suche liefert `null`, das Skript wirft, und die Seite gilt dauerhaft als „nicht
+  bereit". Das Formular wird jetzt nur auf seinem Reiter gebaut.
+- **Playwright (3 Tests) fand `#lcq_questions` nicht.** Sechs Stellen verlinkten
+  weiter per URL-Fragment auf Panes, die es ohne ihren Reiter nicht mehr gibt; das
+  Suchformular trug den Reiter nicht mit und landete nach dem Absenden auf dem
+  Standardreiter, ohne die Liste. Alle auf den `tab`-Parameter umgestellt.
+- `csvimport.js` prüft jetzt auf ein fehlendes Formular-Element, statt mit `null`
+  weiterzuarbeiten.
+- Drei neue Tests halten die Fehlerklasse fest: keine Fragment-Links auf Panes, der
+  `tab` in den Formularparametern, und kein Formularbau für einen inaktiven Reiter.
+
 ## 1.1.7 (interne Version 2026090210)
 
 > CI-Installation repariert; #28 geprüft und begründet nicht umgesetzt.

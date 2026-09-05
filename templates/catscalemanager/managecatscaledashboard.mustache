@@ -100,10 +100,18 @@
 </div>
 
 {{#js}}
+    {{! Issue #29: only the active tab is rendered, so a module whose elements live on
+        another tab finds nothing. csvimport builds a dynamic form from the container
+        it queries; with a null container it throws, and a thrown module leaves the
+        page permanently "not ready" - which is how Behat scenarios started failing at
+        an unrelated step. It is loaded only where its form exists. }}
+    {{#isimporter}}
     require(['local_catquiz/csvimport'], function(init) {
       init.init();
-  });
-  require(['local_catquiz/scaleandcontextselector'], function(init) {
-    init.init();
-  });
+    });
+    {{/isimporter}}
+    {{! The context selector sits above the tabs and is present on every one. }}
+    require(['local_catquiz/scaleandcontextselector'], function(init) {
+      init.init();
+    });
 {{/js}}

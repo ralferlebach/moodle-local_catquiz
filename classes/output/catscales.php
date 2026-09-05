@@ -172,6 +172,9 @@ class catscales implements renderable, templatable {
             // Deep link into the question list, pre-filtered to the unusable items:
             // a number without a way to act on it makes somebody hunt for the rows.
             $item['unusablelink'] = (new \moodle_url('/local/catquiz/manage_catscales.php', [
+                // Without the tab the link lands on the default one, where the list
+                // it is supposed to filter is not rendered at all.
+                'tab' => 'questions',
                 'scaleid' => (int) $item['id'],
                 'contextid' => $this->contextid,
                 'usable' => 0,

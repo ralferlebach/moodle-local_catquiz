@@ -102,7 +102,10 @@ class catscalequestions_table extends wunderbyte_table {
             'contextid' => $this->contextid,
             'scaleid' => $values->catscaleid ?? 0,
             'component' => $values->component ?? "",
-        ], 'lcq_questions');
+            // Issue #29: the tab is a request parameter now; the fragment it used to
+            // use points at a pane that is no longer rendered unless it is active.
+            'tab' => 'questions',
+        ]);
 
         $data['showactionbuttons'][] = [
             'class' => 'btn btn-plain btn-smaller',
