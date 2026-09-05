@@ -26,6 +26,10 @@ on:
       users:
         description: Seeded persons
         default: '2000'
+      items:
+        description: 'Questions with item parameters to seed (0 disables)'
+        required: false
+        default: '20000'
   push:
     branches:
       - main
@@ -195,8 +199,13 @@ jobs:
       - name: Seed a large profile
         id: seed
         run: |
+          # --items is what makes this measure the plugin rather than Moodle's
+          # rendering: without an item pool the manager and the statistics pages run
+          # their pool queries against nothing, and the result says little about how
+          # they behave in an installation that is actually in use.
           php "$MOODLE_DIR/local/catquiz/tests/load/seed_large.php" \
-            --users='${{ github.event.inputs.users || 2000 }}' > /tmp/seed.env
+            --users='${{ github.event.inputs.users || 2000 }}' \
+            --items='${{ github.event.inputs.items || 20000 }}' > /tmp/seed.env
           cat /tmp/seed.env
           # Expose the export lines as environment variables.
           sed -n "s/^export \([A-Z_]*\)='\(.*\)'$/\1=\2/p" /tmp/seed.env >> "$GITHUB_ENV"
@@ -214,7 +223,6 @@ jobs:
             -e CONTEXTID="$CONTEXTID" \
             -e VUS='${{ github.event.inputs.vus || 25 }}' \
             -e DURATION='${{ github.event.inputs.duration || '90s' }}' \
-            --summary-export=k6-summary.json \
             plugin/tests/load/catquiz-read-endpoints.js
 
       - name: Show Moodle diagnostics on failure

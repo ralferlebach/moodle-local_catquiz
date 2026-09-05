@@ -404,4 +404,52 @@ final class subplugin_registration_test extends advanced_testcase {
                 . 'bootstrap aborts before a single test runs.'
         );
     }
+    /**
+     * The load plans are seeded with an item pool, not just with users.
+     *
+     * seed_large.php used to create contexts, scales and person parameters but no
+     * questions and no item parameters. The load plans then exercised the manager and
+     * the statistics pages against an empty pool: a JMeter run reported 60 ms for the
+     * CAT manager that way, while the same page over 50.000 items needs an order of
+     * magnitude more. The numbers looked reassuring and measured something else.
+     *
+     * @return void
+     */
+    public function test_load_workflows_seed_an_item_pool(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $seeder = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/tests/load/seed_large.php'
+        );
+
+        // The seeder has to be able to create a pool at all.
+        foreach (['local_catquiz_items', 'local_catquiz_itemparams', 'question_versions'] as $table) {
+            $this->assertStringContainsString(
+                $table,
+                $seeder,
+                "Without writing to $table the seeded site has no usable item pool."
+            );
+        }
+
+        // And the workflows have to ask for one.
+        $missing = [];
+        foreach (['load-k6.yml', 'load-jmeter.yml'] as $name) {
+            $workflow = $CFG->dirroot . '/local/catquiz/.github/workflows/' . $name;
+            if (!file_exists($workflow)) {
+                continue;
+            }
+            if (!str_contains(file_get_contents($workflow), '--items=')) {
+                $missing[] = $name;
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $missing,
+            'These load workflows seed no items, so their results describe an empty '
+                . 'installation rather than a loaded one.'
+        );
+    }
 }

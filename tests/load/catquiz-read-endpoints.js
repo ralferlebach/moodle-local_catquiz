@@ -99,3 +99,14 @@ export default function () {
 
   sleep(1);
 }
+
+// k6 v2 no longer writes anything for --summary-export: the run produced correct
+// numbers while the uploaded artefact contained a summary with every metric at zero,
+// which reads like a run that never happened. handleSummary() is the supported way
+// and writes the same structure the evaluation expects.
+export function handleSummary(data) {
+    return {
+        'k6-summary.json': JSON.stringify(data, null, 2),
+        stdout: '\nSee k6-summary.json for the full metrics.\n',
+    };
+}

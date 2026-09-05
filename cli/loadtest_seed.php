@@ -231,6 +231,20 @@ loadtest_bulk('local_catquiz_itemparams', function (int $i) use ($itemids, $cont
     ];
 }, count($itemids), $batch, 'itemparams');
 
+// The planner still has statistics from before the bulk insert - to it both tables
+// look empty. It then plans the correlated subquery below as a nested loop over
+// sequential scans, which is quadratic at a quarter of a million rows: the step ran
+// for over half an hour without finishing. Refreshing the statistics first is what
+// lets the existing index on itemparams.itemid be used at all.
+cli_writeln('Refreshing statistics before linking ...');
+if ($DB->get_dbfamily() === 'postgres') {
+    $DB->execute('ANALYZE {local_catquiz_items}');
+    $DB->execute('ANALYZE {local_catquiz_itemparams}');
+} else if ($DB->get_dbfamily() === 'mysql') {
+    $DB->execute('ANALYZE TABLE {local_catquiz_items}');
+    $DB->execute('ANALYZE TABLE {local_catquiz_itemparams}');
+}
+
 cli_writeln('Linking active parameters ...');
 $DB->execute(
     'UPDATE {local_catquiz_items} lci

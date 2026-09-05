@@ -1,5 +1,61 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090223)
+
+> Drei Befunde aus den externen Läufen.
+
+- **k6 lieferte eine leere Zusammenfassung, obwohl der Lauf korrekt war.** Das Log
+  zeigt 1.247 Iterationen und p50 144 ms; das hochgeladene Artefakt enthielt jede
+  Metrik auf null – das liest sich wie ein Lauf, der nie stattgefunden hat.
+  `--summary-export` schreibt in k6 v2 nichts mehr. Das Skript nutzt jetzt
+  `handleSummary()`, den unterstützten Weg, und das Flag ist entfernt.
+- **Der Verknüpfungsschritt des Lastseeders hing über eine halbe Stunde.** Nach dem
+  Masseneinfügen sind die Tabellenstatistiken veraltet – für den Planer sehen beide
+  Tabellen leer aus, und er plant die korrelierte Unterabfrage als verschachtelte
+  Schleife über sequenzielle Scans. Bei einer Viertelmillion Zeilen ist das
+  quadratisch. Ein `ANALYZE` davor lässt den vorhandenen Index auf
+  `itemparams.itemid` überhaupt erst nutzen: lokal **5,8 s** für 50.000 Items.
+- **Der Prüfschritt scheiterte stumm.** Prozesssubstitution verbirgt ein
+  fehlgeschlagenes `php` vor `bash -e`; die anschließende Zahlenprüfung brach dann
+  mit einem Rechenfehler ab, der die Ursache nicht nennt. Ein leeres Ergebnis wird
+  jetzt als solches gemeldet, samt Zählung zur Einordnung.
+
+## 1.1.7 (interne Version 2026090222)
+
+> Der Lasttest-Workflow installierte die Datenbank nicht.
+
+- **`load-runtime-pool.yml` richtet die Site jetzt vollständig ein.**
+  `moodle-plugin-ci install --no-init` spielt den Code ein, legt aber kein Schema an.
+  Der Seeder scheiterte deshalb auf **beiden** Engines mit „Table
+  mdl_local_catquiz_catscales doesn't exist" – einer Meldung, die auf das Plugin
+  zeigt, während die Ursache die fehlende Site-Installation ist. Ergänzt um
+  `install_database.php`, `upgrade.php` und `purge_caches.php`, wie es die
+  funktionierenden Lastworkflows seit jeher tun.
+- **Ein Schritt prüft das Live-Schema**, bevor gesät wird. Ein Seeder gegen eine
+  halb installierte Site scheitert tief in der DML-Schicht, wo die Meldung die
+  Ursache nicht mehr nennt.
+- Plattenplatz auf dem Runner: 86 GB frei – die 250.000-Item-Stufe ist dort
+  herstellbar, anders als in der Verifikationsumgebung.
+
+## 1.1.7 (interne Version 2026090221)
+
+> Lasttests messen jetzt den Fragenpool, nicht die leere Installation.
+
+- **`tests/load/seed_large.php` legt Fragen und Itemparameter an.** Bisher erzeugte
+  es Kontext, Skalen und Personparameter – aber **keine Fragen und keine
+  Itemparameter**. Die Lastpläne prüften damit Rendering, Sessions und
+  Nebenläufigkeit, während die Abfragen, die mit dem Pool wachsen, gegen nichts
+  liefen. Ein JMeter-Lauf meldete so 60 ms für den CAT-Manager; dieselbe Seite
+  braucht über 50.000 Items eine Größenordnung mehr. Die Zahlen sahen beruhigend aus
+  und maßen etwas anderes.
+- **`load-k6.yml` und `load-jmeter.yml` übergeben `--items`** (Vorgabe 20.000, über
+  „Run workflow" einstellbar, `0` schaltet ab).
+- Die Schwierigkeiten sind über einen realistischen Bereich verteilt statt konstant:
+  Ein Pool mit lauter gleich schweren Items lässt die Auswahl entarten und misst
+  einen Fall, der nicht vorkommt.
+- **Ein Test hält beides fest**: dass der Seeder in die Item-Tabellen schreibt und
+  dass die Lastworkflows einen Pool anfordern.
+
 ## 1.1.7 (interne Version 2026090220)
 
 > Subplugin-Pipelines brachen vor dem ersten Test ab.
