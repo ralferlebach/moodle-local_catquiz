@@ -28,6 +28,14 @@ concurrency:
 
 jobs:
   test:
+    # Without an explicit limit a cancelled run ends with exit code 143 (SIGTERM) and
+    # no message: the log simply stops mid-suite, which reads like a crashed test. The
+    # limit makes the difference visible - a timeout is reported as a timeout, and the
+    # number says how far from it the run normally is.
+    #
+    # Chosen well above the observed runtime rather than tightly: the point is to
+    # diagnose, not to police.
+    timeout-minutes: 90
     name: "CI / ${{ matrix.moodle-branch }} / PHP ${{ matrix.php }} / ${{ matrix.database }}"
     runs-on: ubuntu-22.04
 

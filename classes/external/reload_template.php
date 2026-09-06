@@ -82,7 +82,13 @@ class reload_template extends external_api {
     /**
      * Execute this webservice.
      *
-     * @param string $data
+     * @param string $renderer Symbolic renderer name, resolved through self::RENDERERS
+     * @param string $action Action to run before rendering, empty for none
+     * @param string $actionparams Parameters for the action
+     * @param int $testitemid
+     * @param int $contextid
+     * @param int $catscaleid
+     * @param string $component
      *
      * @return boolean external_function_parameters
      *

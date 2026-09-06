@@ -1,5 +1,46 @@
 # Changelog – local_catquiz
 
+## 1.2.0 (interne Version 2026090509)
+
+> Messreihe 250.000 Items ausgewertet; zwei CI-Fehler behoben.
+
+- **Messreihe mit schlankem Spaltensatz** (`doc/workpackage-moodle45-report.md`):
+  Payload **206 → 177 MB**, fast genau der vorhergesagte Wert. Damit ist die
+  Korrektur des Messwerkzeugs bestätigt. Beide Engines liegen beim Pool gleichauf
+  (2.216 gegen 2.210 ms) – der MariaDB-Rückstand ist abfragespezifisch, nicht
+  generell.
+- **#58** bleibt auf MariaDB verfehlt: p95 1.187 ms gegen 218 ms auf PostgreSQL,
+  25 % besser als im ersten Lauf, aber beim 2,4-fachen der Schwelle.
+- **#21** bei 250.000 Items: leichte Zählung spart auf **MariaDB 22 %**
+  (1.461 → 1.145 ms), auf PostgreSQL 2 %. Bestätigt den lokalen 20k-Befund in
+  Richtung und Grössenordnung.
+- **PHPDoc-Checker war rot durch zwei meiner eigenen Änderungen**:
+  `reload_template::execute` (typisierte Parameter statt JSON-Blob) und
+  `catquiz::return_sql_for_catscalequestions` (`$leanselect`) hatten erweiterte
+  Signaturen bei unverändertem Docblock. Beide nachgezogen, Checker Exit 0.
+- **PHPUnit endete mit Code 143** – SIGTERM, also abgebrochen und nicht rot. Der Lauf
+  stoppte mitten in `itemparam_recovery_test`; der Test braucht lokal **drei
+  Sekunden** und war damit nur die Stelle, an der es traf, nicht der Grund. Ohne
+  Zeitlimit endet ein abgebrochener Lauf ohne Meldung und liest sich wie ein
+  abgestürzter Test. Die Jobs `phpunit` (60), `behat` (60), `playwright` (45) und
+  `test` im main-Workflow (90) haben jetzt ein explizites `timeout-minutes` – bewusst
+  weit über der beobachteten Laufzeit: Ein Timeout soll als Timeout erkennbar sein,
+  nicht die Suite disziplinieren.
+
+## 1.2.0 (interne Version 2026090507)
+
+- **#21 (Anschluss) und #58 als blockiert dokumentiert**, mit Bezug auf
+  [wunderbyte_table#141](https://github.com/Wunderbyte-GmbH/moodle-local_wunderbyte_table/pull/141).
+  Beide laufen an derselben Stelle zusammen: `query_db_cached_filtered()` ist
+  `private` und ist der einzige Ort, an dem Paginierung, Filter und Cache
+  zusammengesetzt werden - genau dort muessten Sortierung, Filter und `LIMIT` in die
+  innere Abfrage gelangen.
+- Festgehalten ist auch, was der PR **nicht** loest: Die Uebersetzung von Sortierung
+  und Filter nach innen bleibt zu leisten, und ein Override koppelt `local_catquiz`
+  eng an die Interna von `wunderbyte_table`.
+- Der Statusblock steht jetzt am Kopf von `doc/issue-21-followup.md`, nicht auf
+  Seite drei.
+
 ## 1.2.0 (interne Version 2026090506)
 
 > Ab dieser Auslieferung trägt die Linie das Label `1.2.0`. Die älteren Einträge

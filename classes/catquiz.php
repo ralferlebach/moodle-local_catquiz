@@ -249,6 +249,7 @@ class catquiz {
      * @param int $userid
      * @param string|null $orderby If given, order by the given field in ascending order
      * @param int|null $questionid If given, restrict the query to this single question
+     * @param bool $leanselect Omit the columns only the manager interface displays
      *
      * @return array
      *
