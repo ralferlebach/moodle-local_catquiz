@@ -25,9 +25,14 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_catquiz';
-$plugin->supported = [405, 500];
+// Moodle 4.5 only. The upper bound used to say 500, which declares support for a
+// release line this plugin has not been verified against - the CI matrix builds
+// MOODLE_405_STABLE, and nothing here has been run on 5.x. Declaring support that
+// was never tested is a promise to administrators that the code does not keep.
+// Moodle 5.x is a work package of its own.
+$plugin->supported = [405, 405];
 $plugin->release = '1.1.7';
-$plugin->version = 2026090224;
+$plugin->version = 2026090501;
 $plugin->requires = 2024100700;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [

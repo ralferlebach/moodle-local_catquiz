@@ -452,4 +452,34 @@ final class subplugin_registration_test extends advanced_testcase {
                 . 'installation rather than a loaded one.'
         );
     }
+    /**
+     * The plugin declares support for Moodle 4.5 only.
+     *
+     * The upper bound used to say 500. The CI matrix builds MOODLE_405_STABLE and
+     * nothing here has been run against 5.x, so that declaration promised
+     * administrators a compatibility the code had never been verified to have.
+     * Moodle 5.x is a work package of its own; until it is done, saying so is the
+     * honest state.
+     *
+     * @return void
+     */
+    public function test_supported_versions_are_limited_to_moodle_45(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $plugin = new \stdClass();
+        include($CFG->dirroot . '/local/catquiz/version.php');
+
+        $this->assertSame(
+            [405, 405],
+            $plugin->supported,
+            'Declaring a release line that was never tested is a promise the code '
+                . 'does not keep.'
+        );
+
+        // The requires value stays where it is: 4.5 is what the plugin needs, and raising it
+        // here would lock out installations the plugin does support.
+        $this->assertSame(2024100700, (int) $plugin->requires);
+    }
 }

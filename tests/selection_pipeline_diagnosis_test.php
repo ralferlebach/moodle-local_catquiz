@@ -242,4 +242,63 @@ final class selection_pipeline_diagnosis_test extends advanced_testcase {
             'Writing only here is what left the reported abort without any counts.'
         );
     }
+    /**
+     * Each stage records its own candidate count, not the previous stage's.
+     *
+     * The chain used to read
+     * record_stage('add_scale_standarderror', $this->maximumquestionscheck()).
+     * PHP evaluates arguments before the call, so maximumquestionscheck ran first and
+     * its result was filed under add_scale_standarderror. Every count in the trace was
+     * shifted by one stage.
+     *
+     * For issue #64 that is not a cosmetic problem: the whole point of the trace is to
+     * name the stage that discards the last candidate. A shifted trace names its
+     * predecessor, and the investigation goes to the wrong filter with data that looks
+     * authoritative.
+     *
+     * @return void
+     */
+    public function test_each_stage_records_its_own_count(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/teststrategy/strategy.php'
+        );
+
+        // A record_stage call that also runs the next filter is the defect itself.
+        // Comment lines are dropped first: the fix is explained in a comment that
+        // quotes the old call, and matching that would make the test fail on its own
+        // documentation.
+        $code = implode("\n", array_filter(
+            explode("\n", $source),
+            fn($line) => !preg_match('/^\s*(\/\/|\*|\/\*)/', $line)
+        ));
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/record_stage\(\s*\x27\w+\x27\s*,\s*\$this->\w+\(\)/',
+            $code,
+            'Passing the next filter as an argument files its result under the '
+                . 'previous stage name, because PHP evaluates arguments first.'
+        );
+
+        // Every stage of the chain still has to appear, or the trace has holes.
+        foreach (
+            [
+            'start',
+            'add_scale_standarderror',
+            'maximumquestionscheck',
+            'removeplayedquestions',
+            'noremainingquestions',
+            'fisherinformation',
+            ] as $stage
+        ) {
+            $this->assertStringContainsString(
+                "record_stage('$stage')",
+                $source,
+                "The stage $stage has to record a count of its own."
+            );
+        }
+    }
 }

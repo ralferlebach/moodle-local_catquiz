@@ -126,6 +126,15 @@ class questionsdisplay {
 
         $table->set_filter_sql($select, $from, $where, $filter, $params);
 
+        // Issue #21: the helper existed but was never called, so the table kept
+        // counting its rows with the full query - the one carrying the per question
+        // and per user aggregates, computed only to be thrown away by COUNT().
+        //
+        // The statistics are LEFT JOINs: they can neither add nor remove a row, so
+        // a light query returns the same number. Passing the scale ids and the
+        // context here is what lets the table build it.
+        $table->set_count_context($idsforquery, (int) $catcontext);
+
         $columnsarray = [
             'status' => get_string('status', 'core'),
             'qtype' => get_string('type', 'local_catquiz'),

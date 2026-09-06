@@ -2882,4 +2882,123 @@ final class strategy_test extends advanced_testcase {
         fclose($file);
         return $filename;
     }
+    /**
+     * Issue #64: after answering the first question, a second one is selected.
+     *
+     * The reported symptom is an attempt that stops after Q1. The stage
+     * instrumentation added earlier is diagnosis, not a fix - it records how many
+     * candidates each pipeline stage saw, so that a run which stops can be attributed
+     * to the stage that emptied the pool rather than guessed at.
+     *
+     * This test drives the real flow: start, fetch Q1, answer it, fetch Q2. If the
+     * defect reproduces, the assertion fails and the recorded stage counts say where.
+     *
+     * @dataProvider stopping_strategies_provider
+     * @param int $strategy
+     * @param string $label
+     * @return void
+     */
+    public function test_second_question_is_selected_after_answering_the_first(
+        int $strategy,
+        string $label
+    ): void {
+        global $DB, $USER;
+
+        // Same harness the other full-flow test uses: deterministic ability and
+        // standard error, and the pilot stage stubbed out. Without these the run
+        // depends on the estimator branch and a failure could not be attributed to the
+        // selection pipeline.
+        putenv(
+            sprintf(
+                'USE_TESTING_CLASS_FOR=%s',
+                implode(',', [
+                    'local_catquiz\\teststrategy\\preselect_task\\updatepersonability',
+                    'local_catquiz\\teststrategy\\preselect_task\\maybe_return_pilot',
+                ])
+            )
+        );
+        putenv('CATQUIZ_TESTING_ABILITY=0.0');
+        putenv('CATQUIZ_TESTING_STANDARDERROR=1.0');
+        putenv('CATQUIZ_TESTING_SKIP_FEEDBACK=true');
+
+        $settings = [
+            'maxquestions' => 250,
+            'maxquestionspersubscale' => 25,
+            'standarderror_min' => 0.25,
+            'standarderror_max' => 0.5,
+        ];
+        $this->createtestenvironment($strategy, $settings)->save_or_update();
+        catquiz_handler::prepare_attempt_caches();
+        $this->preventResetByRollback();
+
+        $attempt = new attempt($this->adaptivequiz, $USER->id);
+        $attemptrec = $attempt->get_attempt();
+        $attemptid = $attemptrec->id;
+
+        // First question.
+        $attemptrec = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
+        $adaptivequiz = $DB->get_record('adaptivequiz', ['id' => $attemptrec->instance], '*', MUST_EXIST);
+        $attempt = new attempt($adaptivequiz, $attemptrec->userid);
+        [$firstid] = catquiz_handler::fetch_question_id('1', 'mod_adaptivequiz', $attempt->get_attempt());
+
+        $this->assertNotEquals(0, $firstid, "$label: no first question was selected at all.");
+
+        // Answer it - wrongly, which is the case the issue describes.
+        //
+        // The question usage has to be linked to the attempt and the counter raised,
+        // exactly as the full-flow test does. Without that the answer is written but
+        // never associated with the attempt, and the next selection legitimately
+        // offers the same question again - which looks like the defect under
+        // investigation while being an artefact of the harness.
+        $question = question_bank::load_question($firstid);
+        $this->createresponse($question, false);
+        $attemptrec = $attempt->get_attempt();
+        $attemptrec->timemodified = time();
+        $attemptrec->questionsattempted = ($attemptrec->questionsattempted ?? 0) + 1;
+        $DB->update_record('adaptivequiz_attempt', $attemptrec);
+        $attempt->set_quba_id($this->quba->get_id());
+
+        // Second question.
+        $attemptrec = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
+        $attempt = new attempt($adaptivequiz, $attemptrec->userid);
+        [$secondid, $message] = catquiz_handler::fetch_question_id(
+            '1',
+            'mod_adaptivequiz',
+            $attempt->get_attempt()
+        );
+
+        if ($secondid == 0) {
+            // The run stopped. Report which stage emptied the pool instead of only
+            // reporting that it did - that is what the instrumentation exists for.
+            $cache = \cache::make('local_catquiz', 'adaptivequizattempt');
+            $counts = $cache->get('catquizstagecounts');
+            $trace = is_array($counts) ? json_encode($counts) : 'no stage counts recorded';
+
+            $this->fail("$label: no second question after answering the first. "
+                . "Message: $message. Stage counts: $trace");
+        }
+
+        $this->assertNotEquals(
+            $firstid,
+            $secondid,
+            "$label: the same question was selected twice."
+        );
+    }
+
+    /**
+     * Strategies to drive through the two-question run.
+     *
+     * More than one, because a defect in a shared pipeline stage shows up in all of
+     * them while one in a strategy's own middleware does not - which of the two it is
+     * is exactly the question.
+     *
+     * @return array
+     */
+    public static function stopping_strategies_provider(): array {
+        return [
+            'fastest' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, 'fastest'],
+            'balanced' => [LOCAL_CATQUIZ_STRATEGY_BALANCED, 'balanced'],
+            'lowest' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'lowest subscale'],
+        ];
+    }
 }

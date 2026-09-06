@@ -173,4 +173,31 @@ final class feedback_path_robustness_test extends advanced_testcase {
             'array_key_first() on a possibly empty array is what produced the null call.'
         );
     }
+    /**
+     * A half-built attemptfeedback is inert, not explosive.
+     *
+     * Issue #64: the constructor returns early when no attempt is found and again when
+     * the attempt has no test environment. contextid, courseid and teststrategy are
+     * typed properties without defaults, so on those paths the object was left
+     * half-built and the next read threw "must not be accessed before initialization".
+     *
+     * Observed in the selection pipeline, where strategy.php builds this object after
+     * each answer: the exception ended the run and the learner saw no further
+     * question. The symptom - "the attempt stops after Q1" - points nowhere near the
+     * feedback code that produced it.
+     *
+     * @return void
+     */
+    public function test_attemptfeedback_without_test_environment_does_not_throw(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        // An attempt id that resolves to no test environment takes the second early
+        // return - the path that used to leave the object unusable.
+        $feedback = new \local_catquiz\output\attemptfeedback(999999, 0);
+
+        $this->assertSame(0, $feedback->contextid);
+        $this->assertSame(0, $feedback->courseid);
+        $this->assertSame(0, $feedback->teststrategy);
+    }
 }

@@ -196,7 +196,7 @@ final class capability_declaration_test extends advanced_testcase {
 
             if (
                 preg_match('/new\s+\$\w+\s*\(/', $source)
-                    && !str_contains($source, 'ALLOWED_RENDER_CLASSES')
+                    && !str_contains($source, 'RENDERERS')
             ) {
                 $offenders[] = basename($file) . ' (variable class without an allowlist)';
             }
@@ -238,8 +238,17 @@ final class capability_declaration_test extends advanced_testcase {
         $end = strpos($source, "\n    }\n", $start);
         $body = substr($source, $start, $end - $start);
 
+        // Issue #68: the attempt is loaded once and every role is authorised against
+        // that record, so the check is now an owner comparison rather than a call to
+        // a helper. What has to hold is unchanged: the id from the client is never
+        // acted on without establishing who owns it.
         $this->assertStringContainsString(
-            'self::require_own_attempt(',
+            "get_record('local_catquiz_attempts'",
+            $body,
+            'The attempt has to be loaded before anyone is authorised for it.'
+        );
+        $this->assertStringContainsString(
+            'attempt->userid !== (int) $USER->id',
             $body,
             'An attempt id from the client needs an ownership check, not just a context.'
         );

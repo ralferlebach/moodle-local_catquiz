@@ -99,6 +99,23 @@ class attemptfeedback implements renderable, templatable {
         $courseid = null
     ) {
         global $USER;
+
+        // Issue #64: these are typed properties without defaults, and the constructor
+        // has two early returns - no attempt found, and no test environment for the
+        // attempt. Every path that reached one of them left the object half-built, and
+        // the next property read threw "must not be accessed before initialization".
+        //
+        // In the selection pipeline that exception ends the run, so the learner is
+        // shown no further question. The symptom appears as "the attempt stops after
+        // Q1" and points nowhere near the feedback code that caused it.
+        //
+        // Initialising first makes a half-built object inert rather than explosive:
+        // get_progress() then works against a zero context instead of throwing.
+        $this->attemptid = 0;
+        $this->contextid = 0;
+        $this->courseid = 0;
+        $this->teststrategy = 0;
+
         if ($attemptid === 0) {
             // This can still return nothing. In that case, we show a message that the user has no attempts yet.
             if (!$attemptid = catquiz::get_last_user_attemptid($USER->id)) {

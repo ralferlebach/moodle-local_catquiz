@@ -239,12 +239,26 @@ abstract class strategy {
         }
 
         try {
+            // Issue #64: every stage now records the pool as it stands *after that
+            // stage ran*. The previous form passed the next filter as an argument -
+            // record_stage('add_scale_standarderror', $this->maximumquestionscheck()) -
+            // and PHP evaluates arguments before the call, so each count was filed
+            // under the name of the preceding stage.
+            //
+            // A trace shifted by one stage points the investigation at the wrong
+            // filter, which is the exact opposite of what this instrumentation exists
+            // for: it would have named add_scale_standarderror as the step that
+            // emptied the pool while maximumquestionscheck did it.
             $this->record_stage('start');
             $this->add_scale_standarderror()
-                ->and_then(fn () => $this->record_stage('add_scale_standarderror', $this->maximumquestionscheck()))
-                ->and_then(fn () => $this->record_stage('maximumquestionscheck', $this->removeplayedquestions()))
-                ->and_then(fn () => $this->record_stage('removeplayedquestions', $this->noremainingquestions()))
-                ->and_then(fn () => $this->record_stage('noremainingquestions', $this->fisherinformation()))
+                ->and_then(fn () => $this->record_stage('add_scale_standarderror'))
+                ->and_then(fn () => $this->maximumquestionscheck())
+                ->and_then(fn () => $this->record_stage('maximumquestionscheck'))
+                ->and_then(fn () => $this->removeplayedquestions())
+                ->and_then(fn () => $this->record_stage('removeplayedquestions'))
+                ->and_then(fn () => $this->noremainingquestions())
+                ->and_then(fn () => $this->record_stage('noremainingquestions'))
+                ->and_then(fn () => $this->fisherinformation())
                 ->or_else(fn($res) => $this->after_error($res))
                 ->expect();
             $this->record_stage('fisherinformation');

@@ -335,6 +335,16 @@ class progress implements JsonSerializable {
         $instance->breakend = $data->breakend;
         $instance->activescales = (array) $data->activescales;
         $instance->droppedscales = property_exists($data, 'droppedscales') ? (array) $data->droppedscales : [];
+
+        // Issue #56: attempts written before the trace was persisted have no such
+        // key. Defaulting to an empty array keeps them loadable - refusing them would
+        // break running attempts to fix a display detail.
+        $instance->abilitytrace = property_exists($data, 'abilitytrace')
+            // PHP 8.2 deprecates 'static::method' as a callable string and a later
+            // version removes it. This sits on the abilitytrace load path, so the
+            // removal would turn a loadable attempt into a fatal.
+            ? array_map([static::class, 'to_array'], (array) $data->abilitytrace)
+            : [];
         $instance->responses = (array) $data->responses;
         foreach ($instance->responses as $id => $val) {
             $instance->responses[$id] = (array) $val;
@@ -445,6 +455,12 @@ class progress implements JsonSerializable {
             'excludedquestions' => $this->excludedquestions,
             'gaveupquestions' => $this->gaveupquestions,
             'starttime' => $this->starttime,
+            // Issue #56: the trace was collected for the whole attempt and then
+            // dropped at the end of the request. Everything that reads it - the
+            // learning progress chart, the debug view - saw at most the steps of the
+            // current page load, which looks like a short attempt rather than a lost
+            // history.
+            'abilitytrace' => $this->abilitytrace,
         ];
     }
 
@@ -1261,5 +1277,26 @@ class progress implements JsonSerializable {
     private static function get_cache_key(int $attemptid): string {
         global $USER;
         return sprintf('progress_user_%d_id_%d', $USER->id, $attemptid);
+    }
+    /**
+     * Casts a decoded json branch back to a nested array.
+     *
+     * json_decode() returns objects, while the trace is written and read as arrays of
+     * arrays. Without the cast the restored value has the right shape but the wrong
+     * type, and the first array access on it fails.
+     *
+     * @param mixed $value
+     * @return array
+     */
+    protected static function to_array($value): array {
+        $value = (array) $value;
+
+        foreach ($value as $key => $entry) {
+            if (is_object($entry) || is_array($entry)) {
+                $value[$key] = (array) $entry;
+            }
+        }
+
+        return $value;
     }
 }

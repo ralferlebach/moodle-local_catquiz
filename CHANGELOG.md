@@ -1,5 +1,47 @@
 # Changelog – local_catquiz
 
+## 1.1.7 (interne Version 2026090501)
+
+> Arbeitsauftrag Moodle-4.5-Stabilisierung: Abschnitte 1, 3–7, 12, 13.
+
+- **Nur Moodle 4.5 deklariert** (`supported = [405, 405]`). Die obere Grenze stand auf
+  500, obwohl die CI ausschliesslich `MOODLE_405_STABLE` baut – eine Zusage an
+  Administratoren, die der Code nie eingelöst hat.
+- **#65:** Vier Lücken in den External Functions geschlossen (fehlende Allowlist,
+  fehlende Capabilities, fehlende Kontext- und Skalenprüfung). Fünf Negativtests.
+  Bei `collect_responses` ist die Allowlist bewusst *nicht* anwendbar – die Nutzlast
+  trägt keine Skala; eine Prüfung, die immer besteht, sähe nach Schutz aus.
+- **#66:** Der öffentliche Vertrag von `reload_template` führt keinen PHP-Klassennamen
+  mehr (`renderer=questiondatacard` statt `classlocation=\local_catquiz\…`) und keine
+  CSV-Parameter, sondern typisierte Felder, die `validate_parameters()` prüfen kann.
+- **#67:** Die drei Legacy-Attempt-Webservices entfernt. Sie waren **nie
+  implementiert** (`attemptid = 0`, leeres Array, `MAX(id) FROM {question}`) und
+  prüften eine `CONTEXT_MODULE`-Capability im Systemkontext. Kein Aufrufer in vier
+  geprüften Quellen, darunter `local_adele`.
+- **#68:** Manager und Lehrende passierten allein aufgrund ihrer Capability – eine
+  beliebige Attempt-ID erzeugte ein Ereignis über etwas, das nie stattfand. Der
+  Versuch wird jetzt geladen, bevor irgendjemand autorisiert wird. Sieben Rollentests,
+  jede Ablehnung doppelt geprüft (verweigert **und** kein Ereignis).
+- **#64:** Die Stufen-Instrumentierung war um **eine Stufe verschoben** – PHP wertet
+  Argumente vor dem Aufruf aus, also lag jede Zählung unter dem Namen der
+  Vorgängerstufe. Eine so verschobene Spur benennt den falschen Filter. Korrigiert,
+  Strategie-Suite unverändert (38 Tests, 2.549 Assertions). Neu:
+  `cli/reproduce_issue_64.php`.
+  Dabei gefunden und **bewusst nicht zugeschüttet**: `count($context['questions'])`
+  ohne Null-Prüfung. Ein `?? []` würde den Fatal in „keine Fragen mehr" verwandeln –
+  und damit das Symptom von #64 erzeugen statt beheben.
+- **#21:** `set_count_context()` existierte, wurde aber **nirgends aufgerufen**. Jetzt
+  verdrahtet. Gemessen (warm, gleiche Zeilenzahl): MariaDB 20k **122 → 85 ms (30 %)**,
+  PostgreSQL 50k 164 → 153 ms (7 %). Die Zählmessung läuft jetzt im
+  engine-übergreifenden Werkzeug mit.
+- **#56:** Der Ability-Trace übersteht jetzt nachweislich die **Datenbank**, nicht nur
+  die JSON-Kodierung – der bestehende Test deckte nur letztere ab. Dabei gefunden:
+  `array_map('static::to_array', …)` ist seit PHP 8.2 deprecated und liegt genau auf
+  dem Ladepfad des Trace; die Entfernung in einer späteren PHP-Version machte aus
+  einem ladbaren Versuch einen Fatal.
+- **#27 und #28** bleiben *closed / not planned* – deckt sich mit den Messbefunden
+  dieser Sitzung.
+
 ## 1.1.7 (interne Version 2026090224)
 
 > Der Lasttest-Workflow brach wortlos ab – an einer Zeile Shell.

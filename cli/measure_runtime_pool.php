@@ -171,6 +171,58 @@ function measure_add_questions(int $scaleid, int $contextid, int $pagesize = 10)
     ];
 }
 
+/**
+ * Measures both ways of counting the question list.
+ *
+ * Issue #21: the table counts its rows to build the pager. Done with the full query
+ * that carries the per question and per user aggregates, those aggregates are
+ * computed only to be discarded by COUNT(). The light query keeps the joins that
+ * define the row set and drops the ones that cannot change it.
+ *
+ * Measured here rather than in a separate script because the difference is
+ * engine-dependent: the aggregates are exactly what MariaDB handles differently from
+ * PostgreSQL, and issue #58 shows a factor of six between them at 250k. A number from
+ * one engine says nothing about the other.
+ *
+ * @param array $scaleids
+ * @param int $contextid
+ * @return array
+ */
+function measure_counts(array $scaleids, int $contextid): array {
+    global $DB;
+
+    [$select, $from, $where, , $params] = \local_catquiz\catquiz::return_sql_for_catscalequestions(
+        $scaleids,
+        $contextid,
+        []
+    );
+
+    $start = microtime(true);
+    $full = $DB->count_records_sql(
+        "SELECT COUNT(*) FROM (SELECT $select FROM $from WHERE $where) countcheck",
+        $params
+    );
+    $fullms = (microtime(true) - $start) * 1000;
+
+    [$lightfrom, $lightwhere, $lightparams] =
+        \local_catquiz\catquiz::return_sql_for_catscalequestions_count($scaleids, $contextid);
+
+    $start = microtime(true);
+    $light = $DB->count_records_sql(
+        "SELECT COUNT(*) FROM $lightfrom WHERE $lightwhere",
+        $lightparams
+    );
+    $lightms = (microtime(true) - $start) * 1000;
+
+    return [
+        'full' => $full,
+        'fullms' => $fullms,
+        'light' => $light,
+        'lightms' => $lightms,
+        'equal' => $full === $light,
+    ];
+}
+
 \core\session\manager::set_user(get_admin());
 
 $items = $DB->count_records('local_catquiz_items');
@@ -243,6 +295,40 @@ cli_writeln(sprintf(
     $addlast['statms'],
     $addlast['queries']
 ));
+
+// Issue #21: the count that builds the pager, both ways, on whichever engine this
+// run uses. Cold and warm are kept apart for the same reason as everywhere else in
+// this script.
+purge_all_caches();
+$countcold = measure_counts([$scaleid], $contextid);
+measure_counts([$scaleid], $contextid);
+
+$fulltimes = [];
+$lighttimes = [];
+$countlast = null;
+for ($i = 0; $i < $repeats; $i++) {
+    $countlast = measure_counts([$scaleid], $contextid);
+    $fulltimes[] = $countlast['fullms'];
+    $lighttimes[] = $countlast['lightms'];
+}
+
+cli_writeln("\nList count (issue #21):");
+cli_writeln(sprintf('  Cold   full %.0f ms   light %.0f ms', $countcold['fullms'], $countcold['lightms']));
+cli_writeln(sprintf(
+    '  Warm   full median %.0f ms p95 %.0f ms   light median %.0f ms p95 %.0f ms',
+    percentile($fulltimes, 0.5),
+    percentile($fulltimes, 0.95),
+    percentile($lighttimes, 0.5),
+    percentile($lighttimes, 0.95)
+));
+cli_writeln(sprintf('  Rows   full %d, light %d', $countlast['full'], $countlast['light']));
+
+// A light count that answers a different question is not an optimisation but a
+// defect: the pager would offer pages the list cannot fill. Reported loudly rather
+// than left to be noticed in the numbers.
+if (!$countlast['equal']) {
+    cli_writeln('  !! The light count does not match the full count on this engine.');
+}
 
 if (!empty($options['out'])) {
     $report = sprintf(

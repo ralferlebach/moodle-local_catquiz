@@ -67,7 +67,8 @@ class feedback_tab_clicked extends external_api {
      * @return array
      */
     public static function execute(int $attemptid, string $feedback, string $translatedfeedback): array {
-        global $USER;
+        global $DB, $USER;
+
         self::validate_parameters(self::execute_parameters(), [
             'attemptid' => $attemptid,
             'feedback' => $feedback,
@@ -84,6 +85,16 @@ class feedback_tab_clicked extends external_api {
         // looking at feedback appeared in the event log as the learner. The role is
         // now decided in the context of the attempt, which is where teaching rights
         // actually live - a site-wide manage right says nothing about a course.
+        // Issue #68: the attempt has to exist before anyone is authorised for it.
+        // Managers and teachers passed this point on capability alone, so an id that
+        // matched no attempt still produced an event - a log entry about something
+        // that never happened. Loading it first makes every role fail closed on an
+        // unknown object.
+        $attempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptid]);
+        if (!$attempt) {
+            throw new moodle_exception('norighttoaccess', 'local_catquiz');
+        }
+
         if (has_capability('local/catquiz:canmanage', \context_system::instance())) {
             $role = 'catmanager';
         } else if (has_capability('local/catquiz:view_teacher_feedback', $ctx)) {
@@ -96,7 +107,9 @@ class feedback_tab_clicked extends external_api {
             //
             // Managers and teachers are already covered above; everyone else may only
             // act on their own attempt.
-            self::require_own_attempt($attemptid);
+            if ((int) $attempt->userid !== (int) $USER->id) {
+                throw new moodle_exception('norighttoaccess', 'local_catquiz');
+            }
             $role = 'student';
         }
 
@@ -138,27 +151,6 @@ class feedback_tab_clicked extends external_api {
             'success' => new external_value(PARAM_BOOL, 'Successful calculation', VALUE_REQUIRED),
             'message' => new external_value(PARAM_RAW, 'message if necessary', VALUE_OPTIONAL, ''),
             ]);
-    }
-    /**
-     * Throws unless the attempt belongs to the current user.
-     *
-     * The attempt id arrives from the client. Resolving its context says which
-     * activity it lives in; it says nothing about who owns it.
-     *
-     * @param int $attemptid
-     * @throws moodle_exception
-     * @return void
-     */
-    private static function require_own_attempt(int $attemptid): void {
-        global $DB, $USER;
-
-        $ownerid = $DB->get_field('local_catquiz_attempts', 'userid', ['attemptid' => $attemptid]);
-
-        // An attempt that cannot be resolved is refused rather than allowed: an
-        // unknown object is not a permitted one.
-        if ($ownerid === false || (int) $ownerid !== (int) $USER->id) {
-            throw new moodle_exception('norighttoaccess', 'local_catquiz');
-        }
     }
     /**
      * Whether the identifier names a feedback generator that exists.
