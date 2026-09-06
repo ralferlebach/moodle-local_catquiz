@@ -57,7 +57,7 @@ class feedback_helper {
     /**
      * Reduces per-attempt items to one value per person by a documented rule.
      *
-     * Issue #16: person-weighted analyses (histograms, cohort trajectories) and
+     * Person-weighted analyses (histograms, cohort trajectories) and
      * the exports derived from them must use the same selection rule, so that a
      * person with several attempts contributes exactly one value. Items with a
      * null value are dropped. This is the single place that rule lives.
@@ -114,7 +114,7 @@ class feedback_helper {
      * @return array
      */
     public static function get_reportable_scales(array $personabilities): array {
-        // Issue #7: the definition of a reportable/valid scale lives in the
+        // The definition of a reportable/valid scale lives in the
         // central attempt_result_validator. Route through it so feedback,
         // completion and persistence all share one definition. The validator
         // reproduces the historical set (toreport, not excluded, not hidden).
@@ -647,7 +647,7 @@ class feedback_helper {
         $attemptsbytimerange = [];
 
         if ($perperson) {
-            // Issue #16: for cohort trajectories, determine exactly one value per
+            // For cohort trajectories, determine exactly one value per
             // person and period before aggregating, using the shared selection
             // rule. Buckets collect (userid, endtime, value) items per period.
             $itemsbytimerange = [];
@@ -656,7 +656,7 @@ class feedback_helper {
                     continue;
                 }
                 $data = json_decode($attempt->json);
-                // Issue #11/#16: keep a valid value of exactly 0.0 (null check).
+                // Keep a valid value of exactly 0.0 (null check).
                 $hasvalue = isset($data->personabilities->$scaleid) && $data->personabilities->$scaleid !== null;
                 if (!$hasvalue) {
                     continue;
@@ -785,7 +785,7 @@ class feedback_helper {
         if (!$quizsettings) {
             return null;
         }
-        // Issue #14: delegate to the single half-open resolver so a score is
+        // Delegate to the single half-open resolver so a score is
         // assigned to exactly one range everywhere.
         return self::get_feedback_range_index($quizsettings, $scaleid, $value);
     }
@@ -793,7 +793,7 @@ class feedback_helper {
     /**
      * Returns the configured feedback ranges as plain lower/upper bounds.
      *
-     * Issue #23: the histogram assigns the range in SQL now, so the boundaries have
+     * The histogram assigns the range in SQL now, so the boundaries have
      * to leave PHP as numbers. They are read here from the same settings and with
      * the same parser that get_feedback_range_index() uses, so the two cannot end up
      * describing different ranges.
@@ -830,7 +830,7 @@ class feedback_helper {
     /**
      * Returns the 1-based feedback range a value falls into, or null if none.
      *
-     * Issue #14: ranges are treated as half-open [lower, upper) so a value on a
+     * Ranges are treated as half-open [lower, upper) so a value on a
      * shared boundary belongs to exactly one range; the topmost range is closed
      * [lower, upper] so the maximum value is still covered. A value outside every
      * configured range yields null.

@@ -102,7 +102,7 @@ class catscalequestions_table extends wunderbyte_table {
             'contextid' => $this->contextid,
             'scaleid' => $values->catscaleid ?? 0,
             'component' => $values->component ?? "",
-            // Issue #29: the tab is a request parameter now; the fragment it used to
+            // The tab is a request parameter now; the fragment it used to
             // use points at a pane that is no longer rendered unless it is active.
             'tab' => 'questions',
         ]);
@@ -304,7 +304,7 @@ class catscalequestions_table extends wunderbyte_table {
     /**
      * Counts the list without computing the attempt statistics.
      *
-     * Issue #21: counting the list meant counting the rows of the full query - the
+     * Counting the list meant counting the rows of the full query - the
      * one carrying the per question and per user aggregates. Those are computed only
      * to be discarded by COUNT(). The row set is defined by the joins up to the
      * question bank; the statistics are LEFT JOINs and can neither add nor remove a
@@ -355,7 +355,7 @@ class catscalequestions_table extends wunderbyte_table {
     /**
      * Fills in the attempt count for the rows on this page.
      *
-     * Issue #58: the count used to come from the main query, which produced it by
+     * The count used to come from the main query, which produced it by
      * aggregating every question attempt of the context and joining the result onto
      * all candidates. That aggregate is driven by the number of attempt steps rather
      * than by the page size, so it cost the same whether ten rows were shown or none
@@ -422,7 +422,7 @@ class catscalequestions_table extends wunderbyte_table {
     /**
      * Narrows the list to questions whose text matches, as the SQL is defined.
      *
-     * Issue #20 removed questiontext from the list queries, which also removed the
+     * The list queries do not select questiontext, which also removed the
      * ability to search inside question texts. Carrying the text in every row just
      * so that it can be searched is precisely what made the lists slow, so the text
      * is consulted only when somebody actually searches: a small dedicated query
@@ -514,7 +514,7 @@ class catscalequestions_table extends wunderbyte_table {
     /**
      * Shows whether the stored item parameters are usable for the item's model.
      *
-     * Issue #54: an item whose parameters violate the model contract is silently
+     * An item whose parameters violate the model contract is silently
      * treated as a pilot item at runtime. That was visible only in the import
      * feedback and the attempt debug output, never where the pool is maintained.
      *
@@ -574,7 +574,7 @@ class catscalequestions_table extends wunderbyte_table {
     public function col_name($values) {
         global $OUTPUT;
 
-        // Issue #20: the list no longer selects or renders the question text. The
+        // The list no longer selects or renders the question text. The
         // row shows the question name and opens the preview on demand through
         // local_catquiz_get_question_preview, so a page of rows no longer carries
         // the formatted text - and any embedded images - of every question.
@@ -681,7 +681,7 @@ class catscalequestions_table extends wunderbyte_table {
     public function col_questiontext($values) {
         global $OUTPUT;
 
-        // Issue #20: the list no longer selects or renders the question text. The
+        // The list no longer selects or renders the question text. The
         // row shows the question name and opens the preview on demand through
         // local_catquiz_get_question_preview, so a page of rows no longer carries
         // the formatted text - and any embedded images - of every question.

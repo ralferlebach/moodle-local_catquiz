@@ -61,7 +61,7 @@ class feedbacktab_clicked extends catquiz_event_base {
     public function get_description() {
         $other = $this->get_other_data();
         $url = new moodle_url('manage_catscales.php', [
-            // Issue #29: the tab is a request parameter; the fragment used before
+            // The tab is a request parameter; the fragment used before
             // pointed at a pane that is only rendered when it is the active one.
             'tab' => 'quizattempts',
             'attemptid' => $other->attemptid,
@@ -90,7 +90,7 @@ class feedbacktab_clicked extends catquiz_event_base {
      */
     public function get_url() {
         return new moodle_url('manage_catscales.php', [
-            // Issue #29: the tab is a request parameter; the fragment used before
+            // The tab is a request parameter; the fragment used before
             // pointed at a pane that is only rendered when it is the active one.
             'tab' => 'quizattempts',
             'attemptid' => $this->get_other_data()->attemptid,

@@ -68,7 +68,19 @@ class delete_catscale extends external_api {
             'id' => $id,
         ]);
         require_login();
+
         $context = context_system::instance();
+
+        // Every external function has to call this: it establishes the context the
+        // request acts in for the rest of the call and checks that the web service
+        // session may use it at all. The capability below answers a different
+        // question - who may act - and does not replace it.
+        //
+        // The system context is right here: manage_catscales is declared
+        // CONTEXT_SYSTEM in db/access.php, so scale management is a site-wide
+        // permission rather than one granted inside an activity.
+        self::validate_context($context);
+
         if (!has_capability('local/catquiz:manage_catscales', $context)) {
             throw new moodle_exception('norighttoaccess', 'local_catquiz');
         }

@@ -41,7 +41,7 @@ class managecatscaledashboard implements renderable, templatable {
     /**
      * Tabs of the manager, in the order the template renders them.
      *
-     * Issue #29: the constructor used to build every one of these regardless of which
+     * The constructor used to build every one of these regardless of which
      * was on screen - eight displays, each with its own queries, for one visible tab.
      * The list is kept here so the tab parameter can be validated against it rather
      * than trusted.
@@ -174,7 +174,7 @@ class managecatscaledashboard implements renderable, templatable {
         string $activetab = ''
     ) {
 
-        // Issue #29: an unknown or absent value falls back to the first tab rather
+        // An unknown or absent value falls back to the first tab rather
         // than building everything. Validating against the list keeps a crafted URL
         // parameter from selecting something that does not exist.
         $this->activetab = in_array($activetab, self::TABS, true) ? $activetab : self::TABS[0];
@@ -300,7 +300,7 @@ class managecatscaledashboard implements renderable, templatable {
             'catscalestats' => $this->catscalestatsarray,
             'testitemdashboard' => $this->testitemdashboardarray,
             'eventlogtable' => $this->eventlogtable,
-            // Issue #29: building this form registers Moodle's form validation JS,
+            // Building this form registers Moodle's form validation JS,
             // which looks up the form by id on load. With only the active tab
             // rendered the element is absent, the lookup returns null and the script
             // throws - leaving the page permanently "not ready". That is what made

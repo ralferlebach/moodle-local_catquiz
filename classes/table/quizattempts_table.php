@@ -129,7 +129,7 @@ class quizattempts_table extends wunderbyte_table {
         // TODO: Add back to table overview button/link in detailview triggered here.
 
         // Append attemptid to the existing parameters.
-        // Issue #29: the tab is a request parameter. The fragment used before pointed
+        // The tab is a request parameter. The fragment used before pointed
         // at a pane that is only rendered when it is the active tab, so the link
         // landed on the default tab without the attempt in view.
         $url = new moodle_url(

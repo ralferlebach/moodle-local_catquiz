@@ -32,7 +32,7 @@ use context_system;
 /**
  * Resolves the real course or module context of an attempt.
  *
- * Issue #18: teacher feedback and statistics permissions used to be checked
+ * Teacher feedback and statistics permissions used to be checked
  * against context_system::instance() or against the global $COURSE. Neither is
  * correct: an attempt belongs to a concrete adaptive quiz instance in a concrete
  * course, and during shortcode rendering, AJAX calls or central overviews the

@@ -89,7 +89,7 @@ class catscales implements renderable, templatable {
 
         global $USER;
 
-        // Issue #24: this used to walk the complete scale list once per level and ask
+        // This used to walk the complete scale list once per level and ask
         // the database for the subscription state of every single scale. That is O(n)
         // queries and O(n^2) PHP work, both growing with the number of scales.
         //
@@ -156,9 +156,9 @@ class catscales implements renderable, templatable {
     public function export_for_template(\renderer_base $output): array {
         $out = $this->itemtree;
 
-        // Issue #24: one grouped query instead of one count per scale.
+        // One grouped query instead of one count per scale.
         $counts = catquiz::get_number_of_questions_per_scale();
-        // Issue #54: how many items of this scale carry unusable parameters, in the
+        // How many items of this scale carry unusable parameters, in the
         // context being looked at. Without the context the count mixed every context
         // of the installation into one number, which is not what the page shows.
         $unusable = catquiz::get_unusable_item_counts_per_scale($this->contextid ?: null);
@@ -190,9 +190,9 @@ class catscales implements renderable, templatable {
     public function return_as_array(): array {
         $out = $this->itemtree;
 
-        // Issue #24: one grouped query instead of one count per scale.
+        // One grouped query instead of one count per scale.
         $counts = catquiz::get_number_of_questions_per_scale();
-        // Issue #54: how many items of this scale carry unusable parameters, in the
+        // How many items of this scale carry unusable parameters, in the
         // context being looked at. Without the context the count mixed every context
         // of the installation into one number, which is not what the page shows.
         $unusable = catquiz::get_unusable_item_counts_per_scale($this->contextid ?: null);

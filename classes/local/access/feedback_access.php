@@ -30,7 +30,7 @@ use context_system;
 /**
  * Decides whether the current user may see results of users other than themselves.
  *
- * Issue #18: statistics views, exports and AJAX endpoints each carried their own
+ * Statistics views, exports and AJAX endpoints each carried their own
  * variant of this check, some of them against the system context only. That made
  * it possible for the exported CSV and the rendered page to disagree about who is
  * allowed to see what. All of them now call into this class, so the rule exists

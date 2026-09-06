@@ -174,6 +174,73 @@ class catquiz {
     }
 
     /**
+     * The column aliases the item pool query produces.
+     *
+     * Read off a live result rather than transcribed from the heredoc: the first
+     * version of this list was written by hand from the SQL and had 'contextid' where
+     * the alias is 'lcipcontextid', plus six columns missing entirely. The query
+     * failed with "column s.contextid does not exist".
+     *
+     * If a column is added to the query and forgotten here, the lean select simply
+     * does not carry it - which the equivalence test catches, because the runtime
+     * pool would then differ from the full one.
+     *
+     * @return string[]
+     */
+    public static function pool_columns(): array {
+        return [
+            'id',
+            'componentid',
+            'label',
+            'idnumber',
+            'questionname',
+            'qtype',
+            'categoryname',
+            'catscaleid',
+            'testitemstatus',
+            'component',
+            'itemid',
+            'catscalename',
+            'lccscatscaleid',
+            'model',
+            'difficulty',
+            'discrimination',
+            'guessing',
+            'json',
+            'timecreated',
+            'timemodified',
+            'status',
+            'usable',
+            'itemparamvalidity',
+            'lcipcontextid',
+            'attempts',
+            'astatlastattempttime',
+            'userid',
+            'userattempts',
+            'userlastattempttime',
+        ];
+    }
+
+    /**
+     * Columns of the item pool that only the manager interface needs.
+     *
+     * The same query serves two consumers: the runtime selection, which fills the
+     * item cache, and the CAT manager tables, which display and filter questions.
+     * The interface needs these names; the selection never reads them - it works on
+     * ids, scale ids and item parameters.
+     *
+     * Measured over 2.000 rows they are 36 % of the serialised payload, and that
+     * payload is cached per scale and context: 206 MB at 250.000 items.
+     *
+     * @var string[]
+     */
+    const DISPLAYONLY_POOL_COLUMNS = [
+        'questionname',
+        'categoryname',
+        'catscalename',
+    ];
+
+    /**
      * Returns the sql to get all the questions wanted.
      *
      * @param array $catscaleids
@@ -192,7 +259,8 @@ class catquiz {
         array $wherearray = [],
         int $userid = 0,
         ?string $orderby = null,
-        ?int $questionid = null
+        ?int $questionid = null,
+        bool $leanselect = false
     ) {
 
         global $DB;
@@ -205,7 +273,7 @@ class catquiz {
             'contextid' => $contextid,
 
         ];
-        // Issue #54: items in piloting have no active parameter, so lcipcontextid is
+        // Items in piloting have no active parameter, so lcipcontextid is
         // NULL for them. Restricting on it alone would drop exactly those items again
         // after the join was widened - and their attempt numbers are the interesting
         // part while an item is being piloted.
@@ -219,7 +287,7 @@ class catquiz {
             $params['statuserid'] = $userid;
         }
 
-        // Issue #19: the detail view needs exactly one question. Restricting the
+        // The detail view needs exactly one question. Restricting the
         // innermost query keeps the expensive statistics joins from aggregating
         // over the whole scale first and discarding the rest afterwards - which is
         // what exhausted the memory limit on large, image heavy pools.
@@ -235,7 +303,7 @@ class catquiz {
 
             [$parentscales1, $inparams1] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales1');
             [$parentscales2, $inparams2] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales2');
-            // Issue #21: the statistics subqueries restrict by scale themselves, so
+            // The statistics subqueries restrict by scale themselves, so
             // they need their own placeholders - reusing the ones of the outer joins
             // would bind the same names twice for different clauses.
             [$parentscales3, $inparams3] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales3');
@@ -249,7 +317,17 @@ class catquiz {
             $wherecontains['lccscatscaleid'] = $incatscales;
         }
 
+        // The derived table below still computes every column; what changes is how
+        // much of it is transferred and turned into PHP objects. That is where the
+        // cost sits - the cache holds the hydrated rows, not the query.
         $select = "*";
+        if ($leanselect) {
+            $select = implode(', ', array_map(
+                fn($column) => 's.' . $column,
+                array_diff(self::pool_columns(), self::DISPLAYONLY_POOL_COLUMNS)
+            ));
+        }
+
         $from = <<<SQL
         ( SELECT
             -- Information about the question
@@ -381,7 +459,7 @@ class catquiz {
             $where .= sprintf(' AND %s %s', $key, $value);
         }
 
-        // Issue #54: items in piloting have no active parameter, so lcipcontextid is
+        // Items in piloting have no active parameter, so lcipcontextid is
         // NULL for them. Restricting on it alone would drop exactly those items after
         // the parameter join was widened - and their attempt numbers are the
         // interesting part while an item is being piloted.
@@ -430,7 +508,7 @@ class catquiz {
                 -- and then thrown away for all but the ten rows on screen. The table
                 -- fetches it for the visible page instead.
                 0 as questioncontextattempts";
-        // Issue #22: the list of scales a question belongs to used to be built with
+        // The list of scales a question belongs to used to be built with
         // GROUP_CONCAT into a string like '-3--7-' and then filtered with
         // LIKE '%-3-%'. That string was never displayed - it existed only to express
         // "not already assigned to this scale" - and a leading-wildcard LIKE cannot
@@ -1369,7 +1447,7 @@ class catquiz {
     /**
      * Upper bound for the number of data points a chart query returns.
      *
-     * Issue #23: the classification already collapses a cohort into a handful of
+     * The classification already collapses a cohort into a handful of
      * counts, but a misconfigured class width could still produce a long tail of
      * near-empty classes. This caps what leaves the database; the charts themselves
      * never draw more than ATTEMPTS_PER_PERSON_CLASSES classes anyway.
@@ -1379,7 +1457,7 @@ class catquiz {
     /**
      * Returns the largest value of a column within a subquery.
      *
-     * Issue #23: finding a maximum by loading every row and looping in PHP makes the
+     * Finding a maximum by loading every row and looping in PHP makes the
      * cost grow with the cohort. The database answers it with a single value.
      *
      * @param string $innersql A complete SELECT usable as a subquery.
@@ -1396,7 +1474,7 @@ class catquiz {
     /**
      * Classifies one row per person into (range, class) counts inside the database.
      *
-     * Issue #23: both attempt charts only ever needed the number of people per range
+     * Both attempt charts only ever needed the number of people per range
      * and class - they counted rows they had loaded. This does the counting in SQL,
      * so only the finished numbers travel back.
      *
@@ -1465,7 +1543,7 @@ class catquiz {
     /**
      * Returns the highest number of questions a single person answered.
      *
-     * Issue #23: the chart used to load one row per enrolled person only to find
+     * The chart used to load one row per enrolled person only to find
      * this maximum in PHP. The database can answer it with a single value, and the
      * cost then no longer grows with the size of the cohort.
      *
@@ -1496,7 +1574,7 @@ class catquiz {
     /**
      * Returns the answers-per-person histogram as counts, aggregated in the database.
      *
-     * Issue #23: the chart only ever needed the number of people per (range, class) -
+     * The chart only ever needed the number of people per (range, class) -
      * it counted the rows it had loaded. Loading a row per person to count them is
      * what made memory and runtime grow with the cohort. The classification happens
      * in SQL instead, and only the finished counts travel back.
@@ -1541,7 +1619,7 @@ class catquiz {
     /**
      * Returns the attempts-per-person histogram as counts, aggregated in the database.
      *
-     * Issue #23: the twin of get_answers_per_person_histogram() for the attempts
+     * The twin of get_answers_per_person_histogram() for the attempts
      * chart, which loaded one row per person for the same reason.
      *
      * @param int $contextid
@@ -1600,7 +1678,7 @@ class catquiz {
     /**
      * Returns the number of attempts per question, for the given questions only.
      *
-     * Issue #58: the add-questions dialog used to obtain this by aggregating every
+     * The add-questions dialog used to obtain this by aggregating every
      * question attempt of the context and joining the result onto all candidates. The
      * aggregate is driven by the number of attempt steps, not by the page size, so it
      * cost the same whether ten rows or none were shown.
@@ -1646,7 +1724,7 @@ class catquiz {
     /**
      * Returns a light FROM/WHERE for counting the rows of the question list.
      *
-     * Issue #21: counting the list meant counting the rows of the full query - the
+     * Counting the list meant counting the rows of the full query - the
      * one that carries the per question and per user attempt statistics. Those
      * aggregates are computed only to be thrown away by COUNT(), which makes the
      * count as expensive as the list itself.
@@ -1687,7 +1765,7 @@ class catquiz {
             JOIN {question_categories} qc ON qc.id = qbe.questioncategoryid
         SQL;
 
-        // Issue #54: items in piloting have no active parameter, so their context is
+        // Items in piloting have no active parameter, so their context is
         // NULL - the same allowance the list itself makes.
         $where = '(lcip.contextid = :contextid OR lcip.contextid IS NULL)';
         foreach ($wherecontains as $condition) {
@@ -1700,7 +1778,7 @@ class catquiz {
     /**
      * Returns the number of items with unusable parameters, per scale.
      *
-     * Issue #54: the per item column tells a maintainer what is wrong with one row,
+     * The per item column tells a maintainer what is wrong with one row,
      * but not whether a scale has a problem at all. This answers that for every
      * scale in one grouped query, so the overview costs the same whether there are
      * three scales or three hundred.
@@ -1739,7 +1817,7 @@ class catquiz {
     /**
      * Returns the number of questions per scale, for all scales in one query.
      *
-     * Issue #24: the scale overview called get_sql_for_number_of_questions_in_scale()
+     * The scale overview called get_sql_for_number_of_questions_in_scale()
      * once per scale, so the number of count queries grew with the number of scales.
      * One grouped query answers the same question for every scale at once.
      *
@@ -1859,7 +1937,7 @@ class catquiz {
      */
     public static function get_attempt_statistics(int $attemptid) {
         global $DB;
-        // Issue #13: return exactly one row per question (per question attempt),
+        // Return exactly one row per question (per question attempt),
         // carrying the fraction of its LAST graded step. A question can have
         // several graded steps, so counting steps would overcount; here the inner
         // subquery reduces to the latest graded step per question attempt. A
@@ -1937,7 +2015,7 @@ class catquiz {
     /**
      * Reduces attempt snapshots to one historical ability per person.
      *
-     * Issue #16: historical statistics must use the ability recorded at the time
+     * Historical statistics must use the ability recorded at the time
      * of the attempt (personability_after_attempt), not the person's current
      * parameter. For a person-weighted analysis exactly one value per person is
      * used; the documented rule here is the latest attempt in the period (by
@@ -1951,7 +2029,7 @@ class catquiz {
      * @return array Map of userid => historical ability (float).
      */
     public static function get_snapshot_ability_per_person(array $attempts, string $rule = 'last'): array {
-        // Issue #16: build (userid, endtime, value) items from the attempt
+        // Build (userid, endtime, value) items from the attempt
         // snapshots and reduce to one value per person via the shared rule, so
         // charts, statistics and exports all apply the same selection.
         $items = [];
@@ -1969,7 +2047,7 @@ class catquiz {
     /**
      * Returns aggregated peer-comparison statistics for one context and scale.
      *
-     * Issue #15: the reference group is context-true and statistically sound.
+     * The reference group is context-true and statistically sound.
      * It comprises, within the given CAT context and scale, exactly one value per
      * person (the latest personparam per user), excludes the compared user, and
      * is aggregated in SQL rather than loading every row into PHP. The returned
@@ -2348,7 +2426,7 @@ class catquiz {
         $data->personability_before_attempt = $attemptdata['ability_before_attempt'];
         $data->personability_after_attempt = $attemptdata['progress']->get_abilities()[$attemptdata['catscaleid']] ?? null;
         $data->starttime = $attemptdata['starttime'] ?? null;
-        // Issue #5: never stamp an end time here. save_attempt_to_db() runs after
+        // Never stamp an end time here. save_attempt_to_db() runs after
         // every response (i.e. while the attempt is still running); the end time
         // is set exactly once by attempt_finalizer at completion. On INSERT the
         // running attempt gets endtime = null; on UPDATE the field is left
@@ -2388,7 +2466,7 @@ class catquiz {
         $existingrecord = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptdata['attemptid']]);
         if ($existingrecord) {
             $data->id = $existingrecord->id;
-            // Issue #5: preserve the original creation time and never touch the
+            // Preserve the original creation time and never touch the
             // end time on update. The end time is owned by attempt_finalizer.
             unset($data->timecreated);
             unset($data->endtime);
@@ -2540,7 +2618,7 @@ class catquiz {
             SQL;
         }
 
-        // Issue #23: the caller decides which columns it needs. SELECT * always
+        // The caller decides which columns it needs. SELECT * always
         // carried debug_info along - a field that can hold the full trace of an
         // attempt and that none of the charts ever reads. On a large cohort that is
         // the bulk of the transferred bytes, thrown away right after loading.
@@ -2562,7 +2640,7 @@ class catquiz {
             $sql .= " AND contextid = :contextid";
         }
         if (!is_null($starttime)) {
-            // Issue #16: filter historical periods by actual completion time.
+            // Filter historical periods by actual completion time.
             $sql .= " AND a.endtime >= :starttime";
         }
         if (!is_null($endtime)) {
@@ -3196,7 +3274,7 @@ class catquiz {
         }
 
         if ($starttime) {
-            // Issue #16: same completion-time period rule as the charts.
+            // Same completion-time period rule as the charts.
             $where .= " AND a.endtime >= :starttime";
         }
 

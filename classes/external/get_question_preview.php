@@ -38,7 +38,7 @@ require_once($CFG->libdir . '/questionlib.php');
 /**
  * Returns the rendered text of one question.
  *
- * Issue #20: the question lists used to carry the full, formatted text of every
+ * The question lists used to carry the full, formatted text of every
  * row - including base64 images - inside a hidden modal. That text was held in the
  * database result, in PHP strings, in the AJAX response and in the DOM at the same
  * time. The lists now select only short values, and the preview is fetched through

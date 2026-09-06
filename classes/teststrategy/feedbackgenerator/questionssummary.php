@@ -118,7 +118,7 @@ class questionssummary extends feedbackgenerator {
             return null;
         }
 
-        // Issue #13: exclude pilot items from the performance counters. The pilot
+        // Exclude pilot items from the performance counters. The pilot
         // flag is context-computed, so we get the played pilot question ids from
         // the progress and drop those questions here.
         $pilotids = array_map('intval', array_keys($this->get_progress()->get_played_pilot_questions()));

@@ -1,5 +1,108 @@
 # Changelog – local_catquiz
 
+## 1.2.0 (interne Version 2026090506)
+
+> Ab dieser Auslieferung trägt die Linie das Label `1.2.0`. Die älteren Einträge
+> behalten `1.1.7`: Sie beschreiben, was unter diesem Label ausgeliefert wurde.
+
+- **#44 geschlossen**: `cli/verify_recalculation_lock.php` prueft die Sperre in zwei
+  echten Prozessen - der erste haelt sie, der zweite wird abgewiesen, nach der
+  Freigabe wird sie wieder gewaehrt. Der dritte Schritt ist nicht schmueckend: Ohne
+  ihn bestuende die Pruefung auch mit einer Sperre, die nie zurueckgegeben wird.
+  In der CI laeuft das als Schritt im `load-runtime-pool`-Workflow, auf beiden
+  Engines. PHPUnit kann das nicht zeigen - Moodles DB-Sperre ist prozessintern
+  wiedereintrittsfaehig.
+- **Release-Label auf `1.2.0`.** Aeltere CHANGELOG-Eintraege behalten `1.1.7`: Sie
+  beschreiben, was unter jenem Label ausgeliefert wurde.
+
+### Inhalt der Auslieferung 2026090505
+
+
+> #26: Die Spaltenreduktion war bereits umgesetzt - das Messwerkzeug hat den falschen
+> Pfad gemessen.
+
+- **`measure_runtime_pool.php` rief die Poolabfrage ohne den `$leanselect`-Modus auf.**
+  Die extern gemessenen 206 MB sind damit nicht der Wert, den die Laufzeit cached -
+  der liegt bei rund **174 MB**. Auf Basis der falschen Zahl waere ein Fix gebaut
+  worden, den es bereits gibt.
+- Der Laufzeitpfad laesst `questionname`, `categoryname` und `catscalename` weg:
+  29 Spalten und 868 Byte/Zeile gegen 26 Spalten und 731 Byte/Zeile.
+- **Neuer Test `runtime_pool_columns_test`**: der schlanke Satz laesst genau die drei
+  Namen weg, der Laufzeitpfad fordert ihn an, und sieben Parameterspalten bleiben
+  darin - darunter **`json`**. Es ist die groesste verbleibende Textspalte und damit
+  der erste Kandidat bei einer Payload-Optimierung, traegt aber die
+  Kategorieschwellen der politomen Modelle. Ohne sie stuenden GRM, GGRM, PCM und GPCM
+  ohne Schwellen da, und der Fehler zeigte sich erst in der Schaetzung.
+
+## 1.1.7 (interne Version 2026090504)
+
+> Zwei stille Defekte in der Spaltenkonfiguration; Grundlage von #26 korrigiert.
+
+- **`define_sortablecolumns()` enthielt zwei Eintraege, die auf keine Spalte zeigen**:
+  `idnunber` (Tippfehler) und `name` (die Spalte heisst `questiontext`, nur ihre
+  Ueberschrift lautet "Name"). Ein solcher Eintrag wird **stillschweigend ignoriert** -
+  die Ueberschrift ist einfach nicht sortierbar, nichts schlaegt fehl. Von vier
+  deklarierten Spalten funktionierten zwei. Ein Test vergleicht die Sortierliste
+  gegen `define_columns()`, also gegen die Regel statt gegen eine feste Liste.
+- **#26: die Annahme "29 Spalten geladen, 15 gelesen" haelt nicht.** Die Poolabfrage
+  selektiert 21 Spalten, und fast jede wird irgendwo gelesen - `discrimination`
+  beispielsweise in vier IRT-Modellen. Der Payload verteilt sich ausserdem
+  gleichmaessig; die groesste Einzelspalte macht 14,7 % aus. Die Spaltenreduktion ist
+  damit keine kleine Massnahme mehr, sondern ein Eingriff in die Datenversorgung der
+  Modelle.
+- Festgehalten ist auch der Weg dorthin: Ein erster Zaehlversuch durchsuchte nur
+  `classes/teststrategy/` und meldete `discrimination` und `guessing` als ungenutzt -
+  beide werden unter `catmodel/` gelesen. Eine `grep`-Zaehlung kann diese Frage nicht
+  entscheiden.
+
+## 1.1.7 (interne Version 2026090503)
+
+> #58: Ursache des MariaDB-Rueckstands gefunden - dokumentiert, nicht behoben.
+
+- **`ANALYZE FORMAT=JSON` zeigt 20.010 Durchlaeufe je Tabelle.** Die Abfrage baut die
+  vollstaendige abgeleitete Tabelle auf - alle Kandidaten mit je vier Index-Zugriffen -
+  und nimmt erst danach zehn Zeilen. Das `LIMIT` steht ausserhalb von
+  `FROM ( SELECT ... ) as s1`, MariaDB kann es nicht nach innen ziehen.
+- Damit erklaeren sich alle Messungen: Nicht die **Form** der Unterabfrage ist das
+  Problem, sondern ihre **Anzahl**. Zwei naheliegende Fixes wurden geprueft und
+  scheiden aus - die Umschreibung als Anti-Join bringt 9 ms, ein zusaetzlicher Index
+  wird vom Optimierer gar nicht gewaehlt. Beide lassen die 20.010 Durchlaeufe
+  unberuehrt.
+- Gegenprobe mit innerem `LIMIT`: 47 ms statt 158 ms bei identischem Ergebnis - aber
+  **kein Fix**: ergebnisgleich nur, weil hier weder sortiert noch gefiltert wird.
+  Sortiert `local_wunderbyte_table` aussen, waehlte ein inneres `LIMIT` die falschen
+  Zeilen aus, und die Seite saehe dabei korrekt aus.
+- Der naechste Schritt ist eine Frage der Integration mit `local_wunderbyte_table`,
+  keine Aenderung an einer Zeile SQL. Festgehalten in
+  `doc/workpackage-moodle45-report.md`.
+
+## 1.1.7 (interne Version 2026090502)
+
+> Arbeitspaket Moodle-4.5-Stabilisierung abgeschlossen, soweit belegbar.
+> Abschlussbericht: `doc/workpackage-moodle45-report.md`.
+
+- **#29** unter Moodle 4.5 abgenommen: Browser-Back/Forward, `aria-current`, Kontext
+  im Tab-Link und - der eigentliche Nachweis - dass **nur der aktive Reiter Abfragen
+  erzeugt**. Die anderen sieben DoD-Punkte lassen sich durch Markup erfuellen; dieser
+  nicht.
+- **#44**: inaktive Kontexte werden nicht rekalibriert; Sperre wird ohne Wartezeit
+  angefordert und wieder freigegeben. Ein *echter* paralleler Lauf ist in PHPUnit
+  nicht erzeugbar - Moodles DB-Sperre ist prozessintern wiedereintrittsfaehig. Der
+  erste Testentwurf sah aus, als beweise er die Sperre, und bestand in Wahrheit, weil
+  der Lauf mangels neuer Responses uebersprungen wurde.
+- **#61**: Inventar der Full-Cohort-Pfade (`doc/issue-61-cohort-inventory.md`). Alle
+  sechs Charts haengen an *einer* Ladung; drei sind gefahrlos aggregierbar, drei lesen
+  aus dem Attempt-JSON und wuerden engine-spezifische SQL-Funktionen erfordern.
+- **Security-Pass**: alle neun External Functions inventarisiert. `delete_catscale`
+  rief kein `validate_context()` - die Funktion sah abgesichert aus, prueft aber nur,
+  *wer* handeln darf, nicht *wo*. Als Regel getestet, nicht als Liste.
+- **Cleanup**: EN/DE-Paritaet hergestellt. Darunter ein im Code verwendeter String,
+  der auf **Englisch** fehlte - der Rueckfallsprache; er waere als `[[schluessel]]`
+  erschienen. 152 Issue-Referenzen zu technischen Invarianten umformuliert,
+  `synthcat.php` (340 Zeilen, kein Verweis) entfernt.
+- **CI** unveraendert: PHP 8.1/8.2/8.3 x PostgreSQL/MariaDB auf `MOODLE_405_STABLE`,
+  alle Pflicht-Gates verbindlich - geprueft, nicht angenommen.
+
 ## 1.1.7 (interne Version 2026090501)
 
 > Arbeitsauftrag Moodle-4.5-Stabilisierung: Abschnitte 1, 3–7, 12, 13.

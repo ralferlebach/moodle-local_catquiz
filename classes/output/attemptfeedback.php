@@ -100,7 +100,7 @@ class attemptfeedback implements renderable, templatable {
     ) {
         global $USER;
 
-        // Issue #64: these are typed properties without defaults, and the constructor
+        // These are typed properties without defaults, and the constructor
         // has two early returns - no attempt found, and no test environment for the
         // attempt. Every path that reached one of them left the object half-built, and
         // the next property read threw "must not be accessed before initialization".
@@ -513,7 +513,7 @@ class attemptfeedback implements renderable, templatable {
             return [];
         }
 
-        // Issue #10: only reportable scales (toreport, not excluded/hidden) may
+        // Only reportable scales (toreport, not excluded/hidden) may
         // trigger an automatic enrolment. An invalid result has no reportable
         // scale, so no enrolment happens.
         $candidatescales = feedback_helper::get_reportable_scales(
@@ -525,7 +525,7 @@ class attemptfeedback implements renderable, templatable {
             $coursestoenrol[$scaleid] = [
                 'course_ids' => [],
             ];
-            // Issue #14: a score falls into exactly one range (half-open), so the
+            // A score falls into exactly one range (half-open), so the
             // enrolment for a scale is driven by that single range instead of
             // every range whose inclusive bounds contain the value.
             $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
@@ -570,7 +570,7 @@ class attemptfeedback implements renderable, templatable {
             return [];
         }
 
-        // Issue #10: only reportable scales (toreport, not excluded/hidden) may
+        // Only reportable scales (toreport, not excluded/hidden) may
         // trigger an automatic enrolment. An invalid result has no reportable
         // scale, so no enrolment happens.
         $candidatescales = feedback_helper::get_reportable_scales(
@@ -581,7 +581,7 @@ class attemptfeedback implements renderable, templatable {
         $groupstoenrol = [];
         foreach ($candidatescales as $scaleid => $data) {
             $groupstoenrol[$scaleid] = [];
-            // Issue #14: a score falls into exactly one range (half-open).
+            // A score falls into exactly one range (half-open).
             $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
             if ($i === null) {
                 continue;
@@ -620,7 +620,7 @@ class attemptfeedback implements renderable, templatable {
                 return 0;
             }
         });
-        // Issue #10: determine result validity BEFORE running the generators, so
+        // Determine result validity BEFORE running the generators, so
         // that for an invalid result no per-scale STUDENT feedback (peer
         // comparison, learning progress, ...) is assembled at all - the student
         // only ever sees the single central notice below. Teacher feedback is
@@ -630,7 +630,7 @@ class attemptfeedback implements renderable, templatable {
 
         $context = [];
         foreach ($generators as $generator) {
-            // Issue #10: for an invalid result, do not execute the non-essential
+            // For an invalid result, do not execute the non-essential
             // student-facing generators at all (peer comparison, learning
             // progress, ...) - "don't run peer comparison / recommendations on an
             // invalid result". Only customscalefeedback runs, because it carries
@@ -659,7 +659,7 @@ class attemptfeedback implements renderable, templatable {
             }
         }
 
-        // Issue #10: bind the student feedback to a valid result. When the report
+        // Bind the student feedback to a valid result. When the report
         // pipeline produced no reportable scale (toreport, not excluded/hidden),
         // the attempt has no valid result: show exactly one central notice that
         // carries the rejection reason, instead of scattering "not available"/

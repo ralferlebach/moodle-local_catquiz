@@ -65,7 +65,7 @@ class reload_template extends external_api {
      */
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
-            // Issue #66: typed fields instead of one JSON blob with a comma-separated
+            // Typed fields instead of one JSON blob with a comma-separated
             // parameter string. validate_parameters() can check these; it could never
             // check what was inside the blob, so PARAM_RAW was the only honest
             // declaration and no declaration at all in practice.

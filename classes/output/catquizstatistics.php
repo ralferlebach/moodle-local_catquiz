@@ -215,7 +215,7 @@ class catquizstatistics {
     /**
      * Returns the context these statistics refer to.
      *
-     * Issue #18: resolved once from the most specific scope available (test
+     * Resolved once from the most specific scope available (test
      * instance, otherwise course, otherwise system) so that the rendered page,
      * the export button and the exported CSV all judge access identically.
      *
@@ -391,7 +391,7 @@ class catquizstatistics {
         $models = model_strategy::get_installed_models();
         $fisherinfos = $feedbackhelper->get_fisherinfos_of_items($items, $models, $abilitysteps);
         $attempts = $this->get_attempts();
-        // Issue #16: build the histogram from the historical attempt snapshots
+        // Build the histogram from the historical attempt snapshots
         // (personability_after_attempt at the time of the attempt), not from the
         // person's current parameter. Person-weighted: one value per person, the
         // latest attempt in the selected period.
@@ -434,7 +434,7 @@ class catquizstatistics {
         $chart = new chart_bar();
 
         // Teachers and CAT managers can see the test information in addition to the ability.
-        // Issue #18: judged in the context these statistics refer to (the quiz module
+        // Judged in the context these statistics refer to (the quiz module
         // or the course), never in the system context alone.
         $canviewall = feedback_access::can_view_other_users($this->get_statistics_context());
         if ($canviewall) {
@@ -640,7 +640,7 @@ class catquizstatistics {
     public function render_responses_by_users_chart() {
         global $OUTPUT;
 
-        // Issue #23: the chart only ever needed the number of people per range and
+        // The chart only ever needed the number of people per range and
         // class - it counted the rows it had loaded. Loading one row per enrolled
         // person just to count them made memory and runtime grow with the cohort.
         // Both the maximum and the classification now happen in the database, and
@@ -771,10 +771,10 @@ class catquizstatistics {
             $this->contextid,
             $this->starttime,
             $this->endtime,
-            // Issue #16: historical cohorts must not change when a person is
+            // Historical cohorts must not change when a person is
                 // later unenrolled -> include by historical participation.
                 false,
-            // Issue #23: only the columns the charts actually read. The debug
+            // Only the columns the charts actually read. The debug
                 // trace field in particular is never used here and can be large.
                 'a.id, a.userid, a.scaleid, a.contextid, a.courseid, a.attemptid, '
                     . 'a.starttime, a.endtime, a.json, a.timecreated'
@@ -818,7 +818,7 @@ class catquizstatistics {
                 $this->contextid,
                 $this->starttime,
                 $this->endtime,
-                // Issue #16: historical participation (see get_attempts()).
+                // Historical participation (see get_attempts()).
                 false
             ) as $record
         ) {
@@ -1085,7 +1085,7 @@ class catquizstatistics {
     public function render_attempts_per_person_chart(): array {
         global $OUTPUT;
 
-        // Issue #23: this chart loaded one row per person only to count them per
+        // This chart loaded one row per person only to count them per
         // range and class. Both the maximum and the classification happen in the
         // database now; only the finished counts come back.
         $chartdata = [];
@@ -1190,7 +1190,7 @@ class catquizstatistics {
             optional_param('debug', false, PARAM_BOOL)
             && has_capability('local/catquiz:manage_catscales', context_system::instance())
         ) {
-            // Issue #23 moved this chart to SQL aggregation, and $records - the row
+            // This chart aggregates in SQL, and $records - the row
             // per person - no longer exists. The debug table now shows what the chart
             // actually draws: the counts per range and class. Leaving the old loop in
             // place was an undefined variable waiting for someone to append ?debug=1.
@@ -1276,7 +1276,7 @@ class catquizstatistics {
     public function get_export_data(): array {
         global $DB;
 
-        // Issue #18: the previous check called context_course::instance($this->courseid)
+        // The previous check called context_course::instance($this->courseid)
         // unconditionally, which threw as soon as the statistics were not scoped to a
         // course (site wide shortcode). The resolver degrades to the system context
         // instead, and the rule itself now lives in one place.
@@ -1291,13 +1291,13 @@ class catquizstatistics {
              $this->testid,
              $this->starttime,
              $this->endtime,
-             // Issue #16: the export must use the same cohort rule as the charts
+             // The export must use the same cohort rule as the charts
              // (historical participation), so unenrolment does not diverge them.
              false
          );
 
         $data = [];
-        // Issue #18: in separate groups mode a teacher without accessallgroups may
+        // In separate groups mode a teacher without accessallgroups may
         // only export members of their own groups. Null means "no restriction", so
         // the common case costs nothing.
         $alloweduserids = feedback_access::get_allowed_userids($this->get_statistics_context());

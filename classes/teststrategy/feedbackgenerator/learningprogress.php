@@ -79,7 +79,7 @@ class learningprogress extends feedbackgenerator {
     public function get_studentfeedback(array $feedbackdata): array {
         global $OUTPUT;
 
-        // Issue #11: the learning-progress charts communicate the development of
+        // The learning-progress charts communicate the development of
         // the GLOBAL scale, so they must follow the global scale (catquiz_catscales)
         // and never the primary scale of the current attempt, which can change
         // between attempts and would produce a factually wrong trajectory.
@@ -138,7 +138,7 @@ class learningprogress extends feedbackgenerator {
      *
      */
     public function get_required_context_keys(): array {
-        // Issue #11: the learning-progress charts no longer depend on the
+        // The learning-progress charts no longer depend on the
         // primary scale of the attempt (they follow the global scale), so it is
         // not a required context key any more.
         return [];
@@ -421,7 +421,7 @@ class learningprogress extends feedbackgenerator {
     /**
      * Extracts one scale's ability value per attempt, in attempt order.
      *
-     * Issue #11: the learning-progress trajectory follows the given (global)
+     * The learning-progress trajectory follows the given (global)
      * scale strictly. An attempt without a value for the scale yields null (a
      * gap in the chart) rather than being skipped or substituted with another
      * scale, and an ability of exactly 0.0 is kept (explicit null check, not
@@ -475,7 +475,7 @@ class learningprogress extends feedbackgenerator {
         $chart = new chart_line();
         $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
 
-        // Issue #16: peers are weighted once per person and period so a peer with
+        // Peers are weighted once per person and period so a peer with
         // several attempts does not dominate the comparison.
         $orderedattemptspeers = feedback_helper::order_attempts_by_timerange(
             $attemptsofpeers,
@@ -597,7 +597,7 @@ class learningprogress extends feedbackgenerator {
      */
     private function find_non_nullable_value(array $keys, array $attemptswithnulls, string $key) {
 
-        // Issue #11: treat only genuine nulls as missing. empty() would discard a
+        // Treat only genuine nulls as missing. empty() would discard a
         // valid ability of exactly 0.0 and pull neighbouring averages towards it.
         if (($attemptswithnulls[$key] ?? null) !== null) {
             return $attemptswithnulls[$key];

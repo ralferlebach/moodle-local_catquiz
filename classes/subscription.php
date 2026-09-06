@@ -93,7 +93,7 @@ class subscription {
     /**
      * Returns the ids of all items a user is subscribed to, in one query.
      *
-     * Issue #24: the scale tree called return_subscription_state() for every single
+     * The scale tree called return_subscription_state() for every single
      * scale, and each of those is its own record_exists() - one query per scale.
      * Callers that need the state of many items at once fetch the set once and look
      * it up in memory instead.

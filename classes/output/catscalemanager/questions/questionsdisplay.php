@@ -105,7 +105,7 @@ class questionsdisplay {
             'catscale_' . $catscale . 'context' . $catcontext . ' questionstable'
         );
 
-        // Issue #20: the question text is fetched on demand when a preview is
+        // The question text is fetched on demand when a preview is
         // opened, instead of being embedded into every row.
         $PAGE->requires->js_call_amd('local_catquiz/questionpreview', 'init');
         $table->set_catscaleid_and_contextid($catscale, $catcontext);
@@ -126,7 +126,7 @@ class questionsdisplay {
 
         $table->set_filter_sql($select, $from, $where, $filter, $params);
 
-        // Issue #21: the helper existed but was never called, so the table kept
+        // The helper existed but was never called, so the table kept
         // counting its rows with the full query - the one carrying the per question
         // and per user aggregates, computed only to be thrown away by COUNT().
         //
@@ -145,7 +145,7 @@ class questionsdisplay {
             'difficulty' => get_string('difficulty', 'local_catquiz'),
             'discrimination' => get_string('discrimination', 'local_catquiz'),
             'guessing' => get_string('guessing', 'local_catquiz'),
-            // Issue #54: whether these parameters can actually be used for the model.
+            // Whether these parameters can actually be used for the model.
             'itemparamvalidity' => get_string('itemparamvalidity', 'local_catquiz'),
             'action' => get_string('action', 'local_catquiz'),
         ];
@@ -164,7 +164,7 @@ class questionsdisplay {
 
         $sortcolumns = $columnsarray;
         unset($sortcolumns['action']);
-        // Issue #54: the visible column is named itemparamvalidity, so that is the
+        // The visible column is named itemparamvalidity, so that is the
         // name the header sends when it is clicked. Registering only the underlying
         // field "usable" left the visible header unsortable - the click referred to a
         // column the table did not know as sortable.
@@ -184,7 +184,7 @@ class questionsdisplay {
         $standardfilter = new standardfilter('model', get_string('model', 'local_catquiz'));
         $table->add_filter($standardfilter);
 
-        // Issue #54: filtering on the persisted flag, so that a maintainer can pull
+        // Filtering on the persisted flag, so that a maintainer can pull
         // up exactly the items whose parameters cannot be used. The labels spell the
         // states out; the stored values are 1 and 0.
         $usablefilter = new standardfilter('usable', get_string('itemparamvalidity', 'local_catquiz'));
@@ -248,11 +248,11 @@ class questionsdisplay {
 
         $table = new catscalequestions_table('catscaleid_' . $id . 'context' . $catcontextid . '_additems');
 
-        // Issue #58: the attempt count is loaded for the visible page instead of
+        // The attempt count is loaded for the visible page instead of
         // being aggregated over the whole context inside the main query.
         $table->set_contextattempts_context((int) $catcontextid);
 
-        // Issue #20: the question text is fetched on demand when a preview is
+        // The question text is fetched on demand when a preview is
         // opened, instead of being embedded into every row.
         $PAGE->requires->js_call_amd('local_catquiz/questionpreview', 'init');
         $table->set_catscaleid_and_contextid($id, $catcontextid);
@@ -296,9 +296,13 @@ class questionsdisplay {
         $table->add_filter($standardfilter);
 
         $table->define_fulltextsearchcolumns(['idnumber', 'name', 'qtype']);
+        // The keys have to match define_columns() above, or the declaration is
+        // silently ignored and the header simply is not sortable. 'name' was such a
+        // key: the column that shows the question name is 'questiontext' - its header
+        // reads "Name", which is where the mismatch came from.
         $table->define_sortablecolumns([
-            'idnunber',
-            'name',
+            'idnumber',
+            'questiontext',
             'qtype',
             'questioncontextattempts',
         ]);
@@ -380,7 +384,7 @@ class questionsdisplay {
      */
     private static function current_page_params(): array {
         $definitions = [
-            // Issue #29 moved tab selection to the server: only the active tab is
+            // Tab selection happens on the server: only the active tab is
             // built, and the tab travels in the URL. A form that does not carry it
             // therefore returns to the default tab, and the question list the user
             // was working in is simply gone from the response.
@@ -428,7 +432,7 @@ class questionsdisplay {
             $data['notable'] = $this->check_tabledisplay()['notable'];
             $data['modaltable'] = $this->render_addtestitems_table($this->scale);
 
-            // Issue #20: the question texts are no longer part of the list, so
+            // The question texts are no longer part of the list, so
             // searching them runs as its own step with its own input field.
             $qtsearch = trim(optional_param('qtsearch', '', PARAM_TEXT));
             $data['qtsearch'] = $qtsearch;

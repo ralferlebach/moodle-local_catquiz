@@ -87,7 +87,7 @@ class questiondetailview {
         // If no context is set, get default context from DB.
         $catcontext = empty($this->contextid) ? catquiz::get_default_context_id() : $this->contextid;
 
-        // Issue #19: restrict the query to the requested question instead of loading
+        // Restrict the query to the requested question instead of loading
         // the whole scale and picking one row out in PHP. The detail view shows a
         // single question, so every other row - and every statistics aggregate
         // computed for it - was work thrown away.

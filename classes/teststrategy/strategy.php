@@ -239,7 +239,7 @@ abstract class strategy {
         }
 
         try {
-            // Issue #64: every stage now records the pool as it stands *after that
+            // Every stage now records the pool as it stands *after that
             // stage ran*. The previous form passed the next filter as an argument -
             // record_stage('add_scale_standarderror', $this->maximumquestionscheck()) -
             // and PHP evaluates arguments before the call, so each count was filed
@@ -339,7 +339,7 @@ abstract class strategy {
         $this->cache->set('endtime', time());
         $this->cache->set('catquizerror', $result->get_status());
 
-        // Issue #64: the counts are written by persist_stage_counts(), which runs on
+        // The counts are written by persist_stage_counts(), which runs on
         // every completed selection - not only here. The reported abort never reaches
         // the error path at all: the selection reports no error, so after_error() does
         // not run, and a diagnosis that only wrote here stayed empty for exactly the
@@ -750,7 +750,7 @@ abstract class strategy {
     /**
      * Notes how many candidates remain after a stage, and passes the result through.
      *
-     * Issue #64: the count is taken before the next stage runs, so a stage that
+     * The count is taken before the next stage runs, so a stage that
      * empties the pool can be named. Without this the only observable fact was that
      * the pool ended up empty.
      *
@@ -761,7 +761,7 @@ abstract class strategy {
     /**
      * Writes the recorded counts to the attempt cache.
      *
-     * Issue #64: called at every exit of the selection, successful or not. The
+     * Called at every exit of the selection, successful or not. The
      * reported attempt ended without the selection reporting an error - the pool was
      * simply empty - so writing only in the error path left no trace of the one thing
      * worth knowing.

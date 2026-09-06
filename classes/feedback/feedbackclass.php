@@ -712,7 +712,7 @@ class feedbackclass {
                     ((int) $data["catquiz_catscales"]) === $scale->id ||
                     !empty($data["catquiz_subscalecheckbox_" . $scale->id])
                 ) {
-                    // Issue #14: the first range must be ascending too
+                    // The first range must be ascending too
                     // (upper_1 > lower_1); the loop below only covers j >= 2.
                     if (
                         isset($data['feedback_scaleid_limit_upper_' . $scale->id . '_1'])

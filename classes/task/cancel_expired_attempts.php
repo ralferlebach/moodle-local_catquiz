@@ -119,7 +119,7 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
             $quiz = $this->get_adaptivequiz($record->instance);
             $cm = get_coursemodule_from_instance('adaptivequiz', $record->instance);
             $context = context_module::instance($cm->id);
-            /* Issue #5: use the SAME authoritative completion path as a normal
+            /* Use the SAME authoritative completion path as a normal
                finish. The task used to call local_catquiz\local\attempt\attempt
                ::complete(), which only flips attemptstate/attemptstopcriteria and
                saves - it never sets the immutable timefinished and never invokes

@@ -149,7 +149,7 @@ class infergreateststrength extends strategy {
 
         if ($feedbackonlyfordefinedscaleid && !empty($catscaleid) && isset($personabilities[$catscaleid])) {
             // Force the selected scale. Will also be applied to excluded scales.
-            // Issue #10: use the scale id itself as the key, not the ability
+            // Use the scale id itself as the key, not the ability
             // record (which would be an illegal array offset).
             $relevantscale = $catscaleid;
         } else {

@@ -30,7 +30,7 @@ use stdClass;
 /**
  * Reports whether the stored parameters of an item can actually be used.
  *
- * Issue #54: an item whose parameters violate its model contract is treated as a
+ * An item whose parameters violate its model contract is treated as a
  * pilot item at runtime - necessary, because unusable parameters can silently
  * destroy the estimation (a 2PL item with discrimination 0 is mathematically mute,
  * so the ability estimate freezes). Until now that state was only visible in the
@@ -107,7 +107,7 @@ class itemparam_validity {
     /**
      * Sets the persisted usable flag on a record about to be written.
      *
-     * Issue #54: the backend has to filter and sort on the state, which needs a
+     * The backend has to filter and sort on the state, which needs a
      * database column - the state itself is derived in PHP from the model contract.
      * Persisting a derived value risks it drifting away from the rule, and the item
      * parameters are written from eight different places.

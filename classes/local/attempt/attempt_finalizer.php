@@ -70,7 +70,7 @@ final class attempt_finalizer {
             return false;
         }
 
-        /* Issue #5: the end time is AUTHORITATIVE. In the normal flow $finishedat
+        /* The end time is AUTHORITATIVE. In the normal flow $finishedat
            is the immutable timefinished stamped by adaptivequiz_complete_attempt().
            A missing or non-positive value means the caller reached finalisation
            without a completed attempt - previously this silently invented time()
@@ -120,7 +120,7 @@ final class attempt_finalizer {
             $result
         );
 
-        // Issue #8: expose the validity verdict on the adaptivequiz attempt so
+        // Expose the validity verdict on the adaptivequiz attempt so
         // the completionvalidresult rule can query it. Guarded by a column check
         // so local_catquiz keeps working against an older mod_adaptivequiz that
         // does not yet have these fields.
@@ -131,7 +131,7 @@ final class attempt_finalizer {
             $DB->set_field('adaptivequiz_attempt', 'resultstatus', $status, ['id' => $adaptiveattemptid]);
         }
 
-        // Issue #9: refresh the personparams "latest known state" snapshot only
+        // Refresh the personparams "latest known state" snapshot only
         // now, and only for valid scales measured in this attempt - never from a
         // mere carry-over or an intermediate estimate.
         if ($contextid !== null) {
@@ -149,7 +149,7 @@ final class attempt_finalizer {
                     $preattempt = [];
                 }
 
-                // Issue #56: the progress row is NOT removed here. Finalisation is
+                // The progress row is NOT removed here. Finalisation is
                 // not the end of the request - the feedback path loads the progress
                 // again afterwards, and a row deleted at this point made load() fall
                 // through to create_new() without quiz settings, which fails with a
@@ -184,7 +184,7 @@ final class attempt_finalizer {
             }
         }
 
-        // Issue #8 sets resultstatus/resultvalid on the adaptivequiz_attempt
+        // The fields resultstatus and resultvalid are set on the adaptivequiz_attempt
         // above, which the completionvalidresult rule then consumes.
         unset($stopreason);
 

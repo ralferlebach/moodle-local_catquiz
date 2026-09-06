@@ -117,7 +117,7 @@ class catmodel_info {
         $initialabilities = model_person_param_list::load_from_db($contextid, [$catscaleid]);
         $strategy->get_responses()->set_person_abilities($initialabilities);
         try {
-            // Issue #43: the incremental (in-place) path performs exactly one
+            // The incremental (in-place) path performs exactly one
             // item-parameter pass with the fixed person abilities; the disruptive
             // path iterates person and item parameters.
             if ($inplace) {
@@ -145,7 +145,7 @@ class catmodel_info {
             $event->trigger();
             return ['models' => [], 'targetcontextid' => (int) $contextid, 'identifiability' => null];
         }
-        // Issue #44: the incremental path keeps the existing context. It writes item
+        // The incremental path keeps the existing context. It writes item
         // parameters into that context (save_to_db upserts by componentid+model)
         // and leaves person parameters untouched, so contextid before == after and
         // historical statistics/exports stay visible. The disruptive path keeps
@@ -157,7 +157,7 @@ class catmodel_info {
             $targetcontextid = $newcontext->id;
         }
         $updatedmodels = [];
-        // Issue #43: persist the item parameters atomically. A failure must not
+        // Persist the item parameters atomically. A failure must not
         // leave a half-updated item-parameter set in the context.
         $transaction = $DB->start_delegated_transaction();
         try {
@@ -197,7 +197,7 @@ class catmodel_info {
 
         $identifiability = self::identifiability_summary($strategy, $itemdifficulties);
 
-        // Issue #43: AIC/BIC/CAIC before (old params) and after (new params) over
+        // AIC/BIC/CAIC before (old params) and after (new params) over
         // the same person abilities, plus the iteration/convergence metadata.
         $criteriaafter = $strategy->aggregate_information_criteria($itemdifficulties, $personabilities);
         $oldparams = $strategy->get_old_item_params();

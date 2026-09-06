@@ -127,7 +127,7 @@ class debuginfo extends feedbackgenerator {
 
         $attemptid = $data['attemptid'];
 
-        // Issue #18: resolve the context of this attempt through the central
+        // Resolve the context of this attempt through the central
         // resolver instead of querying the context table by hand with a hardcoded
         // context level, which silently produced no context when the attempt had
         // no course or the course context row was not found.
@@ -344,7 +344,7 @@ class debuginfo extends feedbackgenerator {
             'personabilities' => $personabilities,
             'questions' => $questions,
             'activescales' => '"' . implode(", ", $activescales) . '"',
-            // Issue #62: on the first question of an attempt these keys do not exist,
+            // On the first question of an attempt these keys do not exist,
             // and catquiz.php removes lastquestion from the attempt data outright. On
             // a normal instance (array) null is simply [], but with DEBUG_DEVELOPER
             // Moodle turns the notice into an exception. It is caught in
@@ -375,7 +375,7 @@ class debuginfo extends feedbackgenerator {
      * @return bool
      */
     protected function has_teacherfeedbackpermission(): bool {
-        // Issue #18: the debug output exposes internals of the estimation, so a CAT
+        // The debug output exposes internals of the estimation, so a CAT
         // manager always sees it. In addition a teacher of the course the attempt
         // belongs to may see it - checked in the attempt's own context, never in
         // the system context.

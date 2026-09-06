@@ -178,7 +178,7 @@ class customscalefeedback extends feedbackgenerator {
             $existingdata['teststrategy']
         );
 
-        // Issue #14: attach the per-scale standard error so the feedback range
+        // Attach the per-scale standard error so the feedback range
         // resolver can optionally apply measurement-uncertainty gating.
         if (isset($newdata['se']) && is_array($newdata['se'])) {
             foreach ($personabilitiesfeedbackeditor as $scaleid => &$abilityentry) {
@@ -231,7 +231,7 @@ class customscalefeedback extends feedbackgenerator {
         }
         foreach ($displayable as $catscaleid => $personability) {
             $relevantscalesfound = true;
-            // Issue #14: a score is assigned to exactly one range (half-open
+            // A score is assigned to exactly one range (half-open
             // intervals), instead of matching every range whose inclusive bounds
             // contain the value and letting the last match overwrite the earlier.
             // When measurement-uncertainty gating is enabled (factor > 0), the

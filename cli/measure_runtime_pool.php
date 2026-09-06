@@ -84,12 +84,21 @@ function measure_once(int $scaleid, int $contextid): array {
     $queriesbefore = $DB->perf_get_queries();
     $memorybefore = memory_get_usage();
 
+    // The seventh argument is what the runtime path passes: a lean column set that
+    // omits the question, category and scale names. The manager interface needs those
+    // for display and filtering, the selection does not.
+    //
+    // Measuring without it reported a payload the runtime never holds - 868 bytes per
+    // row instead of 731, which at 250.000 items is the difference between 206 MB and
+    // roughly 174 MB. The number looked like evidence for a fix that already existed.
     [$select, $from, $where, , $params] = \local_catquiz\catquiz::return_sql_for_catscalequestions(
         [$scaleid],
         $contextid,
         [],
         $USER->id,
-        null
+        null,
+        null,
+        true
     );
 
     $sqlstart = microtime(true);

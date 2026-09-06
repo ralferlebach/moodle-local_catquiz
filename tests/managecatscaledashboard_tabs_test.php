@@ -337,4 +337,136 @@ final class managecatscaledashboard_tabs_test extends advanced_testcase {
                 . 'that is not in the document.'
         );
     }
+    /**
+     * Only the active tab issues database queries.
+     *
+     * The other DoD points can all be satisfied by markup: a URL parameter, an
+     * aria-current, a working back button. None of them proves that the server
+     * stopped building the tabs nobody asked for - and that was the actual reason for
+     * the rebuild.
+     *
+     * Counting queries is the only way to tell those apart. The numbers themselves
+     * are not pinned, because they legitimately change when a tab gains a column; what
+     * is pinned is that a second tab costs measurably more than a summary that shows
+     * almost nothing.
+     *
+     * @return void
+     */
+    public function test_only_the_active_tab_queries_the_database(): void {
+        global $DB, $PAGE;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $now = time();
+        $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
+            'name' => 'Tab query context',
+            'description' => '',
+            'descriptionformat' => FORMAT_HTML,
+            'starttimestamp' => $now - 100,
+            'endtimestamp' => $now + 10000,
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'usermodified' => 0,
+        ]);
+        $scaleid = (int) $DB->insert_record('local_catquiz_catscales', (object) [
+            'parentid' => 0,
+            'name' => 'Tab query scale',
+            'label' => 'TQ1',
+            'contextid' => $contextid,
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+
+        // Rendering needs a page with a url, or Moodle emits a debugging notice
+        // that PHPUnit treats as a failure.
+        $PAGE->set_url('/local/catquiz/manage_catscales.php');
+
+        $counts = [];
+        foreach (['summary', 'questions'] as $tab) {
+            $before = $DB->perf_get_queries();
+
+            $dashboard = new managecatscaledashboard(
+                0,
+                $contextid,
+                $scaleid,
+                0,
+                1,
+                'question',
+                $tab
+            );
+
+            // The page renderer rather than a hand-built one: export_for_template()
+            // renders sub-templates, and those need a renderer that knows its theme.
+            $dashboard->export_for_template($PAGE->get_renderer('local_catquiz'));
+
+            $counts[$tab] = $DB->perf_get_queries() - $before;
+        }
+
+        // Every tab needs some queries; a zero would mean the export did not run at
+        // all and the comparison below would be meaningless.
+        $this->assertGreaterThan(0, $counts['summary']);
+
+        $this->assertNotSame(
+            $counts['summary'],
+            $counts['questions'],
+            'Both tabs cost the same, which is what happens when the dashboard builds '
+                . 'all of them regardless of which one was requested.'
+        );
+    }
+    /**
+     * Every sortable column is a column the table actually has.
+     *
+     * A name that matches nothing is silently ignored: the header simply is not
+     * sortable, and nothing fails. 'idnunber' sat in this list instead of 'idnumber',
+     * so the label column could not be sorted at all - visible only to whoever tried.
+     *
+     * The comparison is against define_columns() rather than against a fixed list, so
+     * a column renamed later is caught without anyone editing this test.
+     *
+     * @return void
+     */
+    public function test_sortable_columns_exist(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $source = file_get_contents(
+            $CFG->dirroot . '/local/catquiz/classes/output/catscalemanager/questions/'
+                . 'questionsdisplay.php'
+        );
+
+        $extract = function (string $method) use ($source): array {
+            $names = [];
+            foreach (['define_columns', 'define_sortablecolumns'] as $unused) {
+                // Placeholder to keep the closure signature obvious.
+                break;
+            }
+            $offset = 0;
+            while (($start = strpos($source, $method . '([', $offset)) !== false) {
+                $end = strpos($source, ']', $start);
+                $block = substr($source, $start, $end - $start);
+                preg_match_all("/'([a-z_]+)'/", $block, $matches);
+                $names = array_merge($names, $matches[1]);
+                $offset = $end;
+            }
+
+            return array_unique($names);
+        };
+
+        $columns = $extract('define_columns');
+        $sortable = $extract('define_sortablecolumns');
+
+        $this->assertNotEmpty($columns, 'No columns were found - the test cannot judge.');
+        $this->assertNotEmpty($sortable);
+
+        $unknown = array_values(array_diff($sortable, $columns));
+
+        $this->assertSame(
+            [],
+            $unknown,
+            'These columns are declared sortable but do not exist; the declaration is '
+                . 'ignored without any error.'
+        );
+    }
 }

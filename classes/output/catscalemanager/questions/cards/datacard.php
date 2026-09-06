@@ -98,7 +98,7 @@ class datacard implements renderable {
         // If no context is set, get default context from DB.
         $catcontext = empty($this->contextid) ? catquiz::get_default_context_id() : $this->contextid;
 
-        // Issue #19: fetch exactly this one question.
+        // Fetch exactly this one question.
         //
         // The previous version loaded the scale through the shared list builder and
         // picked the wanted row out of the result in PHP. Two things were wrong with

@@ -208,7 +208,7 @@ class catquiz_handler {
         $subscales = \local_catquiz\data\dataapi::get_catscale_and_children($selectedparentscale, true);
         self::generate_subscale_checkboxes($subscales, $elements, $mform);
 
-        // Issue #56: how long the working state of an attempt is kept, per test.
+        // How long the working state of an attempt is kept, per test.
         //
         // Only the levels the site permits are offered. A site configured for data
         // minimisation must not be overridden here, and an option that would be
@@ -998,7 +998,7 @@ class catquiz_handler {
     ): string {
         global $DB, $COURSE;
 
-        // Issue #5: finalisation is owned by attempt_finalizer and is normally
+        // Finalisation is owned by attempt_finalizer and is normally
         // triggered from the authoritative status change in
         // adaptivequiz_complete_attempt(). Here we only call it again as an
         // idempotent safety net (in case this render path is reached without the

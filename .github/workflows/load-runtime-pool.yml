@@ -240,6 +240,32 @@ jobs:
             --out=/tmp/pool-${{ matrix.items }}.md \
             | tee /tmp/pool-${{ matrix.items }}.txt
 
+      - name: Verify the recalculation lock across two processes (issue #44)
+        run: |
+          cd moodle
+
+          # PHPUnit cannot show this: Moodle's database lock is re-entrant within one
+          # process, so a test that holds the lock and then calls the service is
+          # granted it again and the two runs never collide. Two processes do collide.
+          #
+          # The first call holds the lock in the background; the second has to be
+          # refused rather than wait, because a scheduled run that waits occupies the
+          # queue instead of reporting that the work is already under way.
+          php local/catquiz/cli/verify_recalculation_lock.php \
+            --scaleid=${{ steps.pool.outputs.scaleid }} --hold=15 &
+          holder=$!
+
+          sleep 4
+          php local/catquiz/cli/verify_recalculation_lock.php \
+            --scaleid=${{ steps.pool.outputs.scaleid }} --expect=refused
+
+          wait $holder
+
+          # And once it is released the next run may start again - otherwise the first
+          # check would also pass with a lock that is never given back.
+          php local/catquiz/cli/verify_recalculation_lock.php \
+            --scaleid=${{ steps.pool.outputs.scaleid }} --expect=granted
+
       - name: Upload the measurement
         if: always()
         uses: actions/upload-artifact@v4

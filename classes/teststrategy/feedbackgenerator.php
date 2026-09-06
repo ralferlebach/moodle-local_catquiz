@@ -256,7 +256,7 @@ abstract class feedbackgenerator {
 
         $feedbacksettings->set_params_from_attempt($newdata, $quizsettings);
 
-        // Issue #10: forward the forced-scale configuration end to end. When the
+        // Forward the forced-scale configuration end to end. When the
         // caller passes the defaults, fall back to the values carried on the
         // feedback settings, then hand them to the selection strategy (which maps
         // $forcedscaleid onto its $catscaleid parameter).
@@ -277,7 +277,7 @@ abstract class feedbackgenerator {
     /**
      * Returns an empty result when a generator has no reportable data.
      *
-     * Issue #10: a generator without data must not produce a tab. The assembly
+     * A generator without data must not produce a tab. The assembly
      * (attemptfeedback::generate_feedback) skips empty results, so returning an
      * empty array here suppresses the tab instead of rendering a stray
      * "feedback not available" block. When the whole attempt has no reportable
@@ -362,7 +362,7 @@ abstract class feedbackgenerator {
     /**
      * Returns the context the current attempt belongs to.
      *
-     * Issue #18: permissions must be judged in the course or module context of the
+     * Permissions must be judged in the course or module context of the
      * attempt being viewed, not in the system context and not via the global
      * $COURSE, which during shortcode or AJAX rendering is not necessarily the
      * course of the attempt.
@@ -425,7 +425,7 @@ abstract class feedbackgenerator {
             $this->structuredabilities = [];
             return [];
         }
-        // Issue #59: attemptfeedback::update_data() returns early when no person
+        // Attemptfeedback::update_data() returns early when no person
         // abilities exist yet and never sets 'catscales'. array_key_first([]) is null,
         // which used to reach catscale::__construct() and fail there with a TypeError
         // - one level below the mistake, and in place of the message that would have

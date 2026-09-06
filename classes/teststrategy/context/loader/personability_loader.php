@@ -140,7 +140,7 @@ class personability_loader implements contextloaderinterface {
 
         $abilities = [];
         foreach ($catscaleids as $scaleid) {
-            /* Issue #9: the attempt history is the authoritative source for a
+            /* The attempt history is the authoritative source for a
                carry-over start value. local_catquiz_personparams is written
                DURING an attempt (updatepersonability, filterbystandarderror), so
                it is a living intermediate state rather than a record of finished

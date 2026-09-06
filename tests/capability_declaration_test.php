@@ -253,4 +253,51 @@ final class capability_declaration_test extends advanced_testcase {
             'An attempt id from the client needs an ownership check, not just a context.'
         );
     }
+    /**
+     * Every external function validates its context and checks a capability.
+     *
+     * These are two different questions and neither substitutes for the other:
+     * validate_context() establishes where the request acts and whether the web
+     * service session may use that context at all; the capability answers who may
+     * act. delete_catscale checked the second and not the first, which is easy to
+     * miss precisely because the function looked guarded.
+     *
+     * Written as a rule rather than as a list, so a function added later is covered
+     * without anyone remembering this file.
+     *
+     * @return void
+     */
+    public function test_every_external_function_is_guarded(): void {
+        global $CFG;
+
+        $this->resetAfterTest();
+
+        $directory = $CFG->dirroot . '/local/catquiz/classes/external';
+        $missing = [];
+
+        foreach (glob($directory . '/*.php') as $file) {
+            $name = basename($file, '.php');
+
+            // Not an endpoint: a dispatch helper with no execute() of its own.
+            if ($name === 'execute_method_from_webservice') {
+                continue;
+            }
+
+            $source = file_get_contents($file);
+
+            if (!str_contains($source, 'validate_context')) {
+                $missing[] = $name . ' (no validate_context)';
+            }
+            if (!preg_match('/(require|has)_capability/', $source)) {
+                $missing[] = $name . ' (no capability check)';
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $missing,
+            'These endpoints are reachable over the web service layer without both '
+                . 'guards in place.'
+        );
+    }
 }

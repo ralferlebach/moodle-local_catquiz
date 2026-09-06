@@ -164,7 +164,7 @@ class comparetotestaverage extends feedbackgenerator {
     /**
      * Minimum number of distinct peers required to show the comparison.
      *
-     * Issue #15: configurable via the plugin setting minpeersforcomparison;
+     * Configurable via the plugin setting minpeersforcomparison;
      * falls back to MIN_USERS when the setting is absent or invalid.
      *
      * @return int
@@ -254,7 +254,7 @@ class comparetotestaverage extends feedbackgenerator {
         }
         $ability = $abilities[$catscaleid];
 
-        // Issue #15: compute the peer comparison against a context-true reference
+        // Compute the peer comparison against a context-true reference
         // group via SQL aggregates: same context and scale, exactly one value per
         // person, the compared user excluded. This replaces loading every
         // personparam into PHP, computing a mean that included the user, and a
@@ -401,7 +401,7 @@ class comparetotestaverage extends feedbackgenerator {
 
         $fisherinfos = $this->feedbackhelper->get_fisherinfos_of_items($items, $models, $abilitysteps);
         // Prepare data for scorecounter bars.
-        // Issue #15: scope the histogram to the current CAT context so it does
+        // Scope the histogram to the current CAT context so it does
         // not mix person parameters from other contexts.
         $abilityrecords = $DB->get_records('local_catquiz_personparams', [
             'catscaleid' => $primarycatscale['id'],

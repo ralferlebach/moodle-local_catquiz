@@ -356,6 +356,7 @@ $string['feedback_customscale_nofeedback'] = 'No feedback was provided for your 
 $string['feedback_details_description'] = 'Following table lists all aspects
     (scales) of {$a}, for which a reliable result could be calculated.';
 $string['feedback_details_heading'] = 'Details of your result';
+$string['feedback_details_highestskill'] = 'Your strongest scale';
 $string['feedback_details_lowestskill'] = 'Scale {$a->name} with an ability
     score of {$a->value} (± {$a->se}) was found to be your <b>weakest tested
     area</b>. This does not necessarily mean that you are weak there: it is the

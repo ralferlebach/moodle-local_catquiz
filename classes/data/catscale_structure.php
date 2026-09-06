@@ -101,7 +101,7 @@ class catscale_structure {
             }
 
             if (!empty($data['id'])) {
-                // Issue #29: the tab is a request parameter. The fragment used
+                // The tab is a request parameter. The fragment used
                 // before pointed at a pane that is only rendered when it is active,
                 // so the link landed on the default tab without the scale in view.
                 $url = new moodle_url('/local/catquiz/manage_catscales.php', [

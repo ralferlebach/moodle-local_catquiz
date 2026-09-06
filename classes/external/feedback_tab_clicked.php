@@ -75,7 +75,7 @@ class feedback_tab_clicked extends external_api {
             'feedbacktranslated' => $translatedfeedback,
         ]);
 
-        // Issue #18: AJAX endpoints must resolve and validate the context of the
+        // AJAX endpoints must resolve and validate the context of the
         // attempt they act on, so that they apply exactly the same rules as a
         // normal page request instead of judging everything in the system context.
         $ctx = context_resolver::for_attempt($attemptid);
@@ -85,7 +85,7 @@ class feedback_tab_clicked extends external_api {
         // looking at feedback appeared in the event log as the learner. The role is
         // now decided in the context of the attempt, which is where teaching rights
         // actually live - a site-wide manage right says nothing about a course.
-        // Issue #68: the attempt has to exist before anyone is authorised for it.
+        // The attempt has to exist before anyone is authorised for it.
         // Managers and teachers passed this point on capability alone, so an id that
         // matched no attempt still produced an event - a log entry about something
         // that never happened. Loading it first makes every role fail closed on an

@@ -56,7 +56,7 @@ class recalculate_cat_model_params extends \core\task\scheduled_task {
         $mainscales = catquiz::get_all_scales_for_active_contexts();
         $service = new calculation_service();
         foreach ($mainscales as $scale) {
-            // Issue #44/#43: use the scale's persistent active context (loaded from
+            // Use the scale's persistent active context (loaded from
             // the database, never a process-local cache) and route the run through
             // the central service in the incremental mode. A scheduled trigger may
             // only ever run the incremental mode, so it never creates or activates

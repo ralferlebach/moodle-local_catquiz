@@ -336,7 +336,7 @@ class progress implements JsonSerializable {
         $instance->activescales = (array) $data->activescales;
         $instance->droppedscales = property_exists($data, 'droppedscales') ? (array) $data->droppedscales : [];
 
-        // Issue #56: attempts written before the trace was persisted have no such
+        // Attempts written before the trace was persisted have no such
         // key. Defaulting to an empty array keeps them loadable - refusing them would
         // break running attempts to fix a display detail.
         $instance->abilitytrace = property_exists($data, 'abilitytrace')
@@ -455,7 +455,7 @@ class progress implements JsonSerializable {
             'excludedquestions' => $this->excludedquestions,
             'gaveupquestions' => $this->gaveupquestions,
             'starttime' => $this->starttime,
-            // Issue #56: the trace was collected for the whole attempt and then
+            // The trace was collected for the whole attempt and then
             // dropped at the end of the request. Everything that reads it - the
             // learning progress chart, the debug view - saw at most the steps of the
             // current page load, which looks like a short attempt rather than a lost
@@ -890,7 +890,7 @@ class progress implements JsonSerializable {
      * @return self
      */
     public function set_ability(float $ability, int $catscaleid): self {
-        // Issue #56: the empty array initialisation used to be pointless - the very
+        // The empty array initialisation used to be pointless - the very
         // next line replaced it with a scalar, so abilities only ever held the last
         // estimate per scale and no trajectory could be reconstructed.
         //
