@@ -1,5 +1,23 @@
 # Changelog – local_catquiz
 
+## 1.2.0 (interne Version 2026090510)
+
+> Die Ursache des CI-Abbruchs gefunden: eine Endlosrekursion in einer Test-Fixture.
+
+- **`lean_pool_select_test::make_scale()` rief sich selbst auf.** Die Methode sollte
+  Kontext und Skala anlegen; stattdessen stand dort
+  `[$scaleid, $contextid] = $this->make_scale();` - ein Selbstaufruf ohne
+  Abbruchbedingung, dazu ein undefiniertes `$now`.
+- **Der Test schlug nicht fehl, er verbrauchte den Speicher.** Der Prozess wurde vom
+  Kernel beendet; die Suite endete mit einem blossen Exit-Code ohne Meldung. Genau
+  deshalb brach der Lauf in jedem Branch stabil an derselben Stelle ab - direkt nach
+  `itemparam_recovery_test`, das alphabetisch davor liegt und selbst in Ordnung ist.
+  Lokal reproduziert: rc=137 nach 17 Sekunden.
+- Behoben; der Test laeuft jetzt in **einer Sekunde** durch (3 Tests, 31 Assertions).
+- Die uebrigen 13 Dateien nach der Abbruchstelle laufen ebenfalls durch. Vier weitere
+  Selbstaufrufe im Produktivcode wurden geprueft - alle mit Abbruchbedingung
+  (Baumdurchlaeufe), keine Endlosrekursion.
+
 ## 1.2.0 (interne Version 2026090509)
 
 > Messreihe 250.000 Items ausgewertet; zwei CI-Fehler behoben.

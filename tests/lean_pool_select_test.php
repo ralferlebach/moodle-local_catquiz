@@ -55,7 +55,23 @@ final class lean_pool_select_test extends advanced_testcase {
     private function make_scale(): array {
         global $DB;
 
-        [$scaleid, $contextid] = $this->make_scale();
+        $now = time();
+
+        // The context has to exist before the scale can point at it. This line was
+        // once a recursive call to make_scale() itself: the test did not fail, it
+        // exhausted memory and the run was killed, which surfaced as a bare exit
+        // code with no message and stopped the whole suite.
+        $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
+            'name' => 'Lean pool context',
+            'description' => '',
+            'descriptionformat' => FORMAT_HTML,
+            'starttimestamp' => $now - 100,
+            'endtimestamp' => $now + 10000,
+            'timecreated' => $now,
+            'timemodified' => $now,
+            'usermodified' => 0,
+        ]);
+
         $scaleid = (int) $DB->insert_record('local_catquiz_catscales', (object) [
             'parentid' => 0,
             'name' => 'Lean pool scale',
