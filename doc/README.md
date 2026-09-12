@@ -19,6 +19,12 @@ Zwei Arten von Dokumenten:
 - **environment-setup.md** – Reproduzierbarer Aufbau der Test-/Laufzeitumgebung
   (Moodle, PHP, PostgreSQL, PHPUnit, Behat, phpcs/moodle-cs, Gherkin/Mustache-Lint)
   inkl. verifizierter Fixpunkte und typischer Stolpersteine.
+- **release-1.2.0-changes.md** – Änderungsbericht vom Wunderbyte-v3-Stand zu
+  1.2.0: Testdurchführung, Ergebnispersistenz, Feedback, Performance, Sicherheit.
+  PR-tauglich und menschenlesbar; die Einzelheiten stehen in den Session-Doks.
+- **session-start-moodle5-migration.md** – Startpunkt für den Strang „Migration
+  zu Moodle 5.x": die offenen Issues aus allen drei Repositories in einer
+  Reihenfolge, was aus Sitzung 104 bereits einzahlt, und die Werkzeuge dafür.
 - **session-start-prompt.md** – Kopierfertiger Prompt für den Start neuer
   Sitzungen (Projekt, Pfade, Prüf-Ablauf, verbindliche Disziplinen, Auslieferung).
 

@@ -1,5 +1,22 @@
 # Changelog – local_catquiz
 
+## 1.2.0 (interne Version 2026090554)
+
+> Sitzungsabschluss: Dokumentation aufgenommen, naechster Strang vorbereitet.
+
+- **`doc/release-1.2.0-changes.md`**: der Aenderungsbericht vom Wunderbyte-v3-Stand
+  zu 1.2.0, aufgenommen und im Doc-Index verlinkt.
+- **`doc/session-104-changes.md`**: die Historie dieser Sitzung, einschliesslich der
+  Fehlmessungen und dessen, was daraus folgt.
+- **`doc/session-start-moodle5-migration.md`**: Startpunkt fuer den naechsten Strang.
+  Die 16 offenen Issues aus allen drei Repositories in einer Reihenfolge, mit
+  Begruendung: **#31 zuerst** - solange die CI nur 4.5 faehrt, bleibt jeder
+  5.x-Fehler unsichtbar. Und **#10 vor den kleinen Fixes am Fork**, sonst macht der
+  Rebase sie doppelt.
+- Festgehalten, was aus dieser Sitzung bereits einzahlt (#9, #8, #4) - und dass diese
+  drei nach einem Rebase **erneut zu pruefen** sind, weil sie im Fork liegen.
+- Regression vollstaendig gruen, phpcs 0.
+
 ## 1.2.0 (interne Version 2026090553)
 
 > Das Gate war an der Manager-Seite zu streng - weniger bauen ist der Gewinn.
