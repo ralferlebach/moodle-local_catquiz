@@ -41,7 +41,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:13
+        image: postgres:17  # Moodle 5.3 verlangt PostgreSQL 17.
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -49,7 +49,7 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       mariadb:
-        image: mariadb:10.8
+        image: mariadb:11.4  # Moodle 5.3 verlangt MariaDB 11.4.
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -61,12 +61,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { php: '8.1', moodle-branch: MOODLE_405_STABLE, database: pgsql }
-          - { php: '8.1', moodle-branch: MOODLE_405_STABLE, database: mariadb }
-          - { php: '8.2', moodle-branch: MOODLE_405_STABLE, database: pgsql }
-          - { php: '8.2', moodle-branch: MOODLE_405_STABLE, database: mariadb }
-          - { php: '8.3', moodle-branch: MOODLE_405_STABLE, database: pgsql }
-          - { php: '8.3', moodle-branch: MOODLE_405_STABLE, database: mariadb }
+          # Zielversion ist Moodle 5.3 (LTS), abgesichert gegen 5.1 und 5.2. Moodle 4.x wird
+          # nicht mehr unterstuetzt (version.php: supported = [501, 503]), PHP 8.1 und 8.2
+          # ebenfalls nicht mehr - Moodle 5.1 verlangt mindestens 8.3.
+          - { php: '8.3', moodle-branch: MOODLE_501_STABLE, database: pgsql }
+          - { php: '8.3', moodle-branch: MOODLE_501_STABLE, database: mariadb }
+          - { php: '8.3', moodle-branch: MOODLE_502_STABLE, database: pgsql }
+          - { php: '8.3', moodle-branch: MOODLE_502_STABLE, database: mariadb }
+          # 5.3 ist bis zum Verzweigen am 5. Oktober nur als main verfuegbar.
+          - { php: '8.3', moodle-branch: main, database: pgsql }
+          - { php: '8.3', moodle-branch: main, database: mariadb }
+          - { php: '8.4', moodle-branch: main, database: pgsql }
 
     steps:
       - name: Check out repository code

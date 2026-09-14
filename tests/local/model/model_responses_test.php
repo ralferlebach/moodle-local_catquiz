@@ -80,7 +80,7 @@ final class model_responses_test extends basic_testcase {
     public static function filtering_values_works_as_expected_provider(): array {
         return [
             'limit persons' => [
-                'in_data' => [
+                'indata' => [
                     ['P1', 'A1', 1.0],
                     ['P1', 'A2', 0.0],
                     ['P1', 'A3', 1.0],
@@ -91,16 +91,16 @@ final class model_responses_test extends basic_testcase {
                     ['P3', 'A2', 1.0],
                     ['P3', 'A3', 1.0],
                 ],
-                'limit_to_users' => [
+                'users' => [
                     'P1',
                     'P2',
                 ],
-                'limit_to_items' => null,
-                'expected_users' => ['P1', 'P2'],
-                'expected_items' => ['A1'],
+                'items' => null,
+                'expectedusers' => ['P1', 'P2'],
+                'expecteditems' => ['A1'],
             ],
             'limit items' => [
-                'in_data' => [
+                'indata' => [
                     ['P1', 'A1', 1.0],
                     ['P1', 'A2', 1.0],
                     ['P1', 'A3', 1.0],
@@ -111,15 +111,15 @@ final class model_responses_test extends basic_testcase {
                     ['P3', 'A2', 1.0],
                     ['P3', 'A3', 1.0],
                 ],
-                'limit_to_users' => null,
-                'limit_to_items' => [
+                'users' => null,
+                'items' => [
                     'A1',
                 ],
-                'expected_users' => ['P1', 'P2', 'P3'],
-                'expected_items' => ['A1'],
+                'expectedusers' => ['P1', 'P2', 'P3'],
+                'expecteditems' => ['A1'],
             ],
             'limit users and items' => [
-                'in_data' => [
+                'indata' => [
                     ['P1', 'A1', 1.0],
                     ['P1', 'A2', 1.0],
                     ['P1', 'A3', 1.0],
@@ -130,10 +130,10 @@ final class model_responses_test extends basic_testcase {
                     ['P3', 'A2', 2.0],
                     ['P3', 'A3', 1.0],
                 ],
-                'limit_to_users' => ['P1', 'P3'],
-                'limit_to_items' => [ 'A1', 'A2'],
-                'expected_users' => ['P1', 'P3'],
-                'expected_items' => ['A1', 'A2'],
+                'users' => ['P1', 'P3'],
+                'items' => [ 'A1', 'A2'],
+                'expectedusers' => ['P1', 'P3'],
+                'expecteditems' => ['A1', 'A2'],
             ],
         ];
     }

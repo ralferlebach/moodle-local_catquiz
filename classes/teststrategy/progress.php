@@ -221,8 +221,8 @@ class progress implements JsonSerializable {
      * @return progress
      */
     public static function load(int $attemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
-        $instance = self::load_from_cache($attemptid)
-            ?: self::load_from_db($attemptid, $contextid)
+        $instance = self::load_from_cache($attemptid, $component)
+            ?: self::load_from_db($attemptid, $component, $contextid)
             ?: self::create_new($attemptid, $component, $contextid, $quizsettings);
 
         $instance->hasnewresponse = false;
@@ -271,10 +271,45 @@ class progress implements JsonSerializable {
      * @return progress
      * @throws coding_exception
      */
-    private static function load_from_cache($attemptid) {
+    private static function load_from_cache($attemptid, string $component = '') {
         $attemptcache = cache::make('local_catquiz', 'adaptivequizattempt');
         $cachekey = self::get_cache_key($attemptid);
-        return $attemptcache->get($cachekey);
+        $cached = $attemptcache->get($cachekey);
+
+        if (!$cached instanceof self) {
+            return false;
+        }
+
+        // The cache key carries the user, but a stale entry could still name another one, and the
+        // component has never been part of the key at all. Progress of one component must not be
+        // handed to another under the same numeric id.
+        if (!$cached->belongs_to_current_request($component)) {
+            $attemptcache->delete($cachekey);
+
+            return false;
+        }
+
+        return $cached;
+    }
+
+    /**
+     * Returns whether this progress belongs to the user and component asking for it.
+     *
+     * The identity of a progress record is the pair (component, attemptid) plus the user it was
+     * created for - a numeric attempt id on its own says nothing. Ids are reused across components
+     * and survive as orphans, so a record found under one must still be proven to belong here.
+     *
+     * @param string $component Component asking, empty to skip the component check.
+     * @return bool
+     */
+    private function belongs_to_current_request(string $component): bool {
+        global $USER;
+
+        if ((int) $this->userid !== (int) $USER->id) {
+            return false;
+        }
+
+        return $component === '' || $this->component === $component;
     }
 
     /**
@@ -284,18 +319,34 @@ class progress implements JsonSerializable {
      * @param int $contextid
      * @return progress|false
      */
-    private static function load_from_db(int $attemptid, int $contextid) {
-        global $DB;
+    private static function load_from_db(int $attemptid, string $component, int $contextid) {
+        global $DB, $USER;
+
+        // Look the record up by the whole identity, not by the attempt id alone: the id is the one
+        // of the component's attempt, and the same number exists in other components.
         $record = $DB->get_record(
             'local_catquiz_progress',
-            ['attemptid' => $attemptid],
+            ['attemptid' => $attemptid, 'component' => $component],
             '*'
         );
-        if ($record) {
-            $instance = self::populate_from_object($record, $contextid);
-            return $instance;
+
+        if (!$record) {
+            return false;
         }
-        return false;
+
+        if ((int) $record->userid !== (int) $USER->id) {
+            // An orphaned or foreign record under this id. Taking it over would carry another
+            // person's answers into this attempt, so it is ignored rather than used.
+            debugging(
+                'Progress record ' . $record->id . ' belongs to user ' . $record->userid
+                    . ' and was not used for user ' . $USER->id . '.',
+                DEBUG_DEVELOPER
+            );
+
+            return false;
+        }
+
+        return self::populate_from_object($record, $contextid);
     }
 
     /**

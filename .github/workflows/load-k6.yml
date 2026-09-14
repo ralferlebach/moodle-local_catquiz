@@ -45,7 +45,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:13
+        image: postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -55,7 +55,7 @@ jobs:
 
     env:
       DB: pgsql
-      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_BRANCH: main  # Moodle 5.3; bis zum Verzweigen am 5. Oktober nur als main.
       MOODLE_DIR: ${{ github.workspace }}/moodle
       LOAD_ADMIN_PASS: 'Admin!23'
 

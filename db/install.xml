@@ -165,7 +165,7 @@
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT = "0" SEQUENCE="false" COMMENT="User id"/>
         <FIELD NAME="catscaleid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="contextid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Cat context"/>
-        <FIELD NAME="attemptid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Identifies the attempt"/>   <!-- TODO: To be decided and to be implemented -->
+        <FIELD NAME="attemptid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Id of the attempt in the component named above - for mod_adaptivequiz this is adaptivequiz_attempt.id, not local_catquiz_attempts.id. Identity is the pair (component, attemptid)."/>   <!-- TODO: To be decided and to be implemented -->
         <FIELD NAME="ability" TYPE="number" LENGTH="10" NOTNULL="false" SEQUENCE="false" DECIMALS="4" COMMENT="person ability in given catscale"/>
         <FIELD NAME="standarderror" TYPE="number" LENGTH="10" NOTNULL="false" SEQUENCE="false" DECIMALS="4" COMMENT="standard error of measurement"/> <!-- TODO: To be implemented -->
         <FIELD NAME="status" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Status"/>
@@ -233,9 +233,9 @@
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
-        <KEY NAME="attemptid" TYPE="foreign-unique" FIELDS="attemptid" REFTABLE="local_catquiz_attempts" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
+        <INDEX NAME="componentattempt" UNIQUE="true" FIELDS="component, attemptid"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_catquiz_qhashmap" COMMENT="Maps questions between instances using hashes">

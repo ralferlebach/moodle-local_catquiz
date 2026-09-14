@@ -73,10 +73,12 @@ final class schema_indexes_test extends advanced_testcase {
                 ['userid', 'contextid', 'catscaleid'],
                 true,
             ],
-            'progress: one row per attempt' => [
+            // Identity of a progress row is the pair: the attempt id belongs to the component
+            // named next to it, and the same number exists in every other component.
+            'progress: one row per attempt of a component' => [
                 'local_catquiz_progress',
-                'attemptid',
-                ['attemptid'],
+                'componentattempt',
+                ['component', 'attemptid'],
                 true,
             ],
             'items: lookup by scale and component' => [
@@ -214,12 +216,18 @@ final class schema_indexes_test extends advanced_testcase {
 
         $row = (object) [
             'userid' => 42,
+            'component' => 'mod_adaptivequiz',
             'attemptid' => 12345,
             'json' => '{}',
             'timecreated' => time(),
             'timemodified' => time(),
         ];
         $DB->insert_record('local_catquiz_progress', $row);
+
+        // The same attempt id in another component is a different attempt and is allowed.
+        $other = clone($row);
+        $other->component = 'mod_quiz';
+        $DB->insert_record('local_catquiz_progress', $other);
 
         $this->expectException(dml_exception::class);
         $DB->insert_record('local_catquiz_progress', $row);

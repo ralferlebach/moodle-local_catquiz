@@ -288,19 +288,19 @@ final class catcalc_test extends basic_testcase {
 
         return [
             'grmgeneralized' => [
-                'itemparams' => (new model_item_param_list())->add($grmgeneralizedparam),
+                'items' => (new model_item_param_list())->add($grmgeneralizedparam),
                 'responses' => $responses,
             ],
             'grm' => [
-                'itemparams' => (new model_item_param_list())->add($grmparam),
+                'items' => (new model_item_param_list())->add($grmparam),
                 'responses' => $responses,
             ],
             'pcmgeneralized' => [
-                'itemparams' => (new model_item_param_list())->add($pcmgeneralizedparam),
+                'items' => (new model_item_param_list())->add($pcmgeneralizedparam),
                 'responses' => $responses,
             ],
             'pcm' => [
-                'itemparams' => (new model_item_param_list())->add($pcmparam),
+                'items' => (new model_item_param_list())->add($pcmparam),
                 'responses' => $responses,
             ],
         ];

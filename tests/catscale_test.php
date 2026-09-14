@@ -162,7 +162,7 @@ final class catscale_test extends basic_testcase {
      * @param int $remaining
      * @param float $expected
      * @return void
-     * @dataProvider testpotential_returns_expected_value_provider
+     * @dataProvider potential_returns_expected_value_provider
      */
     public function test_testpotential_returns_expected_value(
         float $ability,
@@ -179,7 +179,7 @@ final class catscale_test extends basic_testcase {
      *
      * @return array
      */
-    public static function testpotential_returns_expected_value_provider(): array {
+    public static function potential_returns_expected_value_provider(): array {
         global $CFG;
         global $items;
         if (! defined('TEST_ITEMS')) {
@@ -222,26 +222,26 @@ final class catscale_test extends basic_testcase {
         return [
             'B01' => [
                 'ability' => -0.67463259413669,
-                'remaining_items' => self::builditemlist($remaining1),
+                'remainingitems' => self::builditemlist($remaining1),
                 'remaining' => 9,
                 'expected' => 14.500478336956,
             ],
 
             'A' => [
                 'ability' => -1.2958684200153,
-                'remaining_items' => self::builditemlist($remaining2),
+                'remainingitems' => self::builditemlist($remaining2),
                 'remaining' => 9,
                 'expected' => 44.972716519499,
             ],
             'B02' => [
                 'ability' => -1.0084159069062,
-                'remaining_items' => self::builditemlist($remaining3),
+                'remainingitems' => self::builditemlist($remaining3),
                 'remaining' => 9,
                 'expected' => 1.97667184708,
             ],
             'B' => [
                 'ability' => -3.4081080401839,
-                'remaining_items' => self::builditemlist($remaining4),
+                'remainingitems' => self::builditemlist($remaining4),
                 'remaining' => 5,
                 'expected' => 0.14658927814196,
             ],
@@ -256,7 +256,7 @@ final class catscale_test extends basic_testcase {
      * @param float $expected
      * @return void
      *
-     * @dataProvider testinformation_returns_expected_value_provider
+     * @dataProvider information_returns_expected_value_provider
      */
     public function test_testinformation_returns_expected_value(
         float $ability,
@@ -272,7 +272,7 @@ final class catscale_test extends basic_testcase {
      *
      * @return array
      */
-    public static function testinformation_returns_expected_value_provider(): array {
+    public static function information_returns_expected_value_provider(): array {
         global $CFG;
         global $items;
         if (! defined('TEST_ITEMS')) {

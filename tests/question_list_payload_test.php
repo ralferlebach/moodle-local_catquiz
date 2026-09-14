@@ -279,10 +279,14 @@ final class question_list_payload_test extends advanced_testcase {
             $result['questiontext'],
             'The system context is the wrong place to look for question files.'
         );
-        $this->assertStringContainsString(
+        // Up to Moodle 4.5 a question category of a course lived in the course context, so the
+        // URL carried that id. From Moodle 5.0 categories live in the context of a question bank
+        // activity, and the URL carries that one - which is what the assertion above already
+        // pins. What still has to hold is that the course context is not used instead.
+        $this->assertStringNotContainsString(
             '/' . $coursecontext->id . '/question/questiontext/',
             $result['questiontext'],
-            'The URL must carry the course context the category lives in.'
+            'The URL must carry the context the category actually lives in, not the course.'
         );
     }
 }

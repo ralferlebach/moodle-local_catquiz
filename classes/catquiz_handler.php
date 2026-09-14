@@ -675,7 +675,8 @@ class catquiz_handler {
 
         $clone = clone($quizdata);
 
-        $clone = self::prepare_editor_fields($quizdata->id, $clone);
+        $clone = self::prepare_editor_fields($quizdata->id, $clone, isset($quizdata->coursemodule)
+            ? (int) $quizdata->coursemodule : null);
 
         // We unset id & instance. We don't want to introduce confusion because of it.
         unset($clone->id);
@@ -1248,10 +1249,24 @@ class catquiz_handler {
      * @param stdClass $clone The object containing the form data to be processed
      * @return stdClass The processed object with updated editor fields
      */
-    private static function prepare_editor_fields(int $componentid, stdClass $clone): stdClass {
-        if (!$cm = get_coursemodule_from_instance('adaptivequiz', intval($componentid))) {
+    private static function prepare_editor_fields(int $componentid, stdClass $clone, ?int $cmid = null): stdClass {
+        // When an activity is created, the course module exists but its instance column is still
+        // zero: core sets it only after MODULENAME_add_instance() has returned
+        // (course/modlib.php, set_field right after the call). Resolving the module through the
+        // instance id therefore finds nothing on the first save, the method returned early, and
+        // the images of the feedback editors were never moved out of the draft area - they only
+        // appeared after editing the activity a second time. The course module id is known at that
+        // point and is used when it is passed.
+        if ($cmid) {
+            $cm = get_coursemodule_from_id('adaptivequiz', $cmid);
+        } else {
+            $cm = get_coursemodule_from_instance('adaptivequiz', intval($componentid));
+        }
+
+        if (!$cm) {
             return $clone;
         }
+
         $context = context_module::instance($cm->id);
         $textfieldoptions = [
             'trusttext' => true,

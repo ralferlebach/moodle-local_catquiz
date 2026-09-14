@@ -45,7 +45,7 @@ jobs:
           --health-timeout=5s --health-retries=5
 
     env:
-      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_BRANCH: main  # Moodle 5.3; bis zum Verzweigen am 5. Oktober nur als main.
       DB: pgsql
       MOODLE_WWWROOT: http://127.0.0.1:8000
 

@@ -161,7 +161,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:13
+        image: postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -222,7 +222,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --no-init
         env:
           DB: pgsql
-          MOODLE_BRANCH: MOODLE_405_STABLE
+          MOODLE_BRANCH: main
 
       - name: Cache npm downloads
         uses: actions/cache@v4
@@ -318,7 +318,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:13
+        image: postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -378,7 +378,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --no-init
         env:
           DB: pgsql
-          MOODLE_BRANCH: MOODLE_405_STABLE
+          MOODLE_BRANCH: main
 
       - name: Moodle PHPDoc Checker
         if: ${{ always() }}
@@ -424,7 +424,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:13
+        image: postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -432,7 +432,7 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       mariadb:
-        image: mariadb:10.8
+        image: mariadb:11.4
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -444,9 +444,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { php: '8.1', database: pgsql }
-          - { php: '8.2', database: mariadb }
+          # Moodle 5.1 verlangt mindestens PHP 8.3; 8.1 und 8.2 sind entfallen.
           - { php: '8.3', database: pgsql }
+          - { php: '8.3', database: mariadb }
+          - { php: '8.4', database: pgsql }
 
     steps:
       - uses: actions/checkout@v4
@@ -501,7 +502,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
-          MOODLE_BRANCH: MOODLE_405_STABLE
+          MOODLE_BRANCH: main
 
       - name: PHPUnit tests
         if: ${{ always() }}
@@ -551,13 +552,13 @@ jobs:
     # Chosen well above the observed runtime rather than tightly: the point is to
     # diagnose, not to police.
     timeout-minutes: 60
-    name: "Behat / PHP 8.2 / Chrome"
+    name: "Behat / PHP 8.3 / Chrome"
     runs-on: ubuntu-22.04
     needs: [lint-php, lint-jsamd]
 
     services:
       mariadb:
-        image: mariadb:10.8
+        image: mariadb:11.4
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -575,7 +576,7 @@ jobs:
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: '8.3'
           ini-values: max_input_vars=5000
           coverage: none
 
@@ -618,7 +619,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: mariadb
-          MOODLE_BRANCH: MOODLE_405_STABLE
+          MOODLE_BRANCH: main
 
       - name: Behat features
         id: behat
@@ -632,7 +633,7 @@ jobs:
             mkdir -p ci-logs/behat_dump
             cp -a "$GITHUB_WORKSPACE/moodledata/behat_dump/." ci-logs/behat_dump/
           fi
-          { echo "job: behat (PHP 8.2 / Chrome)"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs and dumps:"; ls -1 ci-logs; } > ci-logs/summary.txt
+          { echo "job: behat (PHP 8.3 / Chrome)"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs and dumps:"; ls -1 ci-logs; } > ci-logs/summary.txt
           cat ci-logs/summary.txt
 
       - name: Upload error summary (ZIP)
@@ -682,7 +683,7 @@ jobs:
           --health-timeout=5s --health-retries=5
 
     env:
-      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_BRANCH: main
       MOODLE_WWWROOT: http://127.0.0.1:8000
 
     steps:

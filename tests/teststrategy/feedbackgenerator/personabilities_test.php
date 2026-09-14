@@ -335,8 +335,8 @@ final class personabilities_test extends advanced_testcase {
                     'minscalevalue' => -3,
                     'maxscalevalue' => 3,
                 ],
-                'testitemsforscale' => self::return_testitemsforscale(),
-                'fisherinfos' => [
+                'testitemsforcatscale' => self::return_testitemsforscale(),
+                'fisherinfo' => [
                     "-2.75" => 0.053868579223771237,
                     "-2.25" => 0.073312336374749279,
                     "-1.75" => 0.10032462382790783,

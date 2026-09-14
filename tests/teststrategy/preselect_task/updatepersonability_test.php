@@ -98,7 +98,7 @@ final class updatepersonability_test extends TestCase {
                     'contextid' => 1,
                     'catscaleid' => 1,
                 ],
-                'progress_fake_methods' => [
+                'progressfakes' => [
                     'is_first_question' => true,
                 ],
             ],
@@ -113,7 +113,7 @@ final class updatepersonability_test extends TestCase {
                     // Can be null here, because for pilot questions the ability will not be updated.
                     'fake_response_data' => [$USER->id => []],
                 ],
-                'progress_fake_methods' => [],
+                'progressfakes' => [],
             ],
             'has_enough_responses' => [
                 'expected' => 'not_skipped',
@@ -145,7 +145,7 @@ final class updatepersonability_test extends TestCase {
                     'questionsattempted' => 0,
                     'minimumquestions' => 10,
                 ],
-                'progress_fake_methods' => [],
+                'progressfakes' => [],
             ],
         ];
     }
@@ -189,9 +189,9 @@ final class updatepersonability_test extends TestCase {
         return [
             'Initial ability is estimated' => [
                     'expected' => -1.0,
-                    'ability_was_calculated_returns' => false,
+                    'wascalculated' => false,
                     // Average of -1.0.
-                    'fake_existing_abilities_main_scale' => array_map(
+                    'fakeabilities' => array_map(
                         fn($a) => (object) ['ability' => $a],
                         range(-5, 3, 0.1)
                     ),
@@ -199,27 +199,27 @@ final class updatepersonability_test extends TestCase {
             // We do not have enough person params to estimate.
             'Initial ability is not estimated' => [
                     'expected' => 0.0,
-                    'ability_was_calculated_returns' => false,
+                    'wascalculated' => false,
                     // Average of -1.0.
-                    'fake_existing_abilities_main_scale' => array_map(
+                    'fakeabilities' => array_map(
                         fn($a) => (object) ['ability' => $a],
                         range(-2, 0, 0.1)
                     ),
             ],
             'Initial ability is calculated' => [
                     'expected' => 1.23,
-                    'ability_was_calculated_returns' => true,
+                    'wascalculated' => true,
                     // Average of -1.0.
-                    'fake_existing_abilities_main_scale' => array_map(
+                    'fakeabilities' => array_map(
                         fn($a) => (object) ['ability' => $a],
                         range(-5, 3, 0.1)
                     ),
-                    'person_ability_main_scale' => 1.23,
+                    'abilitymainscale' => 1.23,
             ],
             'Initial ability is set to default' => [
                 'expected' => 0.0,
-                'ability_was_calculated_returns' => false,
-                'fake_existing_abilities_main_scale' => [],
+                'wascalculated' => false,
+                'fakeabilities' => [],
             ],
         ];
     }

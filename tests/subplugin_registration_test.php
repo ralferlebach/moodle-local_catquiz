@@ -472,14 +472,16 @@ final class subplugin_registration_test extends advanced_testcase {
         include($CFG->dirroot . '/local/catquiz/version.php');
 
         $this->assertSame(
-            [405, 405],
+            [501, 503],
             $plugin->supported,
             'Declaring a release line that was never tested is a promise the code '
-                . 'does not keep.'
+                . 'does not keep. Moodle 5.1 to 5.3 is declared because the plugin installs on '
+                . '5.3 and its PHPUnit suite runs there. The browser side - Bootstrap 5 markup, '
+                . 'core modals, the public webroot - is not verified yet; narrow this again if '
+                . 'that work is abandoned.'
         );
 
-        // The requires value stays where it is: 4.5 is what the plugin needs, and raising it
-        // here would lock out installations the plugin does support.
-        $this->assertSame(2024100700, (int) $plugin->requires);
+        // Moodle 4.x is no longer supported: the branch point of 5.1 is the floor.
+        $this->assertSame(2025100600, (int) $plugin->requires);
     }
 }

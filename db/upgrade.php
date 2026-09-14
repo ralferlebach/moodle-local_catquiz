@@ -1462,6 +1462,25 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026090207, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026091200) {
+        // Issue #95: the schema declared local_catquiz_progress.attemptid as a unique foreign key
+        // into local_catquiz_attempts, while the code has always stored the id of the attempt of
+        // the component - adaptivequiz_attempt.id for mod_adaptivequiz. The declaration was wrong
+        // in two ways: it named the wrong table, and it made the number unique on its own although
+        // the same number exists in every component. The identity is the pair.
+        $table = new xmldb_table('local_catquiz_progress');
+
+        $key = new xmldb_key('attemptid', XMLDB_KEY_FOREIGN_UNIQUE, ['attemptid'], 'local_catquiz_attempts', ['id']);
+        $dbman->drop_key($table, $key);
+
+        $index = new xmldb_index('componentattempt', XMLDB_INDEX_UNIQUE, ['component', 'attemptid']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_plugin_savepoint(true, 2026091200, 'local', 'catquiz');
+    }
+
     return true;
 }
 

@@ -366,17 +366,17 @@ final class catquiz_test extends advanced_testcase {
         $quizsettings[sprintf('catquiz_group_%s_3', $catscaleid)] = "";
 
         return [
-            'is enrolled' => [
+            'isenrolled' => [
                 'quizsettings' => $quizsettings,
                 'personabilities' => [$catscaleid => -2],
                 'catscaleid' => $catscaleid,
-                'is enrolled' => true,
+                'isenrolled' => true,
             ],
             'is not enrolled' => [
                 'quizsettings' => $quizsettings,
                 'personabilities' => [$catscaleid => 0],
                 'catscaleid' => $catscaleid,
-                'is enrolled' => false,
+                'isenrolled' => false,
             ],
         ];
     }

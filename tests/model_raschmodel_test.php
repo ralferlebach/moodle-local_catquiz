@@ -114,21 +114,21 @@ final class model_raschmodel_test extends basic_testcase {
 
         return [
             'rasch with aic' => [
-                'expected' => '32.0547',
+                '32.0547',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5]),
                 $responses,
                 fn ($personparams, $item, $responses) => $rasch->calc_aic_item($personparams, $item, $responses),
             ],
             'raschbirnbaum with aic' => [
-                'expected' => '64.0008',
+                '64.0008',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5, 'discrimination' => 2]),
                 $responses,
                 fn ($personparams, $item, $responses) => $raschbirnbaum->calc_aic_item($personparams, $item, $responses),
             ],
             'rasch with dic' => [
-                'expected' => '30.0547',
+                '30.0547',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5]),
                 $responses,
@@ -136,7 +136,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $rasch->calc_dic_item($personparams, $item, $responses),
             ],
             'raschbirnbaum with dic' => [
-                'expected' => '60.0008',
+                '60.0008',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5, 'discrimination' => 2]),
                 $responses,
@@ -144,7 +144,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $raschbirnbaum->calc_dic_item($personparams, $item, $responses),
             ],
             'rasch with bic' => [
-                'expected' => '31.1533',
+                '31.1533',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5]),
                 $responses,
@@ -152,7 +152,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $rasch->calc_bic_item($personparams, $item, $responses),
             ],
             'raschbirnbaum with bic' => [
-                'expected' => '62.1980',
+                '62.1980',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5, 'discrimination' => 2]),
                 $responses,
@@ -160,7 +160,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $raschbirnbaum->calc_bic_item($personparams, $item, $responses),
             ],
             'rasch with caic' => [
-                'expected' => '31.4410',
+                '31.4410',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5]),
                 $responses,
@@ -168,7 +168,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $rasch->calc_caic_item($personparams, $item, $responses),
             ],
             'raschbirnbaum with caic' => [
-                'expected' => '62.7734',
+                '62.7734',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5, 'discrimination' => 2]),
                 $responses,
@@ -176,7 +176,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $raschbirnbaum->calc_caic_item($personparams, $item, $responses),
             ],
             'rasch with aicc' => [
-                'expected' => '36.0547',
+                '36.0547',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5]),
                 $responses,
@@ -184,7 +184,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $rasch->calc_aicc_item($personparams, $item, $responses),
             ],
             'raschbirnbaum with aicc' => [
-                'expected' => '0.0000',
+                '0.0000',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5, 'discrimination' => 2]),
                 $responses,
@@ -192,7 +192,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $raschbirnbaum->calc_aicc_item($personparams, $item, $responses),
             ],
             'rasch with sabic' => [
-                'expected' => '28.4861',
+                '28.4861',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5]),
                 $responses,
@@ -200,7 +200,7 @@ final class model_raschmodel_test extends basic_testcase {
                     $rasch->calc_sabic_item($personparams, $item, $responses),
             ],
             'raschbirnbaum with sabic' => [
-                'expected' => '0.0000',
+                '0.0000',
                 $personabilities,
                 $item->set_parameters(['difficulty' => 5, 'discrimination' => 2]),
                 $responses,

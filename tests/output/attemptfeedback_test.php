@@ -129,7 +129,7 @@ final class attemptfeedback_test extends advanced_testcase {
                         'course_ids' => [],
                     ],
                 ],
-                [
+                'feedbackdata' => [
                     'personabilities_abilities' => [
                         1 => [
                             'value' => 6.0,
@@ -145,7 +145,7 @@ final class attemptfeedback_test extends advanced_testcase {
             // ability falls inside a feedback range with configured courses.
             'Excluded scale must not enrol' => [
                 'expected' => [],
-                [
+                'feedbackdata' => [
                     'personabilities_abilities' => [
                         1 => [
                             'value' => 1.2,
@@ -230,7 +230,7 @@ final class attemptfeedback_test extends advanced_testcase {
                 'expected' => [
                     1 => [],
                 ],
-                [
+                'feedbackdata' => [
                     'personabilities_abilities' => [
                         1 => [
                             'value' => 6.0,
