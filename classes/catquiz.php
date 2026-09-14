@@ -53,15 +53,24 @@ class catquiz {
     /**
      * Give back the global (parent) scale id of a given catscale id or an array of catscale ids.
      *
-     * @param int|array $catscaleids
+     * A single id and a list of ids are both allowed. The list form used to be assumed: the method
+     * read index 0 before it had established that an array was passed at all, so the documented
+     * call with a plain integer addressed an offset on an integer.
+     *
+     * @param int|array $catscaleids A scale id or a list of scale ids.
      * @param bool $assocarray
      * @return array
      */
     private static function get_global_scale($catscaleids, bool $assocarray = false) {
         global $DB;
+
+        // Normalise first, decide afterwards.
+        $ids = is_array($catscaleids) ? array_values($catscaleids) : [$catscaleids];
+        $ids = array_values(array_filter(array_map('intval', $ids), fn($id) => $id > 0));
+
         $where = '';
-        if (!empty($catscaleids) && $catscaleids[0] > 0) {
-            [$insql, $inparams] = $DB->get_in_or_equal($catscaleids);
+        if (!empty($ids)) {
+            [$insql, $inparams] = $DB->get_in_or_equal($ids);
             $where = "WHERE scaleid $insql";
         } else {
             // NOTE: If no $catscaleids are given, then return ALL associations.
@@ -299,7 +308,7 @@ class catquiz {
         }
 
         $insql = '';
-        if (!empty($catscaleids) && $catscaleids[0] > 0) {
+        if (!empty($catscaleids) && (is_array($catscaleids) ? reset($catscaleids) : $catscaleids) > 0) {
             $globalscaleids = self::get_global_scale($catscaleids);
 
             [$parentscales1, $inparams1] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales1');
@@ -1799,7 +1808,9 @@ class catquiz {
         $params = ['contextid' => $contextid];
         $wherecontains = [];
 
-        if (!empty($catscaleids) && $catscaleids[0] > 0) {
+        // Not $catscaleids[0]: callers hand this list on id-keyed as well, and index 0 would then
+        // be undefined - the filter would fall away without anyone noticing.
+        if (!empty($catscaleids) && (int) reset($catscaleids) > 0) {
             [$incatscales, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED, 'countcatscales');
             $params = array_merge($params, $inparams);
             $wherecontains[] = "lccs.id $incatscales";

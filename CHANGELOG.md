@@ -1,7 +1,5 @@
 # Changelog – local_catquiz
 
-<<<<<<< Updated upstream
-=======
 ## 1.3.0 (in Arbeit)
 
 Zielplattform ist Moodle 5.3 (LTS), abgesichert gegen 5.1 und 5.2. Moodle 4.x
@@ -16,11 +14,14 @@ wird nicht mehr unterstuetzt; der 4.5-Stand bleibt als 1.2.0 bestehen.
 - Bilder in den Feedback-Editoren erscheinen schon beim ersten Speichern: das
   Kursmodul wird ueber die Kursmodul-Id aufgeloest, nicht ueber die Instanz-Id,
   die zu diesem Zeitpunkt noch auf kein Kursmodul zeigt.
+- Issues #99, #102, #103: ID-Vertraege der Skalen abgesichert - ein Skalen-Array
+  wird nach `catscale.id` geschluesselt, bevor darauf zugegriffen wird, die
+  Sortierung des Custom-Feedbacks schlaegt bei einer fehlenden Skala nicht mehr
+  fehl, und `get_global_scale()` haelt seinen eigenen `int|array`-Vertrag ein.
 - Issues #95, #96, #101: `local_catquiz_progress` wird ueber das Paar
   (component, attemptid) identifiziert, und `progress::load()` uebernimmt keinen
   Datensatz mehr, der einem anderen Nutzer gehoert.
 
->>>>>>> Stashed changes
 ## 1.2.0 (interne Version 2026090554)
 
 > Sitzungsabschluss: Dokumentation aufgenommen, naechster Strang vorbereitet.

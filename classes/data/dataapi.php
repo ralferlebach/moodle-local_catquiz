@@ -200,11 +200,45 @@ class dataapi {
     }
 
     /**
+     * Re-keys a scale array by catscale id, which is what the method below works on.
+     *
+     * @param array $catscales
+     * @return array
+     */
+    private static function key_scales_by_id(array $catscales): array {
+        $keyed = [];
+
+        foreach ($catscales as $key => $scale) {
+            $id = is_object($scale) ? ($scale->id ?? null) : ($scale['id'] ?? null);
+
+            if ($id === null) {
+                // Nothing to key by - hand the array on as it came and let the caller's own
+                // expectations apply.
+                return $catscales;
+            }
+
+            $keyed[(int) $id] = $scale;
+
+            if ((int) $key !== (int) $id) {
+                debugging(
+                    'get_catscale_and_children() expects scales keyed by catscale id; '
+                        . 'the array was re-keyed.',
+                    DEBUG_DEVELOPER
+                );
+            }
+        }
+
+        return $keyed;
+    }
+
+    /**
      * We'll get an array of catscales where every catscale is followed by its children.
      *
      * @param integer $parentid
      * @param bool $getsubchildren
-     * @param array $catscales
+     * @param array $catscales Scales to work on, keyed by catscale id. The method addresses
+     *      $catscales[$id] directly, so a list-keyed array would silently work on the wrong
+     *      entries; an array that does not meet the invariant is re-keyed here.
      * @param bool $returnasarray
      * @param ?int $catcontext
      * @return array
@@ -217,7 +251,7 @@ class dataapi {
         $catcontext = null
     ) {
 
-        $catscales = empty($catscales) ? self::get_all_catscales() : $catscales;
+        $catscales = empty($catscales) ? self::get_all_catscales() : self::key_scales_by_id($catscales);
         $returnarray = [];
 
         $parentscales = array_filter($catscales, fn($a) => $a->id == $parentid);

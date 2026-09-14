@@ -292,11 +292,24 @@ class customscalefeedback extends feedbackgenerator {
         // 2. Other scales are sorted by name.
         $mainscale = $scalefeedback[$this->mainscale] ?? null;
         unset($scalefeedback[$this->mainscale]);
-        uksort($scalefeedback, function ($a, $b) use ($catscales) {
-            $a = (object) $catscales[$a];
-            $b = (object) $catscales[$b];
-            return $catscales[$a->id]->name <=> $catscales[$b->id]->name;
-        });
+        // Sort by the name of the scale the feedback belongs to. Three assumptions used to be
+        // made here without a check: that an entry for the key exists, that the array key equals
+        // catscale.id, and that the entry is an object. A missing scale threw, and a list-keyed
+        // array sorted by whatever happened to sit at that offset. The name is now looked up
+        // directly, and a scale that is not there sorts to the end instead of taking the page down.
+        $scalename = function ($scaleid) use ($catscales): string {
+            $scale = $catscales[$scaleid] ?? null;
+
+            if ($scale === null) {
+                return "\xff";
+            }
+
+            $scale = (object) $scale;
+
+            return (string) ($scale->name ?? "\xff");
+        };
+
+        uksort($scalefeedback, fn($a, $b) => $scalename($a) <=> $scalename($b));
         $sorted = $scalefeedback;
         if ($mainscale) {
             $sorted = [$mainscale, ...$scalefeedback];

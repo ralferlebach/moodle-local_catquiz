@@ -30,17 +30,10 @@ $plugin->component = 'local_catquiz';
 // MOODLE_405_STABLE, and nothing here has been run on 5.x. Declaring support that
 // was never tested is a promise to administrators that the code does not keep.
 // Moodle 5.x is a work package of its own.
-<<<<<<< Updated upstream
-$plugin->supported = [405, 405];
-$plugin->release = '1.2.0';
-$plugin->version = 2026090554;
-$plugin->requires = 2024100700;
-=======
 $plugin->supported = [501, 503];
 $plugin->release = '1.3.0';
-$plugin->version = 2026091201;
+$plugin->version = 2026091202;
 $plugin->requires = 2025100600;
->>>>>>> Stashed changes
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [
     'local_wunderbyte_table' => 2024040200,
