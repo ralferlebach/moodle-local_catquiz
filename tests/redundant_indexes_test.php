@@ -96,12 +96,12 @@ final class redundant_indexes_test extends advanced_testcase {
 
         $unique = false;
         foreach ($DB->get_indexes('local_catquiz_progress') as $info) {
-            if (array_values($info['columns']) === ['component', 'attemptid'] && !empty($info['unique'])) {
+            if (array_values($info['columns']) === ['attemptid'] && !empty($info['unique'])) {
                 $unique = true;
             }
         }
 
-        $this->assertTrue($unique, 'progress must keep a unique index on the pair component, attemptid.');
+        $this->assertTrue($unique, 'progress must keep a unique index on attemptid.');
     }
 
     /**
@@ -127,22 +127,22 @@ final class redundant_indexes_test extends advanced_testcase {
         $indexname = $DB->get_prefix() . 'locacatqprog_attred_ix';
         $DB->change_database_structure(
             $DB->get_dbfamily() === 'mysql'
-                ? "CREATE INDEX $indexname ON $prefixed (component, attemptid)"
-                : "CREATE INDEX $indexname ON $prefixed (component, attemptid)"
+                ? "CREATE INDEX $indexname ON $prefixed (attemptid)"
+                : "CREATE INDEX $indexname ON $prefixed (attemptid)"
         );
 
         $before = 0;
         foreach ($DB->get_indexes('local_catquiz_progress') as $info) {
-            if (array_values($info['columns']) === ['component', 'attemptid']) {
+            if (array_values($info['columns']) === ['attemptid']) {
                 $before++;
             }
         }
-        $this->assertEquals(2, $before, 'Setup must produce two indexes on the pair.');
+        $this->assertEquals(2, $before, 'Setup must produce two indexes on attemptid.');
 
         ob_start();
         $dropped = local_catquiz_upgrade_drop_duplicate_indexes(
             'local_catquiz_progress',
-            ['component', 'attemptid'],
+            ['attemptid'],
             true
         );
         ob_end_clean();
@@ -151,7 +151,7 @@ final class redundant_indexes_test extends advanced_testcase {
 
         $remaining = [];
         foreach ($DB->get_indexes('local_catquiz_progress') as $name => $info) {
-            if (array_values($info['columns']) === ['component', 'attemptid']) {
+            if (array_values($info['columns']) === ['attemptid']) {
                 $remaining[$name] = !empty($info['unique']);
             }
         }

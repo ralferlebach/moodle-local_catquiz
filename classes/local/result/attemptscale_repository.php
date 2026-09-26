@@ -38,18 +38,18 @@ final class attemptscale_repository {
      * Persist the validated per-scale results of a finalised attempt.
      *
      * Writes exactly one row per scale that was measured in this attempt
-     * (unique on catattemptid + catscaleid, so re-finalisation is idempotent).
+     * (unique on attemptid + catscaleid, so re-finalisation is idempotent).
      * Scales that only carry a prior value (not measured in this attempt) are
      * not written, so N/fraction/SE are never carried over.
      *
-     * @param int $catattemptid local_catquiz_attempts.id
+     * @param int $attemptid local_catquiz_attempts.id
      * @param int $userid
      * @param int|null $contextid
      * @param attempt_result $result
      * @return void
      */
     public static function save_attempt_result(
-        int $catattemptid,
+        int $attemptid,
         int $userid,
         ?int $contextid,
         attempt_result $result
@@ -65,7 +65,7 @@ final class attemptscale_repository {
             }
 
             $record = (object) [
-                'catattemptid' => $catattemptid,
+                'attemptid' => $attemptid,
                 'userid' => $userid,
                 'contextid' => $contextid,
                 'catscaleid' => $scaleresult->scaleid,
@@ -82,7 +82,7 @@ final class attemptscale_repository {
 
             $existing = $DB->get_record(
                 self::TABLE,
-                ['catattemptid' => $catattemptid, 'catscaleid' => $scaleresult->scaleid],
+                ['attemptid' => $attemptid, 'catscaleid' => $scaleresult->scaleid],
                 'id'
             );
             if ($existing) {
@@ -97,12 +97,12 @@ final class attemptscale_repository {
     /**
      * All result rows for a CATquiz attempt, indexed by scale id.
      *
-     * @param int $catattemptid local_catquiz_attempts.id
+     * @param int $attemptid local_catquiz_attempts.id
      * @return stdClass[]
      */
-    public static function get_for_attempt(int $catattemptid): array {
+    public static function get_for_attempt(int $attemptid): array {
         global $DB;
-        return $DB->get_records(self::TABLE, ['catattemptid' => $catattemptid], '', '*');
+        return $DB->get_records(self::TABLE, ['attemptid' => $attemptid], '', '*');
     }
 
     /**

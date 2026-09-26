@@ -1255,7 +1255,7 @@ ENDSQL;
         $table = new xmldb_table('local_catquiz_attemptscale');
         if (!$dbman->table_exists($table)) {
             $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
-            $table->add_field('catattemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+            $table->add_field('attemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
             $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
             $table->add_field('contextid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
             $table->add_field('catscaleid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
@@ -1270,11 +1270,11 @@ ENDSQL;
             $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
 
             $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
-            $table->add_key('catattemptid', XMLDB_KEY_FOREIGN, ['catattemptid'], 'local_catquiz_attempts', ['id']);
+            $table->add_key('attemptid', XMLDB_KEY_FOREIGN, ['attemptid'], 'local_catquiz_attempts', ['id']);
             $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
             $table->add_key('catscaleid', XMLDB_KEY_FOREIGN, ['catscaleid'], 'local_catquiz_catscales', ['id']);
             $table->add_key('contextid', XMLDB_KEY_FOREIGN, ['contextid'], 'local_catquiz_catcontext', ['id']);
-            $table->add_key('catattemptid_catscaleid', XMLDB_KEY_UNIQUE, ['catattemptid', 'catscaleid']);
+            $table->add_key('catattemptid_catscaleid', XMLDB_KEY_UNIQUE, ['attemptid', 'catscaleid']);
 
             $table->add_index('userid_contextid_catscaleid', XMLDB_INDEX_NOTUNIQUE, ['userid', 'contextid', 'catscaleid']);
             $table->add_index('isvalid', XMLDB_INDEX_NOTUNIQUE, ['isvalid']);
@@ -1479,6 +1479,92 @@ ENDSQL;
         }
 
         upgrade_plugin_savepoint(true, 2026091200, 'local', 'catquiz');
+    }
+
+    if ($oldversion < 2026092602) {
+        /* Issue #95: local_catquiz_progress.attemptid held the id of the *component's* attempt -
+           adaptivequiz_attempt.id - although the schema declared it a foreign key to
+           local_catquiz_attempts.id. The two are primary keys of different tables and match only by
+           accident. The column keeps its name; what changes is what it holds. The values are
+           re-keyed to the internal CAT attempt, which is what the foreign key has always said. */
+        $table = new xmldb_table('local_catquiz_progress');
+
+        $index = new xmldb_index('componentattempt', XMLDB_INDEX_UNIQUE, ['component', 'attemptid']);
+        if ($dbman->index_exists($table, $index)) {
+            $dbman->drop_index($table, $index);
+        }
+
+        /* Re-keying in place would collide with itself - a value being written may be one that is
+           still to be read. The new values are collected in a temporary column first. */
+        $temp = new xmldb_field('catattemptidtmp', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'attemptid');
+        if (!$dbman->field_exists($table, $temp)) {
+            $dbman->add_field($table, $temp);
+        }
+
+        $DB->execute("
+            UPDATE {local_catquiz_progress} p
+               SET catattemptidtmp = (
+                   SELECT MIN(a.id)
+                     FROM {local_catquiz_attempts} a
+                    WHERE a.attemptid = p.attemptid
+                      AND a.component = p.component
+               )");
+
+        /* Rows without a CAT attempt cannot be assigned. They are neither guessed at nor deleted -
+           deleting would destroy the state of a running attempt if the cause turns out to be
+           something else. They are reported and left behind with attemptid set to zero;
+           progress::load() ignores them, so they behave like no progress at all. */
+        $orphans = $DB->count_records_select('local_catquiz_progress', 'catattemptidtmp IS NULL');
+        if ($orphans > 0) {
+            mtrace("local_catquiz: {$orphans} progress rows have no matching CAT attempt. They are "
+                . "left with attemptid = 0 and ignored at runtime rather than removed.");
+        }
+
+        $DB->execute("UPDATE {local_catquiz_progress} SET attemptid = COALESCE(catattemptidtmp, 0)");
+
+        /* A second progress row for the same CAT attempt was never intended - the schema said
+           foreign-unique all along. Duplicates can only come from the ambiguity this step removes,
+           so the newest row wins and the older ones go. Unassignable rows (attemptid = 0) are left
+           alone; they are not duplicates of each other in any meaningful sense. */
+        $DB->execute("
+            DELETE FROM {local_catquiz_progress}
+             WHERE attemptid <> 0
+               AND id NOT IN (
+                   SELECT MAX(id) FROM {local_catquiz_progress}
+                    WHERE attemptid <> 0
+                 GROUP BY attemptid
+               )");
+
+        $dbman->drop_field($table, $temp);
+
+        $key = new xmldb_key('attemptid', XMLDB_KEY_FOREIGN_UNIQUE, ['attemptid'], 'local_catquiz_attempts', ['id']);
+        $dbman->add_key($table, $key);
+
+        upgrade_plugin_savepoint(true, 2026092602, 'local', 'catquiz');
+    }
+
+    if ($oldversion < 2026092603) {
+        /* local_catquiz_attemptscale.catattemptid always held the right thing - the id of the CAT
+           attempt - but the prefix made it the only id in the plugin that announces its own
+           namespace in its name. Every other table calls that reference attemptid. The column is
+           renamed so the schema reads consistently; the values do not change. */
+        $table = new xmldb_table('local_catquiz_attemptscale');
+
+        $oldkey = new xmldb_key('catattemptid_catscaleid', XMLDB_KEY_UNIQUE, ['attemptid', 'catscaleid']);
+        $dbman->drop_key($table, $oldkey);
+
+        $oldforeign = new xmldb_key('attemptid', XMLDB_KEY_FOREIGN, ['attemptid'], 'local_catquiz_attempts', ['id']);
+        $dbman->drop_key($table, $oldforeign);
+
+        $field = new xmldb_field('attemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null, 'id');
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->rename_field($table, $field, 'attemptid');
+        }
+
+        $dbman->add_key($table, new xmldb_key('attemptid', XMLDB_KEY_FOREIGN, ['attemptid'], 'local_catquiz_attempts', ['id']));
+        $dbman->add_key($table, new xmldb_key('attemptid_catscaleid', XMLDB_KEY_UNIQUE, ['attemptid', 'catscaleid']));
+
+        upgrade_plugin_savepoint(true, 2026092603, 'local', 'catquiz');
     }
 
     return true;

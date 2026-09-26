@@ -80,7 +80,7 @@ final class attemptscale_repository_test extends advanced_testcase {
 
     /**
      * Re-saving the same attempt keeps exactly one row per scale (idempotent
-     * upsert on the unique key catattemptid + catscaleid).
+     * upsert on the unique key attemptid + catscaleid).
      */
     public function test_save_is_idempotent_per_attempt_and_scale(): void {
         $this->resetAfterTest();
@@ -113,12 +113,12 @@ final class attemptscale_repository_test extends advanced_testcase {
 
         $latest = attemptscale_repository::get_latest_valid(2, 9, 5);
         $this->assertNotNull($latest);
-        $this->assertEquals(200, $latest->catattemptid, 'The most recent valid result wins.');
+        $this->assertEquals(200, $latest->attemptid, 'The most recent valid result wins.');
 
         $lastprimary = attemptscale_repository::get_last_primary(2, 9);
         $this->assertNotNull($lastprimary);
         $this->assertEquals(5, $lastprimary->catscaleid);
-        $this->assertEquals(200, $lastprimary->catattemptid);
+        $this->assertEquals(200, $lastprimary->attemptid);
 
         // No valid result for an untested scale.
         $this->assertNull(attemptscale_repository::get_latest_valid(2, 9, 999));

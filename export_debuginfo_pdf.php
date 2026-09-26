@@ -27,6 +27,8 @@ use local_catquiz\teststrategy\feedbackgenerator\debuginfo;
 
 require_once('../../config.php');
 
+use local_catquiz\teststrategy\progress;
+
 $attemptid = required_param('attemptid', PARAM_INT);
 
 require_login();
@@ -47,7 +49,11 @@ $debuginfo = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attempti
 $pdfexport->AddPage('P', "A4");
 $pdfexport->writeHTML("<h1>Debug Info, Attempt $attemptid</h1>" . nl2br(var_export(json_decode($debuginfo->debug_info), true)));
 
-$progressinfo = $DB->get_record('local_catquiz_progress', ['attemptid' => $attemptid], 'json', IGNORE_MISSING);
+// The progress is filed under the internal CAT attempt, not under the attempt of the component.
+$catattemptid = progress::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
+$progressinfo = $catattemptid === null
+    ? false
+    : $DB->get_record('local_catquiz_progress', ['attemptid' => $catattemptid], 'json', IGNORE_MISSING);
 
 $pdfexport->AddPage('P', "A4");
 $pdfexport->writeHTML("<h1>Progress Info, Attempt $attemptid</h1>" . nl2br(var_export(json_decode($progressinfo->json), true)));

@@ -226,16 +226,16 @@
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="component" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="attemptid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Identifies the attempt"/>
+        <FIELD NAME="attemptid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The CAT attempt this progress belongs to: local_catquiz_attempts.id. The external id of the component's attempt is kept in local_catquiz_attempts.attemptid and never here."/>
         <FIELD NAME="json" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="all data needed to continue the attempt"/>
         <FIELD NAME="quizsettings" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="The quiz settings used for this attempt"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
         <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+        <KEY NAME="attemptid" TYPE="foreign-unique" FIELDS="attemptid" REFTABLE="local_catquiz_attempts" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
-        <INDEX NAME="componentattempt" UNIQUE="true" FIELDS="component, attemptid"/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_catquiz_qhashmap" COMMENT="Maps questions between instances using hashes">
@@ -294,7 +294,7 @@
     <TABLE NAME="local_catquiz_attemptscale" COMMENT="Per-attempt, per-scale CAT result history (issue #9). One row per finalised attempt and successfully tested scale.">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="catattemptid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to local_catquiz_attempts.id (the CATquiz attempt, not the adaptivequiz attempt)"/>
+        <FIELD NAME="attemptid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="FK to local_catquiz_attempts.id (the CATquiz attempt, not the adaptivequiz attempt)"/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="contextid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="id of the catcontext"/>
         <FIELD NAME="catscaleid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
@@ -310,11 +310,11 @@
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="catattemptid" TYPE="foreign" FIELDS="catattemptid" REFTABLE="local_catquiz_attempts" REFFIELDS="id"/>
+        <KEY NAME="attemptid" TYPE="foreign" FIELDS="attemptid" REFTABLE="local_catquiz_attempts" REFFIELDS="id"/>
         <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
         <KEY NAME="catscaleid" TYPE="foreign" FIELDS="catscaleid" REFTABLE="local_catquiz_catscales" REFFIELDS="id"/>
         <KEY NAME="contextid" TYPE="foreign" FIELDS="contextid" REFTABLE="local_catquiz_catcontext" REFFIELDS="id"/>
-        <KEY NAME="catattemptid_catscaleid" TYPE="unique" FIELDS="catattemptid, catscaleid"/>
+        <KEY NAME="attemptid_catscaleid" TYPE="unique" FIELDS="attemptid, catscaleid"/>
       </KEYS>
       <INDEXES>
         <INDEX NAME="userid_contextid_catscaleid" UNIQUE="false" FIELDS="userid, contextid, catscaleid"/>

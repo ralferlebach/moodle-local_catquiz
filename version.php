@@ -31,7 +31,7 @@ $plugin->component = 'local_catquiz';
 // the public webroot - is not verified yet; narrow this again if that work stalls.
 $plugin->supported = [501, 503];
 $plugin->release = '1.3.0';
-$plugin->version = 2026092600;
+$plugin->version = 2026092603;
 $plugin->requires = 2025100600;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [

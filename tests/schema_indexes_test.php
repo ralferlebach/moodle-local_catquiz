@@ -73,12 +73,12 @@ final class schema_indexes_test extends advanced_testcase {
                 ['userid', 'contextid', 'catscaleid'],
                 true,
             ],
-            // Identity of a progress row is the pair: the attempt id belongs to the component
-            // named next to it, and the same number exists in every other component.
-            'progress: one row per attempt of a component' => [
+            // One progress row per CAT attempt. The reference is the internal id, which is what
+            // the schema said all along and what issue #95 restored in the runtime.
+            'progress: one row per CAT attempt' => [
                 'local_catquiz_progress',
-                'componentattempt',
-                ['component', 'attemptid'],
+                'attemptid',
+                ['attemptid'],
                 true,
             ],
             'items: lookup by scale and component' => [
@@ -214,20 +214,30 @@ final class schema_indexes_test extends advanced_testcase {
 
         $this->resetAfterTest();
 
+        $now = time();
+        $attemptid = (int) $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => 42,
+            'scaleid' => 1,
+            'contextid' => 1,
+            'courseid' => 1,
+            'attemptid' => 12345,
+            'component' => 'mod_adaptivequiz',
+            'instanceid' => 1,
+            'status' => 1,
+            'json' => '{}',
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+
         $row = (object) [
             'userid' => 42,
             'component' => 'mod_adaptivequiz',
-            'attemptid' => 12345,
+            'attemptid' => $attemptid,
             'json' => '{}',
-            'timecreated' => time(),
-            'timemodified' => time(),
+            'timecreated' => $now,
+            'timemodified' => $now,
         ];
         $DB->insert_record('local_catquiz_progress', $row);
-
-        // The same attempt id in another component is a different attempt and is allowed.
-        $other = clone($row);
-        $other->component = 'mod_quiz';
-        $DB->insert_record('local_catquiz_progress', $other);
 
         $this->expectException(dml_exception::class);
         $DB->insert_record('local_catquiz_progress', $row);

@@ -141,7 +141,9 @@ final class attempt_finalizer {
             // question before any during-attempt estimate was written. Lets us
             // restore a non-validly-measured scale to its exact prior state.
             $preattempt = [];
-            if ($DB->record_exists('local_catquiz_progress', ['attemptid' => $adaptiveattemptid])) {
+            $catattemptid = progress::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz');
+            if ($catattemptid !== null
+                    && $DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid])) {
                 try {
                     $preattempt = progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid)
                         ->get_preattempt_abilities();
