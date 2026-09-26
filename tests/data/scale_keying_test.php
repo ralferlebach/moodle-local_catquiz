@@ -28,8 +28,6 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-/**
  * @covers \local_catquiz\data\dataapi
  */
 final class scale_keying_test extends advanced_testcase {
@@ -40,12 +38,14 @@ final class scale_keying_test extends advanced_testcase {
      */
     private function tree(): array {
         $scales = [];
-        foreach ([
+        foreach (
+            [
             ['id' => 11, 'parentid' => 0, 'name' => 'root', 'contextid' => 7],
             ['id' => 12, 'parentid' => 11, 'name' => 'child a', 'contextid' => 7],
             ['id' => 13, 'parentid' => 11, 'name' => 'child b', 'contextid' => 7],
             ['id' => 14, 'parentid' => 12, 'name' => 'grandchild', 'contextid' => 7],
-        ] as $row) {
+            ] as $row
+        ) {
             $scale = (object) $row;
             $scales[$scale->id] = $scale;
         }

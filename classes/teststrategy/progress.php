@@ -283,6 +283,7 @@ class progress implements JsonSerializable {
      * Try to load a progress object from the cache.
      *
      * @param int $attemptid
+     * @param string $component Component asking; empty to skip the component check.
      * @return progress
      * @throws coding_exception
      */
@@ -300,8 +301,10 @@ class progress implements JsonSerializable {
         /* A cached progress is taken over only after it has been shown to belong here. The cache
            key carries the user, but a stale entry could still name another one, and the component
            has never been part of the key at all. */
-        if ((int) $cached->userid !== (int) $USER->id
-                || ($component !== '' && $cached->component !== $component)) {
+        if (
+            (int) $cached->userid !== (int) $USER->id
+                || ($component !== '' && $cached->component !== $component)
+        ) {
             $attemptcache->delete($cachekey);
 
             return false;
@@ -313,7 +316,7 @@ class progress implements JsonSerializable {
     /**
      * Try to load a progress object from the database.
      *
-     * @param int $attemptid
+     * @param int|null $catattemptid Id of the CAT attempt - local_catquiz_attempts.id.
      * @param int $contextid
      * @return progress|false
      */
@@ -325,7 +328,7 @@ class progress implements JsonSerializable {
             return false;
         }
 
-        // attemptid of this table is the CAT attempt, not the attempt of the component.
+        // The attemptid of this table is the CAT attempt, not the attempt of the component.
         $record = $DB->get_record('local_catquiz_progress', ['attemptid' => $catattemptid], '*');
 
         if (!$record) {
@@ -527,6 +530,7 @@ class progress implements JsonSerializable {
      * Deletes entries of this instance from the database and cache.
      *
      * @param int $attemptid
+     * @param string $component Component asking; empty to skip the component check.
      * @return void
      */
     public static function delete(int $attemptid, string $component = 'mod_adaptivequiz'): void {

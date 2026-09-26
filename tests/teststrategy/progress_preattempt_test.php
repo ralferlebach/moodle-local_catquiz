@@ -137,7 +137,10 @@ final class progress_preattempt_test extends advanced_testcase {
         self::make_cat_attempt($attemptid, $contextid);
         $legacy = progress::load($attemptid, 'mod_adaptivequiz', $contextid, (object) []);
         $legacy->save();
-        $json = json_decode($DB->get_field('local_catquiz_progress', 'json', ['attemptid' => self::catattemptid($attemptid)]), true);
+        $json = json_decode(
+            $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => self::catattemptid($attemptid)]),
+            true
+        );
         unset($json['preattemptabilities']);
         $DB->set_field('local_catquiz_progress', 'json', json_encode($json), ['attemptid' => self::catattemptid($attemptid)]);
         // Force a reload from the DB rather than the cached object.

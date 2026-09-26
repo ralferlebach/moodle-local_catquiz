@@ -201,9 +201,9 @@ jobs:
       - name: Install Moodle, dependencies and plugin (no test init)
         run: |
           moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-adaptivequizcatmodel_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
 
@@ -357,9 +357,9 @@ jobs:
       - name: Install Moodle, dependencies and plugin (no test init)
         run: |
           moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-adaptivequizcatmodel_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
 
@@ -480,9 +480,9 @@ jobs:
       - name: Install Moodle, dependencies and plugin
         run: |
           moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-adaptivequizcatmodel_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
 
@@ -522,10 +522,13 @@ jobs:
         timeout-minutes: 20
         env:
           CATQUIZ_RUN_SLOW: 1
+        # From inside the Moodle tree: phpunit.xml lives there, and without it the
+        # bootstrap is never loaded ("Class basic_testcase not found").
+        working-directory: moodle
         run: >-
-          moodle/vendor/bin/phpunit
+          vendor/bin/phpunit
           --filter 3PL
-          moodle/local/catquiz/tests/local/model/model_person_ability_estimator_catcalc_test.php
+          local/catquiz/tests/local/model/model_person_ability_estimator_catcalc_test.php
       - name: Collect error summary
         if: ${{ always() }}
         run: |
@@ -597,9 +600,9 @@ jobs:
       - name: Install Moodle, dependencies and plugin
         run: |
           moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-adaptivequizcatmodel_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
 

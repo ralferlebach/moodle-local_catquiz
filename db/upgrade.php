@@ -1553,10 +1553,12 @@ ENDSQL;
         if (!$dbman->index_exists($table, $newindex)) {
             $dbman->add_index($table, $newindex);
         }
-        foreach ([
+        foreach (
+            [
             new xmldb_index('isvalid', XMLDB_INDEX_NOTUNIQUE, ['isvalid']),
             new xmldb_index('attemptid_catscaleid', XMLDB_INDEX_NOTUNIQUE, ['attemptid', 'catscaleid']),
-        ] as $index) {
+            ] as $index
+        ) {
             if (!$dbman->index_exists($table, $index)) {
                 $dbman->add_index($table, $index);
             }

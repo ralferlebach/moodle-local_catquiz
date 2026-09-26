@@ -1996,6 +1996,13 @@ class catquiz {
      * @param float $ability The estimated ability.
      * @param int|null $catattemptid The CAT attempt the value comes from - local_catquiz_attempts.id.
      *      Null when it does not come from a single attempt, as with a recalibration of the scale.
+     * @param bool $isvalid Whether the estimate is valid; only valid rows become the current value.
+     * @param string $resultsource Origin of the value: current, prior, legacy or recalibration.
+     * @param float|null $standarderror Standard error of the estimate.
+     * @param int|null $n Number of graded, non-pilot items behind the estimate.
+     * @param float|null $fraction Fraction of correct answers.
+     * @param bool $isprimary Whether this is the reported scale of the attempt.
+     * @param string $validationstatus Comma-separated rejection reason codes.
      */
     public static function update_person_param(
         int $userid,

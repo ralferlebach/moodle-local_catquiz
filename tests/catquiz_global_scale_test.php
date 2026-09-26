@@ -29,8 +29,6 @@ use ReflectionMethod;
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-/**
  * @covers \local_catquiz\catquiz
  */
 final class catquiz_global_scale_test extends advanced_testcase {

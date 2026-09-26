@@ -50,15 +50,6 @@ class filterbystandarderror extends preselect_task {
     private progress $progress;
 
     /**
-     * Run method.
-     *
-     * @param array $context
-     *
-     * @return result
-     *
-     */
-
-    /**
      * Returns the CAT attempt the running test belongs to.
      *
      * The selection context carries the id of the attempt of the component; what is stored with a
@@ -77,6 +68,14 @@ class filterbystandarderror extends preselect_task {
         );
     }
 
+    /**
+     * Run method.
+     *
+     * @param array $context
+     *
+     * @return result
+     *
+     */
     public function run(array &$context): result {
         $this->context = $context;
         $this->progress = $context['progress'];

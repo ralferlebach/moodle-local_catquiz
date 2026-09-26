@@ -26,6 +26,8 @@ use advanced_testcase;
  * accident (issue #95). The ids are deliberately far apart here, so a mix-up cannot pass unnoticed.
  *
  * @package    local_catquiz
+ * @copyright  2026 onwards Ralf Erlebach
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \local_catquiz\teststrategy\progress
  */
 final class progress_attempt_reference_test extends advanced_testcase {
