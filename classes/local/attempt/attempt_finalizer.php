@@ -164,7 +164,7 @@ final class attempt_finalizer {
             foreach ($result->get_scale_results() as $scaleresult) {
                 $scaleid = $scaleresult->scaleid;
                 if ($scaleresult->valid && $scaleresult->score !== null) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $scaleresult->score);
+                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $scaleresult->score, (int) $catattempt->id);
                     continue;
                 }
 
@@ -175,13 +175,13 @@ final class attempt_finalizer {
                 // (Phase 2); fall back to the last valid history value (Phase 1);
                 // otherwise leave it untouched.
                 if (array_key_exists($scaleid, $preattempt)) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $preattempt[$scaleid]);
+                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $preattempt[$scaleid], (int) $catattempt->id);
                     continue;
                 }
 
                 $lastvalid = attemptscale_repository::get_latest_valid($userid, $contextid, $scaleid);
                 if ($lastvalid !== null && $lastvalid->score !== null) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $lastvalid->score);
+                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $lastvalid->score, (int) $catattempt->id);
                 }
             }
         }

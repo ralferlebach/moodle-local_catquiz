@@ -1973,11 +1973,22 @@ class catquiz {
         return (int) max($ids);
     }
 
+    /**
+     * Writes the current ability of a person for one scale.
+     *
+     * @param int $userid The person.
+     * @param int $contextid The CAT context.
+     * @param int $catscaleid The scale.
+     * @param float $ability The estimated ability.
+     * @param int|null $catattemptid The CAT attempt the value comes from - local_catquiz_attempts.id.
+     *      Null when it does not come from a single attempt, as with a recalibration of the scale.
+     */
     public static function update_person_param(
         int $userid,
         int $contextid,
         int $catscaleid,
-        float $ability
+        float $ability,
+        ?int $catattemptid = null
     ) {
         global $DB;
 
@@ -1997,6 +2008,13 @@ class catquiz {
             'ability' => $ability,
             'timemodified' => time(),
         ];
+
+        /* Where the value comes from. Null is a legitimate answer, not a missing one: a
+           recalibration of the whole scale estimates every person from the entire response set and
+           belongs to no single attempt. Only a value that does come from one names it. */
+        if ($catattemptid !== null) {
+            $record->attemptid = $catattemptid;
+        }
 
         if (!$existingrecord) {
             $DB->insert_record(

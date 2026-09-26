@@ -14,6 +14,9 @@ Migrationszweig gefunden wurden und hier unveraendert vorhanden waren.
   Mit Datenmigration; Zeilen ohne CAT-Versuch bleiben unzugeordnet.
 - Issue #96: `progress::load()` uebernimmt keinen Fortschritt mehr, der einem
   anderen Nutzer gehoert.
+- Issue #97: `local_catquiz_personparams.attemptid` wird befuellt. Das Feld hatte
+  einen Fremdschluessel und einen Kommentar, der eine andere Tabelle nannte – und
+  war in jeder Zeile leer.
 
 ## 1.2.0 (interne Version 2026090553)
 
