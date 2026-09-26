@@ -1482,163 +1482,44 @@ ENDSQL;
     }
 
     if ($oldversion < 2026092602) {
-        /* Issue #95: local_catquiz_progress.attemptid held the id of the *component's* attempt -
-           adaptivequiz_attempt.id - although the schema declared it a foreign key to
-           local_catquiz_attempts.id. The two are primary keys of different tables and match only by
-           accident. The column keeps its name; what changes is what it holds. The values are
-           re-keyed to the internal CAT attempt, which is what the foreign key has always said. */
+        /* Issue #95: local_catquiz_progress.attemptid held the id of the component's attempt
+           although the schema declared a foreign key to local_catquiz_attempts.id. The column keeps
+           its name; what changes is what it holds. See local_catquiz_rekey_progress_attempts() -
+           the work is done there so it can be tested against existing data. */
         $table = new xmldb_table('local_catquiz_progress');
 
-        $index = new xmldb_index('componentattempt', XMLDB_INDEX_UNIQUE, ['component', 'attemptid']);
-        if ($dbman->index_exists($table, $index)) {
-            $dbman->drop_index($table, $index);
+        // A first version of this step used a temporary column and stopped half way on MySQL and
+        // MariaDB. An installation that ran it is left with that column; it goes before anything else.
+        $temp = new xmldb_field('catattemptidtmp');
+        if ($dbman->field_exists($table, $temp)) {
+            $dbman->drop_field($table, $temp);
         }
 
-        /* Re-keying in place would collide with itself - a value being written may be one that is
-           still to be read. The new values are collected in a temporary column first. */
-        $temp = new xmldb_field('catattemptidtmp', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'attemptid');
-        if (!$dbman->field_exists($table, $temp)) {
-            $dbman->add_field($table, $temp);
-        }
-
-        $DB->execute("
-            UPDATE {local_catquiz_progress} p
-               SET catattemptidtmp = (
-                   SELECT MIN(a.id)
-                     FROM {local_catquiz_attempts} a
-                    WHERE a.attemptid = p.attemptid
-                      AND a.component = p.component
-               )");
-
-        /* Rows without a CAT attempt cannot be assigned. They are neither guessed at nor deleted -
-           deleting would destroy the state of a running attempt if the cause turns out to be
-           something else. They are reported and left behind with attemptid set to zero;
-           progress::load() ignores them, so they behave like no progress at all. */
-        $orphans = $DB->count_records_select('local_catquiz_progress', 'catattemptidtmp IS NULL');
-        if ($orphans > 0) {
-            mtrace("local_catquiz: {$orphans} progress rows have no matching CAT attempt. They are "
-                . "left with attemptid = 0 and ignored at runtime rather than removed.");
-        }
-
-        $DB->execute("UPDATE {local_catquiz_progress} SET attemptid = COALESCE(catattemptidtmp, 0)");
-
-        /* A second progress row for the same CAT attempt was never intended - the schema said
-           foreign-unique all along. Duplicates can only come from the ambiguity this step removes,
-           so the newest row wins and the older ones go. Unassignable rows (attemptid = 0) are left
-           alone; they are not duplicates of each other in any meaningful sense. */
-        $DB->execute("
-            DELETE FROM {local_catquiz_progress}
-             WHERE attemptid <> 0
-               AND id NOT IN (
-                   SELECT MAX(id) FROM {local_catquiz_progress}
-                    WHERE attemptid <> 0
-                 GROUP BY attemptid
-               )");
-
-        $dbman->drop_field($table, $temp);
-
-        $key = new xmldb_key('attemptid', XMLDB_KEY_FOREIGN_UNIQUE, ['attemptid'], 'local_catquiz_attempts', ['id']);
-        $dbman->add_key($table, $key);
+        $result = local_catquiz_rekey_progress_attempts();
+        mtrace("local_catquiz: progress re-keyed to CAT attempts - {$result['rekeyed']} rows, "
+            . "{$result['orphans']} without a CAT attempt (left unassigned), "
+            . "{$result['duplicates']} duplicates removed.");
 
         upgrade_plugin_savepoint(true, 2026092602, 'local', 'catquiz');
     }
 
     if ($oldversion < 2026092603) {
-        /* local_catquiz_attemptscale.catattemptid always held the right thing - the id of the CAT
-           attempt - but the prefix made it the only id in the plugin that announces its own
-           namespace in its name. Every other table calls that reference attemptid. The column is
-           renamed so the schema reads consistently; the values do not change. */
-        $table = new xmldb_table('local_catquiz_attemptscale');
-
-        $oldkey = new xmldb_key('catattemptid_catscaleid', XMLDB_KEY_UNIQUE, ['attemptid', 'catscaleid']);
-        $dbman->drop_key($table, $oldkey);
-
-        $oldforeign = new xmldb_key('attemptid', XMLDB_KEY_FOREIGN, ['attemptid'], 'local_catquiz_attempts', ['id']);
-        $dbman->drop_key($table, $oldforeign);
-
-        $field = new xmldb_field('attemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null, 'id');
-        if ($dbman->field_exists($table, $field)) {
-            $dbman->rename_field($table, $field, 'attemptid');
-        }
-
-        $dbman->add_key($table, new xmldb_key('attemptid', XMLDB_KEY_FOREIGN, ['attemptid'], 'local_catquiz_attempts', ['id']));
-        $dbman->add_key($table, new xmldb_key('attemptid_catscaleid', XMLDB_KEY_UNIQUE, ['attemptid', 'catscaleid']));
-
+        /* This step used to rename local_catquiz_attemptscale.catattemptid to attemptid. It is left
+           empty on purpose: the step after it merges the table into local_catquiz_personparams and
+           drops it, and the merge reads whichever of the two names exists. Renaming first only
+           added a round of key changes on a table about to disappear - untested against real data,
+           and one more place for an upgrade to stop on another database engine. */
         upgrade_plugin_savepoint(true, 2026092603, 'local', 'catquiz');
     }
 
     if ($oldversion < 2026092605) {
         /* local_catquiz_attemptscale and local_catquiz_personparams held the same thing at
-           different grain: the scale table one row per attempt and scale, the person table one row
-           per person and scale, overwritten on every change. The person table can do both once it
-           is appended to rather than overwritten and reads take the newest valid row. The scale
-           table is merged into it and removed. */
-        $table = new xmldb_table('local_catquiz_personparams');
-
-        $fields = [
-            new xmldb_field('n', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'status'),
-            new xmldb_field('fraction', XMLDB_TYPE_NUMBER, '10, 4', null, null, null, null, 'n'),
-            new xmldb_field('isprimary', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'fraction'),
-            new xmldb_field('isvalid', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'isprimary'),
-            new xmldb_field('resultsource', XMLDB_TYPE_CHAR, '20', null, null, null, null, 'isvalid'),
-            new xmldb_field('validationstatus', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'resultsource'),
-        ];
-        foreach ($fields as $field) {
-            if (!$dbman->field_exists($table, $field)) {
-                $dbman->add_field($table, $field);
-            }
-        }
-
-        /* The existing rows were written before there was any notion of validity. They are the
-           values the plugin has been working with, so they count as valid - but the validity is
-           assumed, not established, and resultsource says so. Without that mark it would later be
-           impossible to tell a checked result from an inherited one. */
-        $DB->execute("
-            UPDATE {local_catquiz_personparams}
-               SET isvalid = 1, resultsource = 'legacy'
-             WHERE resultsource IS NULL");
-
-        // The one-row-per-person rule of issue #25 gives way to the append-only history.
-        $oldindex = new xmldb_index('userid_contextid_catscaleid', XMLDB_INDEX_UNIQUE, ['userid', 'contextid', 'catscaleid']);
-        if ($dbman->index_exists($table, $oldindex)) {
-            $dbman->drop_index($table, $oldindex);
-        }
-        $newindex = new xmldb_index('userid_contextid_catscaleid', XMLDB_INDEX_NOTUNIQUE, ['userid', 'contextid', 'catscaleid']);
-        if (!$dbman->index_exists($table, $newindex)) {
-            $dbman->add_index($table, $newindex);
-        }
-        foreach (
-            [
-            new xmldb_index('isvalid', XMLDB_INDEX_NOTUNIQUE, ['isvalid']),
-            new xmldb_index('attemptid_catscaleid', XMLDB_INDEX_NOTUNIQUE, ['attemptid', 'catscaleid']),
-            ] as $index
-        ) {
-            if (!$dbman->index_exists($table, $index)) {
-                $dbman->add_index($table, $index);
-            }
-        }
-
-        // Carry the per-attempt history over. Each scale row becomes a person parameter that names
-        // the attempt it came from.
-        $scaletable = new xmldb_table('local_catquiz_attemptscale');
-        if ($dbman->table_exists($scaletable)) {
-            $DB->execute("
-                INSERT INTO {local_catquiz_personparams}
-                    (userid, catscaleid, contextid, attemptid, ability, standarderror, status,
-                     n, fraction, isprimary, isvalid, resultsource, validationstatus,
-                     timecreated, timemodified)
-                SELECT s.userid, s.catscaleid, s.contextid, s.attemptid, s.score, s.standarderror,
-                       NULL, s.n, s.fraction, s.isprimary, s.isvalid,
-                       COALESCE(s.resultsource, 'current'), s.validationstatus,
-                       s.timecreated, s.timecreated
-                  FROM {local_catquiz_attemptscale} s");
-
-            $carried = $DB->count_records('local_catquiz_attemptscale');
-            mtrace("local_catquiz: {$carried} rows carried over from local_catquiz_attemptscale "
-                . "into local_catquiz_personparams.");
-
-            $dbman->drop_table($scaletable);
-        }
+           different grain. The person table takes over, appended to rather than overwritten; see
+           local_catquiz_merge_attemptscale_into_personparams() - the work is done there so it can
+           be tested against existing data. */
+        $result = local_catquiz_merge_attemptscale_into_personparams();
+        mtrace("local_catquiz: {$result['legacy']} person parameters marked as legacy, "
+            . "{$result['carried']} scale results carried over from local_catquiz_attemptscale.");
 
         upgrade_plugin_savepoint(true, 2026092605, 'local', 'catquiz');
     }
