@@ -283,28 +283,26 @@ class provider implements
      * @param userlist $userlist The userlist object to add user IDs to.
      */
     public static function get_users_in_context(userlist $userlist) {
-        global $DB;
-
-        // Get the context from the userlist.
         $context = $userlist->get_context();
 
-        // Ensure we only process course contexts for this example.
-        if (
-            $context instanceof \context_course ||
-            $context instanceof context_module
-        ) {
-            $users = get_enrolled_users($context);
-            $params = ['courseid' => $context->instanceid];
-
-            $sql = "SELECT userid
-                    FROM {local_catquiz_attempts}";
-            $usersfromattempts = $DB->get_records_sql($sql, $params);
-
-            foreach ($users as $user) {
-                if (in_array($user->id, array_keys($usersfromattempts))) {
-                    $userlist->add_user($user->userid);
-                }
-            }
+        if (!$context instanceof \context_course) {
+            /* Attempts are filed per course. A module context says nothing about which of them
+               belong here, and the course filter below would have nothing to work with, so such a
+               context is declined rather than half served. */
+            return;
         }
+
+        /* Three defects sat in the previous implementation, and each of them alone made the answer
+           wrong: the prepared course parameter never reached the SQL, so every attempt of the whole
+           site was considered; get_records_sql() keys its result by the first selected column, so
+           several attempts of one user collapsed into a single row and the keys were user ids only
+           by accident; and the loop then read $user->userid on a Moodle user object, which has no
+           such property, so add_user() received null on every match. The set of users is now asked
+           for directly. */
+        $userlist->add_from_sql(
+            'userid',
+            "SELECT DISTINCT userid FROM {local_catquiz_attempts} WHERE courseid = :courseid",
+            ['courseid' => $context->instanceid]
+        );
     }
 }
