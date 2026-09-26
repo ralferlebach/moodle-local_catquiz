@@ -523,10 +523,13 @@ jobs:
         timeout-minutes: 20
         env:
           CATQUIZ_RUN_SLOW: 1
+        # From inside the Moodle tree: phpunit.xml lives there, and without it the
+        # bootstrap is never loaded ("Class basic_testcase not found").
+        working-directory: moodle
         run: >-
-          moodle/vendor/bin/phpunit
+          vendor/bin/phpunit
           --filter 3PL
-          moodle/local/catquiz/tests/local/model/model_person_ability_estimator_catcalc_test.php
+          public/local/catquiz/tests/local/model/model_person_ability_estimator_catcalc_test.php
       - name: Collect error summary
         if: ${{ always() }}
         run: |

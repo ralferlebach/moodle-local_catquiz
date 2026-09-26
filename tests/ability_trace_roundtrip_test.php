@@ -87,6 +87,12 @@ final class ability_trace_roundtrip_test extends advanced_testcase {
         ]);
     }
 
+    /**
+     * Returns the internal CAT attempt id for an attempt of mod_adaptivequiz.
+     *
+     * @param int $attemptid Id of the attempt of the component.
+     * @return int
+     */
     private static function catattemptid(int $attemptid): int {
         global $DB;
 

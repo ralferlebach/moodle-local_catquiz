@@ -219,17 +219,6 @@ class progress implements JsonSerializable {
     private stdClass $quizsettings;
 
     /**
-     * Returns a new progress instance.
-     *
-     * If we already have data in the cache or DB, the instance is populated with those data.
-     *
-     * @param int $attemptid
-     * @param string $component
-     * @param int $contextid
-     * @param ?stdClass $quizsettings
-     * @return progress
-     */
-    /**
      * Returns the internal CAT attempt id for the attempt of a component.
      *
      * Kept as a thin delegate: the resolution lives in catquiz because more than the progress
@@ -243,6 +232,17 @@ class progress implements JsonSerializable {
         return catquiz::get_cat_attempt_id($attemptid, $component);
     }
 
+    /**
+     * Returns a new progress instance.
+     *
+     * If we already have data in the cache or DB, the instance is populated with those data.
+     *
+     * @param int $attemptid
+     * @param string $component
+     * @param int $contextid
+     * @param ?stdClass $quizsettings
+     * @return progress
+     */
     public static function load(int $attemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
         $catattemptid = self::get_cat_attempt_id($attemptid, $component);
 
@@ -297,6 +297,7 @@ class progress implements JsonSerializable {
      * Try to load a progress object from the cache.
      *
      * @param int $attemptid
+     * @param string $component Component asking; empty to skip the component check.
      * @return progress
      * @throws coding_exception
      */
@@ -344,7 +345,7 @@ class progress implements JsonSerializable {
     /**
      * Try to load a progress object from the database.
      *
-     * @param int $attemptid
+     * @param int|null $catattemptid Id of the CAT attempt - local_catquiz_attempts.id.
      * @param int $contextid
      * @return progress|false
      */
@@ -356,7 +357,7 @@ class progress implements JsonSerializable {
             return false;
         }
 
-        // attemptid of this table is the CAT attempt, not the attempt of the component.
+        // The attemptid of this table is the CAT attempt, not the attempt of the component.
         $record = $DB->get_record('local_catquiz_progress', ['attemptid' => $catattemptid], '*');
 
         if (!$record) {
@@ -557,6 +558,7 @@ class progress implements JsonSerializable {
      * Deletes entries of this instance from the database and cache.
      *
      * @param int $attemptid
+     * @param string $component Component asking; empty to skip the component check.
      * @return void
      */
     public static function delete(int $attemptid, string $component = 'mod_adaptivequiz'): void {

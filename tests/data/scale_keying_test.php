@@ -38,12 +38,14 @@ final class scale_keying_test extends advanced_testcase {
      */
     private function tree(): array {
         $scales = [];
-        foreach ([
+        foreach (
+            [
             ['id' => 11, 'parentid' => 0, 'name' => 'root', 'contextid' => 7],
             ['id' => 12, 'parentid' => 11, 'name' => 'child a', 'contextid' => 7],
             ['id' => 13, 'parentid' => 11, 'name' => 'child b', 'contextid' => 7],
             ['id' => 14, 'parentid' => 12, 'name' => 'grandchild', 'contextid' => 7],
-        ] as $row) {
+            ] as $row
+        ) {
             $scale = (object) $row;
             $scales[$scale->id] = $scale;
         }

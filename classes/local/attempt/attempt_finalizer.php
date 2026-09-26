@@ -142,8 +142,10 @@ final class attempt_finalizer {
             // restore a non-validly-measured scale to its exact prior state.
             $preattempt = [];
             $catattemptid = progress::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz');
-            if ($catattemptid !== null
-                    && $DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid])) {
+            if (
+                $catattemptid !== null
+                    && $DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid])
+            ) {
                 try {
                     $preattempt = progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid)
                         ->get_preattempt_abilities();
@@ -180,8 +182,13 @@ final class attempt_finalizer {
                 if (array_key_exists($scaleid, $preattempt)) {
                     // Carried over, not measured in this attempt - hence 'prior'.
                     catquiz::update_person_param(
-                        $userid, $contextid, $scaleid, (float) $preattempt[$scaleid],
-                        (int) $catattempt->id, true, 'prior'
+                        $userid,
+                        $contextid,
+                        $scaleid,
+                        (float) $preattempt[$scaleid],
+                        (int) $catattempt->id,
+                        true,
+                        'prior'
                     );
                     continue;
                 }

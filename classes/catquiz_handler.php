@@ -1247,6 +1247,7 @@ class catquiz_handler {
      *
      * @param int $componentid The ID of the quiz component being processed
      * @param stdClass $clone The object containing the form data to be processed
+     * @param int|null $cmid Course module id, known while the activity is being created
      * @return stdClass The processed object with updated editor fields
      */
     private static function prepare_editor_fields(int $componentid, stdClass $clone, ?int $cmid = null): stdClass {
