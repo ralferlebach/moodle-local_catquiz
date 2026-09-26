@@ -403,19 +403,31 @@ final class strategy_test extends advanced_testcase {
             $adaptivequiz = $DB->get_record('adaptivequiz', ['id' => $attemptrec->instance], '*', MUST_EXIST);
             $attempt = new attempt($adaptivequiz, $attemptrec->userid);
             $attemptdata = $attempt->get_attempt();
-            $abilityrecord = $DB->get_record(
+            /* The newest valid row, not the first one the database happens to return: since the
+               per-attempt results were merged in, local_catquiz_personparams keeps one row per
+               estimate. get_record() would return the oldest and the trajectory would stand still. */
+            $abilityrecord = current($DB->get_records(
                 'local_catquiz_personparams',
-                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid],
-                'ability'
-            );
+                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid, 'isvalid' => 1],
+                'id DESC',
+                'id, ability',
+                0,
+                1
+            )) ?: null;
             $ability = $abilityrecord ? $abilityrecord->ability : ($initialability ?: 0);
 
             [$nextquestionid, $message] = catquiz_handler::fetch_question_id('1', 'mod_adaptivequiz', $attemptdata);
-            $abilityrecord = $DB->get_record(
+            /* The newest valid row, not the first one the database happens to return: since the
+               per-attempt results were merged in, local_catquiz_personparams keeps one row per
+               estimate. get_record() would return the oldest and the trajectory would stand still. */
+            $abilityrecord = current($DB->get_records(
                 'local_catquiz_personparams',
-                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid],
-                'ability'
-            );
+                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid, 'isvalid' => 1],
+                'id DESC',
+                'id, ability',
+                0,
+                1
+            )) ?: null;
             $ability = $abilityrecord ? $abilityrecord->ability : ($initialability ?: 0);
             $abilities[] = (float) $ability;
             if ($expectedquestion['label'] === 'FINISH' || $nextquestionid == 0) {
@@ -515,11 +527,17 @@ final class strategy_test extends advanced_testcase {
 
             [$nextquestionid, $message] = catquiz_handler::fetch_question_id('1', 'mod_adaptivequiz', $attemptdata);
 
-            $abilityrecord = $DB->get_record(
+            /* The newest valid row, not the first one the database happens to return: since the
+               per-attempt results were merged in, local_catquiz_personparams keeps one row per
+               estimate. get_record() would return the oldest and the trajectory would stand still. */
+            $abilityrecord = current($DB->get_records(
                 'local_catquiz_personparams',
-                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid],
-                'ability'
-            );
+                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid, 'isvalid' => 1],
+                'id DESC',
+                'id, ability',
+                0,
+                1
+            )) ?: null;
             $abilities[] = $abilityrecord ? (float) $abilityrecord->ability : 0.0;
 
             if ($nextquestionid == 0) {

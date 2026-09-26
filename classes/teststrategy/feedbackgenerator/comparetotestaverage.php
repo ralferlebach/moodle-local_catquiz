@@ -403,10 +403,27 @@ class comparetotestaverage extends feedbackgenerator {
         // Prepare data for scorecounter bars.
         // Scope the histogram to the current CAT context so it does
         // not mix person parameters from other contexts.
-        $abilityrecords = $DB->get_records('local_catquiz_personparams', [
-            'catscaleid' => $primarycatscale['id'],
-            'contextid' => $initialcontext['contextid'],
-        ]);
+        /* One row per person, not one per estimate: local_catquiz_personparams keeps the history,
+           so counting every row would count a person as often as they have been measured. */
+        $abilityrecords = $DB->get_records_sql(
+            "SELECT pp.*
+               FROM {local_catquiz_personparams} pp
+              WHERE pp.catscaleid = :catscaleid
+                AND pp.contextid = :contextid
+                AND pp.isvalid = 1
+                AND pp.id = (
+                    SELECT MAX(pp2.id)
+                      FROM {local_catquiz_personparams} pp2
+                     WHERE pp2.userid = pp.userid
+                       AND pp2.contextid = pp.contextid
+                       AND pp2.catscaleid = pp.catscaleid
+                       AND pp2.isvalid = 1
+                )",
+            [
+                'catscaleid' => $primarycatscale['id'],
+                'contextid' => $initialcontext['contextid'],
+            ]
+        );
         $abilityseries = [];
         foreach ($abilitysteps as $as) {
             $counter = 0;

@@ -17,6 +17,7 @@
 namespace local_catquiz\local\attempt;
 
 use advanced_testcase;
+use local_catquiz\catquiz;
 use local_catquiz\teststrategy\progress;
 use stdClass;
 
@@ -335,11 +336,15 @@ final class attempt_finalizer_test extends advanced_testcase {
 
         $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
 
-        $snapshot = $DB->get_record(
-            'local_catquiz_personparams',
-            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5]
-        );
+        // The table is appended to, so the current value is the newest valid row, not the only one.
+        $snapshot = catquiz::get_current_person_param($userid, $contextid, 5);
+
         $this->assertEquals(0.55, (float) $snapshot->ability);
+        $this->assertEquals(
+            'prior',
+            $snapshot->resultsource,
+            'A carried-over value must say that it was not measured in this attempt.'
+        );
     }
 
     /**

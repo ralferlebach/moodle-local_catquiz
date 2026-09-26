@@ -94,7 +94,7 @@ class cleanup_attempt_progress extends scheduled_task {
             foreach (array_slice($rows, 0, self::BATCH) as $row) {
                 // Through progress::delete() so the cache is cleared as well; a row
                 // removed behind the cache's back would come back on the next read.
-                progress::delete((int) $row->attemptid, $row->component);
+                progress::delete((int) $row->componentattemptid, $row->component);
                 $removed++;
             }
 

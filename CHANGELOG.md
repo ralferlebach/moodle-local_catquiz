@@ -2,6 +2,14 @@
 
 ## 1.3.0 (in Arbeit)
 
+- `local_catquiz_attemptscale` ist in `local_catquiz_personparams` aufgegangen.
+  Die Personenparameter-Tabelle wird jetzt fortgeschrieben statt ueberschrieben -
+  eine Zeile je Schaetzung, mit Standardfehler, Itemzahl, Fraktion,
+  `isprimary`, `isvalid` und Herkunft. Gelesen wird die juengste gueltige Zeile
+  je Person, Kontext und Skala. Bestandszeilen gelten als gueltig und tragen
+  `resultsource = 'legacy'`, damit unterstellte von geprueften Gueltigkeiten
+  unterscheidbar bleiben.
+
 Zielplattform ist Moodle 5.3 (LTS), abgesichert gegen 5.1 und 5.2. Moodle 4.x
 wird nicht mehr unterstuetzt; der 4.5-Stand bleibt als 1.2.0 bestehen.
 

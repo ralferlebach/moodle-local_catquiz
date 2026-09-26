@@ -164,7 +164,10 @@ final class attempt_finalizer {
             foreach ($result->get_scale_results() as $scaleresult) {
                 $scaleid = $scaleresult->scaleid;
                 if ($scaleresult->valid && $scaleresult->score !== null) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $scaleresult->score, (int) $catattempt->id);
+                    /* Nothing to write here: personparam_repository::save_attempt_result() above
+                       has already filed this scale, with the standard error, the item count and
+                       the validation status that only it knows. A second write would append a
+                       poorer duplicate of the same estimate. */
                     continue;
                 }
 
@@ -175,7 +178,11 @@ final class attempt_finalizer {
                 // (Phase 2); fall back to the last valid history value (Phase 1);
                 // otherwise leave it untouched.
                 if (array_key_exists($scaleid, $preattempt)) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $preattempt[$scaleid], (int) $catattempt->id);
+                    // Carried over, not measured in this attempt - hence 'prior'.
+                    catquiz::update_person_param(
+                        $userid, $contextid, $scaleid, (float) $preattempt[$scaleid],
+                        (int) $catattempt->id, true, 'prior'
+                    );
                     continue;
                 }
 
