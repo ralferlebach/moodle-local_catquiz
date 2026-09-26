@@ -57,6 +57,26 @@ class filterbystandarderror extends preselect_task {
      * @return result
      *
      */
+
+    /**
+     * Returns the CAT attempt the running test belongs to.
+     *
+     * The selection context carries the id of the attempt of the component; what is stored with a
+     * person parameter is the internal one.
+     *
+     * @return int|null
+     */
+    private function cat_attempt_id(): ?int {
+        if (empty($this->context['attemptid'])) {
+            return null;
+        }
+
+        return catquiz::get_cat_attempt_id(
+            (int) $this->context['attemptid'],
+            $this->context['component'] ?? 'mod_adaptivequiz'
+        );
+    }
+
     public function run(array &$context): result {
         $this->context = $context;
         $this->progress = $context['progress'];
@@ -112,7 +132,8 @@ class filterbystandarderror extends preselect_task {
                         $this->context['userid'],
                         $this->context['contextid'],
                         $subscaleid,
-                        $inheritval
+                        $inheritval,
+                        $this->cat_attempt_id()
                     );
                     getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(
                         "%d: [SE] inhere %s - pp: %.5f\n",
@@ -179,7 +200,8 @@ class filterbystandarderror extends preselect_task {
                     $this->context['userid'],
                     $this->context['contextid'],
                     $subscaleid,
-                    $inheritval
+                    $inheritval,
+                    $this->cat_attempt_id()
                 );
                 $this->context['person_ability'][$subscaleid] = $inheritval;
             }

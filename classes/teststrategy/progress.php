@@ -232,31 +232,15 @@ class progress implements JsonSerializable {
     /**
      * Returns the internal CAT attempt id for the attempt of a component.
      *
-     * The component knows its own attempt id; local_catquiz_attempts holds that id next to its own.
-     * Resolving in one place keeps the two namespaces apart: everything the callers hand in is
-     * external, everything that is stored is internal.
+     * Kept as a thin delegate: the resolution lives in catquiz because more than the progress
+     * needs it, and it must read the same way everywhere.
      *
      * @param int $attemptid Id of the attempt of the component.
      * @param string $component The component the attempt belongs to.
      * @return int|null The id in local_catquiz_attempts, null when there is no CAT attempt yet.
      */
     public static function get_cat_attempt_id(int $attemptid, string $component): ?int {
-        global $DB;
-
-        $ids = $DB->get_fieldset_select(
-            'local_catquiz_attempts',
-            'id',
-            'attemptid = :attemptid AND component = :component',
-            ['attemptid' => $attemptid, 'component' => $component]
-        );
-
-        if (empty($ids)) {
-            return null;
-        }
-
-        // More than one would mean the component started several CAT attempts for one attempt of
-        // its own. The newest is the running one.
-        return (int) max($ids);
+        return catquiz::get_cat_attempt_id($attemptid, $component);
     }
 
     public static function load(int $attemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {

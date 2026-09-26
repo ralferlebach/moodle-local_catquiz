@@ -1954,11 +1954,52 @@ class catquiz {
      * @return void
      *
      */
+    /**
+     * Returns the internal CAT attempt id for the attempt of a component.
+     *
+     * A component knows its own attempt id; local_catquiz_attempts holds that id next to its own.
+     * Resolving in one place keeps the two namespaces apart - everything a caller hands in is
+     * external, everything stored in the CATquiz tables is internal.
+     *
+     * @param int $attemptid Id of the attempt of the component.
+     * @param string $component The component the attempt belongs to.
+     * @return int|null The id in local_catquiz_attempts, null when there is no CAT attempt yet.
+     */
+    public static function get_cat_attempt_id(int $attemptid, string $component): ?int {
+        global $DB;
+
+        $ids = $DB->get_fieldset_select(
+            'local_catquiz_attempts',
+            'id',
+            'attemptid = :attemptid AND component = :component',
+            ['attemptid' => $attemptid, 'component' => $component]
+        );
+
+        if (empty($ids)) {
+            return null;
+        }
+
+        // More than one would mean the component started several CAT attempts for one attempt of
+        // its own. The newest is the running one.
+        return (int) max($ids);
+    }
+
+    /**
+     * Writes the current ability of a person for one scale.
+     *
+     * @param int $userid The person.
+     * @param int $contextid The CAT context.
+     * @param int $catscaleid The scale.
+     * @param float $ability The estimated ability.
+     * @param int|null $catattemptid The CAT attempt the value comes from - local_catquiz_attempts.id.
+     *      Null when it does not come from a single attempt, as with a recalibration of the scale.
+     */
     public static function update_person_param(
         int $userid,
         int $contextid,
         int $catscaleid,
-        float $ability
+        float $ability,
+        ?int $catattemptid = null
     ) {
         global $DB;
 
@@ -1978,6 +2019,13 @@ class catquiz {
             'ability' => $ability,
             'timemodified' => time(),
         ];
+
+        /* Where the value comes from. Null is a legitimate answer, not a missing one: a
+           recalibration of the whole scale estimates every person from the entire response set and
+           belongs to no single attempt. Only a value that does come from one names it. */
+        if ($catattemptid !== null) {
+            $record->attemptid = $catattemptid;
+        }
 
         if (!$existingrecord) {
             $DB->insert_record(
