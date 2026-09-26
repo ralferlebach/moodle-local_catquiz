@@ -2002,25 +2002,37 @@ class catquiz {
         int $contextid,
         int $catscaleid,
         float $ability,
-        ?int $catattemptid = null
+        ?int $catattemptid = null,
+        bool $isvalid = true,
+        string $resultsource = 'current',
+        ?float $standarderror = null,
+        ?int $n = null,
+        ?float $fraction = null,
+        bool $isprimary = false,
+        string $validationstatus = ''
     ) {
         global $DB;
 
-        $existingrecord = $DB->get_record(
-            'local_catquiz_personparams',
-            [
-                'userid' => $userid,
-                'contextid' => $contextid,
-                'catscaleid' => $catscaleid,
-            ]
-        );
+        $now = time();
 
-        $record = (object)[
+        /* Appended, not overwritten: local_catquiz_personparams keeps the history of what was
+           estimated, one row per estimate. Reads take the newest valid row per user, context and
+           scale - see get_current_person_param(). Overwriting would throw away exactly the
+           information the per-attempt table used to hold. */
+        $record = (object) [
             'userid' => $userid,
             'contextid' => $contextid,
             'catscaleid' => $catscaleid,
             'ability' => $ability,
-            'timemodified' => time(),
+            'standarderror' => $standarderror,
+            'n' => $n,
+            'fraction' => $fraction,
+            'isprimary' => $isprimary ? 1 : 0,
+            'isvalid' => $isvalid ? 1 : 0,
+            'resultsource' => $resultsource,
+            'validationstatus' => $validationstatus,
+            'timecreated' => $now,
+            'timemodified' => $now,
         ];
 
         /* Where the value comes from. Null is a legitimate answer, not a missing one: a
@@ -2030,16 +2042,33 @@ class catquiz {
             $record->attemptid = $catattemptid;
         }
 
-        if (!$existingrecord) {
-            $DB->insert_record(
-                'local_catquiz_personparams',
-                $record
-            );
-            return;
-        }
+        $DB->insert_record('local_catquiz_personparams', $record);
+    }
 
-        $record->id = $existingrecord->id;
-        $DB->update_record('local_catquiz_personparams', $record);
+    /**
+     * Returns the estimate a person is currently working from for one scale.
+     *
+     * The newest valid row wins. Rows without an attempt count too - a recalibration of the scale
+     * produces the best available value and must not fall behind an older attempt result.
+     *
+     * @param int $userid The person.
+     * @param int $contextid The CAT context.
+     * @param int $catscaleid The scale.
+     * @return \stdClass|null
+     */
+    public static function get_current_person_param(int $userid, int $contextid, int $catscaleid): ?\stdClass {
+        global $DB;
+
+        $records = $DB->get_records(
+            'local_catquiz_personparams',
+            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => $catscaleid, 'isvalid' => 1],
+            'id DESC',
+            '*',
+            0,
+            1
+        );
+
+        return $records ? reset($records) : null;
     }
 
     /**
@@ -2091,7 +2120,7 @@ class catquiz {
      */
     public static function get_person_abilities(int $contextid, array $catscaleids, array $userids = []) {
         global $DB;
-        $where = "contextid = :contextid";
+        $where = "pp.contextid = :contextid";
         $params = ['contextid' => $contextid];
 
         if ($catscaleids) {
@@ -2100,14 +2129,26 @@ class catquiz {
                 SQL_PARAMS_NAMED,
                 'incatscales'
             );
-            $where .= " AND catscaleid " . $inscalesql;
+            $where .= " AND pp.catscaleid " . $inscalesql;
             $params = array_merge($params, $inscaleparams);
         }
 
+        /* The newest valid row per person and scale, not every row: the table keeps the history of
+           what was estimated. Rows without an attempt count too - a recalibration produces the best
+           available value and must not fall behind an older attempt result. */
         $sql = "
-            SELECT *
-            FROM {local_catquiz_personparams}
-            WHERE $where";
+            SELECT pp.*
+            FROM {local_catquiz_personparams} pp
+            WHERE $where
+              AND pp.isvalid = 1
+              AND pp.id = (
+                  SELECT MAX(pp2.id)
+                    FROM {local_catquiz_personparams} pp2
+                   WHERE pp2.userid = pp.userid
+                     AND pp2.contextid = pp.contextid
+                     AND pp2.catscaleid = pp.catscaleid
+                     AND pp2.isvalid = 1
+              )";
 
         if ($userids) {
             [$inuseridssql, $inuseridsparams] = $DB->get_in_or_equal(
@@ -2115,7 +2156,7 @@ class catquiz {
                 SQL_PARAMS_NAMED,
                 'inuserids'
             );
-            $sql .= " AND userid $inuseridssql";
+            $sql .= " AND pp.userid $inuseridssql";
             $params = array_merge($params, $inuseridsparams);
         }
 

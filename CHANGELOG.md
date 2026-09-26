@@ -2,6 +2,13 @@
 
 ## 1.2.1 (in Arbeit)
 
+- `local_catquiz_attemptscale` ist in `local_catquiz_personparams` aufgegangen.
+  Die Personenparameter-Tabelle wird jetzt fortgeschrieben statt ueberschrieben –
+  eine Zeile je Schaetzung, mit Standardfehler, Itemzahl, Fraktion,
+  `isprimary`, `isvalid` und Herkunft. Gelesen wird die juengste gueltige Zeile
+  je Person, Kontext und Skala. Bestandszeilen gelten als gueltig und tragen
+  `resultsource = 'legacy'`.
+
 Wartungsrelease der 4.5-Linie. Behebt Defekte, die zuerst auf dem
 Migrationszweig gefunden wurden und hier unveraendert vorhanden waren.
 

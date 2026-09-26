@@ -18,7 +18,7 @@ namespace local_catquiz\local\attempt;
 
 use local_catquiz\catquiz;
 use local_catquiz\local\result\attempt_result_validator;
-use local_catquiz\local\result\attemptscale_repository;
+use local_catquiz\local\result\personparam_repository;
 use local_catquiz\teststrategy\progress;
 
 /**
@@ -113,7 +113,7 @@ final class attempt_finalizer {
         // Completed -> Validated -> Persisted atomically.
         $result = attempt_result_validator::validate($adaptiveattemptid);
         $contextid = ($catattempt->contextid !== null) ? (int) $catattempt->contextid : null;
-        attemptscale_repository::save_attempt_result(
+        personparam_repository::save_attempt_result(
             (int) $catattempt->id,
             (int) $catattempt->userid,
             $contextid,
@@ -164,7 +164,10 @@ final class attempt_finalizer {
             foreach ($result->get_scale_results() as $scaleresult) {
                 $scaleid = $scaleresult->scaleid;
                 if ($scaleresult->valid && $scaleresult->score !== null) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $scaleresult->score, (int) $catattempt->id);
+                    /* Nothing to write here: personparam_repository::save_attempt_result() above
+                       has already filed this scale, with the standard error, the item count and
+                       the validation status that only it knows. A second write would append a
+                       poorer duplicate of the same estimate. */
                     continue;
                 }
 
@@ -175,13 +178,20 @@ final class attempt_finalizer {
                 // (Phase 2); fall back to the last valid history value (Phase 1);
                 // otherwise leave it untouched.
                 if (array_key_exists($scaleid, $preattempt)) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $preattempt[$scaleid], (int) $catattempt->id);
+                    // Carried over, not measured in this attempt - hence 'prior'.
+                    catquiz::update_person_param(
+                        $userid, $contextid, $scaleid, (float) $preattempt[$scaleid],
+                        (int) $catattempt->id, true, 'prior'
+                    );
                     continue;
                 }
 
-                $lastvalid = attemptscale_repository::get_latest_valid($userid, $contextid, $scaleid);
-                if ($lastvalid !== null && $lastvalid->score !== null) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $lastvalid->score, (int) $catattempt->id);
+                $lastvalid = personparam_repository::get_latest_valid($userid, $contextid, $scaleid);
+                if ($lastvalid !== null && $lastvalid->ability !== null) {
+                    catquiz::update_person_param(
+                        $userid, $contextid, $scaleid, (float) $lastvalid->ability,
+                        (int) $catattempt->id, true, 'prior'
+                    );
                 }
             }
         }

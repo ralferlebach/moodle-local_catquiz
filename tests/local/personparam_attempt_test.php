@@ -97,11 +97,8 @@ final class personparam_attempt_test extends advanced_testcase {
         $catattemptid = $this->make_cat_attempt(4712, 2, 9);
         catquiz::update_person_param(2, 9, 1, 0.75, $catattemptid);
 
-        $record = $DB->get_record('local_catquiz_personparams', [
-            'userid' => 2,
-            'contextid' => 9,
-            'catscaleid' => 1,
-        ]);
+        // The table is appended to; the current value is the newest valid row.
+        $record = catquiz::get_current_person_param(2, 9, 1);
 
         $this->assertEquals(0.75, (float) $record->ability);
         $this->assertEquals(
@@ -125,11 +122,8 @@ final class personparam_attempt_test extends advanced_testcase {
 
         catquiz::update_person_param(2, 9, 1, 0.5);
 
-        $record = $DB->get_record('local_catquiz_personparams', [
-            'userid' => 2,
-            'contextid' => 9,
-            'catscaleid' => 1,
-        ]);
+        // The table is appended to; the current value is the newest valid row.
+        $record = catquiz::get_current_person_param(2, 9, 1);
 
         $this->assertNull($record->attemptid, 'An ability from no attempt must not name one.');
     }
@@ -148,11 +142,8 @@ final class personparam_attempt_test extends advanced_testcase {
         catquiz::update_person_param(2, 9, 1, 0.1, $first);
         catquiz::update_person_param(2, 9, 1, 0.9, $second);
 
-        $record = $DB->get_record('local_catquiz_personparams', [
-            'userid' => 2,
-            'contextid' => 9,
-            'catscaleid' => 1,
-        ]);
+        // The table is appended to; the current value is the newest valid row.
+        $record = catquiz::get_current_person_param(2, 9, 1);
 
         $this->assertEquals(0.9, (float) $record->ability);
         $this->assertEquals($second, (int) $record->attemptid);
