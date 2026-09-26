@@ -59,9 +59,15 @@ class catquiz {
      */
     private static function get_global_scale($catscaleids, bool $assocarray = false) {
         global $DB;
+        // Normalise first, decide afterwards: the method documents int|array, but read index 0
+        // before it had established that an array was passed at all.
+        $ids = is_array($catscaleids) ? array_values($catscaleids) : [$catscaleids];
+        $ids = array_values(array_filter(array_map('intval', $ids), fn($id) => $id > 0));
+
         $where = '';
-        if (!empty($catscaleids) && $catscaleids[0] > 0) {
-            [$insql, $inparams] = $DB->get_in_or_equal($catscaleids);
+        $inparams = [];
+        if (!empty($ids)) {
+            [$insql, $inparams] = $DB->get_in_or_equal($ids);
             $where = "WHERE scaleid $insql";
         } else {
             // NOTE: If no $catscaleids are given, then return ALL associations.
@@ -81,9 +87,13 @@ class catquiz {
             FROM globalscale
             $where";
 
-        if (is_int($catscaleids) && !$assocarray) {
+        /* One id asked for, one global scale returned. The test used to be is_int($catscaleids),
+           which made the same call behave differently depending on whether the id arrived bare
+           or wrapped in an array - the very ambiguity this method is supposed to absorb. */
+        if (count($ids) === 1 && !$assocarray) {
             $sqlresult = $DB->get_record_sql($sql, $inparams);
-            return [intval($sqlresult->globalid)];
+
+            return $sqlresult ? [intval($sqlresult->globalid)] : [];
         }
 
         if (!$assocarray) {
@@ -299,7 +309,9 @@ class catquiz {
         }
 
         $insql = '';
-        if (!empty($catscaleids) && $catscaleids[0] > 0) {
+        // Not $catscaleids[0]: callers hand this list on id-keyed as well, and index 0 would
+        // then be undefined - the filter would fall away without anyone noticing.
+        if (!empty($catscaleids) && (int) reset($catscaleids) > 0) {
             $globalscaleids = self::get_global_scale($catscaleids);
 
             [$parentscales1, $inparams1] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'inparentscales1');
@@ -1799,7 +1811,9 @@ class catquiz {
         $params = ['contextid' => $contextid];
         $wherecontains = [];
 
-        if (!empty($catscaleids) && $catscaleids[0] > 0) {
+        // Not $catscaleids[0]: callers hand this list on id-keyed as well, and index 0 would
+        // then be undefined - the filter would fall away without anyone noticing.
+        if (!empty($catscaleids) && (int) reset($catscaleids) > 0) {
             [$incatscales, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED, 'countcatscales');
             $params = array_merge($params, $inparams);
             $wherecontains[] = "lccs.id $incatscales";

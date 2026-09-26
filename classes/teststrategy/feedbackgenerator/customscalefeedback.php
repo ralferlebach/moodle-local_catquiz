@@ -287,20 +287,7 @@ class customscalefeedback extends feedbackgenerator {
             return get_string('nofeedback', 'local_catquiz');
         }
 
-        // Sort in the following way:
-        // 1. Main scale always comes first.
-        // 2. Other scales are sorted by name.
-        $mainscale = $scalefeedback[$this->mainscale] ?? null;
-        unset($scalefeedback[$this->mainscale]);
-        uksort($scalefeedback, function ($a, $b) use ($catscales) {
-            $a = (object) $catscales[$a];
-            $b = (object) $catscales[$b];
-            return $catscales[$a->id]->name <=> $catscales[$b->id]->name;
-        });
-        $sorted = $scalefeedback;
-        if ($mainscale) {
-            $sorted = [$mainscale, ...$scalefeedback];
-        }
+        $sorted = self::sort_scalefeedback($scalefeedback, $catscales, $this->mainscale);
 
         $text = "";
         foreach ($sorted as $value) {
@@ -358,5 +345,60 @@ class customscalefeedback extends feedbackgenerator {
         }
 
         return $content;
+    }
+
+    /**
+     * Orders the feedback: main scale first, the rest by the name of their scale.
+     *
+     * Extracted so the ordering can be tested on its own - it used to sit inside a private method
+     * that is only reachable through feedback ranges, an uncertainty factor and the result gate.
+     *
+     * Three assumptions used to be made here without a check: that an entry for the key exists,
+     * that the array key equals catscale.id, and that the entry is an object. A missing scale
+     * threw, and a list-keyed array sorted by whatever happened to sit at that offset (issue
+     * #102). The name is looked up directly now, and a scale that is not there sorts to the end
+     * instead of taking the page down.
+     *
+     * @param array $scalefeedback Feedback texts keyed by catscale id.
+     * @param array $catscales Scale records, keyed by catscale id; entries may be arrays or objects.
+     * @param int|null $mainscaleid The scale to put first, if it has feedback.
+     * @return array The feedback texts in display order.
+     */
+    public static function sort_scalefeedback(array $scalefeedback, array $catscales, ?int $mainscaleid): array {
+        $mainscale = $mainscaleid !== null ? ($scalefeedback[$mainscaleid] ?? null) : null;
+
+        if ($mainscaleid !== null) {
+            unset($scalefeedback[$mainscaleid]);
+        }
+
+        /* The scale records are keyed by catscale id here, whatever they arrived as. Only refusing
+           to crash on a list-keyed array would not be enough: no scale would find its name, every
+           entry would sort equal, and the order would silently be the insertion order. */
+        $byid = [];
+        foreach ($catscales as $key => $scale) {
+            $id = is_object($scale) ? ($scale->id ?? null) : ($scale['id'] ?? null);
+            $byid[$id === null ? $key : (int) $id] = $scale;
+        }
+
+        $scalename = function ($scaleid) use ($byid): string {
+            $scale = $byid[$scaleid] ?? null;
+
+            if ($scale === null) {
+                // Sorts to the end: a scale we know nothing about has no name to sort by.
+                return "\xff";
+            }
+
+            $scale = (object) $scale;
+
+            return (string) ($scale->name ?? "\xff");
+        };
+
+        uksort($scalefeedback, fn($a, $b) => $scalename($a) <=> $scalename($b));
+
+        if ($mainscale === null) {
+            return $scalefeedback;
+        }
+
+        return [$mainscale, ...$scalefeedback];
     }
 }

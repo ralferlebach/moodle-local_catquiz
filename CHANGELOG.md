@@ -14,6 +14,15 @@ Migrationszweig gefunden wurden und hier unveraendert vorhanden waren.
   Mit Datenmigration; Zeilen ohne CAT-Versuch bleiben unzugeordnet.
 - Issue #96: `progress::load()` uebernimmt keinen Fortschritt mehr, der einem
   anderen Nutzer gehoert.
+- Issue #102: die Sortierung des Skalen-Feedbacks schluesselt die Skalen nach
+  `catscale.id`, bevor sie nach Namen ordnet – ein reindiziertes Array sortierte
+  vorher still in Einfuegereihenfolge.
+- Issues #99 und #103: ID-Vertraege der Skalen abgesichert – ein Skalen-Array wird
+  nach `catscale.id` geschluesselt, bevor darauf zugegriffen wird, und
+  `get_global_scale()` haelt seinen eigenen `int|array`-Vertrag ein.
+- Issue #104: Audit aller 34 `get_records_sql()`-Aufrufe; kein Aufruf haengt von
+  zufaelliger Eindeutigkeit der ersten Spalte ab. Ergebnis und Review-Checkliste
+  in `doc/dml-resultset-keying.md`.
 - Issue #97: `local_catquiz_personparams.attemptid` wird befuellt. Das Feld hatte
   einen Fremdschluessel und einen Kommentar, der eine andere Tabelle nannte – und
   war in jeder Zeile leer.

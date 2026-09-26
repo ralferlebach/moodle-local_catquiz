@@ -200,6 +200,43 @@ class dataapi {
     }
 
     /**
+     * Re-keys a scale array by catscale id, which is what the method below works on.
+     *
+     * @param array $catscales
+     * @return array
+     */
+    private static function key_scales_by_id(array $catscales): array {
+        $keyed = [];
+        $rekeyed = false;
+
+        foreach ($catscales as $key => $scale) {
+            $id = is_object($scale) ? ($scale->id ?? null) : ($scale['id'] ?? null);
+
+            if ($id === null) {
+                // Nothing to key by - hand the array on as it came and let the caller's own
+                // expectations apply.
+                return $catscales;
+            }
+
+            $keyed[(int) $id] = $scale;
+
+            $rekeyed = $rekeyed || (int) $key !== (int) $id;
+        }
+
+        // Reported once per call, not once per row: an array handed in list-keyed produces one
+        // finding, not one per scale.
+        if ($rekeyed) {
+            debugging(
+                'get_catscale_and_children() expects scales keyed by catscale id; '
+                    . 'the array was re-keyed.',
+                DEBUG_DEVELOPER
+            );
+        }
+
+        return $keyed;
+    }
+
+    /**
      * We'll get an array of catscales where every catscale is followed by its children.
      *
      * @param integer $parentid
@@ -217,7 +254,7 @@ class dataapi {
         $catcontext = null
     ) {
 
-        $catscales = empty($catscales) ? self::get_all_catscales() : $catscales;
+        $catscales = empty($catscales) ? self::get_all_catscales() : self::key_scales_by_id($catscales);
         $returnarray = [];
 
         $parentscales = array_filter($catscales, fn($a) => $a->id == $parentid);
