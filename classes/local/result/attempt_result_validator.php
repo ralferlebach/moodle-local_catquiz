@@ -205,7 +205,7 @@ final class attempt_result_validator {
 
                     // The share of points on the same population as N. It was never
                     // filled - validate() passed an empty array - so the fraction
-                    // column of local_catquiz_attemptscale stayed null on every row
+                    // column of the attempt scale results stayed null on every row
                     // while the value was available all along.
                     $fraction = $progress->get_fraction_for_scale((int) $scaleid);
                     if ($fraction !== null) {

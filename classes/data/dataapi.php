@@ -207,6 +207,7 @@ class dataapi {
      */
     private static function key_scales_by_id(array $catscales): array {
         $keyed = [];
+        $rekeyed = false;
 
         foreach ($catscales as $key => $scale) {
             $id = is_object($scale) ? ($scale->id ?? null) : ($scale['id'] ?? null);
@@ -219,13 +220,17 @@ class dataapi {
 
             $keyed[(int) $id] = $scale;
 
-            if ((int) $key !== (int) $id) {
-                debugging(
-                    'get_catscale_and_children() expects scales keyed by catscale id; '
-                        . 'the array was re-keyed.',
-                    DEBUG_DEVELOPER
-                );
-            }
+            $rekeyed = $rekeyed || (int) $key !== (int) $id;
+        }
+
+        // Reported once per call, not once per row: an array handed in list-keyed produces one
+        // finding, not one per scale.
+        if ($rekeyed) {
+            debugging(
+                'get_catscale_and_children() expects scales keyed by catscale id; '
+                    . 'the array was re-keyed.',
+                DEBUG_DEVELOPER
+            );
         }
 
         return $keyed;

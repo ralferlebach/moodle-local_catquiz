@@ -155,7 +155,7 @@ final class attempt_finalizer_test extends advanced_testcase {
         // defaults to true and both reported scales are historised.
         $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
 
-        $rows = $DB->get_records('local_catquiz_attemptscale', ['attemptid' => $catid]);
+        $rows = $DB->get_records('local_catquiz_personparams', ['attemptid' => $catid]);
         $byscale = [];
         foreach ($rows as $row) {
             $byscale[(int) $row->catscaleid] = $row;
@@ -214,7 +214,7 @@ final class attempt_finalizer_test extends advanced_testcase {
 
         $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
 
-        $rows = $DB->get_records('local_catquiz_attemptscale', ['attemptid' => $catid]);
+        $rows = $DB->get_records('local_catquiz_personparams', ['attemptid' => $catid]);
         $byscale = [];
         foreach ($rows as $row) {
             $byscale[(int) $row->catscaleid] = $row;
@@ -247,9 +247,9 @@ final class attempt_finalizer_test extends advanced_testcase {
         // Prior valid history for scale 5 (score 0.7) from an earlier attempt,
         // and an intermediate estimate currently sitting in personparams (0.15,
         // as a during-attempt task would have written).
-        $DB->insert_record('local_catquiz_attemptscale', (object) [
+        $DB->insert_record('local_catquiz_personparams', (object) [
             'attemptid' => 111, 'userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5,
-            'score' => 0.7, 'standarderror' => 0.2, 'n' => 8, 'fraction' => 0.6,
+            'ability' => 0.7, 'standarderror' => 0.2, 'n' => 8, 'fraction' => 0.6,
             'isprimary' => 1, 'isvalid' => 1, 'resultsource' => 'current', 'validationstatus' => '',
             'timecreated' => $now - 1000,
         ]);

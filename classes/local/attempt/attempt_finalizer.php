@@ -18,7 +18,7 @@ namespace local_catquiz\local\attempt;
 
 use local_catquiz\catquiz;
 use local_catquiz\local\result\attempt_result_validator;
-use local_catquiz\local\result\attemptscale_repository;
+use local_catquiz\local\result\personparam_repository;
 use local_catquiz\teststrategy\progress;
 
 /**
@@ -113,7 +113,7 @@ final class attempt_finalizer {
         // Completed -> Validated -> Persisted atomically.
         $result = attempt_result_validator::validate($adaptiveattemptid);
         $contextid = ($catattempt->contextid !== null) ? (int) $catattempt->contextid : null;
-        attemptscale_repository::save_attempt_result(
+        personparam_repository::save_attempt_result(
             (int) $catattempt->id,
             (int) $catattempt->userid,
             $contextid,
@@ -179,9 +179,9 @@ final class attempt_finalizer {
                     continue;
                 }
 
-                $lastvalid = attemptscale_repository::get_latest_valid($userid, $contextid, $scaleid);
-                if ($lastvalid !== null && $lastvalid->score !== null) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $lastvalid->score, (int) $catattempt->id);
+                $lastvalid = personparam_repository::get_latest_valid($userid, $contextid, $scaleid);
+                if ($lastvalid !== null && $lastvalid->ability !== null) {
+                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $lastvalid->ability, (int) $catattempt->id);
                 }
             }
         }

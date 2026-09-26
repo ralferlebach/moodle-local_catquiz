@@ -1567,6 +1567,80 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026092603, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026092605) {
+        /* local_catquiz_attemptscale and local_catquiz_personparams held the same thing at
+           different grain: the scale table one row per attempt and scale, the person table one row
+           per person and scale, overwritten on every change. The person table can do both once it
+           is appended to rather than overwritten and reads take the newest valid row. The scale
+           table is merged into it and removed. */
+        $table = new xmldb_table('local_catquiz_personparams');
+
+        $fields = [
+            new xmldb_field('n', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'status'),
+            new xmldb_field('fraction', XMLDB_TYPE_NUMBER, '10, 4', null, null, null, null, 'n'),
+            new xmldb_field('isprimary', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'fraction'),
+            new xmldb_field('isvalid', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'isprimary'),
+            new xmldb_field('resultsource', XMLDB_TYPE_CHAR, '20', null, null, null, null, 'isvalid'),
+            new xmldb_field('validationstatus', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'resultsource'),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        /* The existing rows were written before there was any notion of validity. They are the
+           values the plugin has been working with, so they count as valid - but the validity is
+           assumed, not established, and resultsource says so. Without that mark it would later be
+           impossible to tell a checked result from an inherited one. */
+        $DB->execute("
+            UPDATE {local_catquiz_personparams}
+               SET isvalid = 1, resultsource = 'legacy'
+             WHERE resultsource IS NULL");
+
+        // The one-row-per-person rule of issue #25 gives way to the append-only history.
+        $oldindex = new xmldb_index('userid_contextid_catscaleid', XMLDB_INDEX_UNIQUE, ['userid', 'contextid', 'catscaleid']);
+        if ($dbman->index_exists($table, $oldindex)) {
+            $dbman->drop_index($table, $oldindex);
+        }
+        $newindex = new xmldb_index('userid_contextid_catscaleid', XMLDB_INDEX_NOTUNIQUE, ['userid', 'contextid', 'catscaleid']);
+        if (!$dbman->index_exists($table, $newindex)) {
+            $dbman->add_index($table, $newindex);
+        }
+        foreach ([
+            new xmldb_index('isvalid', XMLDB_INDEX_NOTUNIQUE, ['isvalid']),
+            new xmldb_index('attemptid_catscaleid', XMLDB_INDEX_NOTUNIQUE, ['attemptid', 'catscaleid']),
+        ] as $index) {
+            if (!$dbman->index_exists($table, $index)) {
+                $dbman->add_index($table, $index);
+            }
+        }
+
+        // Carry the per-attempt history over. Each scale row becomes a person parameter that names
+        // the attempt it came from.
+        $scaletable = new xmldb_table('local_catquiz_attemptscale');
+        if ($dbman->table_exists($scaletable)) {
+            $DB->execute("
+                INSERT INTO {local_catquiz_personparams}
+                    (userid, catscaleid, contextid, attemptid, ability, standarderror, status,
+                     n, fraction, isprimary, isvalid, resultsource, validationstatus,
+                     timecreated, timemodified)
+                SELECT s.userid, s.catscaleid, s.contextid, s.attemptid, s.score, s.standarderror,
+                       NULL, s.n, s.fraction, s.isprimary, s.isvalid,
+                       COALESCE(s.resultsource, 'current'), s.validationstatus,
+                       s.timecreated, s.timecreated
+                  FROM {local_catquiz_attemptscale} s");
+
+            $carried = $DB->count_records('local_catquiz_attemptscale');
+            mtrace("local_catquiz: {$carried} rows carried over from local_catquiz_attemptscale "
+                . "into local_catquiz_personparams.");
+
+            $dbman->drop_table($scaletable);
+        }
+
+        upgrade_plugin_savepoint(true, 2026092605, 'local', 'catquiz');
+    }
+
     return true;
 }
 

@@ -69,6 +69,7 @@ class catquiz {
         $ids = array_values(array_filter(array_map('intval', $ids), fn($id) => $id > 0));
 
         $where = '';
+        $inparams = [];
         if (!empty($ids)) {
             [$insql, $inparams] = $DB->get_in_or_equal($ids);
             $where = "WHERE scaleid $insql";
@@ -90,9 +91,13 @@ class catquiz {
             FROM globalscale
             $where";
 
-        if (is_int($catscaleids) && !$assocarray) {
+        /* One id asked for, one global scale returned. The test used to be is_int($catscaleids),
+           which made the same call behave differently depending on whether the id arrived bare
+           or wrapped in an array - the very ambiguity this method is supposed to absorb. */
+        if (count($ids) === 1 && !$assocarray) {
             $sqlresult = $DB->get_record_sql($sql, $inparams);
-            return [intval($sqlresult->globalid)];
+
+            return $sqlresult ? [intval($sqlresult->globalid)] : [];
         }
 
         if (!$assocarray) {

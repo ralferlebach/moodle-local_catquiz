@@ -27,7 +27,7 @@ namespace local_catquiz\teststrategy\context\loader;
 use cache;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
-use local_catquiz\local\result\attemptscale_repository;
+use local_catquiz\local\result\personparam_repository;
 use local_catquiz\teststrategy\context\contextloaderinterface;
 use local_catquiz\teststrategy\progress;
 
@@ -149,13 +149,13 @@ class personability_loader implements contextloaderinterface {
                only for scales that were validly measured, so they are preferred
                whenever one exists; personparams remains the fallback for scales
                without such a row (older attempts, never measured). */
-            $carryover = attemptscale_repository::get_latest_valid(
+            $carryover = personparam_repository::get_latest_valid(
                 (int) $context['userid'],
                 (int) $context['contextid'],
                 (int) $scaleid
             );
-            if ($carryover !== null && $carryover->score !== null && $carryover->score !== '') {
-                $abilities[$scaleid] = (float) $carryover->score;
+            if ($carryover !== null && $carryover->ability !== null && $carryover->ability !== '') {
+                $abilities[$scaleid] = (float) $carryover->ability;
                 continue;
             }
 
