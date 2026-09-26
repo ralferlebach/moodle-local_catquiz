@@ -1462,6 +1462,57 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026090207, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026092601) {
+        /* Issue #95: local_catquiz_progress.attemptid held the id of the *component's* attempt -
+           adaptivequiz_attempt.id - although the schema declared it a foreign key to
+           local_catquiz_attempts.id. The two are primary keys of different tables and match only by
+           accident. The column keeps its name; what changes is what it holds. */
+        $table = new xmldb_table('local_catquiz_progress');
+
+        /* Re-keying in place would collide with itself - a value being written may be one that is
+           still to be read. The new values are collected in a temporary column first. */
+        $temp = new xmldb_field('catattemptidtmp', XMLDB_TYPE_INTEGER, '10', null, null, null, null, 'attemptid');
+        if (!$dbman->field_exists($table, $temp)) {
+            $dbman->add_field($table, $temp);
+        }
+
+        $DB->execute("
+            UPDATE {local_catquiz_progress} p
+               SET catattemptidtmp = (
+                   SELECT MIN(a.id)
+                     FROM {local_catquiz_attempts} a
+                    WHERE a.attemptid = p.attemptid
+                      AND a.component = p.component
+               )");
+
+        /* Rows without a CAT attempt cannot be assigned. They are neither guessed at nor deleted -
+           deleting would destroy the state of a running attempt if the cause turns out to be
+           something else. They keep attemptid = 0 and are ignored at runtime. */
+        $orphans = $DB->count_records_select('local_catquiz_progress', 'catattemptidtmp IS NULL');
+        if ($orphans > 0) {
+            mtrace("local_catquiz: {$orphans} progress rows have no matching CAT attempt. They are "
+                . "left with attemptid = 0 and ignored at runtime rather than removed.");
+        }
+
+        $DB->execute("UPDATE {local_catquiz_progress} SET attemptid = COALESCE(catattemptidtmp, 0)");
+
+        /* A second progress row for the same CAT attempt was never intended - the schema said
+           foreign-unique all along. Duplicates can only come from the ambiguity this step removes,
+           so the newest row wins. */
+        $DB->execute("
+            DELETE FROM {local_catquiz_progress}
+             WHERE attemptid <> 0
+               AND id NOT IN (
+                   SELECT MAX(id) FROM {local_catquiz_progress}
+                    WHERE attemptid <> 0
+                 GROUP BY attemptid
+               )");
+
+        $dbman->drop_field($table, $temp);
+
+        upgrade_plugin_savepoint(true, 2026092601, 'local', 'catquiz');
+    }
+
     return true;
 }
 

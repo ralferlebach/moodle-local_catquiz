@@ -1,5 +1,20 @@
 # Changelog – local_catquiz
 
+## 1.2.1 (in Arbeit)
+
+Wartungsrelease der 4.5-Linie. Behebt Defekte, die zuerst auf dem
+Migrationszweig gefunden wurden und hier unveraendert vorhanden waren.
+
+- Issue #100: `get_users_in_context()` im Privacy-Provider nannte die falschen
+  Nutzer – der Kursfilter erreichte das SQL nie, das Keying von
+  `get_records_sql()` fasste mehrere Versuche eines Nutzers zusammen, und die
+  Schleife las eine Eigenschaft, die ein Moodle-Nutzerobjekt nicht hat.
+- Issue #95: `local_catquiz_progress.attemptid` zeigt jetzt auf
+  `local_catquiz_attempts.id`, wie es der Fremdschluessel seit je deklariert.
+  Mit Datenmigration; Zeilen ohne CAT-Versuch bleiben unzugeordnet.
+- Issue #96: `progress::load()` uebernimmt keinen Fortschritt mehr, der einem
+  anderen Nutzer gehoert.
+
 ## 1.2.0 (interne Version 2026090553)
 
 > Das Gate war an der Manager-Seite zu streng - weniger bauen ist der Gewinn.
