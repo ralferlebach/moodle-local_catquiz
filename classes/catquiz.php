@@ -1962,6 +1962,27 @@ class catquiz {
      *
      */
     /**
+     * Returns every spelling under which a component is stored in local_catquiz_attempts.
+     *
+     * The column carries two spellings for the same component. save_attempt_to_db() writes the bare
+     * module name it finds in the quiz settings - 'adaptivequiz' - while progress and the start of an
+     * attempt use the frankenstyle name - 'mod_adaptivequiz'. context_resolver has long accepted
+     * both. A lookup that compares with one of them only misses rows written with the other: the
+     * CAT attempt of a running test disappeared the moment the result page had saved it.
+     * Normalising what is stored belongs to issue #105; until then, lookups accept both.
+     *
+     * @param string $component The component as the caller names it.
+     * @return string[] The frankenstyle name and the bare module name.
+     */
+    public static function component_names(string $component): array {
+        if (strpos($component, 'mod_') === 0) {
+            return [$component, substr($component, strlen('mod_'))];
+        }
+
+        return [$component, 'mod_' . $component];
+    }
+
+    /**
      * Returns the internal CAT attempt id for the attempt of a component.
      *
      * A component knows its own attempt id; local_catquiz_attempts holds that id next to its own.
@@ -1975,11 +1996,12 @@ class catquiz {
     public static function get_cat_attempt_id(int $attemptid, string $component): ?int {
         global $DB;
 
+        [$insql, $inparams] = $DB->get_in_or_equal(self::component_names($component), SQL_PARAMS_NAMED, 'comp');
         $ids = $DB->get_fieldset_select(
             'local_catquiz_attempts',
             'id',
-            'attemptid = :attemptid AND component = :component',
-            ['attemptid' => $attemptid, 'component' => $component]
+            "attemptid = :attemptid AND component $insql",
+            ['attemptid' => $attemptid] + $inparams
         );
 
         if (empty($ids)) {

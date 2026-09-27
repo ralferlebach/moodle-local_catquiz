@@ -111,7 +111,23 @@ final class progress_rekey_upgrade_test extends advanced_testcase {
         ]);
         $running = $this->old_progress(50003);
 
+        // A finished attempt as the result page stored it: bare module name in the CAT attempt,
+        // frankenstyle name in the progress. This is what every real installation holds.
+        $barecat = (int) $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => 2, 'scaleid' => 1, 'contextid' => 1, 'courseid' => 1,
+            'attemptid' => 50004, 'component' => 'adaptivequiz',
+            'instanceid' => 1, 'status' => 0, 'json' => '{}',
+            'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $bare = $this->old_progress(50004);
+
         $result = local_catquiz_rekey_progress_attempts();
+
+        $this->assertEquals(
+            $barecat,
+            (int) $DB->get_field('local_catquiz_progress', 'attemptid', ['id' => $bare]),
+            'A CAT attempt stored with the bare module name was not matched.'
+        );
 
         $runningcat = $DB->get_field('local_catquiz_progress', 'attemptid', ['id' => $running]);
         $this->assertNotNull($runningcat, 'A test running during the upgrade lost its progress.');
@@ -133,7 +149,7 @@ final class progress_rekey_upgrade_test extends advanced_testcase {
             'Several rows without a CAT attempt must coexist - that is what broke on MySQL with 0.'
         );
 
-        $this->assertSame(['rekeyed' => 2, 'started' => 1, 'orphans' => 2, 'duplicates' => 1], $result);
+        $this->assertSame(['rekeyed' => 3, 'started' => 1, 'orphans' => 2, 'duplicates' => 1], $result);
     }
 
     /**
