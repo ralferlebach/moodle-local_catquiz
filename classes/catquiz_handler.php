@@ -709,7 +709,9 @@ class catquiz_handler {
             'component' => 'mod_adaptivequiz',
             'json' => json_encode($clone),
             'parentid' => $parentid ?? 0,
-            'catscaleid' => $quizdata->catquiz_catscales,
+            // Not every caller submits the CATquiz form: an instance created by a generator or a
+            // restore may carry no scale yet. The test then has none, and is not ready to run.
+            'catscaleid' => $quizdata->catquiz_catscales ?? 0,
             'courseid' => $quizdata->course,
         ];
 

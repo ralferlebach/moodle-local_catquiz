@@ -396,7 +396,7 @@ class testenvironment {
         // If we have the record, we update everything, if there are new values. if not, we leave the old ones.
         $record->componentid = $this->componentid ?? $record->componentid;
         $record->component = $this->component ?? $record->component;
-        $record->catscaleid = $this->catscaleid ?? $record->catscaleid;
+        $record->catscaleid = $this->catscaleid ?? $record->catscaleid ?? 0;
         $record->name = $this->name ?? $record->name;
         $record->description = $this->description ?? $record->description;
         $record->descriptionformat = $this->descriptionformat ?? $record->descriptionformat;
