@@ -1497,7 +1497,8 @@ ENDSQL;
 
         $result = local_catquiz_rekey_progress_attempts();
         mtrace("local_catquiz: progress re-keyed to CAT attempts - {$result['rekeyed']} rows, "
-            . "{$result['orphans']} without a CAT attempt (left unassigned), "
+            . "{$result['started']} running tests given a CAT attempt, "
+            . "{$result['orphans']} without an attempt (left unassigned), "
             . "{$result['duplicates']} duplicates removed.");
 
         upgrade_plugin_savepoint(true, 2026092602, 'local', 'catquiz');

@@ -1263,6 +1263,10 @@ class catquiz {
             $params['attemptid'] = $attemptid;
         }
 
+        // A test that has started but not been saved yet has no result to show (issue #101).
+        require_once(__DIR__ . '/../lib.php');
+        $wherearray[] = ' COALESCE(status, 0) <> ' . LOCAL_CATQUIZ_ATTEMPT_RUNNING . ' ';
+
         if (count($wherearray) > 0) {
             $sql .= " WHERE " . implode(' AND ', $wherearray);
         }
@@ -2785,7 +2789,10 @@ class catquiz {
         // carried debug_info along - a field that can hold the full trace of an
         // attempt and that none of the charts ever reads. On a large cohort that is
         // the bulk of the transferred bytes, thrown away right after loading.
-        $sql = "$with SELECT $fields FROM {local_catquiz_attempts} a $join WHERE 1=1";
+        // A test that has started but not been saved yet is not an attempt to list (issue #101).
+        require_once(__DIR__ . '/../lib.php');
+        $sql = "$with SELECT $fields FROM {local_catquiz_attempts} a $join WHERE COALESCE(a.status, 0) <> "
+            . LOCAL_CATQUIZ_ATTEMPT_RUNNING;
 
         if (!is_null($userid)) {
             $sql .= " AND userid = :userid";

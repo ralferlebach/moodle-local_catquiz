@@ -233,6 +233,51 @@ class progress implements JsonSerializable {
     }
 
     /**
+     * Files the CAT attempt for a test that is starting.
+     *
+     * Only what is known at the start is written: the person, the attempt of the component and a
+     * running status. Scale, context and course stay empty until the result page saves the attempt
+     * through catquiz::save_attempt_to_db(), which updates this very row - it looks the attempt up by
+     * its component id. Leaving them empty is deliberate: statistics select by scale, context or
+     * course, and a running attempt is excluded from them without every query having to know.
+     *
+     * @param int $attemptid Id of the attempt of the component.
+     * @param string $component The component the attempt belongs to.
+     * @return int|null The id of the new row in local_catquiz_attempts, null if none can be filed.
+     */
+    private static function start_cat_attempt(int $attemptid, string $component): ?int {
+        global $DB, $USER, $CFG;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+
+        /* local_catquiz_attempts.attemptid is unique on its own (issue #5), not per component. If
+           another component already holds this number, no CAT attempt can be filed for this one.
+           The progress then stays in the cache, as before issue #101 - and it is never handed the
+           other component's progress, because that lookup is by component. Resolving the namespace
+           properly is issue #105. */
+        if ($DB->record_exists('local_catquiz_attempts', ['attemptid' => $attemptid])) {
+            debugging(
+                "Attempt {$attemptid} of {$component} shares its number with a CAT attempt of another "
+                    . 'component; no CAT attempt was filed for it.',
+                DEBUG_DEVELOPER
+            );
+
+            return null;
+        }
+
+        $now = time();
+
+        return (int) $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $USER->id,
+            'attemptid' => $attemptid,
+            'component' => $component,
+            'status' => LOCAL_CATQUIZ_ATTEMPT_RUNNING,
+            'json' => '{}',
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+    }
+
+    /**
      * Returns a new progress instance.
      *
      * If we already have data in the cache or DB, the instance is populated with those data.
@@ -245,6 +290,16 @@ class progress implements JsonSerializable {
      */
     public static function load(int $attemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
         $catattemptid = self::get_cat_attempt_id($attemptid, $component);
+
+        /* Issue #101: the CAT attempt exists before the first progress access. Until now it was
+           written only by the result page at the end of a test, so during the whole attempt there
+           was nothing to attach the progress to - it lived in the cache only and was lost to anyone
+           else and to any cache flush. A caller that brings quiz settings is starting or continuing
+           a test; that is where the CAT attempt is filed. A caller without settings only reads, and
+           a reader never creates an attempt. */
+        if ($catattemptid === null && $quizsettings !== null) {
+            $catattemptid = self::start_cat_attempt($attemptid, $component);
+        }
 
         $instance = self::load_from_cache($attemptid, $component)
             ?: self::load_from_db($catattemptid, $contextid)

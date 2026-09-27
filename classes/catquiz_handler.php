@@ -75,10 +75,20 @@ class catquiz_handler {
 
         $elements = [];
 
-        $advendesettingheading = $mform->getElement('advancedheading');
-        $advendesettingheading->setText(
-            get_string('catmodelsettings', 'local_catquiz')
-        );
+        /* The heading that opens the CAT model section. The host renamed it in the 3.0 line: the
+           1.2 host has 'advancedheading', the 3.0 host a dedicated 'catmodelheader' for CAT models
+           (next to an 'advancedhdr' that is no longer ours). QuickForm answers getElement() on a
+           missing element with a PEAR_Error, and under PHP 8 that ends in 'Non-static method
+           PEAR::getStaticProperty() cannot be called statically' - which took down every activity
+           form of the Behat run on this branch. Only an element that exists is touched. */
+        foreach (['catmodelheader', 'advancedheading'] as $headingname) {
+            if ($mform->elementExists($headingname)) {
+                $mform->getElement($headingname)->setText(
+                    get_string('catmodelsettings', 'local_catquiz')
+                );
+                break;
+            }
+        }
 
         $testtemplates = testenvironment::get_environments_as_array(
             'mod_adaptivequiz',

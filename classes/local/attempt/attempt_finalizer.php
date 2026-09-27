@@ -53,13 +53,21 @@ final class attempt_finalizer {
      * @return bool True if this call performed the finalisation, false if it was a no-op.
      */
     public static function finalize(int $adaptiveattemptid, int $finishedat, string $stopreason = ''): bool {
-        global $DB;
+        global $DB, $CFG;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
         // Locate the local CAT attempt row created during the attempt. If none
         // exists (for example an attempt that never produced a CAT row), there
         // is nothing to finalise.
         $catattempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $adaptiveattemptid]);
         if (!$catattempt) {
+            return false;
+        }
+
+        /* A CAT attempt filed at the start of the test (issue #101) carries no result yet - the result
+           page fills it in. Finalising it now would stamp an end time on an empty row, and the
+           idempotency guard below would then block the real finalisation for good. */
+        if ((int) $catattempt->status === LOCAL_CATQUIZ_ATTEMPT_RUNNING) {
             return false;
         }
 

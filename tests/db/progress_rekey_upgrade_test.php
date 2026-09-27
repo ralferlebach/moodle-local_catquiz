@@ -102,7 +102,24 @@ final class progress_rekey_upgrade_test extends advanced_testcase {
         $orphan1 = $this->old_progress(59998);
         $orphan2 = $this->old_progress(59999);
 
+        // A test running during the upgrade: its attempt exists, its CAT attempt does not yet.
+        $DB->import_record('adaptivequiz_attempt', (object) [
+            'id' => 50003, 'instance' => 1, 'userid' => 2, 'uniqueid' => 9003,
+            'attemptstate' => 'inprogress', 'attemptstopcriteria' => '', 'questionsattempted' => 2,
+            'difficultysum' => 0, 'standarderror' => 1, 'measure' => 0,
+            'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $running = $this->old_progress(50003);
+
         $result = local_catquiz_rekey_progress_attempts();
+
+        $runningcat = $DB->get_field('local_catquiz_progress', 'attemptid', ['id' => $running]);
+        $this->assertNotNull($runningcat, 'A test running during the upgrade lost its progress.');
+        $this->assertEquals(
+            2,
+            (int) $DB->get_field('local_catquiz_attempts', 'status', ['id' => $runningcat]),
+            'The running test must get a CAT attempt with running status.'
+        );
 
         $this->assertEquals($catid, (int) $DB->get_field('local_catquiz_progress', 'attemptid', ['id' => $kept]));
         $this->assertFalse(
@@ -116,7 +133,7 @@ final class progress_rekey_upgrade_test extends advanced_testcase {
             'Several rows without a CAT attempt must coexist - that is what broke on MySQL with 0.'
         );
 
-        $this->assertSame(['rekeyed' => 2, 'orphans' => 2, 'duplicates' => 1], $result);
+        $this->assertSame(['rekeyed' => 2, 'started' => 1, 'orphans' => 2, 'duplicates' => 1], $result);
     }
 
     /**

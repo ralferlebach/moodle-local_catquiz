@@ -157,8 +157,10 @@ jobs:
         run: |
           mkdir -p /tmp/moodledata
           cd moodle
+          # main is the 5.3 development line and currently a beta; the installer refuses
+          # unstable code unless told otherwise. The plugin targets 5.3, so it has to run there.
           php admin/cli/install.php \
-            --non-interactive --agree-license \
+            --non-interactive --agree-license --allow-unstable \
             --dbtype=pgsql --dbhost=127.0.0.1 --dbport=5432 --dbname=moodle \
             --dbuser=moodle --dbpass=moodle \
             --wwwroot="$MOODLE_WWWROOT" --dataroot=/tmp/moodledata \
