@@ -350,7 +350,7 @@ class progress implements JsonSerializable {
      * @return progress|false
      */
     private static function load_from_db(?int $catattemptid, int $contextid) {
-        global $DB, $USER;
+        global $DB;
 
         if ($catattemptid === null) {
             // No CAT attempt, so there cannot be progress belonging to one.
@@ -364,12 +364,16 @@ class progress implements JsonSerializable {
             return false;
         }
 
-        if ((int) $record->userid !== (int) $USER->id) {
-            // An orphaned or foreign record under this id. Taking it over would carry another
-            // person's answers into this attempt, so it is ignored rather than used.
+        /* Issue #96: progress is taken over only if it belongs to the person the attempt belongs to.
+           The comparison is against the owner of the CAT attempt, not against whoever is looking:
+           a teacher opening a student's result reads that student's progress legitimately, and
+           comparing with \$USER turned that into a crash on the feedback page. What #96 guards
+           against is a foreign row attached to someone's attempt - that is what is refused here. */
+        $owner = $DB->get_field('local_catquiz_attempts', 'userid', ['id' => $catattemptid]);
+        if ($owner !== false && (int) $record->userid !== (int) $owner) {
             debugging(
                 'Progress record ' . $record->id . ' belongs to user ' . $record->userid
-                    . ' and was not used for user ' . $USER->id . '.',
+                    . ' but is attached to an attempt of user ' . $owner . '; it was not used.',
                 DEBUG_DEVELOPER
             );
 
