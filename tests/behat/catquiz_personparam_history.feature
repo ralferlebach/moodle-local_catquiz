@@ -45,7 +45,7 @@ Feature: Consecutive attempts are historised per scale.
   @javascript
   Scenario: Two consecutive attempts each finish and are finalised
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -64,7 +64,7 @@ Feature: Consecutive attempts are historised per scale.
     ## Second attempt on the same activity.
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -91,7 +91,7 @@ Feature: Consecutive attempts are historised per scale.
     ## be offered an easier item at the start of the second attempt than at the
     ## very first start.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "falsche Antwort 1" "text" in the "Question 1" "question"
@@ -110,7 +110,7 @@ Feature: Consecutive attempts are historised per scale.
     ## Second attempt: it must start and run normally on the carried-over value.
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     Then I should see "Question 1"
     And I click on "falsche Antwort 1" "text" in the "Question 1" "question"

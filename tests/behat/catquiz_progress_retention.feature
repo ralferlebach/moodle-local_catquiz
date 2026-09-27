@@ -25,8 +25,10 @@ Feature: The retention of attempt progress can be configured per CAT test.
     ## selector sits in a collapsed section of the activity form.
     And I expand all fieldsets
     And I set the field "catmodel" to "catquiz"
-    ## The form reloads itself when the model changes; the submit button behind it
-    ## is hidden and cannot be pressed.
+    ## The 3.0 host does not reload the form on its own: the choice is applied with
+    ## its "Apply CAT model selection" button, and only then do the fields of the
+    ## chosen model appear.
+    And I press "Apply CAT model selection"
     And I wait until the page is ready
     Then I should see "Retention of attempt progress"
     And the "catquiz_progressretention" select box should contain "Use the site default"
@@ -41,8 +43,10 @@ Feature: The retention of attempt progress can be configured per CAT test.
     When I add an "adaptivequiz" activity to course "Course 1" section "1"
     And I expand all fieldsets
     And I set the field "catmodel" to "catquiz"
-    ## The form reloads itself when the model changes; the submit button behind it
-    ## is hidden and cannot be pressed.
+    ## The 3.0 host does not reload the form on its own: the choice is applied with
+    ## its "Apply CAT model selection" button, and only then do the fields of the
+    ## chosen model appear.
+    And I press "Apply CAT model selection"
     And I wait until the page is ready
     ## Only now may a single test record a trajectory - the site setting is the
     ## upper bound, and the form follows it rather than accepting a choice that

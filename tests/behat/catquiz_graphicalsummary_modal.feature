@@ -45,7 +45,7 @@ Feature: The quiz progress summary shows readable question and answer data and
   @javascript
   Scenario: The progress summary renders the labelled answered-question data
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"

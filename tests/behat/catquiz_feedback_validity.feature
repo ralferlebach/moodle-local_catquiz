@@ -52,7 +52,7 @@ Feature: Feedback output is bound to a valid CAT result.
     ## to infer. Answering every question correctly therefore excludes every scale
     ## and no valid result can be determined.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -73,7 +73,7 @@ Feature: Feedback output is bound to a valid CAT result.
   Scenario: A valid attempt shows feedback and not the central notice
     ## A mix of correct and incorrect answers yields a reportable scale.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"

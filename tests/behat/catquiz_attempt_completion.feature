@@ -47,7 +47,7 @@ Feature: A CAT attempt is finalised authoritatively on completion.
   Scenario: Completing an attempt normally finalises it and shows feedback
     ## Reaching the end runs the finaliser once and renders the feedback page.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -69,7 +69,7 @@ Feature: A CAT attempt is finalised authoritatively on completion.
     ## Leaving mid-attempt and returning must not start a second attempt; the
     ## same attempt is resumed and, once finished, is finalised a single time.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -80,7 +80,7 @@ Feature: A CAT attempt is finalised authoritatively on completion.
     ## the existing attempt rather than starting a new one.
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 2"
     And I click on "falsche Antwort 1" "text" in the "Question 2" "question"

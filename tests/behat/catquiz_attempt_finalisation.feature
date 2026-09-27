@@ -48,7 +48,7 @@ Feature: Completing an attempt is authoritative on every path.
     ## number on the activity page into a link when that callback returns a URL, so
     ## before it a teacher had no UI path to "Close attempt" at all.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -65,7 +65,7 @@ Feature: Completing an attempt is authoritative on every path.
     ## Issue #5 DoD 4: finalisation is idempotent. Revisiting the finished attempt
     ## must neither change nor duplicate its result.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"

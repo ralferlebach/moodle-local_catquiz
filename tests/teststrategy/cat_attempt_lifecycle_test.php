@@ -120,6 +120,33 @@ final class cat_attempt_lifecycle_test extends advanced_testcase {
     }
 
     /**
+     * After the result page has saved the attempt, the next access still finds it.
+     *
+     * save_attempt_to_db() stores the bare module name - 'adaptivequiz' - where the start of the
+     * test wrote 'mod_adaptivequiz'. The lookup compared with one spelling only, so the next access
+     * missed its own CAT attempt and reported a collision with 'another component'. That debugging
+     * message failed 15 Behat scenarios.
+     */
+    public function test_the_attempt_is_found_after_the_result_page_saved_it(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setUser($this->getDataGenerator()->create_user());
+
+        $progress = progress::load(93006, 'mod_adaptivequiz', 9, (object) []);
+        $progress->save();
+
+        // What the result page does to the row: it writes the bare module name.
+        $DB->set_field('local_catquiz_attempts', 'component', 'adaptivequiz', ['attemptid' => 93006]);
+        \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+
+        $again = progress::load(93006, 'mod_adaptivequiz', 9, (object) []);
+
+        $this->assertEquals($progress->get_id(), $again->get_id(), 'The test lost its own progress.');
+        $this->assertEquals(1, $DB->count_records('local_catquiz_attempts', ['attemptid' => 93006]));
+    }
+
+    /**
      * A running attempt does not appear among the attempts that are listed.
      */
     public function test_a_running_attempt_is_not_listed(): void {

@@ -51,7 +51,7 @@ Feature: CAT quiz permissions are judged in the course context of the attempt.
     ## local/catquiz:manage_catscales there, so a teacher of the very course the
     ## attempt belongs to was locked out of reviewing it.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -76,7 +76,7 @@ Feature: CAT quiz permissions are judged in the course context of the attempt.
   @javascript
   Scenario: A non-editing teacher of the course may review the attempt as well
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"

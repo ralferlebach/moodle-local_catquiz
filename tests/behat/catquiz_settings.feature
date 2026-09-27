@@ -30,13 +30,15 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     Given I log in as "teacher1"
     And I am on "Course 1" course homepage with editing mode on
     And I add a "Adaptive Quiz" to section "1" using the activity chooser
-    And I set the following fields to these values:
-      | catmodel                                              |       |
+    ## The 3.0 host shows the fields of a CAT model only after the choice has been
+    ## applied with its "Apply CAT model selection" button.
+    And I expand all fieldsets
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
     And I wait until the page is ready
     And I set the following fields to these values:
       | Name             | Adaptive CATquiz  |
       | ID number        | adaptivecatquiz1  |
-      | catmodel         | Catquiz CAT model |
       | catquiz_selectteststrategy | 1 |
       | Select CAT scale | Simulation        |
       ## Should we expect defaults?

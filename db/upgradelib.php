@@ -88,9 +88,19 @@ function local_catquiz_rekey_progress_attempts(): array {
     $rows = $DB->get_records('local_catquiz_progress', null, 'id ASC', 'id, attemptid, component');
     $catids = [];
     foreach ($rows as $row) {
+        /* local_catquiz_attempts stores the component in two spellings - 'adaptivequiz' from the
+           result page, 'mod_adaptivequiz' elsewhere - while progress always says 'mod_adaptivequiz'.
+           Comparing with one spelling found no CAT attempt at all on a real installation; every
+           running test would then have been given a second one under the same number and the
+           unique index on attemptid would have stopped the upgrade. Both spellings count. */
+        $component = (string) $row->component;
+        $names = strpos($component, 'mod_') === 0
+            ? [$component, substr($component, strlen('mod_'))]
+            : [$component, 'mod_' . $component];
+        [$insql, $inparams] = $DB->get_in_or_equal($names, SQL_PARAMS_NAMED, 'comp');
         $catid = $DB->get_field_sql(
-            "SELECT MAX(id) FROM {local_catquiz_attempts} WHERE attemptid = :attemptid AND component = :component",
-            ['attemptid' => (int) $row->attemptid, 'component' => (string) $row->component]
+            "SELECT MAX(id) FROM {local_catquiz_attempts} WHERE attemptid = :attemptid AND component $insql",
+            ['attemptid' => (int) $row->attemptid] + $inparams
         );
         $catids[(int) $row->id] = $catid ? (int) $catid : null;
     }
@@ -131,6 +141,10 @@ function local_catquiz_rekey_progress_attempts(): array {
             $attemptexists = $row->component === 'mod_adaptivequiz'
                 && $dbman->table_exists(new xmldb_table('adaptivequiz_attempt'))
                 && $DB->record_exists('adaptivequiz_attempt', ['id' => (int) $row->attemptid]);
+            // The number may be taken by a CAT attempt of a truly different component (issue #5
+            // makes attemptid unique on its own); then no second one can be filed.
+            $attemptexists = $attemptexists
+                && !$DB->record_exists('local_catquiz_attempts', ['attemptid' => (int) $row->attemptid]);
             if ($attemptexists) {
                 $now = time();
                 $catid = (int) $DB->insert_record('local_catquiz_attempts', (object) [

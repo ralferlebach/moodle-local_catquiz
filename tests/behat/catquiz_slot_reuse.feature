@@ -47,7 +47,7 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     ## Without slot reuse the reload would add a second QUBA slot for the same
     ## item; with it, the very same question is shown again.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I reload the page
@@ -60,7 +60,7 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     ## A reload before answering must not inflate the number of administered
     ## items: the attempt still ends after the configured four questions.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -71,7 +71,7 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     ## out-of-sequence resubmission by design. Resuming re-renders Question 2.
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 2"
     And I reload the page
@@ -94,7 +94,7 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     ## guard must recognise the existing active slot instead of adding a new one,
     ## so the attempt still ends after exactly the configured four questions.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -108,7 +108,7 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     ## Re-enter through the activity so no answer is re-posted out of sequence.
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 2"
     And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
@@ -129,7 +129,7 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     ## again, so without the slot guard every re-entry would add another slot and
     ## the attempt would run past its configured length.
     Given I am on the "adaptivecatquiz1" Activity page logged in as student1
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 1"
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
@@ -137,12 +137,12 @@ Feature: Reloading an unanswered item does not create a duplicate slot.
     And I should see "Question 2"
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 2"
     And I am on the "adaptivecatquiz1" Activity page
     And I wait until the page is ready
-    And I click on "Start attempt" "link"
+    And I click on "Start attempt" "button"
     And I wait until the page is ready
     And I should see "Question 2"
     And I should not see "Question 3"
