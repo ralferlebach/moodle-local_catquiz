@@ -80,7 +80,9 @@ jobs:
           # DEP_REF pins the ref the adaptivequiz side is taken from; it defaults to
           # the branch this workflow runs on, so a run always tests one coherent
           # state.
-          DEP_REF="${DEP_REF:-v-3.0}"
+          # The 4.5 line needs the 4.5 line of host and adapter; v-3.0 requires Moodle 5.1 and
+          # failed the dependency check of the site install.
+          DEP_REF="${DEP_REF:-ALiSe-v-1.2.0-legacy}"
           echo "Abhaengigkeiten von Ref: $DEP_REF"
 
           # The plugin under test comes from this checkout, never from a clone.
