@@ -65,6 +65,12 @@ define('LOCAL_CATQUIZ_STATUS_CONFIRMED_MANUALLY_COLOR_CLASS', 'text-success');
 // Attempt Status.
 define('LOCAL_CATQUIZ_ATTEMPT_OK', 0);
 define('LOCAL_CATQUIZ_ATTEMPT_ABORTED', 1);
+/*
+ * A CAT attempt that has started but not been saved by the result page yet. Issue #101 requires the
+ * CAT attempt to exist before the first progress access, so it is filed as soon as a test starts -
+ * without scale, context or course, which the result page fills in. Statistics must not count it.
+ */
+define('LOCAL_CATQUIZ_ATTEMPT_RUNNING', 2);
 
 define('LOCAL_CATQUIZ_PERSONABILITY_MAX', 50);
 

@@ -713,7 +713,9 @@ jobs:
         run: |
           # local_catquiz declares hard dependencies in version.php, so the site
           # cannot install with the plugin alone. DEP_REF pins the adaptivequiz side.
-          DEP_REF="${DEP_REF:-v-3.0}"
+          # The 4.5 line needs the 4.5 line of host and adapter; v-3.0 requires Moodle 5.1 and
+          # failed the dependency check of the site install.
+          DEP_REF="${DEP_REF:-ALiSe-v-1.2.0-legacy}"
 
           # The plugin under test comes from this checkout, never from a clone.
           rm -rf moodle/local/catquiz

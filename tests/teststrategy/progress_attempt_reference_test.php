@@ -160,6 +160,8 @@ final class progress_attempt_reference_test extends advanced_testcase {
 
         \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
         $other = progress::load(77002, 'mod_quiz', $contextid, (object) []);
+        // The number is taken by the other component; that is reported, not silently worked around.
+        $this->assertDebuggingCalled();
 
         $this->assertNull(
             $other->get_id(),

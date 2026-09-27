@@ -50,7 +50,7 @@ function local_catquiz_helper_function() {
  * the new values are worked out in PHP, rows that cannot be assigned get NULL - which a unique key
  * tolerates any number of times, unlike 0 - and duplicates are removed by id.
  *
- * @return array{rekeyed: int, orphans: int, duplicates: int} What was done, for the upgrade log.
+ * @return array{rekeyed: int, started: int, orphans: int, duplicates: int} What was done, for the upgrade log.
  */
 function local_catquiz_rekey_progress_attempts(): array {
     global $DB;
@@ -116,13 +116,36 @@ function local_catquiz_rekey_progress_attempts(): array {
 
     $rekeyed = 0;
     $orphans = 0;
+    $started = 0;
     foreach ($catids as $rowid => $catid) {
         if (in_array($rowid, $duplicates, true)) {
             continue;
         }
         if ($catid === null) {
-            // Neither guessed at nor deleted: deleting would destroy the state of a running attempt
-            // if the cause turns out to be something else. NULL never matches at runtime.
+            /* A progress row without a CAT attempt is, at upgrade time, a test that is running: the
+               CAT attempt used to be written only when the result page was shown. Since issue #101
+               it exists from the start, so the running test gets one now - provided its attempt
+               still exists. Only a row whose attempt is gone stays unassigned; NULL never matches
+               at runtime, and nothing is deleted. */
+            $row = $rows[$rowid];
+            $attemptexists = $row->component === 'mod_adaptivequiz'
+                && $dbman->table_exists(new xmldb_table('adaptivequiz_attempt'))
+                && $DB->record_exists('adaptivequiz_attempt', ['id' => (int) $row->attemptid]);
+            if ($attemptexists) {
+                $now = time();
+                $catid = (int) $DB->insert_record('local_catquiz_attempts', (object) [
+                    'userid' => (int) $DB->get_field('local_catquiz_progress', 'userid', ['id' => $rowid]),
+                    'attemptid' => (int) $row->attemptid,
+                    'component' => $row->component,
+                    'status' => 2, // LOCAL_CATQUIZ_ATTEMPT_RUNNING; lib.php is not loaded during upgrade.
+                    'json' => '{}',
+                    'timecreated' => $now,
+                    'timemodified' => $now,
+                ]);
+                $DB->set_field('local_catquiz_progress', 'attemptid', $catid, ['id' => $rowid]);
+                $started++;
+                continue;
+            }
             $DB->set_field('local_catquiz_progress', 'attemptid', null, ['id' => $rowid]);
             $orphans++;
         } else {
@@ -136,7 +159,7 @@ function local_catquiz_rekey_progress_attempts(): array {
         new xmldb_key('attemptid', XMLDB_KEY_FOREIGN_UNIQUE, ['attemptid'], 'local_catquiz_attempts', ['id'])
     );
 
-    return ['rekeyed' => $rekeyed, 'orphans' => $orphans, 'duplicates' => count($duplicates)];
+    return ['rekeyed' => $rekeyed, 'started' => $started, 'orphans' => $orphans, 'duplicates' => count($duplicates)];
 }
 
 /**
