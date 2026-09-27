@@ -720,7 +720,9 @@ class catquiz_handler {
             'component' => 'mod_adaptivequiz',
             'json' => json_encode($clone),
             'parentid' => $parentid ?? 0,
-            'catscaleid' => $quizdata->catquiz_catscales,
+            // Not every caller submits the CATquiz form: an instance created by a generator or a
+            // restore may carry no scale yet. The test then has none, and is not ready to run.
+            'catscaleid' => $quizdata->catquiz_catscales ?? 0,
             'courseid' => $quizdata->course,
         ];
 
@@ -1317,5 +1319,35 @@ class catquiz_handler {
         }
 
         return $clone;
+    }
+
+    /**
+     * Returns whether a CAT test has what it needs before an attempt can be started.
+     *
+     * Asked by the host through the catmodel adapter (mod_adaptivequiz catmodel_item_bank_readiness).
+     * The host's own rule - question banks linked and its item parameters valid - describes its
+     * built-in algorithm; CATquiz keeps its items in CAT scales instead. The test is ready when its
+     * settings name a CAT scale and that scale, or one below it, holds at least one item.
+     *
+     * @param string $component The component of the activity, 'mod_adaptivequiz'.
+     * @param int $instanceid Id of the activity instance.
+     * @return bool
+     */
+    public static function is_ready_for_attempt(string $component, int $instanceid): bool {
+        global $DB;
+
+        $catscaleid = (int) $DB->get_field(
+            'local_catquiz_tests',
+            'catscaleid',
+            ['component' => $component, 'componentid' => $instanceid]
+        );
+        if ($catscaleid <= 0 || !$DB->record_exists('local_catquiz_catscales', ['id' => $catscaleid])) {
+            return false;
+        }
+
+        $scaleids = array_merge([$catscaleid], \local_catquiz\catscale::get_subscale_ids($catscaleid));
+        [$insql, $params] = $DB->get_in_or_equal($scaleids, SQL_PARAMS_NAMED, 'scale');
+
+        return $DB->record_exists_select('local_catquiz_items', "catscaleid $insql", $params);
     }
 }

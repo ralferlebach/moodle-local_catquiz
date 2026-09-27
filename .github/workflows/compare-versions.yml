@@ -350,16 +350,16 @@ jobs:
 
       - name: "Swap in the comparison version"
         run: |
-          rm -rf moodle/local/catquiz
-          cp -a compare-version moodle/local/catquiz
+          rm -rf moodle/public/local/catquiz
+          cp -a compare-version moodle/public/local/catquiz
 
           # The comparison version predates this harness and does not contain it.
           # Copied in deliberately: the application code under test stays entirely
           # the other version, only the stopwatch comes from here. Without this the
           # measurement ran against a file that does not exist and the failure was
           # swallowed by `|| true`.
-          mkdir -p moodle/local/catquiz/cli
-          cp plugin/cli/measure_screens.php moodle/local/catquiz/cli/measure_screens.php
+          mkdir -p moodle/public/local/catquiz/cli
+          cp plugin/cli/measure_screens.php moodle/public/local/catquiz/cli/measure_screens.php
 
           echo "Application code: ${{ github.event.inputs.compare_ref || 'adaptive-catquiz-v3' }}"
           echo "Benchmark harness: this branch, ${{ github.sha }}"

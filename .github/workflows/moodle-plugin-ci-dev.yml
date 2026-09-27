@@ -717,21 +717,21 @@ jobs:
           DEP_REF="${DEP_REF:-v-3.0}"
 
           # The plugin under test comes from this checkout, never from a clone.
-          rm -rf moodle/local/catquiz
+          rm -rf moodle/public/local/catquiz
           mkdir -p moodle/local
-          cp -a plugin moodle/local/catquiz
-          rm -rf moodle/local/catquiz/.git
+          cp -a plugin moodle/public/local/catquiz
+          rm -rf moodle/public/local/catquiz/.git
 
           git clone --depth 1 --branch "$DEP_REF" \
-            https://github.com/ralferlebach/moodle-mod_adaptivequiz.git moodle/mod/adaptivequiz
+            https://github.com/ralferlebach/moodle-mod_adaptivequiz.git moodle/public/mod/adaptivequiz
           git clone --depth 1 --branch "$DEP_REF" \
             https://github.com/ralferlebach/moodle-adaptivequizcatmodel_catquiz.git \
-            moodle/mod/adaptivequiz/catmodel/catquiz
+            moodle/public/mod/adaptivequiz/catmodel/catquiz
           git clone --depth 1 --branch main \
             https://github.com/Wunderbyte-GmbH/moodle-local_wunderbyte_table.git \
-            moodle/local/wunderbyte_table
+            moodle/public/local/wunderbyte_table
           git clone --depth 1 --branch master \
-            https://github.com/branchup/moodle-filter_shortcodes.git moodle/filter/shortcodes
+            https://github.com/branchup/moodle-filter_shortcodes.git moodle/public/filter/shortcodes
 
           find moodle -mindepth 2 -type d -name .git -prune -exec rm -rf {} + || true
 
@@ -756,13 +756,13 @@ jobs:
       - name: Seed the CAT manager fixture
         run: |
           cd moodle
-          php local/catquiz/tests/playwright/seed.php > /tmp/catquiz-seed.env
+          php public/local/catquiz/tests/playwright/seed.php > /tmp/catquiz-seed.env
           sed -n "s/^export \([A-Z_][A-Z_]*\)='\(.*\)'$/\1=\2/p" \
             /tmp/catquiz-seed.env >> "$GITHUB_ENV"
 
       - name: Install Playwright and browsers
         run: |
-          cd moodle/local/catquiz/tests/playwright
+          cd moodle/public/local/catquiz/tests/playwright
           npm ci
           npx playwright install --with-deps chromium
 
@@ -770,7 +770,7 @@ jobs:
         env:
           CATQUIZ_BASE_URL: ${{ env.MOODLE_WWWROOT }}
         run: |
-          cd moodle/local/catquiz/tests/playwright
+          cd moodle/public/local/catquiz/tests/playwright
           # PHP's built-in server is single-threaded unless PHP_CLI_SERVER_WORKERS is
           # set, and a Moodle page pulls many subresources in parallel. Bound to
           # 127.0.0.1 rather than "localhost", which clients resolve differently.
@@ -803,7 +803,7 @@ jobs:
       - name: Collect the failed tests only
         if: failure()
         run: |
-          src="moodle/local/catquiz/tests/playwright/test-results"
+          src="moodle/public/local/catquiz/tests/playwright/test-results"
           dest="$RUNNER_TEMP/playwright-failures"
           rm -rf "$dest"; mkdir -p "$dest"
           found=0
