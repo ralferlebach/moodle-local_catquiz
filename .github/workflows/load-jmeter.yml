@@ -161,7 +161,7 @@ jobs:
           # A single PHP CLI server is single-threaded and would invalidate a
           # concurrency load test. Use several built-in workers for this CI
           # smoke/load baseline.
-          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$MOODLE_DIR" \
+          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$MOODLE_DIR/public" \
             >/tmp/moodle-server.log 2>&1 &
           serverpid=$!
           echo "MOODLE_SERVER_PID=$serverpid" >> "$GITHUB_ENV"

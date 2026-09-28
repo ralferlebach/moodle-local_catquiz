@@ -777,7 +777,9 @@ jobs:
           #
           # Started inside THIS step: a server from an earlier step does not reliably
           # survive into the next one.
-          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$GITHUB_WORKSPACE/moodle" \
+          # Since Moodle 5.1 the web root is moodle/public; serving moodle/ answered every
+          # page with 404 and the readiness probe below never saw a 200.
+          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$GITHUB_WORKSPACE/moodle/public" \
             >/tmp/moodle-server.log 2>&1 &
           ready=0
           for i in $(seq 1 40); do

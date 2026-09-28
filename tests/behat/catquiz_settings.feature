@@ -55,7 +55,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I click on "Save and return to course" "button"
     And I log out
     And I am on the "adaptivecatquiz1" "Activity" page logged in as "student1"
-    Then "Start attempt" "link" should exist
+    Then "Start attempt" "button" should exist
 
   @javascript
   Scenario: CATquiz settings: teacher setup catscale usage in quiz and verify it
@@ -65,11 +65,12 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
     ## And I wait until the page is ready
-    And I set the following fields to these values:
-      | catmodel                                              |       |
+    ## The 3.0 host shows the fields of a CAT model only after the choice has been
+    ## applied with its "Apply CAT model selection" button.
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
     And I wait until the page is ready
     And I set the following fields to these values:
-      | catmodel                                              | Catquiz CAT model |
       | Select CAT scale                                      | Simulation        |
       | catquiz_selectteststrategy                            | 1                 |
       | catquiz_standarderrorgroup[catquiz_standarderror_min] | 0.4               |
@@ -142,11 +143,12 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
       | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
-    And I set the following fields to these values:
-      | catmodel                                              |       |
+    ## The 3.0 host shows the fields of a CAT model only after the choice has been
+    ## applied with its "Apply CAT model selection" button.
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
     And I wait until the page is ready
     And I set the following fields to these values:
-      | catmodel                                   | Catquiz CAT model                |
       | Select CAT scale                           | Simulation                       |
       | Purpose of test                            | Infer lowest skill gap           |
       | Activate pilot mode                        | 1                                |
@@ -242,11 +244,12 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
     ## And I wait until the page is ready
-    And I set the following fields to these values:
-      | catmodel                                              |       |
+    ## The 3.0 host shows the fields of a CAT model only after the choice has been
+    ## applied with its "Apply CAT model selection" button.
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
     And I wait until the page is ready
     And I set the following fields to these values:
-      | catmodel                                              | Catquiz CAT model |
       | Select CAT scale                                      | Simulation        |
       | catquiz_selectteststrategy                            | 1                 |
       | catquiz_standarderrorgroup[catquiz_standarderror_min] | 0.4               |
