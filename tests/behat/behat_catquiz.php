@@ -119,8 +119,38 @@ class behat_catquiz extends behat_base {
                 $xpathtarget = "(//" . $fieldtype . "[contains(@id, '" . $dynamicidentifier . "')])[" . $numberofitem . "]";
         }
 
+        // Moodle 5 has no Atto: the editor is TinyMCE, which keeps its content in an iframe and mirrors
+        // it into the textarea it replaces. Looking for Atto's contenteditable div found nothing, and
+        // the step failed with 'Call to a member function isVisible() on null'.
+        if ($fieldtype === 'editor') {
+            $textareaxpath = "(//textarea[contains(@id, '" . $dynamicidentifier . "')])[" . $numberofitem . "]";
+            $textarea = $this->getSession()->getPage()->find('xpath', $textareaxpath);
+            if ($textarea && !$this->getSession()->getPage()->find('xpath', $xpathtarget)) {
+                $textareaid = $textarea->getAttribute('id');
+                $js = json_encode($textareaid);
+                $content = json_encode($value);
+                $this->getSession()->executeScript(
+                    "(function(id, content) {" .
+                    "  var ed = (window.tinymce && window.tinymce.get(id)) || null;" .
+                    "  if (ed) { ed.setContent(content); ed.save(); ed.fire('change'); }" .
+                    "  var ta = document.getElementById(id); ta.value = ed ? ta.value : content;" .
+                    "  ta.dispatchEvent(new Event('change', {bubbles: true}));" .
+                    "})($js, $content);"
+                );
+                return;
+            }
+        }
+
         // Assuming you want to find an editor element related to the competency and fill it with the specified value.
         $field = $this->getSession()->getPage()->find('xpath', $xpathtarget);
+        if (!$field) {
+            throw new \Behat\Mink\Exception\ElementNotFoundException(
+                $this->getSession(),
+                $fieldtype . ' element number ' . $numberofitem,
+                'xpath',
+                $xpathtarget
+            );
+        }
         if ($field->isVisible()) {
             switch ($fieldtype) {
                 case 'autocomplete':
