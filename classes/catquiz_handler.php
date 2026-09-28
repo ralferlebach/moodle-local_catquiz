@@ -331,7 +331,8 @@ class catquiz_handler {
     }
 
     /**
-     * Undocumented function
+     * Prepares the CAT settings of the activity form: stored values on the first load, the
+     * submission on every later request.
      *
      * @param array $formdefaultvalues
      * @param MoodleQuickForm|null $mform
@@ -348,9 +349,12 @@ class catquiz_handler {
         // We can hardcode this at this moment.
         $component = 'mod_adaptivequiz';
 
-        if ($mform) {
-            $data = $mform->getSubmitValues();
-        }
+        /* Issue #124: what the user has just submitted takes precedence over what is stored. The host
+           hands over its form for this; an older host did not, and then every request - first load,
+           reload after a change of scale, final save - took the first-load path below and wrote the
+           stored settings over the fresh choice. Without a form the raw submission tells the same:
+           on a first load there is none. */
+        $data = $mform ? $mform->getSubmitValues() : (array) (data_submitted() ?: []);
 
         // We have the following cases.
 

@@ -36,6 +36,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I set the field "catmodel" to "Catquiz CAT model"
     And I press "Apply CAT model selection"
     And I wait until the page is ready
+    And I expand all fieldsets
     And I set the following fields to these values:
       | Name             | Adaptive CATquiz  |
       | ID number        | adaptivecatquiz1  |
@@ -66,10 +67,13 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I follow "Settings"
     ## And I wait until the page is ready
     ## The 3.0 host shows the fields of a CAT model only after the choice has been
-    ## applied with its "Apply CAT model selection" button.
+    ## applied with its "Apply CAT model selection" button. The selector sits in a
+    ## collapsed section on the settings page and has to be expanded first.
+    And I expand all fieldsets
     And I set the field "catmodel" to "Catquiz CAT model"
     And I press "Apply CAT model selection"
     And I wait until the page is ready
+    And I expand all fieldsets
     And I set the following fields to these values:
       | Select CAT scale                                      | Simulation        |
       | catquiz_selectteststrategy                            | 1                 |
@@ -144,10 +148,13 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
     And I follow "Settings"
     ## The 3.0 host shows the fields of a CAT model only after the choice has been
-    ## applied with its "Apply CAT model selection" button.
+    ## applied with its "Apply CAT model selection" button. The selector sits in a
+    ## collapsed section on the settings page and has to be expanded first.
+    And I expand all fieldsets
     And I set the field "catmodel" to "Catquiz CAT model"
     And I press "Apply CAT model selection"
     And I wait until the page is ready
+    And I expand all fieldsets
     And I set the following fields to these values:
       | Select CAT scale                           | Simulation                       |
       | Purpose of test                            | Infer lowest skill gap           |
@@ -245,10 +252,13 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I follow "Settings"
     ## And I wait until the page is ready
     ## The 3.0 host shows the fields of a CAT model only after the choice has been
-    ## applied with its "Apply CAT model selection" button.
+    ## applied with its "Apply CAT model selection" button. The selector sits in a
+    ## collapsed section on the settings page and has to be expanded first.
+    And I expand all fieldsets
     And I set the field "catmodel" to "Catquiz CAT model"
     And I press "Apply CAT model selection"
     And I wait until the page is ready
+    And I expand all fieldsets
     And I set the following fields to these values:
       | Select CAT scale                                      | Simulation        |
       | catquiz_selectteststrategy                            | 1                 |

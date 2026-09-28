@@ -66,12 +66,15 @@ export const init = () => {
                 submitbutton.classList.remove('hidden');
                 return;
             }
+            // The field carries the reason for the reload, and it is set here - the one place where
+            // that reason is known. The technical no-submit button travels separately under its own
+            // name (see prepareNoSubmitButton()); the two must not share this field.
             let triggeredButtonField = document.getElementsByName('triggered_button')[0];
-            triggeredButtonField.value = '';
+            const action = e.target.dataset.onChangeAction;
+            triggeredButtonField.value = action || '';
 
-            switch (e.target.dataset.onChangeAction) {
+            switch (action) {
                 case 'reloadTestForm':
-                    document.getElementsByName('triggered_button')[0].value = 'reloadTestForm';
                     clickNoSubmitButton(e.target, SELECTORS.CATTESTSUBMIT);
                     break;
                 case 'reloadFormFromScaleSelect':
@@ -178,12 +181,10 @@ function clickNoSubmitButton(element, buttonselector) {
  */
 function prepareNoSubmitButton(button) {
     const form = button.closest('form');
-    const triggeredButtonField = form.querySelector('[name="triggered_button"]');
 
-    if (triggeredButtonField) {
-        triggeredButtonField.value = button.name;
-    }
-
+    // Only the technical no-submit button is put into the request here. This used to write the
+    // button's name into triggered_button as well, which overwrote the reason for the reload that
+    // had just been set - 'reloadTestForm' arrived as 'submitcattestoption' (issue #123).
     let hiddenButtonField = form.querySelector('[data-nosubmit-proxy-for="' + button.name + '"]');
     if (!hiddenButtonField) {
         hiddenButtonField = document.createElement('input');
