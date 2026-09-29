@@ -123,14 +123,35 @@ class questionssummary extends feedbackgenerator {
         // the progress and drop those questions here.
         $pilotids = array_map('intval', array_keys($this->get_progress()->get_played_pilot_questions()));
 
+        return ['questionssummary' => self::count_graded($rows, $pilotids)];
+    }
+
+
+    /**
+     * Counts right, wrong, partially right and unanswered questions.
+     *
+     * Each question once, from its first administration (issue #125). The rows are question
+     * attempts, one per slot, in slot order; a question administered twice by mistake has two, and
+     * counting both entered the same answer twice into what the test taker is shown.
+     *
+     * @param \stdClass[] $rows Question attempts with questionid and fraction, in slot order.
+     * @param int[] $pilotids Ids of questions played as pilot items; they are left out.
+     * @return array gradedright, gradedwrong, gradedpartial and gradedunanswered.
+     */
+    public static function count_graded(array $rows, array $pilotids): array {
         $right = 0;
         $wrong = 0;
         $partial = 0;
         $unanswered = 0;
+        $counted = [];
         foreach ($rows as $row) {
             if (in_array((int) $row->questionid, $pilotids, true)) {
                 continue;
             }
+            if (isset($counted[(int) $row->questionid])) {
+                continue;
+            }
+            $counted[(int) $row->questionid] = true;
             // No graded step at all: skipped/unanswered, kept separate from wrong.
             if ($row->fraction === null) {
                 $unanswered++;
@@ -146,12 +167,11 @@ class questionssummary extends feedbackgenerator {
             }
         }
 
-        return ['questionssummary' => [
-                'gradedright' => $right,
-                'gradedwrong' => $wrong,
-                'gradedpartial' => $partial,
-                'gradedunanswered' => $unanswered,
-            ],
+        return [
+            'gradedright' => $right,
+            'gradedwrong' => $wrong,
+            'gradedpartial' => $partial,
+            'gradedunanswered' => $unanswered,
         ];
     }
 

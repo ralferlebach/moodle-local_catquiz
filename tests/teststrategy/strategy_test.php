@@ -2901,6 +2901,62 @@ final class strategy_test extends advanced_testcase {
         return $filename;
     }
     /**
+     * The first question enters the exclusion set the moment it is handed out (issue #126).
+     *
+     * Every path that hands out a question now registers it through the same helper. Two early
+     * returns did not: the first-question selector when only one question has a difficulty, and a
+     * pilot item. Unregistered, a question was missing from the played questions - the exclusion
+     * set for every later selection - and could be drawn again in the same attempt.
+     *
+     * What this fixture reaches is the regular selection; removing the registration there turns it
+     * red. The two early returns go through the same helper but are not reached here - the pilot
+     * path needs a pool with pilot items, which only the large simulation data set provides.
+     *
+     * @dataProvider stopping_strategies_provider
+     * @param int $strategy
+     * @param string $label
+     * @return void
+     */
+    public function test_the_first_question_is_excluded_from_then_on(int $strategy, string $label): void {
+        global $DB, $USER;
+
+        putenv(
+            sprintf(
+                'USE_TESTING_CLASS_FOR=%s',
+                implode(',', [
+                    'local_catquiz\\teststrategy\\preselect_task\\updatepersonability',
+                    'local_catquiz\\teststrategy\\preselect_task\\maybe_return_pilot',
+                ])
+            )
+        );
+        putenv('CATQUIZ_TESTING_ABILITY=0.0');
+        putenv('CATQUIZ_TESTING_STANDARDERROR=1.0');
+        putenv('CATQUIZ_TESTING_SKIP_FEEDBACK=true');
+        $settings = [
+            'maxquestions' => 250,
+            'maxquestionspersubscale' => 25,
+            'standarderror_min' => 0.25,
+            'standarderror_max' => 0.5,
+        ];
+        $this->createtestenvironment($strategy, $settings)->save_or_update();
+        catquiz_handler::prepare_attempt_caches();
+        $this->preventResetByRollback();
+        $attempt = new attempt($this->adaptivequiz, $USER->id);
+
+        [$firstid] = catquiz_handler::fetch_question_id('1', 'mod_adaptivequiz', $attempt->get_attempt());
+        $this->assertNotEquals(0, $firstid, "$label: no first question was selected at all.");
+
+        // Read back what was saved: the exclusion set of the next request comes from there.
+        $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id((int) $attempt->get_attempt()->id, 'mod_adaptivequiz');
+        $saved = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]), true);
+        $this->assertArrayHasKey(
+            (int) $firstid,
+            $saved['playedquestions'] ?? [],
+            "$label: the first question was handed out without entering the exclusion set."
+        );
+    }
+
+    /**
      * Issue #64: after answering the first question, a second one is selected.
      *
      * The reported symptom is an attempt that stops after Q1. The stage

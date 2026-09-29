@@ -2119,7 +2119,8 @@ class catquiz {
         // question without any graded step (skipped/unanswered) yields a NULL
         // fraction via the LEFT JOIN, which the caller counts as "unanswered"
         // rather than "wrong". Pilot exclusion happens in the caller because the
-        // pilot flag is context-computed, not a database column.
+        // pilot flag is context-computed, not a database column. In slot order: a
+        // question administered twice has two rows, and callers count the first.
         return $DB->get_records_sql(
             "SELECT qa.id AS questionattemptid, qa.questionid, laststep.fraction
             FROM {adaptivequiz_attempt} aa
@@ -2136,7 +2137,8 @@ class catquiz {
                     ON laststepseq.questionattemptid = qas.questionattemptid
                     AND laststepseq.maxseq = qas.sequencenumber
             ) laststep ON laststep.questionattemptid = qa.id
-            WHERE aa.id = :attemptid",
+            WHERE aa.id = :attemptid
+            ORDER BY qa.slot ASC",
             ['attemptid' => $attemptid]
         );
     }
