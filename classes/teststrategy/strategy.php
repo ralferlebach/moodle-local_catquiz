@@ -248,6 +248,10 @@ abstract class strategy {
         // Othewise, it contains the updated $context array with the ability and standarderror set in such a way, that the
         // teststrategy will return the correct question (e.g. the question corresponding to mean ability of all students).
         if (is_object($val)) {
+            // The first question counts as administered like any other (issue #126). Returning it
+            // without registering it left it out of the played questions, so it was never
+            // excluded and could be drawn again later in the same attempt.
+            $this->register_administered_question($val, $context);
             $this->persist_stage_counts();
 
             return $res;
@@ -287,6 +291,10 @@ abstract class strategy {
         $val = $res->unwrap();
         // If the value is an object, it is the pilot question that should be returned.
         if (is_object($val)) {
+            // Registered like any other administered question (issue #126): unregistered, a pilot
+            // item was never excluded and could be drawn again, and its answer - missing from the
+            // played questions - was counted as a productive item.
+            $this->register_administered_question($val, $context);
             $this->persist_stage_counts();
 
             return $res;
@@ -325,17 +333,7 @@ abstract class strategy {
             return result::err();
         }
 
-        $this->progress
-            ->add_playedquestion($selectedquestion)
-            ->save();
-
-        catscale::update_testitem(
-            $context['contextid'],
-            $selectedquestion,
-            $context['catscaleid'],
-            $context['includesubscales'],
-            $context['progress']->get_selected_subscales()
-        );
+        $this->register_administered_question($selectedquestion, $context);
         $this->persist_stage_counts();
 
         return result::ok($selectedquestion);
@@ -670,6 +668,30 @@ abstract class strategy {
     protected function fisherinformation(): result {
         $fisherinformation = new fisherinformation();
         return $fisherinformation->run($this->context);
+    }
+
+    /**
+     * Records a question as administered: in the played questions and in the item's last use.
+     *
+     * Every path that hands out a question goes through here - the regular selection, the first
+     * question and a pilot item. The played questions are the exclusion set for every later
+     * selection; a question missing from them can be administered a second time (issue #126).
+     *
+     * @param \stdClass $question The question being administered.
+     * @param array $context The selection context.
+     */
+    private function register_administered_question(\stdClass $question, array $context): void {
+        $this->progress
+            ->add_playedquestion($question)
+            ->save();
+
+        catscale::update_testitem(
+            $context['contextid'],
+            $question,
+            $context['catscaleid'],
+            $context['includesubscales'],
+            $context['progress']->get_selected_subscales()
+        );
     }
 
     /**

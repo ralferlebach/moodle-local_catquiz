@@ -270,4 +270,50 @@ final class administration_history_test extends advanced_testcase {
         $this->assertFalse($none['hasduplicates'], 'An attempt without duplicates must show no notice.');
         $this->assertSame('', trim($output->render_from_template('local_catquiz/administration_notice', $none)));
     }
+    /**
+     * A duplicate in the question usage does not make an otherwise valid result invalid.
+     *
+     * The validator decides from the measurement flags and the counts of the progress, never from
+     * the question usage. A technical duplicate is the system's mistake; it must not cost the test
+     * taker a valid result.
+     */
+    public function test_a_duplicate_does_not_invalidate_the_result(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$attemptid, $ids] = $this->attempt_with_slots(['a', 'b', 'a']);
+
+        // The progress as a real attempt leaves it after answering 'a' and 'b' in scale 5 - the
+        // repeated administration of 'a' adds nothing to it, which is the point of this test.
+        $progress = \local_catquiz\teststrategy\progress::load($attemptid, 'mod_adaptivequiz', 9, (object) []);
+        $played = [];
+        foreach (['a', 'b'] as $key) {
+            $played[$ids[$key]] = (object) ['id' => $ids[$key], 'catscaleid' => 5, 'is_pilot' => false];
+        }
+        foreach (
+            ['responses' => array_map(fn($q) => ['questionid' => $q->id, 'fraction' => 1.0], $played),
+                'playedquestions' => $played, 'playedquestionsbyscale' => [5 => $played]] as $name => $value
+        ) {
+            $property = new \ReflectionProperty($progress, $name);
+            $property->setAccessible(true);
+            $property->setValue($progress, $value);
+        }
+        $progress->save();
+
+        // The CAT attempt of this test, with a scale result that is valid by every criterion.
+        $DB->set_field('local_catquiz_attempts', 'contextid', 9, ['attemptid' => $attemptid]);
+        $DB->set_field('local_catquiz_attempts', 'json', json_encode([
+            'personabilities_abilities' => [5 => ['value' => 0.4, 'toreport' => true]],
+            'se' => [5 => 0.3],
+            'primaryscale' => ['id' => 5],
+        ]), ['attemptid' => $attemptid]);
+
+        $result = \local_catquiz\local\result\attempt_result_validator::validate($attemptid);
+
+        $this->assertNotEmpty(administration_history::technical_duplicates(administration_history::for_attempt($attemptid)));
+        $this->assertTrue($result->is_valid(), 'A technical duplicate made the result invalid.');
+        $this->assertTrue($result->get_scale_result(5)->statisticallyvalid);
+        $this->assertSame(2, $result->get_scale_result(5)->n, 'The duplicate raised N.');
+    }
 }
