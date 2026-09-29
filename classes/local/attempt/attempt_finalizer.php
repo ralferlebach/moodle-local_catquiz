@@ -64,12 +64,13 @@ final class attempt_finalizer {
             return false;
         }
 
-        /* A CAT attempt filed at the start of the test (issue #101) carries no result yet - the result
-           page fills it in. Finalising it now would stamp an end time on an empty row, and the
-           idempotency guard below would then block the real finalisation for good. */
-        if ((int) $catattempt->status === LOCAL_CATQUIZ_ATTEMPT_RUNNING) {
-            return false;
-        }
+        /* A CAT attempt still marked running (issue #101) is one whose test ended before a single
+           answer was processed - by the time limit, after too long a break, or by leaving right
+           after the start. It is finalised like any other: a test that has ended is announced as
+           ended, whether or not it produced a result. Finalisation needs the authoritative end
+           time of the activity's attempt, which exists only once that attempt is complete, so a
+           test that is still running never gets this far. */
+        $endedwithoutanswer = (int) $catattempt->status === LOCAL_CATQUIZ_ATTEMPT_RUNNING;
 
         // Idempotency guard: a finalised attempt carries a non-empty endtime.
         // Re-running finalisation must not change the stored result. Removing
@@ -110,6 +111,10 @@ final class attempt_finalizer {
         );
         if ($questionsattempted !== false) {
             $catattempt->number_of_testitems_used = (int) $questionsattempted;
+        }
+        if ($endedwithoutanswer) {
+            // Ended without any processed answer: there is no result, and the row says so.
+            $catattempt->status = LOCAL_CATQUIZ_ATTEMPT_ABORTED;
         }
         $catattempt->timemodified = time();
         $DB->update_record('local_catquiz_attempts', $catattempt);
@@ -214,6 +219,61 @@ final class attempt_finalizer {
 
         $transaction->allow_commit();
 
+        // Issue #122: the CAT attempt is finalised - announce it, and only now. After the commit,
+        // so no listener sees a half-written result; here, and not on the result page, so it
+        // happens whether or not anyone ever opens that page. The endtime guard above makes a
+        // second finalize() return early, so an attempt is announced once.
+        self::announce_completion($catattempt, $adaptiveattemptid, $finishedat, $result->is_valid());
+
         return true;
+    }
+
+    /**
+     * Triggers the attempt_completed event for a finalised CAT attempt.
+     *
+     * @param \stdClass $catattempt The finalised row of local_catquiz_attempts.
+     * @param int $adaptiveattemptid Id of the attempt in adaptivequiz_attempt.
+     * @param int $finishedat When the attempt was finalised.
+     * @param bool $isvalid Whether the result is valid.
+     */
+    private static function announce_completion(
+        \stdClass $catattempt,
+        int $adaptiveattemptid,
+        int $finishedat,
+        bool $isvalid
+    ): void {
+        global $DB;
+
+        /* The module context of the activity, taken from the activity's attempt itself - not from
+           local_catquiz_attempts through the context resolver. A CAT attempt is filed when the test
+           starts, before course and instance are known; the resolver falls back to the system
+           context for it and keeps that for the rest of the request. */
+        $instanceid = (int) $DB->get_field('adaptivequiz_attempt', 'instance', ['id' => $adaptiveattemptid]);
+        $cm = $instanceid ? get_coursemodule_from_instance('adaptivequiz', $instanceid, 0, false, IGNORE_MISSING) : false;
+        $context = $cm ? \context_module::instance($cm->id) : \context_system::instance();
+
+        try {
+            \local_catquiz\event\attempt_completed::create([
+                'objectid' => (int) $catattempt->id,
+                'context' => $context,
+                'userid' => (int) $catattempt->userid,
+                'relateduserid' => (int) $catattempt->userid,
+                'other' => [
+                    'catattemptid' => (int) $catattempt->id,
+                    'adaptiveattemptid' => $adaptiveattemptid,
+                    'instanceid' => $instanceid,
+                    'courseid' => $cm ? (int) $cm->course : (int) ($catattempt->courseid ?? 0),
+                    'catscaleid' => (int) ($catattempt->scaleid ?? 0),
+                    'teststrategy' => (int) ($catattempt->teststrategy ?? 0),
+                    'resultvalid' => $isvalid ? 1 : 0,
+                    'resultstatus' => $isvalid ? 'valid' : 'invalid',
+                    'finishedat' => $finishedat,
+                ],
+            ])->trigger();
+        } catch (\Throwable $e) {
+            // The attempt is finalised and committed; a failing announcement must not turn that
+            // into an error for the person who just finished the test.
+            debugging('attempt_completed could not be triggered: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
     }
 }

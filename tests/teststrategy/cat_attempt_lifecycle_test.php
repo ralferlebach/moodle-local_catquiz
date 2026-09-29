@@ -102,9 +102,13 @@ final class cat_attempt_lifecycle_test extends advanced_testcase {
     }
 
     /**
-     * The finalizer leaves a running attempt alone - otherwise the idempotency guard would lock it.
+     * A test that ended before any answer is still finalised and announced as ended.
+     *
+     * A test can end without one processed answer - by the time limit, after too long a break, or
+     * by leaving right after the start - and without the result page ever being reached. It used to
+     * stay 'running' and was never announced; it is finalised now, without a result.
      */
-    public function test_the_finalizer_leaves_a_running_attempt_alone(): void {
+    public function test_a_test_ended_without_an_answer_is_finalised(): void {
         global $DB;
 
         $this->resetAfterTest();
@@ -112,11 +116,17 @@ final class cat_attempt_lifecycle_test extends advanced_testcase {
 
         progress::load(93004, 'mod_adaptivequiz', 9, (object) [])->save();
 
-        $this->assertFalse(attempt_finalizer::finalize(93004, time(), 'reason'));
-        $this->assertNull(
-            $DB->get_field('local_catquiz_attempts', 'endtime', ['attemptid' => 93004]),
-            'A running attempt must not be given an end time.'
-        );
+        $sink = $this->redirectEvents();
+        $this->assertTrue(attempt_finalizer::finalize(93004, time(), 'reason'), 'The ended test was not finalised.');
+        $this->assertFalse(attempt_finalizer::finalize(93004, time(), 'reason'), 'It was finalised twice.');
+        $events = array_filter($sink->get_events(), fn($e) => $e instanceof \local_catquiz\event\attempt_completed);
+        $sink->close();
+
+        $row = $DB->get_record('local_catquiz_attempts', ['attemptid' => 93004]);
+        $this->assertNotEmpty($row->endtime);
+        $this->assertEquals(LOCAL_CATQUIZ_ATTEMPT_ABORTED, (int) $row->status, 'Not marked as ended without a result.');
+        $this->assertCount(1, $events, 'The ended test was not announced exactly once.');
+        $this->assertEquals(0, reset($events)->other['resultvalid']);
     }
 
     /**

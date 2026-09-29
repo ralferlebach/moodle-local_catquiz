@@ -398,6 +398,28 @@ class progress implements JsonSerializable {
     }
 
     /**
+     * Reads the stored progress of a CAT attempt, for looking at it only.
+     *
+     * No cache, no ownership check against the current user and nothing created: a monitor reads
+     * the progress of other people's running attempts, and a missing progress stays missing. The
+     * caller is responsible for deciding who may see it.
+     *
+     * @param int $catattemptid Id in local_catquiz_attempts.
+     * @return self|null
+     */
+    public static function load_for_reading(int $catattemptid): ?self {
+        global $DB;
+
+        $record = $DB->get_record('local_catquiz_progress', ['attemptid' => $catattemptid]);
+        if (!$record) {
+            return null;
+        }
+        $contextid = (int) $DB->get_field('local_catquiz_attempts', 'contextid', ['id' => $catattemptid]);
+
+        return self::populate_from_object($record, $contextid);
+    }
+
+    /**
      * Try to load a progress object from the database.
      *
      * @param int|null $catattemptid Id of the CAT attempt - local_catquiz_attempts.id.
@@ -653,6 +675,8 @@ class progress implements JsonSerializable {
         }
 
         $record = (object) [
+            // When this progress was last persisted (issue #122) - for live monitoring.
+            'timemodified' => time(),
             'attemptid' => $this->catattemptid,
             'userid' => $this->userid,
             'component' => $this->component,

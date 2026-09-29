@@ -1525,6 +1525,18 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026092605, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026092904) {
+        // Issue #122: when a progress was last saved, for live monitoring. Existing rows get 0 - a
+        // time of last activity is not invented for them; the column says 'never recorded'.
+        $table = new xmldb_table('local_catquiz_progress');
+        $field = new xmldb_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'quizsettings');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026092904, 'local', 'catquiz');
+    }
+
     return true;
 }
 

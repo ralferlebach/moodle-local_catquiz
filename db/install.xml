@@ -237,6 +237,7 @@
         <FIELD NAME="attemptid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The CAT attempt this progress belongs to: local_catquiz_attempts.id. The external id of the component's attempt is kept in local_catquiz_attempts.attemptid and never here."/>
         <FIELD NAME="json" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="all data needed to continue the attempt"/>
         <FIELD NAME="quizsettings" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="The quiz settings used for this attempt"/>
+        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When this progress was last saved on the server. Not when the person was last active in the browser; for that, the start time of the current question counts. 0 for rows saved before this field existed."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
