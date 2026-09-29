@@ -19,13 +19,11 @@ namespace local_catquiz\output;
 use cache;
 use cache_helper;
 use coding_exception;
-use context_system;
 use Exception;
 use dml_exception;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
-use local_catquiz\event\attempt_completed;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbacksettings;
@@ -463,22 +461,9 @@ class attemptfeedback implements renderable, templatable {
             $this->attemptid
         );
 
-        // Trigger attempt_completed event.
-        $event = attempt_completed::create([
-            'objectid' => $this->attemptid,
-            'context' => context_system::instance(),
-            'other' => [
-                'attemptid' => $this->attemptid,
-                'catscaleid' => $quizsettings->catquiz_catscales,
-                'userid' => $USER->id,
-                'contextid' => $this->contextid,
-                'component' => $quizsettings->modulename,
-                'instanceid' => $courseandinstance['instanceid'],
-                'teststrategy' => $this->teststrategy,
-                'status' => LOCAL_CATQUIZ_ATTEMPT_OK,
-            ],
-        ]);
-        $event->trigger();
+        // No attempt_completed here (issue #122): this runs when the result page is built, and a page
+        // view is not the completion of a test. The event is triggered by attempt_finalizer, once,
+        // whether or not the page is ever opened.
         return $enrolementmsg;
     }
 
