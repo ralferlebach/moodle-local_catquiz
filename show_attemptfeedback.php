@@ -95,5 +95,10 @@ echo $OUTPUT->header();
 $data = $attemptfeedback->export_for_template($OUTPUT);
 
 echo $OUTPUT->render_from_template('local_catquiz/attemptfeedback', $data);
+// Issue #125: a question the system administered more than once is named here, for reviewers only.
+echo $OUTPUT->render_from_template(
+    'local_catquiz/administration_notice',
+    (new \local_catquiz\output\administration_notice($attemptid))->export_for_template($OUTPUT)
+);
 
 echo $OUTPUT->footer();

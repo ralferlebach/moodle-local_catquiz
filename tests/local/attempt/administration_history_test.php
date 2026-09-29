@@ -199,4 +199,75 @@ final class administration_history_test extends advanced_testcase {
         );
         $this->assertSame(0, $summary['gradedwrong'], 'The answer of the repeated administration was counted.');
     }
+    /**
+     * The measurement takes the first answer of a repeated question and counts it once.
+     *
+     * The progress keeps responses keyed by question id and ignores a later response to the same
+     * question. That is what keeps a technical duplicate from raising N or weighing twice in the
+     * estimate; here it is held down with a repeated question answered differently the second time.
+     */
+    public function test_the_progress_counts_the_first_answer_once(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$attemptid, $ids] = $this->attempt_with_slots(['a', 'b', 'a']);
+        $history = administration_history::for_attempt($attemptid);
+
+        // First administration of 'a' right, the repeated one wrong.
+        $DB->set_field_select(
+            'question_attempt_steps',
+            'fraction',
+            1,
+            'questionattemptid = :qa AND fraction IS NOT NULL',
+            ['qa' => $history[1]->questionattemptid]
+        );
+        $DB->set_field_select(
+            'question_attempt_steps',
+            'fraction',
+            0,
+            'questionattemptid = :qa AND fraction IS NOT NULL',
+            ['qa' => $history[3]->questionattemptid]
+        );
+
+        $progress = \local_catquiz\teststrategy\progress::load($attemptid, 'mod_adaptivequiz', 9, (object) []);
+        $responses = new \ReflectionProperty($progress, 'responses');
+        $responses->setAccessible(true);
+        // What update_cached_responses() has collected after slot 1 and slot 2 ...
+        $responses->setValue($progress, [
+            $ids['a'] => ['questionid' => $ids['a'], 'fraction' => 1.0],
+            $ids['b'] => ['questionid' => $ids['b'], 'fraction' => 1.0],
+        ]);
+        // ... and then the answer to the repeated administration arrives.
+        $progress->update_cached_responses();
+
+        $collected = $responses->getValue($progress);
+        $this->assertCount(2, $collected, 'The repeated question raised the number of responses.');
+        $this->assertEquals(1.0, $collected[$ids['a']]['fraction'], 'The second answer replaced the first.');
+    }
+    /**
+     * Reviewers are told which question was repeated, with its original and duplicate slot.
+     */
+    public function test_reviewers_see_the_repeated_question(): void {
+        global $PAGE;
+
+        $this->resetAfterTest();
+        [$withduplicate, $ids] = $this->attempt_with_slots(['a', 'b', 'a']);
+        [$without] = $this->attempt_with_slots(['c', 'd']);
+        $output = $PAGE->get_renderer('core');
+
+        $data = (new \local_catquiz\output\administration_notice($withduplicate))->export_for_template($output);
+        $this->assertTrue($data['hasduplicates']);
+        $this->assertCount(1, $data['items']);
+        $this->assertSame($ids['a'], $data['items'][0]['questionid']);
+        $this->assertSame(1, $data['items'][0]['originalslot']);
+        $this->assertSame(3, $data['items'][0]['duplicateslot']);
+
+        $html = $output->render_from_template('local_catquiz/administration_notice', $data);
+        $this->assertStringContainsString('data-duplicateslot="3"', $html);
+
+        $none = (new \local_catquiz\output\administration_notice($without))->export_for_template($output);
+        $this->assertFalse($none['hasduplicates'], 'An attempt without duplicates must show no notice.');
+        $this->assertSame('', trim($output->render_from_template('local_catquiz/administration_notice', $none)));
+    }
 }
