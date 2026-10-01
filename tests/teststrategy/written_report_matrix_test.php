@@ -61,7 +61,7 @@ final class written_report_matrix_test extends advanced_testcase {
      * @param int $strategyid
      * @return int[]
      */
-    private function written_scales(int $strategyid): array {
+    private function written_scales(int $strategyid, string $predicate = 'is_displayable'): array {
         $this->setAdminUser();
 
         // The progress of an attempt that answered these items, each scale its own questions; the
@@ -121,7 +121,7 @@ final class written_report_matrix_test extends advanced_testcase {
         $result = feedback_helper::build_attempt_result($personabilities, $feedbackdata);
         $written = array_values(array_filter(
             array_keys(self::ABILITY),
-            fn($scaleid) => feedback_helper::is_displayable($result, $scaleid)
+            fn($scaleid) => feedback_helper::$predicate($result, $scaleid)
         ));
         sort($written);
 
@@ -177,5 +177,37 @@ final class written_report_matrix_test extends advanced_testcase {
         }
         $this->assertNotContains(103, $written, 'Reporting switched off, yet reported.');
         $this->assertNotContains(106, $written, 'Not measured in this attempt, yet reported.');
+    }
+    /**
+     * What the detail tab shows per strategy (issue #118).
+     *
+     * @return array
+     */
+    public static function detail_tab(): array {
+        return [
+            'fastest: root only' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, [100]],
+            'relevant subscales' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS, [100, 101, 102]],
+            'all subscales' => [LOCAL_CATQUIZ_STRATEGY_ALLSUBS, [100, 101, 102]],
+            'lowest skill gap: the selected one and every other valid one' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, [100, 101, 102]],
+            'greatest strength: the selected one and every other valid one' => [LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB, [100, 101, 102]],
+        ];
+    }
+
+    /**
+     * The detail tab shows every enabled, measured and valid scale - not only the reported ones.
+     *
+     * toreport and primary decide what the written feedback names; the detail tab shows every valid
+     * measurement. Lowest and highest report one scale in writing, yet show the other valid ones
+     * here. Reporting off, below the minimum N, above the maximum standard error and not measured
+     * stay out. The root is in the list once; the template shows it as the reference, not as a row.
+     *
+     * @dataProvider detail_tab
+     * @param int $strategyid
+     * @param int[] $expected
+     */
+    public function test_the_detail_tab_shows_every_valid_measurement(int $strategyid, array $expected): void {
+        $this->resetAfterTest();
+
+        $this->assertSame($expected, $this->written_scales($strategyid, 'is_feedback_eligible'));
     }
 }
