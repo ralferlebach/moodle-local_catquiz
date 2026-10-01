@@ -147,13 +147,13 @@ class quizattemptsdisplay {
     /**
      * Renders attempt details.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      *
      * @return mixed
      *
      */
-    public function render_attempt_details(int $attemptid) {
-        $attemptfeedback = new attemptfeedback($attemptid);
+    public function render_attempt_details(int $adaptiveattemptid) {
+        $attemptfeedback = new attemptfeedback($adaptiveattemptid);
         $feedback = $attemptfeedback->get_feedback_for_attempt();
         return $feedback;
     }

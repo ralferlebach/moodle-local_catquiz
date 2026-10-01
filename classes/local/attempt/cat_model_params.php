@@ -60,12 +60,12 @@ final class cat_model_params extends persistent {
     /**
      * Instantiates an object for a fresh attempt.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @return self
      */
-    public static function create_new_for_attempt(int $attemptid): self {
+    public static function create_new_for_attempt(int $adaptiveattemptid): self {
         $data = new stdClass();
-        $data->attempt = $attemptid;
+        $data->attempt = $adaptiveattemptid;
         $data->difficultysum = 0;
         $data->standarderror = 999;
         $data->measure = 0;
@@ -91,12 +91,12 @@ final class cat_model_params extends persistent {
      *
      * Reaches out to the database to fetch the corresponding record.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @return self
      * @throws dml_missing_record_exception
      */
-    public static function for_attempt(int $attemptid): self {
-        $params = self::get_record(['attempt' => $attemptid]);
+    public static function for_attempt(int $adaptiveattemptid): self {
+        $params = self::get_record(['attempt' => $adaptiveattemptid]);
         if (!$params) {
             throw new dml_missing_record_exception(self::TABLE);
         }

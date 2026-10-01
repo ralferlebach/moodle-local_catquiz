@@ -158,26 +158,26 @@ abstract class feedbackgenerator {
     /**
      * Update the feedback data that is stored in the DB to render the feedback
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param array $existingdata
      * @param array $newdata
      * @return null|array
      */
-    public function update_data(int $attemptid, array $existingdata, array $newdata): ?array {
-        $this->attemptid = $attemptid;
+    public function update_data(int $adaptiveattemptid, array $existingdata, array $newdata): ?array {
+        $this->attemptid = $adaptiveattemptid;
         $this->contextid = $newdata['contextid'];
-        return $this->load_data($attemptid, $existingdata, $newdata);
+        return $this->load_data($adaptiveattemptid, $existingdata, $newdata);
     }
 
     /**
      * Loads the data required to render the feedback.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param array $existingdata
      * @param array $newdata Data from the last attempt
      * @return ?array
      */
-    abstract public function load_data(int $attemptid, array $existingdata, array $newdata): ?array;
+    abstract public function load_data(int $adaptiveattemptid, array $existingdata, array $newdata): ?array;
 
     /**
      * To update feedbackdata (that will be rendered later)...

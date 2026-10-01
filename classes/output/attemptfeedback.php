@@ -84,14 +84,14 @@ class attemptfeedback implements renderable, templatable {
     /**
      * Constructor of class.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $contextid
      * @param ?feedbacksettings $feedbacksettings
      * @param int $courseid
      *
      */
     public function __construct(
-        int $attemptid,
+        int $adaptiveattemptid,
         int $contextid = 0,
         ?feedbacksettings $feedbacksettings = null,
         $courseid = null
@@ -114,19 +114,19 @@ class attemptfeedback implements renderable, templatable {
         $this->courseid = 0;
         $this->teststrategy = 0;
 
-        if ($attemptid === 0) {
+        if ($adaptiveattemptid === 0) {
             // This can still return nothing. In that case, we show a message that the user has no attempts yet.
-            if (!$attemptid = catquiz::get_last_user_attemptid($USER->id)) {
+            if (!$adaptiveattemptid = catquiz::get_last_user_attemptid($USER->id)) {
                 return;
             }
         }
-        $this->attemptid = $attemptid;
+        $this->attemptid = $adaptiveattemptid;
 
         if (!empty($courseid)) {
             $this->courseid = $courseid;
         }
 
-        if (!$testenvironment = catquiz::get_testenvironment_by_attemptid($attemptid)) {
+        if (!$testenvironment = catquiz::get_testenvironment_by_attemptid($adaptiveattemptid)) {
             return;
         }
 

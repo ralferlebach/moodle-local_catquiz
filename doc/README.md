@@ -16,6 +16,9 @@ Zwei Arten von Dokumenten:
   Abschluss+Ergebnisspeicherung; Privacy/Datenschutz; Performance CAT-Manager &
   Statistik; Performance Testadministration; Migration zu Moodle 5.x; zukünftige
   IRT-Modelle) inkl. Zweck, Inhalt, Priorität und Abhängigkeiten.
+- **id-namespaces.md** – Id-Namensräume: Benennung von Host- und CAT-Versuchs-Id, die
+  bewusste Ausnahme `local_catquiz_attempts.attemptid`, zentrale Übersetzung,
+  id-geschlüsselte Arrays, Kollisionstests (#107).
 - **environment-setup.md** – Reproduzierbarer Aufbau der Test-/Laufzeitumgebung
   (Moodle, PHP, PostgreSQL, PHPUnit, Behat, phpcs/moodle-cs, Gherkin/Mustache-Lint)
   inkl. verifizierter Fixpunkte und typischer Stolpersteine.

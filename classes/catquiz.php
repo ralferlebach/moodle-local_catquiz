@@ -1185,7 +1185,7 @@ class catquiz {
      * @param int $numberofrecords
      * @param int $instanceid
      * @param int $courseid
-     * @param int $attemptid Optional attemptid.
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $userid
      *
      * @return mixed
@@ -1195,7 +1195,7 @@ class catquiz {
         int $numberofrecords = 1,
         int $instanceid = 0,
         int $courseid = 0,
-        int $attemptid = 0,
+        int $adaptiveattemptid = 0,
         int $userid = -1
     ) {
 
@@ -1205,7 +1205,7 @@ class catquiz {
             $numberofrecords,
             $instanceid,
             $courseid,
-            $attemptid,
+            $adaptiveattemptid,
             $userid
         );
 
@@ -1219,7 +1219,7 @@ class catquiz {
      * @param int $numberofrecords
      * @param int $instanceid
      * @param int $courseid
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $userid
      * @return array
      */
@@ -1227,7 +1227,7 @@ class catquiz {
         int $numberofrecords = 1,
         int $instanceid = 0,
         int $courseid = 0,
-        int $attemptid = 0,
+        int $adaptiveattemptid = 0,
         int $userid = -1
     ): array {
 
@@ -1256,9 +1256,9 @@ class catquiz {
             $params['userid'] = $userid;
         }
 
-        if ($attemptid !== 0) {
+        if ($adaptiveattemptid !== 0) {
             $wherearray[] = ' attemptid = :attemptid ';
-            $params['attemptid'] = $attemptid;
+            $params['attemptid'] = $adaptiveattemptid;
         }
 
         // A test that has started but not been saved yet has no result to show (issue #101).
@@ -1989,11 +1989,11 @@ class catquiz {
      * Resolving in one place keeps the two namespaces apart - everything a caller hands in is
      * external, everything stored in the CATquiz tables is internal.
      *
-     * @param int $attemptid Id of the attempt of the component.
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $component The component the attempt belongs to.
      * @return int|null The id in local_catquiz_attempts, null when there is no CAT attempt yet.
      */
-    public static function get_cat_attempt_id(int $attemptid, string $component): ?int {
+    public static function get_cat_attempt_id(int $adaptiveattemptid, string $component): ?int {
         global $DB;
 
         [$insql, $inparams] = $DB->get_in_or_equal(self::component_names($component), SQL_PARAMS_NAMED, 'comp');
@@ -2001,7 +2001,7 @@ class catquiz {
             'local_catquiz_attempts',
             'id',
             "attemptid = :attemptid AND component $insql",
-            ['attemptid' => $attemptid] + $inparams
+            ['attemptid' => $adaptiveattemptid] + $inparams
         );
 
         if (empty($ids)) {
@@ -2107,10 +2107,10 @@ class catquiz {
     /**
      * Return the attempt with the given attemptid
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @return array<\stdClass>
      */
-    public static function get_attempt_statistics(int $attemptid) {
+    public static function get_attempt_statistics(int $adaptiveattemptid) {
         global $DB;
         // Return exactly one row per question (per question attempt),
         // carrying the fraction of its LAST graded step. A question can have
@@ -2139,7 +2139,7 @@ class catquiz {
             ) laststep ON laststep.questionattemptid = qa.id
             WHERE aa.id = :attemptid
             ORDER BY qa.slot ASC",
-            ['attemptid' => $attemptid]
+            ['attemptid' => $adaptiveattemptid]
         );
     }
 
@@ -2334,12 +2334,12 @@ class catquiz {
     /**
      * Get testenvironment by attemptid.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      *
      * @return object
      *
      */
-    public static function get_testenvironment_by_attemptid(int $attemptid) {
+    public static function get_testenvironment_by_attemptid(int $adaptiveattemptid) {
         global $DB;
 
         return $DB->get_record_sql(
@@ -2352,7 +2352,7 @@ class catquiz {
             ",
             [
                 'component' => 'mod_adaptivequiz',
-                'id' => $attemptid,
+                'id' => $adaptiveattemptid,
             ]
         );
     }
@@ -2675,15 +2675,15 @@ class catquiz {
     /**
      * Set the status in the attempts table.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $status
      *
      * @return void
      */
-    public static function set_final_attempt_status(int $attemptid, string $status) {
+    public static function set_final_attempt_status(int $adaptiveattemptid, string $status) {
         global $DB;
         $statusnumber = status::to_int($status);
-        if (!$existingrecord = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptid])) {
+        if (!$existingrecord = $DB->get_record('local_catquiz_attempts', ['attemptid' => $adaptiveattemptid])) {
             return;
         }
         $data = (object) [
@@ -2717,11 +2717,11 @@ class catquiz {
      * Fetch courseid and and instanceid from DB for attempt.
      *
      * @param string $modulename
-     * @param int    $attemptid
+     * @param int    $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @return array
      * @throws dml_exception
      */
-    public static function return_course_and_instance_id(string $modulename, int $attemptid) {
+    public static function return_course_and_instance_id(string $modulename, int $adaptiveattemptid) {
         global $DB;
         $courseid = 0;
         $instanceid = 0;
@@ -2733,7 +2733,7 @@ class catquiz {
                     WHERE aqa.id = :attemptid";
 
             $params = [
-                'attemptid' => $attemptid,
+                'attemptid' => $adaptiveattemptid,
             ];
             $record = $DB->get_record_sql($sql, $params);
             $courseid = $record->course;

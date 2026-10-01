@@ -39,10 +39,10 @@ class administration_notice implements renderable, templatable {
     /**
      * Constructor.
      *
-     * @param int $attemptid Id of the attempt in adaptivequiz_attempt.
+     * @param int $adaptiveattemptid Id of the attempt in adaptivequiz_attempt.
      */
-    public function __construct(int $attemptid) {
-        $this->attemptid = $attemptid;
+    public function __construct(int $adaptiveattemptid) {
+        $this->attemptid = $adaptiveattemptid;
     }
 
     /**
