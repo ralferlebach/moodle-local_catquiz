@@ -56,9 +56,11 @@ final class written_report_matrix_test extends advanced_testcase {
     private const SHOWNONLY = [104 => 1, 106 => 2];
 
     /**
-     * Runs the chain of the feedback generator for one strategy and returns the scales reported in writing.
+     * Runs the chain of the feedback generator for one strategy and returns the scales the predicate admits.
      *
      * @param int $strategyid
+     * @param string $predicate The feedback_helper predicate: is_displayable (written) or
+     *      is_feedback_eligible (detail tab).
      * @return int[]
      */
     private function written_scales(int $strategyid, string $predicate = 'is_displayable'): array {

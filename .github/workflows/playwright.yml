@@ -116,9 +116,12 @@ jobs:
           # What actually has to hold: a plugin root has its own version.php, and any
           # further one lives inside a directory declared in db/subplugins.json.
           rc=0
+          # Moodle 5 keeps the code under public/; the guard has to look where the plugins are.
+          webroot=moodle
+          [ -d moodle/public ] && webroot=moodle/public
           for dest in local/catquiz local/wunderbyte_table filter/shortcodes; do
-            if [ ! -f "moodle/$dest/version.php" ]; then
-              echo "moodle/$dest hat keine version.php im Wurzelverzeichnis"
+            if [ ! -f "$webroot/$dest/version.php" ]; then
+              echo "$webroot/$dest hat keine version.php im Wurzelverzeichnis"
               rc=1
               continue
             fi
@@ -126,13 +129,13 @@ jobs:
             # Declared subplugin roots, read from the plugin itself rather than
             # hardcoded here - otherwise this guard drifts away from the plugin.
             allowed=""
-            if [ -f "moodle/$dest/db/subplugins.json" ]; then
-              allowed=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(' '.join(d.get('plugintypes', d.get('subplugintypes', {})).values()))" "moodle/$dest/db/subplugins.json")
+            if [ -f "$webroot/$dest/db/subplugins.json" ]; then
+              allowed=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(' '.join(d.get('plugintypes', d.get('subplugintypes', {})).values()))" "$webroot/$dest/db/subplugins.json")
             fi
 
             while read -r found; do
-              [ "$found" = "moodle/$dest/version.php" ] && continue
-              relative=${found#moodle/$dest/}
+              [ "$found" = "$webroot/$dest/version.php" ] && continue
+              relative=${found#$webroot/$dest/}
               ok=0
               for root in $allowed; do
                 base=$(basename "$root")
@@ -142,7 +145,7 @@ jobs:
                 echo "Unerwartete version.php ausserhalb der deklarierten Subplugins: $found"
                 rc=1
               fi
-            done < <(find "moodle/$dest" -name version.php)
+            done < <(find "$webroot/$dest" -name version.php)
           done
           if [ "$rc" -ne 0 ]; then
             echo "Verschachtelte Plugin-Kopien gefunden - das getestete Oekosystem waere nicht reproduzierbar."
