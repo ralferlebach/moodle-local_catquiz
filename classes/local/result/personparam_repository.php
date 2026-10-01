@@ -42,14 +42,14 @@ final class personparam_repository {
      * Scales that only carry a prior value (not measured in this attempt) are
      * not written, so N/fraction/SE are never carried over.
      *
-     * @param int $attemptid local_catquiz_attempts.id
+     * @param int $catattemptid local_catquiz_attempts.id
      * @param int $userid
      * @param int|null $contextid
      * @param attempt_result $result
      * @return void
      */
     public static function save_attempt_result(
-        int $attemptid,
+        int $catattemptid,
         int $userid,
         ?int $contextid,
         attempt_result $result
@@ -65,7 +65,7 @@ final class personparam_repository {
             }
 
             $record = (object) [
-                'attemptid' => $attemptid,
+                'attemptid' => $catattemptid,
                 'userid' => $userid,
                 'contextid' => $contextid,
                 'catscaleid' => $scaleresult->scaleid,
@@ -83,7 +83,7 @@ final class personparam_repository {
 
             $existing = $DB->get_record(
                 self::TABLE,
-                ['attemptid' => $attemptid, 'catscaleid' => $scaleresult->scaleid],
+                ['attemptid' => $catattemptid, 'catscaleid' => $scaleresult->scaleid],
                 'id'
             );
             if ($existing) {
@@ -98,12 +98,12 @@ final class personparam_repository {
     /**
      * All result rows for a CATquiz attempt, indexed by scale id.
      *
-     * @param int $attemptid local_catquiz_attempts.id
+     * @param int $catattemptid local_catquiz_attempts.id
      * @return stdClass[]
      */
-    public static function get_for_attempt(int $attemptid): array {
+    public static function get_for_attempt(int $catattemptid): array {
         global $DB;
-        return $DB->get_records(self::TABLE, ['attemptid' => $attemptid], '', '*');
+        return $DB->get_records(self::TABLE, ['attemptid' => $catattemptid], '', '*');
     }
 
     /**

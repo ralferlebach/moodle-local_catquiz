@@ -104,14 +104,14 @@ class pilotquestions extends feedbackgenerator {
     /**
      * Loads data.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param array $existingdata
      * @param array $newdata
      *
      * @return array|null
      *
      */
-    public function load_data(int $attemptid, array $existingdata, array $newdata): ?array {
+    public function load_data(int $adaptiveattemptid, array $existingdata, array $newdata): ?array {
         $numpilotquestions = $existingdata['num_pilot_questions'];
 
         if ($numpilotquestions === null) {

@@ -291,14 +291,14 @@ class debuginfo extends feedbackgenerator {
     /**
      * Load data.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param array $existingdata
      * @param array $newdata
      *
      * @return array|null
      *
      */
-    public function load_data(int $attemptid, array $existingdata, array $newdata): ?array {
+    public function load_data(int $adaptiveattemptid, array $existingdata, array $newdata): ?array {
 
         // Note: This has to be redone as well.
         if (!get_config('local_catquiz', 'store_debug_info')) {
@@ -338,7 +338,7 @@ class debuginfo extends feedbackgenerator {
         $lastresponse = $this->get_progress()->get_last_response();
         $debuginfo[] = [
             'pluginversion' => get_config('local_catquiz')->version ?? self::NA,
-            'attemptid' => $attemptid,
+            'attemptid' => $adaptiveattemptid,
             'questionsattempted' => count($this->get_progress()->get_playedquestions()),
             'timestamp' => time(),
             'personabilities' => $personabilities,

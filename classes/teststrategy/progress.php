@@ -224,12 +224,12 @@ class progress implements JsonSerializable {
      * Kept as a thin delegate: the resolution lives in catquiz because more than the progress
      * needs it, and it must read the same way everywhere.
      *
-     * @param int $attemptid Id of the attempt of the component.
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $component The component the attempt belongs to.
      * @return int|null The id in local_catquiz_attempts, null when there is no CAT attempt yet.
      */
-    public static function get_cat_attempt_id(int $attemptid, string $component): ?int {
-        return catquiz::get_cat_attempt_id($attemptid, $component);
+    public static function get_cat_attempt_id(int $adaptiveattemptid, string $component): ?int {
+        return catquiz::get_cat_attempt_id($adaptiveattemptid, $component);
     }
 
     /**
@@ -241,11 +241,11 @@ class progress implements JsonSerializable {
      * its component id. Leaving them empty is deliberate: statistics select by scale, context or
      * course, and a running attempt is excluded from them without every query having to know.
      *
-     * @param int $attemptid Id of the attempt of the component.
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $component The component the attempt belongs to.
      * @return int|null The id of the new row in local_catquiz_attempts, null if none can be filed.
      */
-    private static function start_cat_attempt(int $attemptid, string $component): ?int {
+    private static function start_cat_attempt(int $adaptiveattemptid, string $component): ?int {
         global $DB, $USER, $CFG;
         require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
@@ -254,9 +254,9 @@ class progress implements JsonSerializable {
            The progress then stays in the cache, as before issue #101 - and it is never handed the
            other component's progress, because that lookup is by component. Resolving the namespace
            properly is issue #105. */
-        if ($DB->record_exists('local_catquiz_attempts', ['attemptid' => $attemptid])) {
+        if ($DB->record_exists('local_catquiz_attempts', ['attemptid' => $adaptiveattemptid])) {
             debugging(
-                "Attempt {$attemptid} of {$component} shares its number with a CAT attempt of another "
+                "Attempt {$adaptiveattemptid} of {$component} shares its number with a CAT attempt of another "
                     . 'component; no CAT attempt was filed for it.',
                 DEBUG_DEVELOPER
             );
@@ -268,7 +268,7 @@ class progress implements JsonSerializable {
 
         return (int) $DB->insert_record('local_catquiz_attempts', (object) [
             'userid' => $USER->id,
-            'attemptid' => $attemptid,
+            'attemptid' => $adaptiveattemptid,
             'component' => $component,
             'status' => LOCAL_CATQUIZ_ATTEMPT_RUNNING,
             'json' => '{}',
@@ -282,14 +282,14 @@ class progress implements JsonSerializable {
      *
      * If we already have data in the cache or DB, the instance is populated with those data.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $component
      * @param int $contextid
      * @param ?stdClass $quizsettings
      * @return progress
      */
-    public static function load(int $attemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
-        $catattemptid = self::get_cat_attempt_id($attemptid, $component);
+    public static function load(int $adaptiveattemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
+        $catattemptid = self::get_cat_attempt_id($adaptiveattemptid, $component);
 
         /* Issue #101: the CAT attempt exists before the first progress access. Until now it was
            written only by the result page at the end of a test, so during the whole attempt there
@@ -298,12 +298,12 @@ class progress implements JsonSerializable {
            a test; that is where the CAT attempt is filed. A caller without settings only reads, and
            a reader never creates an attempt. */
         if ($catattemptid === null && $quizsettings !== null) {
-            $catattemptid = self::start_cat_attempt($attemptid, $component);
+            $catattemptid = self::start_cat_attempt($adaptiveattemptid, $component);
         }
 
-        $instance = self::load_from_cache($attemptid, $component)
+        $instance = self::load_from_cache($adaptiveattemptid, $component)
             ?: self::load_from_db($catattemptid, $contextid)
-            ?: self::create_new($attemptid, $component, $contextid, $quizsettings);
+            ?: self::create_new($adaptiveattemptid, $component, $contextid, $quizsettings);
 
         // The CAT attempt may have been created after this progress was first built - the component
         // starts its attempt, the CAT model files its own right after. Pick it up when it appears.
@@ -351,14 +351,14 @@ class progress implements JsonSerializable {
     /**
      * Try to load a progress object from the cache.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $component Component asking; empty to skip the component check.
      * @return progress
      * @throws coding_exception
      */
-    private static function load_from_cache($attemptid, string $component = '') {
+    private static function load_from_cache($adaptiveattemptid, string $component = '') {
         $attemptcache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $cachekey = self::get_cache_key($attemptid);
+        $cachekey = self::get_cache_key($adaptiveattemptid);
         $cached = $attemptcache->get($cachekey);
 
         if (!$cached instanceof self) {
@@ -562,20 +562,20 @@ class progress implements JsonSerializable {
     /**
      * This sets default data for a new instance.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $component
      * @param int $contextid
      * @param stdClass $quizsettings
      * @return self
      */
-    private static function create_new(int $attemptid, string $component, int $contextid, stdClass $quizsettings): self {
+    private static function create_new(int $adaptiveattemptid, string $component, int $contextid, stdClass $quizsettings): self {
         global $USER;
         $instance = new self();
         $instance->id = null;
         $instance->userid = $USER->id;
         $instance->component = $component;
-        $instance->attemptid = $attemptid;
-        $instance->catattemptid = self::get_cat_attempt_id($attemptid, $component);
+        $instance->attemptid = $adaptiveattemptid;
+        $instance->catattemptid = self::get_cat_attempt_id($adaptiveattemptid, $component);
         $instance->contextid = $contextid;
 
         $instance->playedquestions = [];
@@ -638,19 +638,19 @@ class progress implements JsonSerializable {
     /**
      * Deletes entries of this instance from the database and cache.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param string $component Component asking; empty to skip the component check.
      * @return void
      */
-    public static function delete(int $attemptid, string $component = 'mod_adaptivequiz'): void {
+    public static function delete(int $adaptiveattemptid, string $component = 'mod_adaptivequiz'): void {
         global $DB;
 
         // Delete cache.
-        $cachekey = self::get_cache_key($attemptid);
+        $cachekey = self::get_cache_key($adaptiveattemptid);
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
         $cache->delete($cachekey);
 
-        $catattemptid = self::get_cat_attempt_id($attemptid, $component);
+        $catattemptid = self::get_cat_attempt_id($adaptiveattemptid, $component);
 
         if ($catattemptid !== null) {
             $DB->delete_records('local_catquiz_progress', ['attemptid' => $catattemptid]);
@@ -1517,12 +1517,12 @@ class progress implements JsonSerializable {
     /**
      * Returns the cache key.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @return string
      */
-    private static function get_cache_key(int $attemptid): string {
+    private static function get_cache_key(int $adaptiveattemptid): string {
         global $USER;
-        return sprintf('progress_user_%d_id_%d', $USER->id, $attemptid);
+        return sprintf('progress_user_%d_id_%d', $USER->id, $adaptiveattemptid);
     }
     /**
      * Casts a decoded json branch back to a nested array.

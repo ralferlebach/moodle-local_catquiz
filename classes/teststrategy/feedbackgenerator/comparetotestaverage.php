@@ -231,14 +231,14 @@ class comparetotestaverage extends feedbackgenerator {
     /**
      * Load data.
      *
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param array $existingdata
      * @param array $newdata
      *
      * @return array|null
      *
      */
-    public function load_data(int $attemptid, array $existingdata, array $newdata): ?array {
+    public function load_data(int $adaptiveattemptid, array $existingdata, array $newdata): ?array {
         global $DB;
         $progress = $this->get_progress();
         $quizsettings = $progress->get_quiz_settings();
@@ -259,7 +259,7 @@ class comparetotestaverage extends feedbackgenerator {
         // person, the compared user excluded. This replaces loading every
         // personparam into PHP, computing a mean that included the user, and a
         // percentile that ignored ties.
-        $attemptuserid = (int) $DB->get_field('adaptivequiz_attempt', 'userid', ['id' => $attemptid]);
+        $attemptuserid = (int) $DB->get_field('adaptivequiz_attempt', 'userid', ['id' => $adaptiveattemptid]);
         $stats = catquiz::get_peer_comparison_stats(
             (int) $existingdata['contextid'],
             (int) $catscaleid,

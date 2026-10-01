@@ -74,16 +74,16 @@ class render_question_with_response extends external_api {
      * Webservice for the local catquiz plugin to update context parameters
      *
      * @param int $slot
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $questionattemptid Optional question attempt id to verify the slot mapping.
      *
      * @return array
      */
-    public static function execute(int $slot, int $attemptid, int $questionattemptid = 0): array {
+    public static function execute(int $slot, int $adaptiveattemptid, int $questionattemptid = 0): array {
         global $PAGE, $OUTPUT;
         self::validate_parameters(self::execute_parameters(), [
             'slot' => $slot,
-            'attemptid' => $attemptid,
+            'attemptid' => $adaptiveattemptid,
             'questionattemptid' => $questionattemptid,
         ]);
 
@@ -102,7 +102,7 @@ class render_question_with_response extends external_api {
         $OUTPUT->doctype();
 
         $PAGE->start_collecting_javascript_requirements();
-        $questionhtml = self::render_question($slot, $attemptid, $questionattemptid);
+        $questionhtml = self::render_question($slot, $adaptiveattemptid, $questionattemptid);
         $jsfooter = $PAGE->requires->get_end_code();
 
         return [
@@ -127,7 +127,7 @@ class render_question_with_response extends external_api {
      * Returns an array with the rendered question HTML.
      *
      * @param int $slot
-     * @param int $attemptid
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $questionattemptid Expected question attempt id (0 = skip check).
      * @return array
      * @throws dml_exception
@@ -135,9 +135,9 @@ class render_question_with_response extends external_api {
      * @throws require_login_exception
      * @throws moodle_exception
      */
-    private static function render_question(int $slot, int $attemptid, int $questionattemptid = 0): array {
+    private static function render_question(int $slot, int $adaptiveattemptid, int $questionattemptid = 0): array {
         global $DB, $PAGE, $USER;
-        $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
+        $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $adaptiveattemptid], '*', MUST_EXIST);
         $instanceid = $attempt->instance;
 
         $cm = get_coursemodule_from_instance('adaptivequiz', $instanceid, 0, false, MUST_EXIST);

@@ -396,6 +396,9 @@ class testenvironment {
         // If we have the record, we update everything, if there are new values. if not, we leave the old ones.
         $record->componentid = $this->componentid ?? $record->componentid;
         $record->component = $this->component ?? $record->component;
+        // Kept before it is overwritten: the contextid below follows a change of the main scale, and
+        // the change can only be seen against the value stored before this save (issue #127).
+        $previousscaleid = (int) ($record->catscaleid ?? 0);
         $record->catscaleid = $this->catscaleid ?? $record->catscaleid ?? 0;
         $record->name = $this->name ?? $record->name;
         $record->description = $this->description ?? $record->description;
@@ -408,12 +411,14 @@ class testenvironment {
         $record->parentid = $this->parentid ?? $record->parentid ?? 0;
         $record->courseid = $this->courseid ?? $record->courseid;
 
-        // Set the contextid only if this is a new test OR the scale was changed.
-        // New test: $record->contextid is empty. Scale changed: $record->contextid != $this->contextid.
+        // Set the contextid only if this is a new test OR the main scale was changed. New test: no
+        // contextid yet. Scale changed: the scale now differs from the one stored before this save.
+        // The check used to compare the scale with itself - it had been overwritten above - so a
+        // change of scale left the test in the context of the old one.
         if (
             !property_exists($record, 'contextid')
             || !$record->contextid
-            || ($this->catscaleid && $record->catscaleid && $this->catscaleid != $record->catscaleid)
+            || ($record->catscaleid && $previousscaleid && (int) $record->catscaleid !== $previousscaleid)
         ) {
             $record->contextid = $DB->get_field('local_catquiz_catscales', 'contextid', ['id' => $record->catscaleid]);
         }
