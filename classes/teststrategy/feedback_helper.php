@@ -112,14 +112,16 @@ class feedback_helper {
      * feedback assembly (issue #10).
      *
      * @param array $personabilities
+     * @param array $nbyscale Productive answered items per scale in this attempt. Without it no
+     *      scale counts as measured (issue #128).
      * @return array
      */
-    public static function get_reportable_scales(array $personabilities): array {
+    public static function get_reportable_scales(array $personabilities, array $nbyscale = []): array {
         // The definition of a reportable/valid scale lives in the
         // central attempt_result_validator. Route through it so feedback,
         // completion and persistence all share one definition. The validator
         // reproduces the historical set (toreport, not excluded, not hidden).
-        $result = attempt_result_validator::from_personabilities($personabilities);
+        $result = attempt_result_validator::from_personabilities($personabilities, [], $nbyscale);
         $reportableids = array_flip($result->get_reportable_scale_ids());
 
         return array_filter(
@@ -133,10 +135,12 @@ class feedback_helper {
      * Whether a person-abilities list contains at least one reportable scale.
      *
      * @param array $personabilities
+     * @param array $nbyscale Productive answered items per scale in this attempt. Without it no
+     *      scale counts as measured (issue #128).
      * @return bool
      */
-    public static function has_reportable_result(array $personabilities): bool {
-        return attempt_result_validator::from_personabilities($personabilities)->has_reportable_result();
+    public static function has_reportable_result(array $personabilities, array $nbyscale = []): bool {
+        return attempt_result_validator::from_personabilities($personabilities, [], $nbyscale)->has_reportable_result();
     }
 
     /**
@@ -175,8 +179,10 @@ class feedback_helper {
         // made every scale count as measured, so REASON_NOT_MEASURED never fired and
         // scales that were never asked appeared in the feedback with the parent's
         // value - several at once with the identical number.
-        $nbyscale = [];
-        if (isset($feedbackdata['progress']) && $feedbackdata['progress'] instanceof progress) {
+        // Counts given explicitly win; otherwise they come from the progress. Without either, N is
+        // unknown and no scale counts as measured (issue #128).
+        $nbyscale = array_map('intval', (array) ($feedbackdata['nbyscale'] ?? []));
+        if (!$nbyscale && isset($feedbackdata['progress']) && $feedbackdata['progress'] instanceof progress) {
             foreach (array_keys($personabilities) as $scaleid) {
                 // The authoritative N (issue #117): productive items answered in this attempt - the
                 // same count the validator uses at finalisation. Played questions include items shown

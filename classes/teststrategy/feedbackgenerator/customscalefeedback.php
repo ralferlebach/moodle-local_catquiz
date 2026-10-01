@@ -97,7 +97,9 @@ class customscalefeedback extends feedbackgenerator {
             $data['customscalefeedback_abilities'],
             (array) $progress->get_quiz_settings(),
             $data['catscales'],
-            ['se' => $data['se'] ?? []]
+            // With the progress, so the per-scale N is known and a scale not measured in this attempt
+            // is not taken as measured (issue #128).
+            ['se' => $data['se'] ?? [], 'progress' => $progress]
         );
 
         if (empty($customscalefeedback)) {

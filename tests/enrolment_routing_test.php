@@ -119,6 +119,12 @@ final class enrolment_routing_test extends advanced_testcase {
         $excluded = 101;
         $carryover = 102;
 
+        // The attempt of the activity behind the progress, as every real attempt has one.
+        $DB->import_record('adaptivequiz_attempt', (object) [
+            'id' => 98001, 'instance' => 1, 'userid' => 2, 'uniqueid' => 598001, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 3, 'difficultysum' => 0, 'standarderror' => 0.3,
+            'measure' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
         $progress = progress::load(98001, 'mod_adaptivequiz', 9, (object) []);
         $played = [];
         $responses = [];
@@ -126,7 +132,9 @@ final class enrolment_routing_test extends advanced_testcase {
             $played[$qid] = (object) ['id' => $qid, 'catscaleid' => $root, 'is_pilot' => false, 'fisherinformation' => []];
             $responses[$qid] = ['questionid' => $qid, 'fraction' => 1.0];
         }
-        $state = ['responses' => $responses, 'playedquestions' => $played, 'playedquestionsbyscale' => [$root => $played]];
+        $state = ['responses' => $responses, 'playedquestions' => $played,
+            // A progress with played questions always has a last one.
+            'lastquestion' => end($played) ?: null, 'playedquestionsbyscale' => [$root => $played]];
         foreach ($state as $name => $value) {
             $property = new \ReflectionProperty($progress, $name);
             $property->setAccessible(true);

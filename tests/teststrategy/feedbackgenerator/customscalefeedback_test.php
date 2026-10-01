@@ -63,11 +63,17 @@ final class customscalefeedback_test extends basic_testcase {
         $progressmock = $this->getMockBUilder(progress::class)
             ->onlyMethods([
                 'get_quiz_settings',
+                'get_num_answered_productive_questions',
             ])
             ->getMock();
         $progressmock
             ->method('get_quiz_settings')
             ->willReturn((object) $feedbackdata['quizsettings']);
+        // The range path now reads the per-scale N from the progress (issue #128); the scales of these
+        // data sets stand for scales measured in the attempt.
+        $progressmock
+            ->method('get_num_answered_productive_questions')
+            ->willReturn(3);
 
         $customscalefeedback = $this->getMockBuilder(customscalefeedback::class)
             ->onlyMethods([

@@ -61,13 +61,21 @@ final class written_report_matrix_test extends advanced_testcase {
      * @param int $strategyid
      * @param string $predicate The feedback_helper predicate: is_displayable (written) or
      *      is_feedback_eligible (detail tab).
+     * @param int $nmintest Minimum number of items for the whole test.
      * @return int[]
      */
-    private function written_scales(int $strategyid, string $predicate = 'is_displayable'): array {
+    private function written_scales(int $strategyid, string $predicate = 'is_displayable', int $nmintest = 1): array {
         $this->setAdminUser();
 
         // The progress of an attempt that answered these items, each scale its own questions; the
         // root holds all of them.
+        // The attempt of the activity behind the progress, as every real attempt has one.
+        global $DB;
+        $DB->import_record('adaptivequiz_attempt', (object) [
+            'id' => 97001, 'instance' => 1, 'userid' => 2, 'uniqueid' => 597001, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 3, 'difficultysum' => 0, 'standarderror' => 0.3,
+            'measure' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
         $progress = progress::load(97001, 'mod_adaptivequiz', 9, (object) []);
         $byscale = [];
         $responses = [];
@@ -85,7 +93,9 @@ final class written_report_matrix_test extends advanced_testcase {
                 }
             }
         }
-        $state = ['responses' => $responses, 'playedquestions' => $played, 'playedquestionsbyscale' => $byscale];
+        $state = ['responses' => $responses, 'playedquestions' => $played,
+            // A progress with played questions always has a last one.
+            'lastquestion' => end($played) ?: null, 'playedquestionsbyscale' => $byscale];
         foreach ($state as $name => $value) {
             $property = new \ReflectionProperty($progress, $name);
             $property->setAccessible(true);
@@ -104,7 +114,7 @@ final class written_report_matrix_test extends advanced_testcase {
 
         $settings = new feedbacksettings($strategyid);
         $settings->nminscale = 2;
-        $settings->nmintest = 1;
+        $settings->nmintest = $nmintest;
         $settings->semax = 0.5;
         $settings->fraction = 0.6;
         $feedbackdata = [
@@ -195,5 +205,16 @@ final class written_report_matrix_test extends advanced_testcase {
         $this->resetAfterTest();
 
         $this->assertSame($expected, $this->written_scales($strategyid, 'is_feedback_eligible'));
+    }
+    /**
+     * CAT: the minimum for the whole test counts answered productive items only (issue #128).
+     *
+     * 13 items are answered, 3 more were shown and not answered. With a minimum of 14 the test does
+     * not reach it - counting shown items, it would, and the root would be reported.
+     */
+    public function test_cat_minimum_for_the_test_counts_answered_items(): void {
+        $this->resetAfterTest();
+
+        $this->assertSame([], $this->written_scales(LOCAL_CATQUIZ_STRATEGY_FASTEST, 'is_displayable', 14));
     }
 }

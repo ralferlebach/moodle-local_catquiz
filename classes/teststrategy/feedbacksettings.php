@@ -294,7 +294,9 @@ class feedbacksettings {
     public function filter_nmintest(array $personabilities, array $feedbackdata, bool $hide = false): array {
         $nmintest = $this->nmintest;
         if (!empty($nmintest)) {
-            $nintest = $feedbackdata['progress']->get_num_playedquestions();
+            // Productive items answered in the whole test (issue #128) - the N the validator uses.
+            // Played questions would let pending, unanswered and pilot items meet the minimum.
+            $nintest = $feedbackdata['progress']->get_num_answered_productive_questions();
             if ($nintest < $nmintest) {
                 foreach ($personabilities as $scaleid => $scalearray) {
                     $personabilities[$scaleid]['error']['nminscale'] = [

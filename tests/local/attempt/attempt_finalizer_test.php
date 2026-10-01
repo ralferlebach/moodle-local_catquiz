@@ -21,6 +21,11 @@ use local_catquiz\catquiz;
 use local_catquiz\teststrategy\progress;
 use stdClass;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/measured_progress.php');
+
 /**
  * Tests the authoritative, idempotent attempt finaliser (Issue #5).
  *
@@ -151,6 +156,9 @@ final class attempt_finalizer_test extends advanced_testcase {
             'component' => 'mod_adaptivequiz', 'status' => 0, 'number_of_testitems_used' => 6,
             'endtime' => null, 'json' => $json, 'timecreated' => $now, 'timemodified' => $now,
         ]);
+        // Issue #128: the attempt's progress - without it no scale counts as measured.
+        $this->setAdminUser();
+        local_catquiz_measured_progress((int) $adaptiveattemptid, [5 => 3, 6 => 1]);
 
         // Without progress data N per scale is unknown, so measuredincurrentattempt
         // defaults to true and both reported scales are historised.
@@ -212,6 +220,9 @@ final class attempt_finalizer_test extends advanced_testcase {
             'component' => 'mod_adaptivequiz', 'status' => 0, 'number_of_testitems_used' => 6,
             'endtime' => null, 'json' => $json, 'timecreated' => $now, 'timemodified' => $now,
         ]);
+        // Issue #128: the attempt's progress - without it no scale counts as measured.
+        $this->setAdminUser();
+        local_catquiz_measured_progress((int) $adaptiveattemptid, [5 => 3, 6 => 3]);
 
         $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
 
@@ -277,6 +288,9 @@ final class attempt_finalizer_test extends advanced_testcase {
             'component' => 'mod_adaptivequiz', 'status' => 0, 'endtime' => null, 'json' => $json,
             'timecreated' => $now, 'timemodified' => $now,
         ]);
+        // Issue #128: the attempt's progress - without it no scale counts as measured.
+        $this->setAdminUser();
+        local_catquiz_measured_progress((int) $adaptiveattemptid, [5 => 1]);
 
         $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
 
@@ -326,6 +340,9 @@ final class attempt_finalizer_test extends advanced_testcase {
             'component' => 'mod_adaptivequiz', 'status' => 0, 'endtime' => null, 'json' => $json,
             'timecreated' => $now, 'timemodified' => $now,
         ]);
+        // Issue #128: the attempt's progress - without it no scale counts as measured.
+        $this->setAdminUser();
+        local_catquiz_measured_progress((int) $adaptiveattemptid, [5 => 1]);
 
         // Capture the pre-attempt value (0.55) on the attempt's progress. No
         // valid attempt-scale history exists for the scale.

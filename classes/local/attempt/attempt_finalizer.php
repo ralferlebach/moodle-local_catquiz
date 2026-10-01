@@ -233,6 +233,15 @@ final class attempt_finalizer {
         // second finalize() return early, so an attempt is announced once.
         self::announce_completion($catattempt, $adaptiveattemptid, $finishedat, $result->is_valid());
 
+        // Issue #129: enrolment on every way a test ends, once - not when the result page is built,
+        // which may never happen. Only scales that route (valid, measured, selected) enrol anyone;
+        // an invalid result enrols nobody.
+        try {
+            attempt_enrolment::enrol($adaptiveattemptid);
+        } catch (\Throwable $e) {
+            debugging('Enrolment after the attempt failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
         return true;
     }
 

@@ -19,6 +19,11 @@ namespace local_catquiz\local\attempt;
 use advanced_testcase;
 use local_catquiz\catquiz;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/measured_progress.php');
+
 /**
  * The finalizer files scale results under the CAT attempt, not under the attempt of the component.
  *
@@ -70,6 +75,9 @@ final class finalizer_attempt_reference_test extends advanced_testcase {
             'endtime' => null, 'json' => $json, 'timecreated' => $now, 'timemodified' => $now,
         ]);
 
+        // Issue #128: the attempt's progress - without it no scale counts as measured.
+        $this->setAdminUser();
+        local_catquiz_measured_progress(self::COMPONENTATTEMPT, [5 => 3]);
         return [self::COMPONENTATTEMPT, $catid];
     }
 
@@ -158,6 +166,7 @@ final class finalizer_attempt_reference_test extends advanced_testcase {
                 'se' => [5 => 0.25]]),
             'timecreated' => $now, 'timemodified' => $now,
         ]);
+        local_catquiz_measured_progress(self::COMPONENTATTEMPT + 1, [5 => 3]);
         attempt_finalizer::finalize(self::COMPONENTATTEMPT + 1, $now + 5, 'reason');
 
         $this->assertTrue($DB->record_exists('local_catquiz_personparams', ['attemptid' => $catid]));

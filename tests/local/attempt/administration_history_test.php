@@ -289,11 +289,12 @@ final class administration_history_test extends advanced_testcase {
         $progress = \local_catquiz\teststrategy\progress::load($attemptid, 'mod_adaptivequiz', 9, (object) []);
         $played = [];
         foreach (['a', 'b'] as $key) {
-            $played[$ids[$key]] = (object) ['id' => $ids[$key], 'catscaleid' => 5, 'is_pilot' => false];
+            $played[$ids[$key]] = (object) ['id' => $ids[$key], 'catscaleid' => 5, 'is_pilot' => false, 'fisherinformation' => []];
         }
         foreach (
             ['responses' => array_map(fn($q) => ['questionid' => $q->id, 'fraction' => 1.0], $played),
-                'playedquestions' => $played, 'playedquestionsbyscale' => [5 => $played]] as $name => $value
+                'playedquestions' => $played, 'lastquestion' => end($played) ?: null,
+                'playedquestionsbyscale' => [5 => $played]] as $name => $value
         ) {
             $property = new \ReflectionProperty($progress, $name);
             $property->setAccessible(true);
