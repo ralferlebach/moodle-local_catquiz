@@ -119,6 +119,12 @@ class classicalcat extends strategy {
         // If Fraction is 1 (all answers correct) or 0 (all answers wrong) mark abilities as estimated.
         $estimated = $feedbacksettings->fraction == 1 || $feedbacksettings->fraction == 0;
         $rootscaleid = $feedbackdata['catscaleid'];
+        // Minimum N and maximum standard error are prerequisites of a valid result, here as in every
+        // other strategy; a scale that misses them is excluded. Maximum N and minimum standard error
+        // are stopping criteria of the test and play no part in validity. Without a configured
+        // limit both filters leave every scale as it is.
+        $personabilities = $feedbacksettings->filter_nminscale($personabilities, $feedbackdata);
+        $personabilities = $feedbacksettings->filter_semax($personabilities, $feedbackdata);
         foreach ($personabilities as $scaleid => $abilitiesarray) {
             $personabilities[$scaleid]['toreport'] = true;
             if ($estimated) {
