@@ -178,9 +178,11 @@ class feedback_helper {
         $nbyscale = [];
         if (isset($feedbackdata['progress']) && $feedbackdata['progress'] instanceof progress) {
             foreach (array_keys($personabilities) as $scaleid) {
-                $nbyscale[(int) $scaleid] = count(
-                    $feedbackdata['progress']->get_playedquestions(true, (int) $scaleid)
-                );
+                // The authoritative N (issue #117): productive items answered in this attempt - the
+                // same count the validator uses at finalisation. Played questions include items shown
+                // but not answered and pilot items, and a scale carried over from an earlier attempt
+                // but not measured in this one would look measured.
+                $nbyscale[(int) $scaleid] = $feedbackdata['progress']->get_num_answered_productive_questions((int) $scaleid);
             }
         }
 
@@ -194,15 +196,16 @@ class feedback_helper {
     }
 
     /**
-     * Shows whether a scale may be displayed in the feedback.
+     * The one predicate for scale-specific written feedback (issue #117).
      *
-     * A scale is displayed when it is meant to be reported AND its measurement is
-     * statistically sound. Both conditions come from the central result object, so
-     * display and validity stay in step (issue #7).
+     * A scale is reported in writing when the strategy marks it toreport, its reporting is switched
+     * on in the quiz settings and it is not hidden (together: reportable), it was measured in this
+     * attempt, and it meets the statistical criteria. Whether it is the primary scale plays no part:
+     * a strategy that reports several scales reports every one of them. This is not the completion
+     * rule - that one asks for the primary scale (attempt_result::is_valid()).
      *
      * @param attempt_result $result
      * @param int $scaleid
-     *
      * @return bool
      */
     public static function is_displayable(attempt_result $result, int $scaleid): bool {
@@ -210,7 +213,7 @@ class feedback_helper {
         if ($scale === null) {
             return false;
         }
-        return $scale->reportable && $scale->statisticallyvalid;
+        return $scale->reportable && $scale->statisticallyvalid && $scale->measuredincurrentattempt;
     }
 
     /**
