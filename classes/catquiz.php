@@ -2656,6 +2656,13 @@ class catquiz {
         // Ensure there is only one row per attempt.
         $existingrecord = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptdata['attemptid']]);
         if ($existingrecord) {
+            // The enrolment message written at finalisation (issue #129) belongs to the attempt, not to
+            // the feedback data being saved; a save after finalisation must not drop it.
+            $previous = json_decode((string) ($existingrecord->json ?? ''), true);
+            if (is_array($previous) && isset($previous['enrolmentmessage']) && !isset($attemptdata['enrolmentmessage'])) {
+                $attemptdata['enrolmentmessage'] = $previous['enrolmentmessage'];
+                $data->json = json_encode($attemptdata);
+            }
             $data->id = $existingrecord->id;
             // Preserve the original creation time and never touch the
             // end time on update. The end time is owned by attempt_finalizer.
@@ -2861,15 +2868,25 @@ class catquiz {
      * @param array $quizsettings
      * @param array $coursestoenrol
      * @param array $groupstoenrol
+     * @param int|null $userid The person whose attempt it is; defaults to the current user.
+     * @param int|null $courseid The course of the activity; defaults to $COURSE.
      *
      * @return string
      */
     public static function enrol_user(
         array $quizsettings,
         array $coursestoenrol,
-        array $groupstoenrol
+        array $groupstoenrol,
+        ?int $userid = null,
+        ?int $courseid = null
     ): string {
-        global $USER;
+        global $USER, $COURSE;
+
+        // The person whose attempt it is, in the course of the activity (issue #129). At
+        // finalisation the current user may be someone else - a teacher closing the attempt, or the
+        // administrator running the time-limit task - and $COURSE the site.
+        $userid = $userid ?? (int) $USER->id;
+        $courseid = $courseid ?? (int) $COURSE->id;
 
         /* Issue #130: every routing scale exactly once. This used to loop over the scales and hand
            the whole map to a function that looped over it again; the inner result replaced the
@@ -2879,9 +2896,10 @@ class catquiz {
             $entries = self::enrol_and_create_message_array(
                 $coursestoenrol[$catscaleid] ?? [],
                 $groupstoenrol[$catscaleid] ?? [],
-                $quizsettings['name'],
+                (string) ($quizsettings['name'] ?? ''),
                 (int) $catscaleid,
-                (int) $USER->id
+                $userid,
+                $courseid
             );
             array_push($enrolmentarray['course'], ...($entries['course'] ?? []));
             array_push($enrolmentarray['group'], ...($entries['group'] ?? []));
@@ -2893,7 +2911,7 @@ class catquiz {
             return "";
         }
         messages::send_html_message(
-            $USER->id,
+            $userid,
             $enrolementstrings['messagetitle'] ?? "",
             $enrolementstrings['messagebody'] ?? "",
             'enrolmentfeedback'
@@ -2914,6 +2932,7 @@ class catquiz {
      * @param string $testname
      * @param int $catscaleid The scale being processed - and the one named in events and messages.
      * @param int $userid
+     * @param int|null $courseid The course of the activity; its groups are joined too. Defaults to $COURSE.
      * @return array Lines for the message: 'course' and 'group', each a list.
      */
     public static function enrol_and_create_message_array(
@@ -2921,9 +2940,12 @@ class catquiz {
         array $groups,
         string $testname,
         int $catscaleid,
-        int $userid
+        int $userid,
+        ?int $courseid = null
     ): array {
         global $DB, $COURSE;
+
+        $homecourseid = $courseid ?? (int) $COURSE->id;
 
         try {
             $catscale = catscale::return_catscale_object($catscaleid);
@@ -2936,14 +2958,14 @@ class catquiz {
 
         $courseids = array_values(array_unique(array_merge(
             array_map('intval', $coursedata['course_ids'] ?? []),
-            [(int) $COURSE->id]
+            [$homecourseid]
         )));
         foreach ($courseids as $courseid) {
             $course = get_course($courseid);
             $context = \context_course::instance($courseid);
             $courseurl = (new moodle_url('/course/view.php', ['id' => $courseid]))->out();
 
-            if ($courseid !== (int) $COURSE->id && !is_enrolled($context, $userid)) {
+            if ($courseid !== $homecourseid && !is_enrolled($context, $userid)) {
                 if (enrol_try_internal_enrol($courseid, $userid, $rolestudent->id)) {
                     $line = [
                         'testname' => $testname,

@@ -75,7 +75,7 @@ final class feedback_all_valid_scales_test extends advanced_testcase {
         $this->resetAfterTest();
 
         $abilities = $this->abilities_of_attempt_12357();
-        $result = attempt_result_validator::from_personabilities($abilities);
+        $result = attempt_result_validator::from_personabilities($abilities, [], array_fill_keys(array_keys($abilities), 1));
 
         $eligible = [];
         foreach (array_keys($abilities) as $scaleid) {
@@ -107,7 +107,7 @@ final class feedback_all_valid_scales_test extends advanced_testcase {
         $this->resetAfterTest();
 
         $abilities = $this->abilities_of_attempt_12357();
-        $result = attempt_result_validator::from_personabilities($abilities);
+        $result = attempt_result_validator::from_personabilities($abilities, [], array_fill_keys(array_keys($abilities), 1));
 
         $primary = [];
         foreach (array_keys($abilities) as $scaleid) {
@@ -140,7 +140,7 @@ final class feedback_all_valid_scales_test extends advanced_testcase {
             'excluded' => true,
         ];
 
-        $result = attempt_result_validator::from_personabilities($abilities);
+        $result = attempt_result_validator::from_personabilities($abilities, [], array_fill_keys(array_keys($abilities), 1));
 
         $this->assertFalse(
             feedback_helper::is_feedback_eligible($result, 123),

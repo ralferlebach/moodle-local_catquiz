@@ -71,7 +71,8 @@ final class attemptfeedback_test extends advanced_testcase {
         // Since issue #129 the candidates come from the final result of the attempt
         // (enrolment_routing_test). Here they are derived from the data set, so these cases keep
         // testing what they are about: which range and which courses or groups a score leads to.
-        $reportable = feedback_helper::get_reportable_scales($feedbackdata['personabilities_abilities'] ?? []);
+        $abilities = $feedbackdata['personabilities_abilities'] ?? [];
+        $reportable = feedback_helper::get_reportable_scales($abilities, array_fill_keys(array_keys($abilities), 1));
         $attemptfeedback
             ->method('get_routing_scores')
             ->willReturn(array_map(fn($a) => (float) $a['value'], $reportable));
@@ -198,7 +199,8 @@ final class attemptfeedback_test extends advanced_testcase {
         // Since issue #129 the candidates come from the final result of the attempt
         // (enrolment_routing_test). Here they are derived from the data set, so these cases keep
         // testing what they are about: which range and which courses or groups a score leads to.
-        $reportable = feedback_helper::get_reportable_scales($feedbackdata['personabilities_abilities'] ?? []);
+        $abilities = $feedbackdata['personabilities_abilities'] ?? [];
+        $reportable = feedback_helper::get_reportable_scales($abilities, array_fill_keys(array_keys($abilities), 1));
         $attemptfeedback
             ->method('get_routing_scores')
             ->willReturn(array_map(fn($a) => (float) $a['value'], $reportable));

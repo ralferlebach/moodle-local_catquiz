@@ -451,21 +451,9 @@ class attemptfeedback implements renderable, templatable {
      * Triggers tasks when attempt finished
      */
     public function attempt_finished_tasks() {
-        global $USER;
-
-        $quizsettings = $this->get_quiz_settings();
-        $coursestoenrol = $this->get_courses_to_enrol();
-        $groupstoenrol = $this->get_groups_to_enrol();
-        $enrolementmsg = catquiz::enrol_user((array) $quizsettings, $coursestoenrol, $groupstoenrol);
-        $courseandinstance = catquiz::return_course_and_instance_id(
-            $quizsettings->modulename,
-            $this->attemptid
-        );
-
-        // No attempt_completed here (issue #122): this runs when the result page is built, and a page
-        // view is not the completion of a test. The event is triggered by attempt_finalizer, once,
-        // whether or not the page is ever opened.
-        return $enrolementmsg;
+        // Enrolment happens when the attempt is finalised (issue #129), on every way a test can end -
+        // the result page may never be opened. Here the message of that enrolment is only shown.
+        return \local_catquiz\local\attempt\attempt_enrolment::stored_message((int) $this->attemptid);
     }
 
     /**
@@ -525,11 +513,19 @@ class attemptfeedback implements renderable, templatable {
      * @return array
      */
     public function get_courses_to_enrol(): array {
-        $quizsettings = (array) $this->get_quiz_settings();
         // Issue #129: the candidates come from the final per-scale result of the attempt, the same
-        // for courses and groups - not from the data of one feedback generator, which a strategy
-        // may not register at all (CAT has no personabilities generator and enrolled nobody).
-        $candidatescales = $this->get_routing_scores();
+        // for courses and groups - not from the data of one feedback generator.
+        return self::courses_to_enrol((array) $this->get_quiz_settings(), $this->get_routing_scores());
+    }
+
+    /**
+     * Maps routing scores to courses via the ranges of the quiz settings.
+     *
+     * @param array $quizsettings The quiz settings of the attempt.
+     * @param array $candidatescales Score by scale id, as routing_scores() returns them.
+     * @return array
+     */
+    public static function courses_to_enrol(array $quizsettings, array $candidatescales): array {
 
         $coursestoenrol = [];
         foreach ($candidatescales as $scaleid => $score) {
@@ -572,11 +568,19 @@ class attemptfeedback implements renderable, templatable {
      * @return array
      */
     public function get_groups_to_enrol(): array {
-        $quizsettings = (array) $this->get_quiz_settings();
         // Issue #129: the candidates come from the final per-scale result of the attempt, the same
-        // for courses and groups - not from the data of one feedback generator, which a strategy
-        // may not register at all (CAT has no personabilities generator and enrolled nobody).
-        $candidatescales = $this->get_routing_scores();
+        // for courses and groups - not from the data of one feedback generator.
+        return self::groups_to_enrol((array) $this->get_quiz_settings(), $this->get_routing_scores());
+    }
+
+    /**
+     * Maps routing scores to groups via the ranges of the quiz settings.
+     *
+     * @param array $quizsettings The quiz settings of the attempt.
+     * @param array $candidatescales Score by scale id, as routing_scores() returns them.
+     * @return array
+     */
+    public static function groups_to_enrol(array $quizsettings, array $candidatescales): array {
 
         // Check if there is a course associated with that value and if so, return it.
         $groupstoenrol = [];
@@ -627,7 +631,18 @@ class attemptfeedback implements renderable, templatable {
         // only ever sees the single central notice below. Teacher feedback is
         // still produced so teachers can inspect the (invalid) details.
         $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
-        $hasvalidresult = !(is_array($abilities) && !feedback_helper::has_reportable_result($abilities));
+        // With the per-scale N of this attempt (issue #128): without it every scale counted as measured.
+        $hasvalidresult = true;
+        if (is_array($abilities)) {
+            $adaptiveattemptid = (int) ($feedbackdata['attemptid'] ?? $this->attemptid ?? 0);
+            $catattemptid = $adaptiveattemptid ? catquiz::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz') : null;
+            $progress = $catattemptid === null ? null : progress::load_for_reading($catattemptid);
+            $hasvalidresult = feedback_helper::build_attempt_result(
+                $abilities,
+                ['se' => $feedbackdata['se'] ?? [], 'nbyscale' => $feedbackdata['nbyscale'] ?? []]
+                    + ($progress ? ['progress' => $progress] : [])
+            )->has_reportable_result();
+        }
 
         $context = [];
         foreach ($generators as $generator) {

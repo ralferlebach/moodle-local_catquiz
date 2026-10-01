@@ -126,7 +126,10 @@ final class attempt_result_validator {
 
             // Measured in the current attempt (vs. carry-over only).
             $n = array_key_exists($scaleid, $nbyscale) ? (int) $nbyscale[$scaleid] : null;
-            $measured = $n === null ? true : ($n > 0);
+            // Measured only when this attempt's N is known and positive (issue #128). An unknown N
+            // used to count as measured, so a caller that passed no counts made every scale -
+            // a value carried over from an earlier attempt included - look measured.
+            $measured = $n !== null && $n > 0;
             if (!$measured) {
                 $reasons[] = scale_result::REASON_NOT_MEASURED;
             }
@@ -197,9 +200,12 @@ final class attempt_result_validator {
            authoritative counter on progress now enforces both filters (Issue #7). */
         $nbyscale = [];
         $fractionbyscale = [];
-        if (!empty($catattempt->contextid)) {
+        // Read without cache, ownership check or a context id (issue #128): finalisation may run in a
+        // scheduled task, and a CAT attempt filed at the start has no context id yet. Without the
+        // progress, N stays unknown and no scale counts as measured.
+        $progress = progress::load_for_reading((int) $catattempt->id);
+        if ($progress !== null) {
             try {
-                $progress = progress::load($adaptiveattemptid, 'mod_adaptivequiz', (int) $catattempt->contextid);
                 foreach (array_keys($personabilities) as $scaleid) {
                     $nbyscale[(int) $scaleid] = $progress->get_num_answered_productive_questions((int) $scaleid);
 
