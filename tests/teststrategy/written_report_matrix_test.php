@@ -137,6 +137,7 @@ final class written_report_matrix_test extends advanced_testcase {
      */
     public static function strategies(): array {
         return [
+            'classical cat: every valid one' => [LOCAL_CATQUIZ_STRATEGY_CLASSIC, [100, 101, 102]],
             'fastest: root only' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, [100]],
             'relevant subscales: every valid one' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS, [100, 101, 102]],
             'all subscales: every valid one' => [LOCAL_CATQUIZ_STRATEGY_ALLSUBS, [100, 101, 102]],
@@ -163,30 +164,13 @@ final class written_report_matrix_test extends advanced_testcase {
     }
 
     /**
-     * Classical CAT: what is settled.
-     *
-     * It applies neither the minimum N nor the maximum standard error; whether it should is open.
-     * Settled is: valid scales are reported, a scale with reporting off and a scale not measured in
-     * this attempt are not.
-     */
-    public function test_classical_cat_reports_valid_scales_only_if_measured_and_enabled(): void {
-        $this->resetAfterTest();
-
-        $written = $this->written_scales(LOCAL_CATQUIZ_STRATEGY_CLASSIC);
-
-        foreach ([100, 101, 102] as $scaleid) {
-            $this->assertContains($scaleid, $written);
-        }
-        $this->assertNotContains(103, $written, 'Reporting switched off, yet reported.');
-        $this->assertNotContains(106, $written, 'Not measured in this attempt, yet reported.');
-    }
-    /**
      * What the detail tab shows per strategy (issue #118).
      *
      * @return array
      */
     public static function detail_tab(): array {
         return [
+            'classical cat' => [LOCAL_CATQUIZ_STRATEGY_CLASSIC, [100, 101, 102]],
             'fastest: root only' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, [100]],
             'relevant subscales' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS, [100, 101, 102]],
             'all subscales' => [LOCAL_CATQUIZ_STRATEGY_ALLSUBS, [100, 101, 102]],
