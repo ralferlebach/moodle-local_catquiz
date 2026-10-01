@@ -265,7 +265,9 @@ class feedbacksettings {
         $nminscale = $this->nminscale;
         if (!empty($nminscale)) {
             foreach ($personabilities as $scaleid => $array) {
-                $ninscale = count($progress->get_playedquestions(true, $scaleid));
+                // Productive items answered in this attempt (issue #117) - the N the validator uses.
+                // Played questions would count items shown but not answered, and pilot items.
+                $ninscale = $progress->get_num_answered_productive_questions((int) $scaleid);
                 if ($ninscale < $nminscale) {
                     $personabilities[$scaleid]['error']['nminscale'] = [
                         'nminscaledefined' => $nminscale,
