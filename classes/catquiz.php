@@ -2869,26 +2869,27 @@ class catquiz {
     ): string {
         global $USER;
 
-        // Filter for scales that are selected for enrolement.
-
-        $enrolementarray = [];
-
-        foreach ($coursestoenrol as $catscaleid => $data) {
-            $enrolementarray = self::enrol_and_create_message_array(
-                $coursestoenrol,
-                $groupstoenrol,
+        /* Issue #130: every routing scale exactly once. This used to loop over the scales and hand
+           the whole map to a function that looped over it again; the inner result replaced the
+           outer one on each pass. A scale that routes into groups only is a scale too. */
+        $enrolmentarray = ['course' => [], 'group' => []];
+        foreach (array_keys($coursestoenrol + $groupstoenrol) as $catscaleid) {
+            $entries = self::enrol_and_create_message_array(
+                $coursestoenrol[$catscaleid] ?? [],
+                $groupstoenrol[$catscaleid] ?? [],
                 $quizsettings['name'],
-                $catscaleid,
-                $USER->id
+                (int) $catscaleid,
+                (int) $USER->id
             );
+            array_push($enrolmentarray['course'], ...($entries['course'] ?? []));
+            array_push($enrolmentarray['group'], ...($entries['group'] ?? []));
         }
+        $enrolmentarray = array_filter($enrolmentarray);
 
-        $enrolementstrings = self::create_strings_for_enrolement_notification($enrolementarray);
-
+        $enrolementstrings = self::create_strings_for_enrolement_notification($enrolmentarray);
         if (empty($enrolementstrings['messagetitle']) && empty($enrolementstrings['messagebody'])) {
             return "";
         }
-
         messages::send_html_message(
             $USER->id,
             $enrolementstrings['messagetitle'] ?? "",
@@ -2899,20 +2900,23 @@ class catquiz {
     }
 
     /**
-     * Creates array with courses and groups to enrole to.
+     * Enrols the user for one routing scale and returns what to tell them.
      *
-     * @param array $coursestoenrol
-     * @param array $groupstoenrol
+     * One scale, its own courses and groups (issue #130). Courses are enrolled into, then the groups
+     * of this scale in those courses and in the current course; existing memberships are left alone
+     * and produce neither an event nor a message line. Events are triggered for every new
+     * membership; the message lines are returned only if the range of this scale asks for a message.
+     *
+     * @param array $coursedata The routing data of this scale: course_ids, range, show_message.
+     * @param array $groups Names of the groups of this scale.
      * @param string $testname
-     * @param int $catscaleid
+     * @param int $catscaleid The scale being processed - and the one named in events and messages.
      * @param int $userid
-     *
-     * @return array
-     *
+     * @return array Lines for the message: 'course' and 'group', each a list.
      */
     public static function enrol_and_create_message_array(
-        array $coursestoenrol,
-        array $groupstoenrol,
+        array $coursedata,
+        array $groups,
         string $testname,
         int $catscaleid,
         int $userid
@@ -2922,69 +2926,61 @@ class catquiz {
         try {
             $catscale = catscale::return_catscale_object($catscaleid);
         } catch (\Exception $e) {
-            $catscale = (object) ['name' => '']; // Create a dummy object.
+            $catscale = (object) ['name' => ''];
         }
-
+        $scalename = $catscale->name ?? '';
         $rolestudent = $DB->get_record('role', ['shortname' => 'student']);
-        $enrolmentarray = [];
-        $message = false;
-        foreach ($coursestoenrol as $catscaleid => $data) {
-            $message = $data['show_message'] ?? false;
-            $courseids = $data['course_ids'] ?? [];
-            array_push($courseids, $COURSE->id);
-            foreach ($courseids as $courseid) {
-                $context = \context_course::instance($courseid);
-                $course = get_course($courseid);
-                $url = new moodle_url('/course/view.php', ['id' => $courseid]);
+        $lines = ['course' => [], 'group' => []];
 
-                $coursedata = [];
-                $coursedata['testname'] = $testname;
-                $coursedata['coursename'] = $course->fullname ?? "";
-                $coursedata['coursesummary'] = $course->summary ?? "";
-                $coursedata['courseurl'] = $url->out() ?? "";
-                $coursedata['catscalename'] = $catscale->name ?? "";
+        $courseids = array_values(array_unique(array_merge(
+            array_map('intval', $coursedata['course_ids'] ?? []),
+            [(int) $COURSE->id]
+        )));
+        foreach ($courseids as $courseid) {
+            $course = get_course($courseid);
+            $context = \context_course::instance($courseid);
+            $courseurl = (new moodle_url('/course/view.php', ['id' => $courseid]))->out();
 
-                if (!is_enrolled($context, $userid) && !empty($course) && ($courseid != $COURSE->id)) {
-                    if (enrol_try_internal_enrol($courseid, $userid, $rolestudent->id)) {
-                        $enrolementarray['course'][] = $coursedata;
-                        self::course_enrolment_event($coursedata, $userid);
-                    }
+            if ($courseid !== (int) $COURSE->id && !is_enrolled($context, $userid)) {
+                if (enrol_try_internal_enrol($courseid, $userid, $rolestudent->id)) {
+                    $line = [
+                        'testname' => $testname,
+                        'coursename' => $course->fullname ?? '',
+                        'coursesummary' => $course->summary ?? '',
+                        'courseurl' => $courseurl,
+                        'catscalename' => $scalename,
+                    ];
+                    // This line used to go into $enrolementarray - a different variable from the one
+                    // returned - so no course enrolment ever reached the message.
+                    $lines['course'][] = $line;
+                    self::course_enrolment_event($line, $userid);
                 }
-                if (empty($groupstoenrol[$catscaleid])) {
+            }
+
+            if (!$groups) {
+                continue;
+            }
+            // Only groups that exist in the course are joined.
+            foreach (groups_get_all_groups($courseid) as $existinggroup) {
+                if (!in_array($existinggroup->name, $groups) || groups_is_member($existinggroup->id, $userid)) {
                     continue;
                 }
-                // Inscription only for existing groups.
-                $groupsofcourse = groups_get_all_groups($courseid);
-                foreach ($groupsofcourse as $existinggroup) {
-                    foreach ($groupstoenrol[$catscaleid] as $newgroup) {
-                        if ($existinggroup->name == $newgroup) {
-                            if (groups_is_member($existinggroup->id, $userid)) {
-                                continue;
-                            }
-                            $groupmember = groups_add_member($existinggroup->id, $userid);
-                            if ($groupmember) {
-                                $data = [];
-                                $data['testname'] = $testname;
-                                $data['groupname'] = $existinggroup->name;
-                                $data['groupdescription'] = $existinggroup->description ?? "";
-                                $data['coursename'] = $course->fullname ?? "";
-                                $url = new moodle_url('/course/view.php', ['id' => $course->id]);
-                                $data['courseurl'] = $url->out();
-                                $data['catscalename'] = $catscale->name ?? "";
-                                $enrolmentarray['group'][] = $data;
-                                self::group_enrolment_event($data, $userid);
-                            }
-                        }
-                    }
+                if (groups_add_member($existinggroup->id, $userid)) {
+                    $line = [
+                        'testname' => $testname,
+                        'groupname' => $existinggroup->name,
+                        'groupdescription' => $existinggroup->description ?? '',
+                        'coursename' => $course->fullname ?? '',
+                        'courseurl' => $courseurl,
+                        'catscalename' => $scalename,
+                    ];
+                    $lines['group'][] = $line;
+                    self::group_enrolment_event($line, $userid);
                 }
             }
         }
 
-        if (!$message) {
-            return [];
-        }
-
-        return $enrolmentarray;
+        return empty($coursedata['show_message']) ? [] : array_filter($lines);
     }
 
     /**

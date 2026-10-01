@@ -24,6 +24,7 @@ use dml_exception;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
+use local_catquiz\local\result\attempt_result_validator;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbacksettings;
@@ -468,6 +469,42 @@ class attemptfeedback implements renderable, templatable {
     }
 
     /**
+     * The scales that route a participant into courses and groups, with the score that decides the range.
+     *
+     * Read from the final per-scale result of the attempt (attempt_result_validator::validate), the
+     * source finalisation uses: N from productive answers, and the abilities of whichever feedback
+     * generator the strategy registers. A scale routes when the written feedback would report it -
+     * selected by the strategy (toreport), reporting enabled, not hidden, measured in this attempt and
+     * statistically valid (feedback_helper::is_displayable). Not scale_result::$valid: that one is
+     * bound to the primary scale and serves completion; Relevant, All and Classical route non-primary
+     * scales too.
+     *
+     * @return array Score by scale id.
+     */
+    public function get_routing_scores(): array {
+        return self::routing_scores((int) $this->attemptid);
+    }
+
+    /**
+     * The routing scores of an attempt; see get_routing_scores().
+     *
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id.
+     * @return array Score by scale id.
+     */
+    public static function routing_scores(int $adaptiveattemptid): array {
+        $result = attempt_result_validator::validate($adaptiveattemptid);
+        $scores = [];
+        foreach ($result->get_scale_results() as $scaleid => $scale) {
+            if ($scale->score === null || !feedback_helper::is_displayable($result, (int) $scaleid)) {
+                continue;
+            }
+            $scores[(int) $scaleid] = (float) $scale->score;
+        }
+
+        return $scores;
+    }
+
+    /**
      * Returns the courses that the user shoule be enrolled to, indexed by scale ID.
      *
      * This depends on both the quiz settings, that contain the information about which ranges in which scales should trigger an
@@ -489,47 +526,37 @@ class attemptfeedback implements renderable, templatable {
      */
     public function get_courses_to_enrol(): array {
         $quizsettings = (array) $this->get_quiz_settings();
-        $feedbackdata = $this->load_feedbackdata();
-
-        if (
-            !array_key_exists('personabilities_abilities', $feedbackdata)
-            || !$feedbackdata['personabilities_abilities']
-        ) {
-            return [];
-        }
-
-        // Only reportable scales (toreport, not excluded/hidden) may
-        // trigger an automatic enrolment. An invalid result has no reportable
-        // scale, so no enrolment happens.
-        $candidatescales = feedback_helper::get_reportable_scales(
-            $feedbackdata['personabilities_abilities']
-        );
+        // Issue #129: the candidates come from the final per-scale result of the attempt, the same
+        // for courses and groups - not from the data of one feedback generator, which a strategy
+        // may not register at all (CAT has no personabilities generator and enrolled nobody).
+        $candidatescales = $this->get_routing_scores();
 
         $coursestoenrol = [];
-        foreach ($candidatescales as $scaleid => $data) {
+        foreach ($candidatescales as $scaleid => $score) {
             $coursestoenrol[$scaleid] = [
                 'course_ids' => [],
             ];
             // A score falls into exactly one range (half-open), so the
             // enrolment for a scale is driven by that single range instead of
             // every range whose inclusive bounds contain the value.
-            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
+            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $score);
             if ($i === null) {
                 continue;
             }
+            // Range and message setting are known before any course: a scale that routes into groups
+            // only has them too, and its message would otherwise never be shown (issue #130).
+            $coursestoenrol[$scaleid] = [
+                'range' => $i,
+                'show_message' => !empty($quizsettings["enrolment_message_checkbox_" . $scaleid . "_" . $i]),
+                'course_ids' => [],
+            ];
             if (!($courses = $quizsettings['catquiz_courses_' . $scaleid . '_' . $i] ?? [])) {
                 continue;
             }
             // The first element at array key 0 is a dummy value to
             // display some message like "please select course" in the
             // form and has a course ID of 0.
-            $courses = array_filter($courses, fn ($v) => $v != 0);
-            $showenrolmentmessage = !empty($quizsettings["enrolment_message_checkbox_" . $scaleid . "_" . $i]);
-            $coursestoenrol[$scaleid] = [
-                'range' => $i,
-                'show_message' => $showenrolmentmessage,
-                'course_ids' => $courses,
-            ];
+            $coursestoenrol[$scaleid]['course_ids'] = array_filter($courses, fn ($v) => $v != 0);
         }
         return $coursestoenrol;
     }
@@ -546,28 +573,17 @@ class attemptfeedback implements renderable, templatable {
      */
     public function get_groups_to_enrol(): array {
         $quizsettings = (array) $this->get_quiz_settings();
-        $feedbackdata = $this->load_feedbackdata();
-
-        if (
-            !array_key_exists('personabilities_abilities', $feedbackdata)
-            || !$feedbackdata['personabilities_abilities']
-        ) {
-            return [];
-        }
-
-        // Only reportable scales (toreport, not excluded/hidden) may
-        // trigger an automatic enrolment. An invalid result has no reportable
-        // scale, so no enrolment happens.
-        $candidatescales = feedback_helper::get_reportable_scales(
-            $feedbackdata['personabilities_abilities']
-        );
+        // Issue #129: the candidates come from the final per-scale result of the attempt, the same
+        // for courses and groups - not from the data of one feedback generator, which a strategy
+        // may not register at all (CAT has no personabilities generator and enrolled nobody).
+        $candidatescales = $this->get_routing_scores();
 
         // Check if there is a course associated with that value and if so, return it.
         $groupstoenrol = [];
-        foreach ($candidatescales as $scaleid => $data) {
+        foreach ($candidatescales as $scaleid => $score) {
             $groupstoenrol[$scaleid] = [];
             // A score falls into exactly one range (half-open).
-            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $data['value']);
+            $i = feedback_helper::get_feedback_range_index($quizsettings, (int) $scaleid, (float) $score);
             if ($i === null) {
                 continue;
             }
