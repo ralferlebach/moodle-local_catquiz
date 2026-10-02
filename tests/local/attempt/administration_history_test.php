@@ -317,4 +317,27 @@ final class administration_history_test extends advanced_testcase {
         $this->assertTrue($result->get_scale_result(5)->statisticallyvalid);
         $this->assertSame(2, $result->get_scale_result(5)->n, 'The duplicate raised N.');
     }
+    /**
+     * A reload without a new answer changes nothing in the progress (issue #122).
+     *
+     * On a reload the last response of the attempt is the one already recorded. It must neither be
+     * counted again nor replace what is there.
+     */
+    public function test_a_reload_without_a_new_answer_changes_nothing(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        [$attemptid, $ids] = $this->attempt_with_slots(['a']);
+
+        $progress = \local_catquiz\teststrategy\progress::load($attemptid, 'mod_adaptivequiz', 9, (object) []);
+        $responses = new \ReflectionProperty($progress, 'responses');
+        $responses->setAccessible(true);
+        $recorded = [$ids['a'] => ['questionid' => $ids['a'], 'fraction' => 1.0]];
+        $responses->setValue($progress, $recorded);
+
+        // The page is loaded again; no answer was given since.
+        $progress->update_cached_responses();
+        $progress->update_cached_responses();
+
+        $this->assertSame($recorded, $responses->getValue($progress));
+    }
 }

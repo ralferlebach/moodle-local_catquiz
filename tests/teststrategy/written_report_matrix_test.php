@@ -32,7 +32,9 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * runs, for each of the six strategies, on one set of scales:
  *
  *  100 root; 101 and 102 valid; 103 reporting switched off; 104 below the minimum N;
- *  105 standard error above the maximum; 106 not measured in this attempt.
+ *  105 standard error above the maximum; 106 not measured in this attempt, with a value above
+ *  every valid one; 107 not measured either, with a value below every valid one (issue #128):
+ *  neither may be picked as the greatest strength or the lowest skill gap.
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -41,13 +43,13 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
 #[\PHPUnit\Framework\Attributes\CoversClass(feedback_helper::class)]
 final class written_report_matrix_test extends advanced_testcase {
     /** @var array Ability per scale; distinct, so lowest and highest are unambiguous. */
-    private const ABILITY = [100 => 0.2, 101 => -1.0, 102 => 1.5, 103 => -2.0, 104 => -3.0, 105 => 3.0, 106 => 2.5];
+    private const ABILITY = [100 => 0.2, 101 => -1.0, 102 => 1.5, 103 => -2.0, 104 => -3.0, 105 => 3.0, 106 => 2.5, 107 => -5.0];
 
     /** @var array Standard error per scale. */
-    private const SE = [100 => 0.2, 101 => 0.3, 102 => 0.3, 103 => 0.3, 104 => 0.3, 105 => 0.9, 106 => 0.3];
+    private const SE = [100 => 0.2, 101 => 0.3, 102 => 0.3, 103 => 0.3, 104 => 0.3, 105 => 0.9, 106 => 0.3, 107 => 0.3];
 
     /** @var array Productive answered items per scale in this attempt. */
-    private const N = [101 => 3, 102 => 3, 103 => 3, 104 => 1, 105 => 3, 106 => 0];
+    private const N = [101 => 3, 102 => 3, 103 => 3, 104 => 1, 105 => 3, 106 => 0, 107 => 0];
 
     /**
      * @var array Items shown but not answered. Counted as played, 104 and 106 would reach the
@@ -62,9 +64,15 @@ final class written_report_matrix_test extends advanced_testcase {
      * @param string $predicate The feedback_helper predicate: is_displayable (written) or
      *      is_feedback_eligible (detail tab).
      * @param int $nmintest Minimum number of items for the whole test.
+     * @param int $nminscale Minimum number of items per scale; 0 for none.
      * @return int[]
      */
-    private function written_scales(int $strategyid, string $predicate = 'is_displayable', int $nmintest = 1): array {
+    private function written_scales(
+        int $strategyid,
+        string $predicate = 'is_displayable',
+        int $nmintest = 1,
+        int $nminscale = 2
+    ): array {
         $this->setAdminUser();
 
         // The progress of an attempt that answered these items, each scale its own questions; the
@@ -113,7 +121,7 @@ final class written_report_matrix_test extends advanced_testcase {
         }
 
         $settings = new feedbacksettings($strategyid);
-        $settings->nminscale = 2;
+        $settings->nminscale = $nminscale;
         $settings->nmintest = $nmintest;
         $settings->semax = 0.5;
         $settings->fraction = 0.6;
@@ -216,5 +224,24 @@ final class written_report_matrix_test extends advanced_testcase {
         $this->resetAfterTest();
 
         $this->assertSame([], $this->written_scales(LOCAL_CATQUIZ_STRATEGY_FASTEST, 'is_displayable', 14));
+    }
+    /**
+     * Without a minimum N, lowest and highest still choose among measured scales only (issue #128).
+     *
+     * 106 and 107 were not measured in this attempt; their values lie above and below every valid
+     * one. With no minimum N configured nothing else excludes them - choosing one of them would
+     * leave the attempt without any reported scale.
+     */
+    public function test_selection_ignores_unmeasured_scales_without_a_minimum(): void {
+        $this->resetAfterTest();
+
+        // Without a minimum N, 104 (one answered item, -3.0) is the lowest measured scale.
+        $this->assertSame([104], $this->written_scales(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'is_displayable', 1, 0));
+        \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+        global $DB;
+        $DB->delete_records('local_catquiz_progress');
+        $DB->delete_records('local_catquiz_attempts');
+        $DB->delete_records('adaptivequiz_attempt');
+        $this->assertSame([102], $this->written_scales(LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB, 'is_displayable', 1, 0));
     }
 }
