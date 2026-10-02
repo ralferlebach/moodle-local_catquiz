@@ -94,6 +94,31 @@ final class provider_test extends provider_testcase {
     }
 
     /**
+     * Enrolled in two courses, with an attempt in one: named for that course only (issue #100).
+     *
+     * Enrolment is not the source of the data. A person enrolled in both courses whose CAT data
+     * belongs to one of them must not appear in the other.
+     */
+    public function test_overlapping_enrolment_names_the_user_only_where_the_data_is(): void {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $withattempt = $generator->create_course();
+        $without = $generator->create_course();
+        $user = $generator->create_user();
+        $generator->enrol_user($user->id, $withattempt->id, 'student');
+        $generator->enrol_user($user->id, $without->id, 'student');
+        $this->record_attempt((int) $withattempt->id, (int) $user->id);
+
+        $here = new userlist(context_course::instance($withattempt->id), 'local_catquiz');
+        provider::get_users_in_context($here);
+        $there = new userlist(context_course::instance($without->id), 'local_catquiz');
+        provider::get_users_in_context($there);
+
+        $this->assertSame([(int) $user->id], array_map('intval', $here->get_userids()));
+        $this->assertSame([], $there->get_userids(), 'Named in a course where no CAT data of theirs exists.');
+    }
+
+    /**
      * A course without attempts names nobody.
      */
     public function test_course_without_attempts_names_nobody(): void {

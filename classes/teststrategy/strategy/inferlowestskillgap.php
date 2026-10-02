@@ -138,6 +138,8 @@ class inferlowestskillgap extends strategy {
             return $returnarray;
         }
         // Exclude scales that don't meet minimum of items required in quizsettings.
+        // Only measured scales take part in the choice (issue #128).
+        $personabilities = $feedbacksettings->filter_unmeasured($personabilities, $feedbackdata);
         $personabilities = $feedbacksettings->filter_nminscale($personabilities, $feedbackdata);
         // Exclude scales where standarderror is not in range.
         $personabilities = $feedbacksettings->filter_semax($personabilities, $feedbackdata);

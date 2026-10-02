@@ -105,6 +105,45 @@ final class enrolment_routing_test extends advanced_testcase {
     }
 
     /**
+     * Two scales, each with its own new group: both groups joined once, each named after its scale.
+     */
+    public function test_two_scales_with_a_group_each(): void {
+        global $COURSE;
+
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $home = $this->getDataGenerator()->create_course();
+        $this->getDataGenerator()->enrol_user($user->id, $home->id, 'student');
+        $COURSE = get_course($home->id);
+        $this->getDataGenerator()->create_group(['courseid' => $home->id, 'name' => 'alpha']);
+        $this->getDataGenerator()->create_group(['courseid' => $home->id, 'name' => 'beta']);
+        $scalea = $this->scale('Scale A');
+        $scaleb = $this->scale('Scale B');
+
+        $courses = [
+            $scalea => ['range' => 1, 'show_message' => true, 'course_ids' => []],
+            $scaleb => ['range' => 1, 'show_message' => true, 'course_ids' => []],
+        ];
+        $groups = [$scalea => ['alpha'], $scaleb => ['beta']];
+
+        $this->redirectMessages();
+        $sink = $this->redirectEvents();
+        $message = catquiz::enrol_user(['name' => 'Test'], $courses, $groups);
+        $events = array_values(array_filter($sink->get_events(), fn($e) => $e instanceof usertogroup_enroled));
+        $sink->close();
+
+        $byname = [];
+        foreach ($events as $event) {
+            $byname[$event->other['groupname']] = $event->other['catscalename'];
+        }
+        ksort($byname);
+        $this->assertSame(['alpha' => 'Scale A', 'beta' => 'Scale B'], $byname, 'Each group once, under its own scale.');
+        $this->assertStringContainsString('alpha', $message);
+        $this->assertStringContainsString('beta', $message);
+    }
+
+    /**
      * A strategy without the personabilities generator still routes its valid root (CAT).
      *
      * Not routed: a scale the strategy excluded, and one it selected but that was not measured in

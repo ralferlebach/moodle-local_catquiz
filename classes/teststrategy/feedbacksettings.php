@@ -247,6 +247,35 @@ class feedbacksettings {
     }
 
     /**
+     * Excludes scales without a productive answer in this attempt (issue #128).
+     *
+     * A value carried over from an earlier attempt is not a result of this one. Strategies that
+     * pick one scale - the lowest skill gap, the greatest strength - must choose among measured
+     * scales only; otherwise an unmeasured value can win the choice and the attempt ends up with
+     * no reported scale at all. Independent of any minimum N.
+     *
+     * @param array $personabilities
+     * @param array $feedbackdata
+     * @return array
+     */
+    public function filter_unmeasured(array $personabilities, array $feedbackdata): array {
+        $progress = $feedbackdata['progress'] ?? null;
+        if (!$progress instanceof progress) {
+            $progress = progress::load(
+                $feedbackdata['attemptid'],
+                'mod_adaptivequiz',
+                $feedbackdata['contextid']
+            );
+        }
+        foreach (array_keys($personabilities) as $scaleid) {
+            if ($progress->get_num_answered_productive_questions((int) $scaleid) === 0) {
+                $personabilities[$scaleid]['excluded'] = true;
+            }
+        }
+        return $personabilities;
+    }
+
+    /**
      * Exclude scales that don't meet minimum of items required in quizsettings.
      *
      * @param array $personabilities
