@@ -347,6 +347,7 @@ $string['estimatedbecause:allanswersincorrect'] = 'Leider haben Sie alle Fragen 
     errechnet werden und wurden geschätzt.';
 $string['estimatedbecause:default'] = 'Ihre Ergebnisse konnten nicht zuverlässig errechnet werden und wurden geschätzt.';
 $string['eventname'] = 'Name des Ereignisses';
+$string['eventprogressintegrityfailed'] = 'Gespeicherter Teststand abgelehnt';
 $string['eventtime'] = 'Zeitpunkt des Ereignisses';
 $string['exceededmaxattempttime'] = 'Die erlaubte Zeit für den Versuch wurde überschritten';
 $string['executed_calculation_description'] = 'Es wurde eine Berechnung der CAT-Skala „{$a->catscalename}“ mit der ID {$a->catscaleid} im Kontext
@@ -680,6 +681,7 @@ $string['privacy:metadata:local_catquiz_subscriptions:timecreated'] = 'Der Zeitp
 $string['privacy:metadata:local_catquiz_subscriptions:timemodified'] = 'Der Zeitpunkt, zu dem das Abonnement geändert wurde.';
 $string['privacy:metadata:local_catquiz_subscriptions:userid'] = 'Die ID des Benutzers.';
 $string['progress'] = 'Entwicklung Fähigkeits-Wert in „{$a}“';
+$string['progressintegrityerror'] = 'Dieser Test kann nicht fortgesetzt werden: sein gespeicherter Stand gehört nicht zu diesem Versuch. Bitte wenden Sie sich an Ihre Lehrkraft oder die Administration.';
 $string['progressretention'] = 'Aufbewahrung des Attempt-Fortschritts';
 $string['progressretention_default'] = 'Standard der Website übernehmen';
 $string['progressretention_desc'] = 'Steuert, wie lange der Arbeitszustand eines Versuchs aufbewahrt wird und wie viel davon. „Datensparsam“ löscht ihn nach Abschluss und behält keine Antwortdaten. „Endzustand“ behält den letzten Wert je Skala. „Verlauf“ protokolliert zusätzlich die Fähigkeitsschätzung jedes Schritts – das ist von den dreien die personenbezogenste Stufe.';

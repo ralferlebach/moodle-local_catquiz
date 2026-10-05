@@ -101,13 +101,14 @@ final class progress_viewer_test extends advanced_testcase {
         $this->setUser($student);
         \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
 
-        $progress = progress::load(88002, 'mod_adaptivequiz', 9, (object) []);
-        $this->assertDebuggingCalled();
-
-        $this->assertNotEquals(
-            $progressid,
-            $progress->get_id(),
-            'A row of another person attached to this attempt was taken over.'
-        );
+        // Issue #96: fail closed - a controlled error instead of a fresh progress that would collide
+        // with the foreign row when saved.
+        try {
+            progress::load(88002, 'mod_adaptivequiz', 9, (object) []);
+            $this->fail('A row of another person attached to this attempt was taken over.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('progressintegrityerror', $e->errorcode);
+        }
+        $this->assertEquals($stranger->id, $DB->get_field('local_catquiz_progress', 'userid', ['id' => $progressid]));
     }
 }
