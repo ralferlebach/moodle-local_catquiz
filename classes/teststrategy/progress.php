@@ -24,6 +24,7 @@
 
 namespace local_catquiz\teststrategy;
 
+use local_catquiz\local\attempt\progress_integrity;
 use cache;
 use coding_exception;
 use JsonSerializable;
@@ -385,7 +386,14 @@ class progress implements JsonSerializable {
         if (!$record) {
             return null;
         }
-        $contextid = (int) $DB->get_field('local_catquiz_attempts', 'contextid', ['id' => $catattemptid]);
+        $catattempt = $DB->get_record('local_catquiz_attempts', ['id' => $catattemptid]) ?: null;
+        $contextid = $catattempt ? (int) $catattempt->contextid : 0;
+        // Issue #96: a reader gets no progress rather than a foreign one; operations get an event.
+        $reason = progress_integrity::check($record, $catattempt);
+        if ($reason !== null) {
+            progress_integrity::report($record, $catattempt, $reason, $contextid);
+            return null;
+        }
 
         return self::populate_from_object($record, $contextid);
     }
@@ -412,22 +420,17 @@ class progress implements JsonSerializable {
             return false;
         }
 
-        /* Issue #96: progress is taken over only if it belongs to the person the attempt belongs to.
-           The comparison is against the owner of the CAT attempt, not against whoever is looking:
-           a teacher opening a student's result reads that student's progress legitimately, and
-           comparing with \$USER turned that into a crash on the feedback page. What #96 guards
-           against is a foreign row attached to someone's attempt - that is what is refused here. */
-        $owner = $DB->get_field('local_catquiz_attempts', 'userid', ['id' => $catattemptid]);
-        if ($owner !== false && (int) $record->userid !== (int) $owner) {
-            debugging(
-                'Progress record ' . $record->id . ' belongs to user ' . $record->userid
-                    . ' but is attached to an attempt of user ' . $owner . '; it was not used.',
-                DEBUG_DEVELOPER
-            );
-
-            return false;
+        /* Issue #96: progress is taken over only if it belongs to its CAT attempt - same person, same
+           component - and the CAT attempt exists. The comparison is against the owner of the CAT
+           attempt, not against whoever is looking: a teacher opening a student's result reads that
+           student's progress legitimately. A foreign row fails closed: the test stops with a generic
+           message, the row is neither used nor overwritten, and operations get an event. Going on
+           with a fresh progress instead would have collided with the foreign row on save. */
+        $catattempt = $DB->get_record('local_catquiz_attempts', ['id' => $catattemptid]) ?: null;
+        $reason = progress_integrity::check($record, $catattempt);
+        if ($reason !== null) {
+            progress_integrity::fail($record, $catattempt, $reason, $contextid);
         }
-
         return self::populate_from_object($record, $contextid);
     }
 

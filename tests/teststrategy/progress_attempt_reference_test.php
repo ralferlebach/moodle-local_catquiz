@@ -129,15 +129,13 @@ final class progress_attempt_reference_test extends advanced_testcase {
         $DB->set_field('local_catquiz_progress', 'userid', $stranger->id, ['attemptid' => $catattemptid]);
         \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
 
-        $loaded = progress::load(77003, 'mod_adaptivequiz', $contextid, (object) []);
-
-        // The refusal is reported to developers; that is the point, not an accident.
-        $this->assertDebuggingCalled();
-
-        $this->assertNull(
-            $loaded->get_id(),
-            'The progress of another user was taken over for the current one.'
-        );
+        // Issue #96: fail closed - a controlled error, nothing taken over.
+        try {
+            progress::load(77003, 'mod_adaptivequiz', $contextid, (object) []);
+            $this->fail('The progress of another user was taken over for the current one.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('progressintegrityerror', $e->errorcode);
+        }
         $this->assertEquals(
             $stranger->id,
             $DB->get_field('local_catquiz_progress', 'userid', ['attemptid' => $catattemptid]),
