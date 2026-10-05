@@ -343,3 +343,68 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And the field "Lower limit" in the "//div[@data-name='feedback_scale_Simulation_range_2']" "xpath_element" matches value "-1"
     And I should see "5" in the "//div[@data-name='feedback_scale_Simulation_range_2']//div[@id='fitem_id_highestvalue']" "xpath_element"
     And I log out
+
+  @javascript
+  Scenario: CATquiz settings: a disabled subscale can be switched on again and saved
+    Given the following "activities" exist:
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
+    And I follow "Settings"
+    ## And I wait until the page is ready
+    ## The 3.0 host shows the fields of a CAT model only after the choice has been
+    ## applied with its "Apply CAT model selection" button. The selector sits in a
+    ## collapsed section on the settings page and has to be expanded first.
+    And I expand all fieldsets
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    And I set the following fields to these values:
+      | Select CAT scale                                      | Simulation        |
+      | catquiz_selectteststrategy                            | 1                 |
+      | catquiz_standarderrorgroup[catquiz_standarderror_min] | 0.4               |
+      | catquiz_standarderrorgroup[catquiz_standarderror_max] | 0.6               |
+    When I wait until the page is ready
+    ## Verify all root catscales active by default
+    Then I should see "SimA" in the "#id_catquiz_headercontainer" "css_element"
+    And I should see "SimA02" in the "#id_catquiz_headercontainer" "css_element"
+    And I should see "SimB" in the "#id_catquiz_headercontainer" "css_element"
+    And I should see "SimB03" in the "#id_catquiz_headercontainer" "css_element"
+    And I should see "SimC" in the "#id_catquiz_headercontainer" "css_element"
+    And I should see "SimC02" in the "#id_catquiz_headercontainer" "css_element"
+    And the field with xpath "//input[@data-name='SimA']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimA02']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimB']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimB03']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimC']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimC02']" matches value "checked"
+    ## Disable scale and sub-scale
+    And I set the field with xpath "//input[@data-name='SimB03']" to ""
+    And I set the field with xpath "//input[@data-name='SimC']" to ""
+    ## Verify disabled scale and sub-scale
+    And I wait until the page is ready
+    And I should not see "SimC01" in the "#id_catquiz_headercontainer" "css_element"
+    And I should not see "SimC02" in the "#id_catquiz_headercontainer" "css_element"
+    And I click on "Save and display" "button"
+    And I follow "Settings"
+    ## Verify disabled scale and sub-scale after save
+    And the field with xpath "//input[@data-name='SimA']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimA02']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimB']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimB02']" matches value "checked"
+    And the field with xpath "//input[@data-name='SimB03']" matches value ""
+    And the field with xpath "//input[@data-name='SimC']" matches value ""
+    And I should not see "SimC01" in the "#id_catquiz_headercontainer" "css_element"
+    And I should not see "SimC02" in the "#id_catquiz_headercontainer" "css_element"
+    ## Issue #124: switch the stored, disabled scale on again. The reload that builds its
+    ## subtree used to restore the stored "off", so the choice could not be saved.
+    And I expand all fieldsets
+    And I set the field with xpath "//input[@data-name='SimC']" to "1"
+    And I wait until the page is ready
+    And the field with xpath "//input[@data-name='SimC']" matches value "checked"
+    And I should see "SimC02" in the "#id_catquiz_headercontainer" "css_element"
+    And I click on "Save and display" "button"
+    And I follow "Settings"
+    Then the field with xpath "//input[@data-name='SimC']" matches value "checked"
+    And I should see "SimC02" in the "#id_catquiz_headercontainer" "css_element"
