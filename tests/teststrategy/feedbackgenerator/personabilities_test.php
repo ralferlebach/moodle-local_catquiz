@@ -1636,4 +1636,73 @@ final class personabilities_test extends advanced_testcase {
             "showabilitymeasure" => 0,
         ];
     }
+
+    /**
+     * The detail values of a past attempt do not move when later results arrive (issue #118).
+     *
+     * The detail tab is built from the data stored with the attempt. Newer person parameters of
+     * the same person and scales - a later attempt - must not change what this attempt shows.
+     */
+    public function test_detail_values_ignore_later_person_parameters(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        [$feedbackdata, , $abilityrange, $testitems] = array_values(self::get_studentfeedback_provider()['lowestskillgap']);
+        $render = function () use ($feedbackdata, $abilityrange, $testitems): string {
+            $progress = $this->getMockBuilder(progress::class)
+                ->onlyMethods(['get_quiz_settings', 'get_abilities', 'get_num_playedquestions'])
+                ->getMock();
+            $progress->method('get_quiz_settings')->willReturn((object) $feedbackdata['quizsettings']);
+            $progress->method('get_abilities')->willReturn([271 => -2.5175]);
+            $progress->method('get_num_playedquestions')->willReturn(1);
+            $helper = $this->getMockBuilder(feedback_helper::class)
+                ->disableOriginalConstructor()
+                ->onlyMethods(['get_ability_range'])
+                ->getMock();
+            $helper->method('get_ability_range')->willReturn($abilityrange);
+            $generator = $this->getMockBuilder(personabilities::class)
+                ->onlyMethods(['get_testitems_for_catscale', 'get_progress', 'get_global_scale'])
+                ->setConstructorArgs([new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB), $helper])
+                ->getMock();
+            $generator->method('get_testitems_for_catscale')->willReturn($testitems);
+            $generator->method('get_progress')->willReturn($progress);
+            $generator->method('get_global_scale')->willReturn((object) ['name' => 'Global scale name']);
+            // The chart gets a fresh element id on every render; that is not a value.
+            return preg_replace('/chart-area-[0-9a-f]+/', 'chart-area-X', json_encode($generator->get_feedback($feedbackdata)));
+        };
+
+        $before = $render();
+        // A later attempt of the same person: other values on every scale of this attempt.
+        foreach ([271, 272, 273] as $scaleid) {
+            $DB->insert_record('local_catquiz_personparams', (object) [
+                'userid' => 2, 'contextid' => 1817, 'catscaleid' => $scaleid, 'ability' => 3.3,
+                'standarderror' => 0.2, 'status' => 0, 'isvalid' => 1, 'isprimary' => 0,
+                'timecreated' => time() + 60, 'timemodified' => time() + 60,
+            ]);
+        }
+
+        $this->assertSame($before, $render());
+    }
+
+    /**
+     * The scale the strategy selected stands out among the other valid ones (issue #118).
+     */
+    public function test_selected_scale_is_marked_in_the_detail_tab(): void {
+        global $OUTPUT;
+        $this->resetAfterTest();
+
+        $html = $OUTPUT->render_from_template('local_catquiz/feedback/personabilities', [
+            'abilities' => [
+                ['pseudo_index' => 1, 'name' => 'Selected scale', 'abilityscore' => '-1,2', 'isselectedscale' => true,
+                    'tooltiptitle' => 'Your weakest scale', 'is_global' => false],
+                ['pseudo_index' => 2, 'name' => 'Other scale', 'abilityscore' => '0,4', 'isselectedscale' => false,
+                    'tooltiptitle' => 'Other scale', 'is_global' => false],
+            ],
+        ]);
+
+        $marker = get_string('detected_scales_selected', 'local_catquiz');
+        $this->assertSame(1, substr_count($html, $marker), 'Exactly one scale is marked.');
+        $this->assertStringContainsString('<strong title="Your weakest scale">Selected scale</strong>', $html);
+        $this->assertStringNotContainsString('<strong title="Other scale">', $html);
+    }
 }

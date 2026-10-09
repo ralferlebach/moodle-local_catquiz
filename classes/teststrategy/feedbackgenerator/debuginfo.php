@@ -257,6 +257,15 @@ class debuginfo extends feedbackgenerator {
     }
 
     /**
+     * The export tab for authorised users; it marks an invalid result, it does not need a valid one. (issue #120)
+     *
+     * @return string
+     */
+    public function get_result_dependency(): string {
+        return self::DIAGNOSTIC;
+    }
+
+    /**
      * Get generatorname.
      *
      * @return string

@@ -45,6 +45,15 @@ abstract class feedbackgenerator {
      */
     protected const PRECISION = 2;
 
+    /** @var string Needs a valid result: peer comparison, learning progress, scale feedback (issue #120). */
+    public const DEPENDS_ON_RESULT = 'result';
+
+    /** @var string Shows what happened in the attempt, valid result or not: summary, quiz history. */
+    public const DEPENDS_ON_ATTEMPT = 'attempt';
+
+    /** @var string Diagnosis and export for authorised users, valid result or not. */
+    public const DIAGNOSTIC = 'diagnostic';
+
     /**
      * Attempt ID
      *
@@ -154,6 +163,20 @@ abstract class feedbackgenerator {
      * @return string
      */
     abstract public function get_generatorname(): string;
+
+    /**
+     * What this feedback depends on (issue #120).
+     *
+     * An attempt without a valid result shows no feedback that reads the result - but what the
+     * attempt contained, and the export for authorised users, do not depend on it. Each generator
+     * says which kind it is; the default is the safe one, so a generator that does not declare
+     * itself stays hidden for an invalid result.
+     *
+     * @return string One of DEPENDS_ON_RESULT, DEPENDS_ON_ATTEMPT, DIAGNOSTIC.
+     */
+    public function get_result_dependency(): string {
+        return self::DEPENDS_ON_RESULT;
+    }
 
     /**
      * Update the feedback data that is stored in the DB to render the feedback

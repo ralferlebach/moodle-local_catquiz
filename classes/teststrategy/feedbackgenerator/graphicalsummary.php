@@ -150,6 +150,15 @@ class graphicalsummary extends feedbackgenerator {
     }
 
     /**
+     * The quiz history: the questions of the attempt one by one; no result needed. (issue #120)
+     *
+     * @return string
+     */
+    public function get_result_dependency(): string {
+        return self::DEPENDS_ON_ATTEMPT;
+    }
+
+    /**
      * Get generatorname.
      *
      * @return string
