@@ -37,11 +37,25 @@ defined('MOODLE_INTERNAL') || die();
  * @param array $nbyscale Answered items by scale id.
  * @param int $contextid The CAT context.
  * @param array $quizsettings The quiz settings the progress carries.
+ * @param array $fractionbyscale Fraction of every answer by scale id. Defaults to half credit, which keeps
+ *      the fraction of each scale inside (0, 1): with all answers right or all wrong a scale is invalid
+ *      (issue #140).
  */
-function local_catquiz_measured_progress(int $adaptiveattemptid, array $nbyscale, int $contextid = 9, array $quizsettings = []): void {
+function local_catquiz_measured_progress(
+    int $adaptiveattemptid,
+    array $nbyscale,
+    int $contextid = 9,
+    array $quizsettings = [],
+    array $fractionbyscale = []
+): void {
     static $nextquestionid = 900000;
 
-    $progress = \local_catquiz\teststrategy\progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid, (object) $quizsettings);
+    $progress = \local_catquiz\teststrategy\progress::load(
+        $adaptiveattemptid,
+        'mod_adaptivequiz',
+        $contextid,
+        (object) $quizsettings
+    );
     $played = [];
     $byscale = [];
     $responses = [];
@@ -51,7 +65,8 @@ function local_catquiz_measured_progress(int $adaptiveattemptid, array $nbyscale
                 'fisherinformation' => []];
             $played[$q->id] = $q;
             $byscale[(int) $scaleid][$q->id] = $q;
-            $responses[$q->id] = ['questionid' => $q->id, 'fraction' => 1.0];
+            $fraction = (float) ($fractionbyscale[$scaleid] ?? 0.5);
+            $responses[$q->id] = ['questionid' => $q->id, 'fraction' => $fraction];
         }
     }
     $state = [

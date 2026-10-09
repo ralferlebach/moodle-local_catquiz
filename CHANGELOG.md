@@ -2,6 +2,18 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Issue #140: Fraction 0/1 wird zentral im Validator geprüft. Eine im Versuch
+  gemessene Skala, deren produktive Items alle falsch (`fraction_all_incorrect`) oder
+  alle richtig (`fraction_all_correct`) beantwortet wurden, ist statistisch ungültig;
+  Score, SE, N und Fraction bleiben gespeichert und berichtbar. Pilot-, offene und
+  doppelt vergebene Items zählen nicht. Die sechs Strategien wenden dieselbe Regel
+  je Skala an (`feedbacksettings::filter_fraction()`) statt eigener Regeln auf der
+  Fraction des ganzen Tests; Größte Stärke und Unterste Lücke wählen nur noch unter
+  gültigen Skalen.
+- Issue #136 (Phase 1, Messung): abschaltbarer Versuchs-Trace (`attempttrace`),
+  Tabelle `local_catquiz_trace`, Export per Admin-Download und CLI mit
+  p50/p95/p99, Aufräumaufgabe. Siehe `doc/attempt-trace.md`.
+
 - `local_catquiz_attemptscale` ist in `local_catquiz_personparams` aufgegangen.
   Die Personenparameter-Tabelle wird jetzt fortgeschrieben statt ueberschrieben –
   eine Zeile je Schaetzung, mit Standardfehler, Itemzahl, Fraktion,

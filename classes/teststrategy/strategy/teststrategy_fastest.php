@@ -153,19 +153,8 @@ class teststrategy_fastest extends strategy {
         // Minimum of questions per test applied.
         $newabilities = $feedbacksettings->filter_nmintest($newabilities, $feedbackdata);
 
-        // Fraction can not be 1 (all answers correct) or 0 (all answers incorrect).
-        if ($feedbacksettings->fraction >= 1 || $feedbacksettings->fraction <= 0) {
-            foreach ($personabilities as $scaleid => $abilityvalue) {
-                $newabilities[$scaleid] = [
-                    'value' => $abilityvalue['value'],
-                    'excluded' => true,
-                    ];
-                $newabilities[$scaleid]['error']['fraction'] = [
-                        'fraction' => $feedbacksettings->fraction,
-                        'expected' => '0 < f < 1',
-                ];
-            }
-        }
+        // Neither all productive items of the root scale wrong nor all right (issue #140).
+        $newabilities = $feedbacksettings->filter_fraction($newabilities, $feedbackdata);
         return $newabilities;
     }
 

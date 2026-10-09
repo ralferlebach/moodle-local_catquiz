@@ -32,6 +32,7 @@ use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_strategy;
+use local_catquiz\local\monitoring\timeline;
 use local_catquiz\local\result;
 use local_catquiz\local\status;
 use local_catquiz\output\attemptfeedback;
@@ -236,11 +237,11 @@ abstract class strategy {
            Loading it here means the chain always has the pool, whichever path the
            selector takes. The loader has existed all along and was called nowhere. */
         if (!isset($this->context['questions'])) {
-            $this->context = (new questions_loader())->load($this->context);
+            $this->context = timeline::span('strategy:questions_loader', fn() => (new questions_loader())->load($this->context));
         }
 
-        $res = $this->update_personability()
-            ->and_then(fn () => $this->first_question_selector())
+        $res = $this->traced('update_personability', fn() => $this->update_personability())
+            ->and_then(fn () => $this->traced('first_question_selector', fn() => $this->first_question_selector()))
             ->or_else(fn ($res) => $this->after_error($res));
 
         $val = $res->unwrap();
@@ -269,15 +270,15 @@ abstract class strategy {
             // for: it would have named add_scale_standarderror as the step that
             // emptied the pool while maximumquestionscheck did it.
             $this->record_stage('start');
-            $this->add_scale_standarderror()
+            $this->traced('add_scale_standarderror', fn() => $this->add_scale_standarderror())
                 ->and_then(fn () => $this->record_stage('add_scale_standarderror'))
-                ->and_then(fn () => $this->maximumquestionscheck())
+                ->and_then(fn () => $this->traced('maximumquestionscheck', fn() => $this->maximumquestionscheck()))
                 ->and_then(fn () => $this->record_stage('maximumquestionscheck'))
-                ->and_then(fn () => $this->removeplayedquestions())
+                ->and_then(fn () => $this->traced('removeplayedquestions', fn() => $this->removeplayedquestions()))
                 ->and_then(fn () => $this->record_stage('removeplayedquestions'))
-                ->and_then(fn () => $this->noremainingquestions())
+                ->and_then(fn () => $this->traced('noremainingquestions', fn() => $this->noremainingquestions()))
                 ->and_then(fn () => $this->record_stage('noremainingquestions'))
-                ->and_then(fn () => $this->fisherinformation())
+                ->and_then(fn () => $this->traced('fisherinformation', fn() => $this->fisherinformation()))
                 ->or_else(fn($res) => $this->after_error($res))
                 ->expect();
             $this->record_stage('fisherinformation');
@@ -287,7 +288,7 @@ abstract class strategy {
             return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
         }
 
-        $res = $this->maybereturnpilot();
+        $res = $this->traced('maybereturnpilot', fn() => $this->maybereturnpilot());
         $val = $res->unwrap();
         // If the value is an object, it is the pilot question that should be returned.
         if (is_object($val)) {
@@ -301,19 +302,22 @@ abstract class strategy {
         }
 
         try {
-            $selectedquestion = $this->remove_uncalculated()
-                ->and_then(fn() => $this->mayberemovescale())
-                ->and_then(fn() => $this->last_time_played_penalty())
-                ->and_then(fn() => $this->filterbystandarderror())
+            $selectedquestion = $this->traced('remove_uncalculated', fn() => $this->remove_uncalculated())
+                ->and_then(fn() => $this->traced('mayberemovescale', fn() => $this->mayberemovescale()))
+                ->and_then(fn() => $this->traced('last_time_played_penalty', fn() => $this->last_time_played_penalty()))
+                ->and_then(fn() => $this->traced('filterbystandarderror', fn() => $this->filterbystandarderror()))
                 ->or_else(fn($res) => $this->after_error($res))
                 ->expect()
-                ->and_then(fn() => $this->filterbytestinfo())
-                ->and_then(fn() => $this->filterbyquestionsperscale())
-                ->and_then(fn() => $this->select_question())
+                ->and_then(fn() => $this->traced('filterbytestinfo', fn() => $this->filterbytestinfo()))
+                ->and_then(fn() => $this->traced('filterbyquestionsperscale', fn() => $this->filterbyquestionsperscale()))
+                ->and_then(fn() => $this->traced('select_question', fn() => $this->select_question()))
                 ->and_then(
                     function ($res) {
-                        $this->progress->save();
-                        $this->update_attemptfeedback($this->context);
+                        timeline::span('strategy:progress_save', fn() => $this->progress->save());
+                        timeline::span(
+                            'strategy:update_attemptfeedback',
+                            fn() => $this->update_attemptfeedback($this->context)
+                        );
                         $this->persist_stage_counts();
                         return $res;
                     }
@@ -784,17 +788,27 @@ abstract class strategy {
     protected function filterbyquestionsperscale(): result {
         return result::ok($this->context);
     }
+
     /**
-     * Notes how many candidates remain after a stage, and passes the result through.
+     * Runs one step of the selection inside a trace span (issue #136) and notes the candidates left.
      *
-     * The count is taken before the next stage runs, so a stage that
-     * empties the pool can be named. Without this the only observable fact was that
-     * the pool ended up empty.
+     * Without the trace switched on this only calls the step.
      *
-     * @param string $stage Name of the stage that has just finished.
-     * @param result|null $result Result of the following stage, passed through.
-     * @return result
+     * @param string $step Name of the step.
+     * @param callable $fn The step.
+     * @return mixed What the step returns.
      */
+    private function traced(string $step, callable $fn) {
+        if (!timeline::enabled()) {
+            return $fn();
+        }
+        return timeline::span('strategy:' . $step, function () use ($fn) {
+            $res = $fn();
+            timeline::note('candidates', isset($this->context['questions']) ? count($this->context['questions']) : null);
+            return $res;
+        });
+    }
+
     /**
      * Writes the recorded counts to the attempt cache.
      *

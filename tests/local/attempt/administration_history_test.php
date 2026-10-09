@@ -292,7 +292,7 @@ final class administration_history_test extends advanced_testcase {
             $played[$ids[$key]] = (object) ['id' => $ids[$key], 'catscaleid' => 5, 'is_pilot' => false, 'fisherinformation' => []];
         }
         foreach (
-            ['responses' => array_map(fn($q) => ['questionid' => $q->id, 'fraction' => 1.0], $played),
+            ['responses' => array_map(fn($q) => ['questionid' => $q->id, 'fraction' => 0.5], $played),
                 'playedquestions' => $played, 'lastquestion' => end($played) ?: null,
                 'playedquestionsbyscale' => [5 => $played]] as $name => $value
         ) {

@@ -1509,6 +1509,29 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026092902, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026100900) {
+        // Issue #136: timeline of attempt requests, written only while the trace is switched on.
+        $table = new xmldb_table('local_catquiz_trace');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('adaptiveattemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('kind', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('questionnumber', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('requestms', XMLDB_TYPE_NUMBER, '12, 3', null, null, null, null);
+        $table->add_field('dbqueries', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('spans', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+        $table->add_index('adaptiveattemptid', XMLDB_INDEX_NOTUNIQUE, ['adaptiveattemptid']);
+        $table->add_index('timecreated', XMLDB_INDEX_NOTUNIQUE, ['timecreated']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026100900, 'local', 'catquiz');
+    }
+
     return true;
 }
 

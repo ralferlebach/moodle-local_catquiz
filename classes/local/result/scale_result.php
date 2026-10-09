@@ -45,6 +45,12 @@ final class scale_result {
     /** @var string Rejection: fraction rule not met (e.g. all-correct/all-wrong). */
     public const REASON_FRACTION = 'fraction';
 
+    /** @var string Rejection: every productive item of the scale answered wrongly (fraction 0, issue #140). */
+    public const REASON_FRACTION_ALL_INCORRECT = 'fraction_all_incorrect';
+
+    /** @var string Rejection: every productive item of the scale answered correctly (fraction 1, issue #140). */
+    public const REASON_FRACTION_ALL_CORRECT = 'fraction_all_correct';
+
     /** @var string Rejection: only the root scale, no reportable subscale. */
     public const REASON_ROOTONLY = 'rootonly';
 

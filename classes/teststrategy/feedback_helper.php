@@ -114,14 +114,19 @@ class feedback_helper {
      * @param array $personabilities
      * @param array $nbyscale Productive answered items per scale in this attempt. Without it no
      *      scale counts as measured (issue #128).
+     * @param array $fractionbyscale Fraction per scale on the same items (issue #140).
      * @return array
      */
-    public static function get_reportable_scales(array $personabilities, array $nbyscale = []): array {
+    public static function get_reportable_scales(
+        array $personabilities,
+        array $nbyscale = [],
+        array $fractionbyscale = []
+    ): array {
         // The definition of a reportable/valid scale lives in the
         // central attempt_result_validator. Route through it so feedback,
         // completion and persistence all share one definition. The validator
         // reproduces the historical set (toreport, not excluded, not hidden).
-        $result = attempt_result_validator::from_personabilities($personabilities, [], $nbyscale);
+        $result = attempt_result_validator::from_personabilities($personabilities, [], $nbyscale, $fractionbyscale);
         $reportableids = array_flip($result->get_reportable_scale_ids());
 
         return array_filter(
@@ -137,10 +142,16 @@ class feedback_helper {
      * @param array $personabilities
      * @param array $nbyscale Productive answered items per scale in this attempt. Without it no
      *      scale counts as measured (issue #128).
+     * @param array $fractionbyscale Fraction per scale on the same items (issue #140).
      * @return bool
      */
-    public static function has_reportable_result(array $personabilities, array $nbyscale = []): bool {
-        return attempt_result_validator::from_personabilities($personabilities, [], $nbyscale)->has_reportable_result();
+    public static function has_reportable_result(
+        array $personabilities,
+        array $nbyscale = [],
+        array $fractionbyscale = []
+    ): bool {
+        return attempt_result_validator::from_personabilities($personabilities, [], $nbyscale, $fractionbyscale)
+            ->has_reportable_result();
     }
 
     /**
@@ -192,11 +203,24 @@ class feedback_helper {
             }
         }
 
+        // The fraction per scale, on the same population as N (issue #140): with it, a scale whose
+        // productive items were all answered wrongly or all correctly is invalid here exactly as it
+        // is at finalisation. Without a progress and without given fractions no fraction rule applies.
+        $fractionbyscale = array_map('floatval', (array) ($feedbackdata['fractionbyscale'] ?? []));
+        if (!$fractionbyscale && isset($feedbackdata['progress']) && $feedbackdata['progress'] instanceof progress) {
+            foreach (array_keys($personabilities) as $scaleid) {
+                $fraction = $feedbackdata['progress']->get_fraction_for_scale((int) $scaleid);
+                if ($fraction !== null) {
+                    $fractionbyscale[(int) $scaleid] = $fraction;
+                }
+            }
+        }
+
         return attempt_result_validator::from_personabilities(
             $personabilities,
             $sebyscale,
             $nbyscale,
-            [],
+            $fractionbyscale,
             $primaryscaleid
         );
     }
@@ -309,6 +333,10 @@ class feedback_helper {
                         return get_string('error:semax', 'local_catquiz', $error['se'] ?? null);
                     case scale_result::REASON_N_MIN:
                         return get_string('error:nminscale', 'local_catquiz', $error['nminscale'] ?? null);
+                    case scale_result::REASON_FRACTION_ALL_CORRECT:
+                        return get_string('error:fraction1', 'local_catquiz');
+                    case scale_result::REASON_FRACTION_ALL_INCORRECT:
+                        return get_string('error:fraction0', 'local_catquiz');
                     case scale_result::REASON_FRACTION:
                         $fraction = $error['fraction']['fraction'] ?? null;
                         if ((string) $fraction === '1') {

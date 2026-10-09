@@ -35,6 +35,7 @@ use context_system;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\attempt\attempt_finalizer;
 use local_catquiz\local\model\model_strategy;
+use local_catquiz\local\monitoring\timeline;
 use local_catquiz\output\attemptfeedback;
 use local_catquiz\teststrategy\info;
 use local_catquiz\teststrategy\progress;
@@ -985,9 +986,23 @@ class catquiz_handler {
      * @return array
      */
     public static function fetch_question_id(int $cmid, string $component, stdClass $attemptdata): array {
+        // Issue #136: the trace of this request belongs to this attempt; first item or a following one.
+        timeline::attempt((int) $attemptdata->id, (int) $attemptdata->questionsattempted);
+        return timeline::span('catquiz:fetch_question_id', fn() => self::fetch_question_id_traced($cmid, $component, $attemptdata));
+    }
 
+    /**
+     * Does the work of fetch_question_id(), inside its trace span.
+     *
+     * @param int $cmid
+     * @param string $component
+     * @param stdClass $attemptdata
+     * @return array
+     */
+    private static function fetch_question_id_traced(int $cmid, string $component, stdClass $attemptdata): array {
         $data = (object)['componentid' => $cmid, 'component' => $component];
 
+        timeline::start('testenvironment');
         $testenvironment = new testenvironment($data);
 
         $quizsettings = $testenvironment->return_settings();
@@ -1000,9 +1015,13 @@ class catquiz_handler {
             ->return_active_strategy($quizsettings->catquiz_selectteststrategy)
             ->set_scale($quizsettings->catquiz_catscales)
             ->set_catcontextid($catcontext);
+        timeline::stop('testenvironment');
 
-        $selectioncontext = self::get_strategy_selectcontext($quizsettings, $attemptdata);
-        $result = $teststrategy->return_next_testitem($selectioncontext);
+        $selectioncontext = timeline::span(
+            'contextcreator',
+            fn() => self::get_strategy_selectcontext($quizsettings, $attemptdata)
+        );
+        $result = timeline::span('strategy', fn() => $teststrategy->return_next_testitem($selectioncontext));
         if (!$result->isOk()) {
             catquiz::set_final_attempt_status($attemptdata->id, $result->get_status());
             return [0, $result->getErrorMessage()];
@@ -1020,9 +1039,11 @@ class catquiz_handler {
      * @throws cache_exception
      */
     public static function prepare_attempt_caches() {
+        timeline::start('prepare_attempt_caches');
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
         $cache->purge();
         $cache->set('starttime', time());
+        timeline::stop('prepare_attempt_caches');
     }
 
     /**

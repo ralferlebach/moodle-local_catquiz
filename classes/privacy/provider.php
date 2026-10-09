@@ -113,6 +113,18 @@ class provider implements
             'privacy:metadata:local_catquiz_progress'
         );
 
+        // Issue #136: timeline of attempt requests, only while the trace is switched on.
+        $items->add_database_table(
+            'local_catquiz_trace',
+            [
+                'adaptiveattemptid' => 'privacy:metadata:local_catquiz_trace:adaptiveattemptid',
+                'userid' => 'privacy:metadata:local_catquiz_trace:userid',
+                'spans' => 'privacy:metadata:local_catquiz_trace:spans',
+                'timecreated' => 'privacy:metadata:local_catquiz_trace:timecreated',
+            ],
+            'privacy:metadata:local_catquiz_trace'
+        );
+
         // Returning the updated metadata collection.
         return $items;
     }
@@ -220,6 +232,17 @@ class provider implements
         $data = (object) $personparams;
         $systemcontext = context_system::instance();
         writer::with_context($systemcontext)->export_related_data([], 'catquiz_personparams', $data);
+
+        // Attempt traces (issue #136): timings only, no question or answer content.
+        $traces = $DB->get_records(
+            'local_catquiz_trace',
+            ['userid' => $userid],
+            'id ASC',
+            'id, adaptiveattemptid, kind, questionnumber, requestms, dbqueries, spans, timecreated'
+        );
+        if ($traces) {
+            writer::with_context($systemcontext)->export_related_data([], 'catquiz_attempttraces', (object) $traces);
+        }
     }
 
     /**
@@ -236,6 +259,8 @@ class provider implements
         $userid = $contextlist->get_user()->id;
 
         $DB->delete_records('local_catquiz_subscriptions', ['userid' => $userid]);
+        // Traces are a diagnosis of response times; nothing depends on them.
+        $DB->delete_records('local_catquiz_trace', ['userid' => $userid]);
     }
 
     /**
@@ -252,6 +277,7 @@ class provider implements
         $userids = $userlist->get_userids();
 
         $DB->delete_records_list('local_catquiz_subscriptions', 'userid', $userids);
+        $DB->delete_records_list('local_catquiz_trace', 'userid', $userids);
     }
 
     /**
@@ -270,6 +296,7 @@ class provider implements
             case CONTEXT_SYSTEM:
                 // System context, delete all data.
                 $DB->delete_records('local_catquiz_subscriptions');
+                $DB->delete_records('local_catquiz_trace');
                 break;
             default:
                 // Other contexts, don't delete data related to that context.

@@ -186,12 +186,16 @@ class filterbystandarderror extends preselect_task {
      * @throws UnexpectedValueException
      */
     private function filter_for_cat(array $updatedscales): result {
-        $drop = false;
+        /* Issue #134: a scale that has all the information it needs is not the end of the test.
+           Only the scale the CAT measures - the root, protected until the minimum number of
+           questions - ends it. A subscale that reaches its criterion is dropped and leaves the
+           selection; the test goes on with the remaining scales. Ending the whole test on a
+           subscale's drop let attempts stop after 5 to 14 items with a minimum of 15. */
+        $mainscaleid = (int) $this->context['catscaleid'];
         foreach (array_reverse($updatedscales) as $scaleid) {
             if (!$this->check_scale_should_be_dropped($scaleid)) {
                 continue;
             }
-            $drop = true;
             $inheritval = $this->context['person_ability'][$scaleid];
             $inheritscales = $this->get_scale_heirs($scaleid);
             foreach ($inheritscales as $subscaleid) {
@@ -204,9 +208,12 @@ class filterbystandarderror extends preselect_task {
                 );
                 $this->context['person_ability'][$subscaleid] = $inheritval;
             }
-        }
-        if ($drop) {
-            return result::err(status::ERROR_NO_REMAINING_QUESTIONS);
+            if ((int) $scaleid === $mainscaleid) {
+                return result::err(status::ERROR_NO_REMAINING_QUESTIONS);
+            }
+            if (in_array($scaleid, $this->progress->get_active_scales())) {
+                $this->progress->drop_scale($scaleid);
+            }
         }
         return result::ok($this->context);
     }

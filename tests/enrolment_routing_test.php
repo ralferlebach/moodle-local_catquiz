@@ -169,7 +169,7 @@ final class enrolment_routing_test extends advanced_testcase {
         $responses = [];
         foreach ([7001, 7002, 7003] as $qid) {
             $played[$qid] = (object) ['id' => $qid, 'catscaleid' => $root, 'is_pilot' => false, 'fisherinformation' => []];
-            $responses[$qid] = ['questionid' => $qid, 'fraction' => 1.0];
+            $responses[$qid] = ['questionid' => $qid, 'fraction' => 0.5];
         }
         $state = ['responses' => $responses, 'playedquestions' => $played,
             // A progress with played questions always has a last one.

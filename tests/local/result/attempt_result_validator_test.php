@@ -238,7 +238,7 @@ final class attempt_result_validator_test extends advanced_testcase {
             $played[$qid] = (object) ['id' => $qid, 'catscaleid' => 5, 'is_pilot' => false, 'fisherinformation' => []];
         }
         $state = [
-            'responses' => array_map(fn($q) => ['questionid' => $q->id, 'fraction' => 1.0], $played),
+            'responses' => array_map(fn($q) => ['questionid' => $q->id, 'fraction' => 0.5], $played),
             'playedquestions' => $played,
             // A progress with played questions always has a last one.
             'lastquestion' => end($played) ?: null,
