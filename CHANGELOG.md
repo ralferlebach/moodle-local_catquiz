@@ -2,6 +2,17 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Issue #120: Ein Versuch ohne valides Ergebnis zeigt weiter Quizverlauf,
+  Zusammenfassung und (für Berechtigte) den Export; nur ergebnisabhängige Bereiche
+  (Peer-Vergleich, Lernfortschritt, Skalenfeedback) entfallen. Die Generatoren
+  erklären ihre Abhängigkeit (`get_result_dependency()`). Neuer Export je Versuch
+  `export_attempt_csv.php` mit `resultstatus`/`resultvalid` und den gespeicherten
+  Skalenwerten samt Ablehnungsgrund; der Knopf im Export-Tab zeigte bisher auf den
+  Statistik-Export und brach mit fehlendem Parameter ab.
+- Issues #129, #128, #118: Tests ergänzt - Routing über alle sechs Strategien aus
+  dem gespeicherten Ergebnis, Range-Grenzen und gleicher Range für Kurs und Gruppe,
+  Custom-Range-Feedback über alle sechs Strategien, stabile Detailwerte. Die von
+  der Strategie ausgewählte Skala ist im Detail-Tab markiert.
 - Issue #140: Fraction 0/1 wird zentral im Validator geprüft. Eine im Versuch
   gemessene Skala, deren produktive Items alle falsch (`fraction_all_incorrect`) oder
   alle richtig (`fraction_all_correct`) beantwortet wurden, ist statistisch ungültig;

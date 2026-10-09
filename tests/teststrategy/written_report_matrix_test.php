@@ -62,7 +62,8 @@ final class written_report_matrix_test extends advanced_testcase {
      *
      * @param int $strategyid
      * @param string $predicate The feedback_helper predicate: is_displayable (written) or
-     *      is_feedback_eligible (detail tab).
+     *      is_feedback_eligible (detail tab); 'routing' for the scales the stored result routes;
+     *      'customrange' for the scales whose range feedback text the participant gets.
      * @param int $nmintest Minimum number of items for the whole test.
      * @param int $nminscale Minimum number of items per scale; 0 for none.
      * @param array $fractions Fraction of every answer by scale id. Half credit by default, so each
@@ -140,6 +141,23 @@ final class written_report_matrix_test extends advanced_testcase {
         $personabilities = $settings->filter_excluded_scales($personabilities, $quizsettings);
         $personabilities = \local_catquiz\teststrategy\info::get_teststrategy($strategyid)
             ->select_scales_for_report($settings, $personabilities, $feedbackdata, 100);
+
+        if ($predicate === 'customrange') {
+            return $this->custom_range_scales($personabilities, $quizsettings, $feedbackdata);
+        }
+        if ($predicate === 'routing') {
+            // Routing reads the stored result of the finished attempt (issue #129), not the
+            // feedback generators: file what the strategy selected, as the attempt would.
+            global $DB;
+            $DB->set_field('local_catquiz_attempts', 'contextid', 9, ['attemptid' => 97001]);
+            $DB->set_field('local_catquiz_attempts', 'json', json_encode([
+                'personabilities_abilities' => $personabilities,
+                'se' => self::SE,
+            ]), ['attemptid' => 97001]);
+            $routed = array_keys(\local_catquiz\output\attemptfeedback::routing_scores(97001));
+            sort($routed);
+            return $routed;
+        }
 
         $result = feedback_helper::build_attempt_result($personabilities, $feedbackdata);
         $written = array_values(array_filter(
@@ -284,5 +302,77 @@ final class written_report_matrix_test extends advanced_testcase {
         $fractions = [101 => 0.0, 102 => 1.0];
         $written = $this->written_scales($strategyid, 'is_displayable', 1, 2, $fractions);
         $this->assertSame($expected, $written);
+    }
+
+    /**
+     * Each strategy routes exactly the scales it reports in writing (issue #129).
+     *
+     * Routing reads the stored per-scale result of the attempt; the predicate is the written one,
+     * not scale_result::$valid, which asks for the primary scale. Relevant, all and classic route
+     * several scales, lowest and highest their one selected scale, CAT the root; reporting off,
+     * below the minimum N, above the maximum SE and not measured route nowhere.
+     *
+     * @dataProvider strategies
+     * @param int $strategyid
+     * @param int[] $expected
+     */
+    public function test_each_strategy_routes_what_it_reports(int $strategyid, array $expected): void {
+        $this->resetAfterTest();
+
+        $this->assertSame($expected, $this->written_scales($strategyid, 'routing'));
+    }
+
+    /**
+     * The scales whose custom range feedback text appears, through customscalefeedback itself.
+     *
+     * Every scale gets one range over the whole scale and the text "FB<scaleid>"; which texts come
+     * out is which scales the range feedback admits.
+     *
+     * @param array $personabilities As the strategy selected them.
+     * @param \stdClass $quizsettings
+     * @param array $feedbackdata
+     * @return int[]
+     */
+    private function custom_range_scales(array $personabilities, \stdClass $quizsettings, array $feedbackdata): array {
+        $settings = (array) $quizsettings + ['numberoffeedbackoptionsselect' => 1];
+        foreach (array_keys(self::ABILITY) as $scaleid) {
+            $settings['feedback_scaleid_limit_lower_' . $scaleid . '_1'] = -10;
+            $settings['feedback_scaleid_limit_upper_' . $scaleid . '_1'] = 10;
+            $settings['feedbackeditor_scaleid_' . $scaleid . '_1'] = 'FB' . $scaleid;
+        }
+        $generator = new \local_catquiz\teststrategy\feedbackgenerator\customscalefeedback(
+            new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB),
+            new feedback_helper()
+        );
+        $reflection = new \ReflectionClass($generator);
+        foreach (['testid' => 0, 'mainscale' => 100] as $name => $value) {
+            $property = $reflection->getProperty($name);
+            $property->setAccessible(true);
+            $property->setValue($generator, $value);
+        }
+        $method = $reflection->getMethod('get_customscalefeedback_for_abilities_in_range');
+        $method->setAccessible(true);
+        $text = $method->invoke($generator, $personabilities, $settings, [], $feedbackdata);
+
+        preg_match_all('/FB(\d+)/', $text, $matches);
+        $shown = array_map('intval', $matches[1]);
+        sort($shown);
+        return $shown;
+    }
+
+    /**
+     * The custom range feedback admits exactly the scales of the written report (issue #128).
+     *
+     * The range path builds its own attempt result; it must judge the scales as the written
+     * feedback does - measured, valid, reported - in every strategy.
+     *
+     * @dataProvider strategies
+     * @param int $strategyid
+     * @param int[] $expected
+     */
+    public function test_custom_range_feedback_follows_the_written_report(int $strategyid, array $expected): void {
+        $this->resetAfterTest();
+
+        $this->assertSame($expected, $this->written_scales($strategyid, 'customrange'));
     }
 }

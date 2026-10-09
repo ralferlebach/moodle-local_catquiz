@@ -80,6 +80,15 @@ class questionssummary extends feedbackgenerator {
     }
 
     /**
+     * Counts right, wrong and unanswered questions of the attempt; no result needed. (issue #120)
+     *
+     * @return string
+     */
+    public function get_result_dependency(): string {
+        return self::DEPENDS_ON_ATTEMPT;
+    }
+
+    /**
      * Get generatorname.
      *
      * @return string

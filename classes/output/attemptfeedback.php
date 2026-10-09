@@ -646,12 +646,15 @@ class attemptfeedback implements renderable, templatable {
 
         $context = [];
         foreach ($generators as $generator) {
-            // For an invalid result, do not execute the non-essential
-            // student-facing generators at all (peer comparison, learning
-            // progress, ...) - "don't run peer comparison / recommendations on an
-            // invalid result". Only customscalefeedback runs, because it carries
-            // the exclusion reason that feeds the central notice / teacher view.
-            if (!$hasvalidresult && $generator->get_generatorname() !== $primaryfeedbackname) {
+            $isprimary = $generator->get_generatorname() === $primaryfeedbackname;
+            /* For an invalid result, what reads the result stays out - peer comparison, learning
+               progress, scale feedback (issue #120). What the attempt contained - summary, quiz
+               history - and the export for authorised users do not depend on the result and stay.
+               Validity used to switch off every generator but the primary one, and with them the
+               quiz history and the export of exactly the attempts that most need looking into.
+               The primary generator still runs: it carries the reason for the central notice. */
+            $dependency = $generator->get_result_dependency();
+            if (!$hasvalidresult && !$isprimary && $dependency === feedbackgenerator::DEPENDS_ON_RESULT) {
                 continue;
             }
             $feedbacks = $generator->get_feedback($feedbackdata);
@@ -660,8 +663,8 @@ class attemptfeedback implements renderable, templatable {
                 if (!$feedback || !is_array($feedback)) {
                     continue;
                 }
-                // For an invalid result, do not emit student-facing scale feedback.
-                if (!$hasvalidresult && $fbtype === 'studentfeedback') {
+                // For an invalid result, the primary generator's scale feedback is not shown.
+                if (!$hasvalidresult && $isprimary && $fbtype === 'studentfeedback') {
                     continue;
                 }
 
@@ -681,17 +684,19 @@ class attemptfeedback implements renderable, templatable {
         // carries the rejection reason, instead of scattering "not available"/
         // exclusion blocks across several tabs.
         if (!$hasvalidresult && is_array($abilities)) {
+            $context['studentfeedback'] = $context['studentfeedback'] ?? [];
             $reason = feedback_helper::get_exclusion_reason_string($abilities);
             $content = get_string('feedbacknovalidresult', 'local_catquiz');
             if ($reason !== '') {
                 $content .= ' ' . $reason;
             }
-            $context['studentfeedback'] = [[
+            // In front of what remains, not instead of it: the quiz history stays (issue #120).
+            array_unshift($context['studentfeedback'], [
                 'heading' => get_string('feedbacknovalidresultheading', 'local_catquiz'),
                 'content' => $content,
                 'generatorname' => 'novalidresult',
                 'frontpage' => '1',
-            ]];
+            ]);
         }
 
         return $context;

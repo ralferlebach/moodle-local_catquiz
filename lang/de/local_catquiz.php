@@ -291,6 +291,7 @@ $string['detected_scales_chart_description'] = 'Die folgende Grafik stellt die
 $string['detected_scales_number_questions'] = 'Anzahl Fragen';
 $string['detected_scales_reference'] = 'Vergleichsbasis';
 $string['detected_scales_scalename'] = 'Name der Skala';
+$string['detected_scales_selected'] = 'ausgewählt';
 $string['difficulties'] = 'Schwierigkeiten';
 $string['difficulty'] = 'Schwierigkeit';
 $string['difficulty_next_easier'] = 'Nächstschwierigere Frage';

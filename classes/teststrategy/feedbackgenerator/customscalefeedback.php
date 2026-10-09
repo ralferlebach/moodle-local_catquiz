@@ -215,7 +215,6 @@ class customscalefeedback extends feedbackgenerator {
         array $feedbackdata = []
     ): string {
         $scalefeedback = [];
-        $relevantscalesfound = false;
 
         /* Issue #7 DoD 2/3: the gate and the rejection message both come from the
            central result object. Previously this filtered on `toreport` and then
@@ -232,7 +231,6 @@ class customscalefeedback extends feedbackgenerator {
             return feedback_helper::get_rejection_reason_string($attemptresult, $personabilities);
         }
         foreach ($displayable as $catscaleid => $personability) {
-            $relevantscalesfound = true;
             // A score is assigned to exactly one range (half-open
             // intervals), instead of matching every range whose inclusive bounds
             // contain the value and letting the last match overwrite the earlier.
@@ -283,9 +281,7 @@ class customscalefeedback extends feedbackgenerator {
         }
 
         if (!$scalefeedback) {
-            if (!$relevantscalesfound) {
-                return $this->get_exclusion_reason_string($personabilitiestoreport);
-            }
+            // Shown scales exist (the empty case returned above), but none has a range text.
             return get_string('nofeedback', 'local_catquiz');
         }
 
