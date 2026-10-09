@@ -110,4 +110,13 @@ $functions = [
                 'type' => 'read',
                 'ajax' => 1,
         ],
+        // Issue #85: one feedback tab, when it is opened. Read only, so it does not hold the session
+        // lock while a chart is built - other tabs and requests of the same user stay responsive.
+        'local_catquiz_render_feedback_tab' => [
+                'classname' => 'local_catquiz\external\render_feedback_tab',
+                'description' => 'Renders one feedback tab of an attempt on demand',
+                'type' => 'read',
+                'ajax' => 1,
+                'readonlysession' => true,
+        ],
 ];

@@ -2,6 +2,14 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Issue #85: Die Ergebnisseite baut nur das Hauptfeedback sofort auf; Quizverlauf,
+  Zusammenfassung, Vergleich, Lernfortschritt, Export und Pilotfragen laden erst beim Öffnen
+  ihres Tabs (`local_catquiz_render_feedback_tab`, nur lesend, ohne Session-Sperre).
+  Zugriff wie die Seite: Besitzer oder `view_users_feedback`, Lehrkraft-Tabs mit
+  `view_teacher_feedback`, ergebnisabhängige Tabs nur bei validem Ergebnis. Ladeanzeige,
+  Fehlermeldung mit „Erneut versuchen“; ein fehlschlagender Tab lässt die Seite stehen.
+  Generatoren erklären ihr Publikum (`get_audiences()`), damit keine leeren Lehrkraft-Tabs
+  entstehen. Abschaltbar über `local_catquiz/lazyfeedbacktabs` (Standard: an).
 - Issue #30 (Teil): Feedback-Tabs, die Versuchsliste und der Statistik-Shortcode tragen
   instanzbezogene IDs (`{{uniqid}}`), sodass mehrere Instanzen auf einer Seite sich nicht
   stören; Schüler- und Lehrkraft-Tab desselben Generators hatten dieselbe Pane-ID. Die

@@ -266,6 +266,15 @@ class debuginfo extends feedbackgenerator {
     }
 
     /**
+     * Teacher feedback only (issue #85).
+     *
+     * @return string[]
+     */
+    public function get_audiences(): array {
+        return [self::AUDIENCE_TEACHER];
+    }
+
+    /**
      * Get generatorname.
      *
      * @return string

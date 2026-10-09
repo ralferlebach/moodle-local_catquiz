@@ -60,10 +60,11 @@ Feature: The quiz progress summary shows readable question and answer data and
     And I click on "richtige Antwort" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
+    ## Issue #85: the tab loads its content when it is opened.
+    And I click on "Quiz progress summary" "link" in the "#region-main" "css_element"
+    And I wait until ".catquiz-graphicalsummary-table" "css_element" exists
     ## The quiz-progress-summary feedback renders the answered-question table with
-    ## per-question response data. It lives in a feedback tab that is inactive
-    ## until the learner opens it, so the rows are present in the DOM but not
-    ## visible: assert on DOM presence to secure the end-to-end data mapping - the
+    ## per-question response data. Assert on DOM presence to secure the end-to-end data mapping - the
     ## responsive result table, the "Given answer:" label span, and the chosen
     ## answer value carried in the response-summary span. The magnifier button and
     ## its modal open/close behaviour - including the "no hanging spinner"

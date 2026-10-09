@@ -398,6 +398,7 @@ $string['feedbacknumber'] = 'Feedback for range {$a}';
 $string['feedbackrange'] = 'Ability level {$a}';
 $string['feedbackrangeuncertain'] = 'Your result is close to a boundary between two feedback ranges, so no definite classification can be given yet.';
 $string['feedbacksheader'] = 'Attempt {$a}';
+$string['feedbacktabloadfailed'] = 'This part of the feedback could not be loaded.';
 $string['fetchempty'] = 'Parameters are up to date';
 $string['fetchingparameters'] = 'Fetching parameters from central instance...';
 $string['fetchparamheading'] = 'Fetching parameters from {$a}';
@@ -489,6 +490,8 @@ $string['labelidnotunique'] = 'Label “{$a}” is not unique.';
 $string['lang'] = 'Language';
 $string['lastattempttime'] = 'Last attempt';
 $string['lastcalculation'] = 'Last recalculation';
+$string['lazyfeedbacktabs'] = 'Load feedback tabs when opened';
+$string['lazyfeedbacktabs_desc'] = 'The result page builds the main feedback at once and every further tab (quiz history, comparison, learning progress, export) only when it is opened. Off: everything is built with the page, as before.';
 $string['learningprogress_description'] = 'How did your ability score change
     over time? Did you improve?<br/>The following chart displays the progress
     of your (general) ability score in “{$a}” in comparison to the average of all

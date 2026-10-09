@@ -54,6 +54,12 @@ abstract class feedbackgenerator {
     /** @var string Diagnosis and export for authorised users, valid result or not. */
     public const DIAGNOSTIC = 'diagnostic';
 
+    /** @var string Feedback for the participant (issue #85). */
+    public const AUDIENCE_STUDENT = 'student';
+
+    /** @var string Feedback for teachers (issue #85). */
+    public const AUDIENCE_TEACHER = 'teacher';
+
     /**
      * Attempt ID
      *
@@ -176,6 +182,40 @@ abstract class feedbackgenerator {
      */
     public function get_result_dependency(): string {
         return self::DEPENDS_ON_RESULT;
+    }
+
+    /**
+     * For whom this generator writes feedback (issue #85).
+     *
+     * A tab loaded on demand is offered before its content exists; this says which tabs to offer.
+     * Most generators write for the participant only.
+     *
+     * @return string[] AUDIENCE_STUDENT and/or AUDIENCE_TEACHER.
+     */
+    public function get_audiences(): array {
+        return [self::AUDIENCE_STUDENT];
+    }
+
+    /**
+     * Whether the attempt data carry what this generator needs - without building the feedback.
+     *
+     * @param array $feedbackdata
+     * @return bool
+     */
+    public function has_data_for(array $feedbackdata): bool {
+        return $this->has_required_context_keys($feedbackdata);
+    }
+
+    /**
+     * Whether the current user may see the teacher feedback of this attempt.
+     *
+     * @param array $feedbackdata
+     * @return bool
+     */
+    public function may_show_teacher_feedback(array $feedbackdata): bool {
+        $this->attemptid = $feedbackdata['attemptid'];
+        $this->contextid = $feedbackdata['contextid'];
+        return $this->has_teacherfeedbackpermission();
     }
 
     /**

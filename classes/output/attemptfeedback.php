@@ -42,6 +42,9 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class attemptfeedback implements renderable, templatable {
+    /** @var string The generator of the main feedback, always built with the page. */
+    public const PRIMARY_GENERATOR = 'customscalefeedback';
+
     /**
      * @var ?int
      */
@@ -423,7 +426,8 @@ class attemptfeedback implements renderable, templatable {
     public function get_feedback_for_attempt(?string $feedbackdata = null, ?string $debuginfo = null): array {
         $feedbackdata = $this->load_feedbackdata($feedbackdata, $debuginfo);
         $generators = $this->get_feedback_generators_for_teststrategy($feedbackdata['teststrategy']);
-        return $this->generate_feedback($generators, $feedbackdata);
+        // Issue #85: the tabs beyond the main feedback load when they are opened, unless switched off.
+        return $this->generate_feedback($generators, $feedbackdata, (bool) get_config('local_catquiz', 'lazyfeedbacktabs'));
     }
 
     /**
@@ -609,11 +613,11 @@ class attemptfeedback implements renderable, templatable {
      * @return array
      *
      */
-    private function generate_feedback(array $generators, array $feedbackdata): array {
+    private function generate_feedback(array $generators, array $feedbackdata, bool $lazy = false): array {
         if (!$feedbackdata) {
             return [];
         }
-        $primaryfeedbackname = 'customscalefeedback';
+        $primaryfeedbackname = self::PRIMARY_GENERATOR;
 
         // Set primary generator element (customscalefeedback) first.
         usort($generators, function ($a, $b) use ($primaryfeedbackname) {
@@ -631,18 +635,7 @@ class attemptfeedback implements renderable, templatable {
         // only ever sees the single central notice below. Teacher feedback is
         // still produced so teachers can inspect the (invalid) details.
         $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
-        // With the per-scale N of this attempt (issue #128): without it every scale counted as measured.
-        $hasvalidresult = true;
-        if (is_array($abilities)) {
-            $adaptiveattemptid = (int) ($feedbackdata['attemptid'] ?? $this->attemptid ?? 0);
-            $catattemptid = $adaptiveattemptid ? catquiz::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz') : null;
-            $progress = $catattemptid === null ? null : progress::load_for_reading($catattemptid);
-            $hasvalidresult = feedback_helper::build_attempt_result(
-                $abilities,
-                ['se' => $feedbackdata['se'] ?? [], 'nbyscale' => $feedbackdata['nbyscale'] ?? []]
-                    + ($progress ? ['progress' => $progress] : [])
-            )->has_reportable_result();
-        }
+        $hasvalidresult = $this->has_valid_result($feedbackdata);
 
         $context = [];
         foreach ($generators as $generator) {
@@ -655,6 +648,13 @@ class attemptfeedback implements renderable, templatable {
                The primary generator still runs: it carries the reason for the central notice. */
             $dependency = $generator->get_result_dependency();
             if (!$hasvalidresult && !$isprimary && $dependency === feedbackgenerator::DEPENDS_ON_RESULT) {
+                continue;
+            }
+            if ($lazy && !$isprimary) {
+                // Issue #85: only the tab is offered; its content is built when it is opened.
+                foreach ($this->lazy_tabs($generator, $feedbackdata) as $fbtype => $tab) {
+                    $context[$fbtype][] = $tab;
+                }
                 continue;
             }
             $feedbacks = $generator->get_feedback($feedbackdata);
@@ -700,6 +700,99 @@ class attemptfeedback implements renderable, templatable {
         }
 
         return $context;
+    }
+
+    /**
+     * Whether the attempt has a valid result for the feedback: at least one reportable scale.
+     *
+     * @param array $feedbackdata
+     * @return bool
+     */
+    private function has_valid_result(array $feedbackdata): bool {
+        $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
+        if (!is_array($abilities)) {
+            return true;
+        }
+        // With the per-scale N of this attempt (issue #128): without it every scale counted as measured.
+        $adaptiveattemptid = (int) ($feedbackdata['attemptid'] ?? $this->attemptid ?? 0);
+        $catattemptid = $adaptiveattemptid ? catquiz::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz') : null;
+        $progress = $catattemptid === null ? null : progress::load_for_reading($catattemptid);
+        return feedback_helper::build_attempt_result(
+            $abilities,
+            ['se' => $feedbackdata['se'] ?? [], 'nbyscale' => $feedbackdata['nbyscale'] ?? []]
+                + ($progress ? ['progress' => $progress] : [])
+        )->has_reportable_result();
+    }
+
+    /**
+     * The tabs a generator offers without building its content (issue #85).
+     *
+     * A student tab for every generator writing for participants, a teacher tab only for users
+     * allowed to see teacher feedback - and none when the attempt data lack what it needs.
+     *
+     * @param feedbackgenerator $generator
+     * @param array $feedbackdata
+     * @return array Tab stubs by feedback type (studentfeedback, teacherfeedback).
+     */
+    private function lazy_tabs(feedbackgenerator $generator, array $feedbackdata): array {
+        if (!$generator->has_data_for($feedbackdata)) {
+            return [];
+        }
+        $tabs = [];
+        foreach ($generator->get_audiences() as $audience) {
+            if ($audience === feedbackgenerator::AUDIENCE_TEACHER && !$generator->may_show_teacher_feedback($feedbackdata)) {
+                continue;
+            }
+            $tabs[$audience . 'feedback'] = [
+                'generatorname' => $generator->get_generatorname(),
+                'heading' => $generator->get_heading(),
+                'content' => '',
+                'lazy' => '1',
+                'audience' => $audience,
+                'othertabs' => '1',
+            ];
+        }
+        return $tabs;
+    }
+
+    /**
+     * The feedback of one generator for one audience: the content of a tab opened later (issue #85).
+     *
+     * The same rules as the page: a generator that reads the result shows nothing for an invalid
+     * result; teacher feedback needs the teacher permission.
+     *
+     * @param string $generatorname
+     * @param string $audience feedbackgenerator::AUDIENCE_STUDENT or AUDIENCE_TEACHER.
+     * @return array ['heading' => ..., 'content' => ...], or [] when there is nothing to show.
+     */
+    public function get_single_feedback(string $generatorname, string $audience): array {
+        if (!$this->attemptid || !$this->teststrategy || $generatorname === self::PRIMARY_GENERATOR) {
+            return [];
+        }
+        // As on the page: below the minimum number of questions there is no feedback.
+        $minquestions = $this->get_progress()->get_quiz_settings()->maxquestionsgroup->catquiz_minquestions ?? 0;
+        if ($this->get_progress()->get_num_playedquestions() < $minquestions) {
+            return [];
+        }
+        $feedbackdata = $this->load_feedbackdata();
+        $generators = $this->get_feedback_generators_for_teststrategy((int) ($feedbackdata['teststrategy'] ?? $this->teststrategy));
+        foreach ($generators as $generator) {
+            if ($generator->get_generatorname() !== $generatorname) {
+                continue;
+            }
+            if (!in_array($audience, $generator->get_audiences(), true)) {
+                return [];
+            }
+            if (
+                $generator->get_result_dependency() === feedbackgenerator::DEPENDS_ON_RESULT
+                && !$this->has_valid_result($feedbackdata)
+            ) {
+                return [];
+            }
+            $feedback = $generator->get_feedback($feedbackdata)[$audience . 'feedback'] ?? [];
+            return is_array($feedback) ? $feedback : [];
+        }
+        return [];
     }
 
     /**
