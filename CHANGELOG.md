@@ -2,6 +2,10 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Issue #30 (Teil): Feedback-Tabs, die Versuchsliste und der Statistik-Shortcode tragen
+  instanzbezogene IDs (`{{uniqid}}`), sodass mehrere Instanzen auf einer Seite sich nicht
+  stören; Schüler- und Lehrkraft-Tab desselben Generators hatten dieselbe Pane-ID. Die
+  Bootstrap-5-Umstellung betrifft nur 1.3 (Moodle 4.5 ist Bootstrap 4).
 - mod_adaptivequiz #18: Frage-Modals eines abgeschlossenen Versuchs funktionieren auch, wenn
   die Aktivität inzwischen verborgen oder eingeschränkt ist. Der Endpunkt
   `render_question_with_response` prüfte den Modulkontext; Moodles `validate_context()` ruft
