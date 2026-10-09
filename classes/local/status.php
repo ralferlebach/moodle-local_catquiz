@@ -53,6 +53,11 @@ class status {
      * @var string
      */
     const ERROR_NO_REMAINING_QUESTIONS = 'noremainingquestions';
+
+    /**
+     * No question left before the minimum number of questions was reached (issue #134).
+     */
+    const ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM = 'noremainingquestionsbeforeminimum';
     /**
      * ERROR_TESTITEM_ALREADY_IN_RELATED_SCALE
      *
@@ -131,6 +136,7 @@ class status {
         self::ERROR_NO_ITEMS => 7,
         self::EXCEEDED_MAX_ATTEMPT_TIME => 8,
         self::CLOSED_BY_TIMELIMIT => 9,
+        self::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM => 10,
     ];
 
     /**

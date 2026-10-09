@@ -131,6 +131,8 @@ class relevantscales extends strategy {
         $personabilities = $feedbacksettings->filter_nminscale($personabilities, $feedbackdata);
         // Exclude scales where standarderror is not in range.
         $personabilities = $feedbacksettings->filter_semax($personabilities, $feedbackdata);
+        // Neither all productive items of a scale wrong nor all right (issue #140).
+        $personabilities = $feedbacksettings->filter_fraction($personabilities, $feedbackdata);
 
         foreach ($personabilities as $scaleid => $abilitiesarray) {
             $personabilities[$scaleid]['toreport'] = true;

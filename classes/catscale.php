@@ -41,6 +41,7 @@ use local_catquiz\data\dataapi;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_model;
 use local_catquiz\local\model\model_strategy;
+use local_catquiz\local\monitoring\timeline;
 use local_catquiz\output\catscales;
 use moodle_exception;
 use moodle_url;
@@ -435,7 +436,14 @@ class catscale {
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
         $selectedscaleshash = hash('crc32', implode('_', $selectedsubscales));
         $cachekey = sprintf('testitems_%s_%s_%s_%s', $contextid, $includesubscales, $this->catscale->id, $selectedscaleshash);
-        if ($testitems = $cache->get($cachekey)) {
+        // Issue #136: whether the pool came from the cache, and what a miss costs.
+        timeline::start('pool:cache_lookup');
+        $testitems = $cache->get($cachekey);
+        timeline::stop('pool:cache_lookup', [
+            'pool_cache' => $testitems ? 'hit' : 'miss',
+            'pool_items' => $testitems ? count($testitems) : 0,
+        ]);
+        if ($testitems) {
             return $testitems;
         }
 
@@ -464,8 +472,14 @@ class catscale {
 
         $sql = "SELECT $select FROM $from WHERE $where";
 
-        $testitems = $DB->get_records_sql($sql, $params) ?? [];
-        $cache->set($cachekey, $testitems);
+        // Query and building the rows in one span: get_records_sql() does both, and switching to a
+        // recordset only to time them apart would change how the driver fetches.
+        $testitems = timeline::span(
+            'pool:query',
+            fn() => $DB->get_records_sql($sql, $params) ?? [],
+            ['pool_scales' => count($scaleids)]
+        );
+        timeline::span('pool:cache_write', fn() => $cache->set($cachekey, $testitems), ['pool_items' => count($testitems)]);
         return $testitems;
     }
 

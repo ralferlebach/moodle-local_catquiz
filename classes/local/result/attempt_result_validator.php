@@ -52,7 +52,10 @@ final class attempt_result_validator {
      * @param array $nbyscale Optional map scaleid => number of graded, non-pilot
      *        items in this attempt. When given, a scale counts as measured in the
      *        current attempt only when its N is greater than zero.
-     * @param array $fractionbyscale Optional map scaleid => fraction.
+     * @param array $fractionbyscale Optional map scaleid => mean fraction of the productive items
+     *        answered in this attempt. For a scale measured in this attempt a fraction of 0 or 1
+     *        makes the result statistically invalid (issue #140); a missing fraction applies no
+     *        fraction rule.
      * @param int|null $primaryscaleid When given, only this scale is primary;
      *        otherwise every 'toreport' scale is primary.
      * @return attempt_result
@@ -90,6 +93,32 @@ final class attempt_result_validator {
                 $reasons[] = scale_result::REASON_ROOTONLY;
             }
 
+            // Measured in the current attempt (vs. carry-over only).
+            $n = array_key_exists($scaleid, $nbyscale) ? (int) $nbyscale[$scaleid] : null;
+            // Measured only when this attempt's N is known and positive (issue #128). An unknown N
+            // used to count as measured, so a caller that passed no counts made every scale -
+            // a value carried over from an earlier attempt included - look measured.
+            $measured = $n !== null && $n > 0;
+            $fraction = array_key_exists($scaleid, $fractionbyscale) && $fractionbyscale[$scaleid] !== null
+                ? (float) $fractionbyscale[$scaleid]
+                : null;
+
+            /* The fraction rule (issue #140), here and nowhere else. With every productive item
+               of a scale answered wrongly or every one answered correctly, the ability estimate
+               sits at the edge of the range and says nothing reliable: the scale keeps its score,
+               SE, N and fraction for the report but is statistically invalid. The strategies used
+               to apply this rule on the fraction of the whole test, each in its own way, so a
+               subscale answered entirely correctly inside a mixed test passed. The rule applies
+               to measured scales only - with N = 0 the scale is "not measured" instead, and with
+               no fraction at all no fraction rule applies. */
+            if ($measured && $fraction !== null) {
+                if ($fraction <= 0.0) {
+                    $reasons[] = scale_result::REASON_FRACTION_ALL_INCORRECT;
+                } else if ($fraction >= 1.0) {
+                    $reasons[] = scale_result::REASON_FRACTION_ALL_CORRECT;
+                }
+            }
+
             /* 'excluded' now means exactly one thing: the measurement is unusable.
                The display decision "reporting switched off" arrives as its own flag
                (feedbacksettings::FIELD_NOTREPORTED), so the statistical check no
@@ -124,12 +153,6 @@ final class attempt_result_validator {
                 $reasons[] = scale_result::REASON_NOT_PRIMARY;
             }
 
-            // Measured in the current attempt (vs. carry-over only).
-            $n = array_key_exists($scaleid, $nbyscale) ? (int) $nbyscale[$scaleid] : null;
-            // Measured only when this attempt's N is known and positive (issue #128). An unknown N
-            // used to count as measured, so a caller that passed no counts made every scale -
-            // a value carried over from an earlier attempt included - look measured.
-            $measured = $n !== null && $n > 0;
             if (!$measured) {
                 $reasons[] = scale_result::REASON_NOT_MEASURED;
             }
@@ -139,7 +162,6 @@ final class attempt_result_validator {
 
             $score = isset($entry['value']) ? (float) $entry['value'] : null;
             $se = array_key_exists($scaleid, $sebyscale) ? (float) $sebyscale[$scaleid] : null;
-            $fraction = array_key_exists($scaleid, $fractionbyscale) ? (float) $fractionbyscale[$scaleid] : null;
 
             $results[$scaleid] = new scale_result(
                 $scaleid,

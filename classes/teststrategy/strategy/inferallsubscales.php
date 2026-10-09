@@ -133,6 +133,8 @@ class inferallsubscales extends strategy {
         // Filter scales, but instead of excluding a scale, mark it as hidden.
         $personabilities = $feedbacksettings->filter_nminscale($personabilities, $feedbackdata, true);
         $personabilities = $feedbacksettings->filter_semax($personabilities, $feedbackdata, true);
+        // Neither all productive items of a scale wrong nor all right (issue #140).
+        $personabilities = $feedbacksettings->filter_fraction($personabilities, $feedbackdata, true);
         foreach ($personabilities as $scaleid => $abilitiesarray) {
             $personabilities[$scaleid]['toreport'] = true;
             if ($estimated) {

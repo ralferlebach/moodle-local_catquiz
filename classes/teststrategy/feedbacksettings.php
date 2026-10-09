@@ -276,6 +276,47 @@ class feedbacksettings {
     }
 
     /**
+     * Marks scales whose productive items were all answered wrongly or all correctly (issue #140).
+     *
+     * The validator decides validity on this rule by itself (attempt_result_validator). This filter
+     * lets a strategy see the same rule before it chooses: the greatest strength or the lowest skill
+     * gap is picked among scales that can carry a valid result. It used to be decided per strategy on
+     * the fraction of the whole test, pilot items included - all wrong for one strategy, all right
+     * for another, both for a third - so a subscale answered entirely correctly inside a mixed test
+     * passed every check. Only scales measured in this attempt are judged.
+     *
+     * @param array $personabilities
+     * @param array $feedbackdata
+     * @param bool $hide If given, the scale is not excluded but instead the value is marked as hidden.
+     * @return array
+     */
+    public function filter_fraction(array $personabilities, array $feedbackdata, bool $hide = false): array {
+        $progress = $feedbackdata['progress'] ?? null;
+        if (!$progress instanceof progress) {
+            $progress = progress::load(
+                $feedbackdata['attemptid'],
+                'mod_adaptivequiz',
+                $feedbackdata['contextid']
+            );
+        }
+        foreach (array_keys($personabilities) as $scaleid) {
+            if ($progress->get_num_answered_productive_questions((int) $scaleid) === 0) {
+                continue;
+            }
+            $fraction = $progress->get_fraction_for_scale((int) $scaleid);
+            if ($fraction === null || ($fraction > 0.0 && $fraction < 1.0)) {
+                continue;
+            }
+            $personabilities[$scaleid]['error']['fraction'] = [
+                'fraction' => $fraction,
+                'expected' => '0 < f < 1',
+            ];
+            $personabilities[$scaleid][$hide ? self::FIELD_HIDDEN : 'excluded'] = true;
+        }
+        return $personabilities;
+    }
+
+    /**
      * Exclude scales that don't meet minimum of items required in quizsettings.
      *
      * @param array $personabilities

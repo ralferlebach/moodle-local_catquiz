@@ -64,6 +64,7 @@ final class customscalefeedback_test extends basic_testcase {
             ->onlyMethods([
                 'get_quiz_settings',
                 'get_num_answered_productive_questions',
+                'get_fraction_for_scale',
             ])
             ->getMock();
         $progressmock
@@ -74,6 +75,10 @@ final class customscalefeedback_test extends basic_testcase {
         $progressmock
             ->method('get_num_answered_productive_questions')
             ->willReturn(3);
+        // Answered partly right (issue #140): all right or all wrong would make the scales invalid.
+        $progressmock
+            ->method('get_fraction_for_scale')
+            ->willReturn(0.5);
 
         $customscalefeedback = $this->getMockBuilder(customscalefeedback::class)
             ->onlyMethods([
@@ -121,10 +126,11 @@ final class customscalefeedback_test extends basic_testcase {
         ];
 
         $progressmock = $this->getMockBuilder(progress::class)
-            ->onlyMethods(['get_quiz_settings', 'get_num_answered_productive_questions'])
+            ->onlyMethods(['get_quiz_settings', 'get_num_answered_productive_questions', 'get_fraction_for_scale'])
             ->getMock();
         $progressmock->method('get_quiz_settings')->willReturn((object) $quizsettings);
         $progressmock->method('get_num_answered_productive_questions')->willReturn(3);
+        $progressmock->method('get_fraction_for_scale')->willReturn(0.5);
         $generator = $this->getMockBuilder(customscalefeedback::class)
             ->onlyMethods(['get_progress'])
             ->setConstructorArgs([new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_RELSUBS), new feedback_helper()])

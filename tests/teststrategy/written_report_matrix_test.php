@@ -65,13 +65,16 @@ final class written_report_matrix_test extends advanced_testcase {
      *      is_feedback_eligible (detail tab).
      * @param int $nmintest Minimum number of items for the whole test.
      * @param int $nminscale Minimum number of items per scale; 0 for none.
+     * @param array $fractions Fraction of every answer by scale id. Half credit by default, so each
+     *      scale's fraction lies inside (0, 1); all right or all wrong makes a scale invalid (issue #140).
      * @return int[]
      */
     private function written_scales(
         int $strategyid,
         string $predicate = 'is_displayable',
         int $nmintest = 1,
-        int $nminscale = 2
+        int $nminscale = 2,
+        array $fractions = []
     ): array {
         $this->setAdminUser();
 
@@ -97,7 +100,7 @@ final class written_report_matrix_test extends advanced_testcase {
                 $byscale[100][$q->id] = $q;
                 $played[$q->id] = $q;
                 if ($i < $n) {
-                    $responses[$q->id] = ['questionid' => $q->id, 'fraction' => 1.0];
+                    $responses[$q->id] = ['questionid' => $q->id, 'fraction' => (float) ($fractions[$scaleid] ?? 0.5)];
                 }
             }
         }
@@ -243,5 +246,43 @@ final class written_report_matrix_test extends advanced_testcase {
         $DB->delete_records('local_catquiz_attempts');
         $DB->delete_records('adaptivequiz_attempt');
         $this->assertSame([102], $this->written_scales(LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB, 'is_displayable', 1, 0));
+    }
+
+    /**
+     * The fraction rule, per strategy (issue #140).
+     *
+     * 101 answered all wrong, 102 all right; the root holds every answer, so its fraction lies
+     * inside (0, 1). Each strategy treats both as invalid: neither is reported, and the greatest
+     * strength and the lowest skill gap choose among the remaining valid scales. The fraction of the
+     * whole test plays no part - it used to, differently in each strategy.
+     *
+     * @return array
+     */
+    public static function fraction_rule(): array {
+        return [
+            'classical cat' => [LOCAL_CATQUIZ_STRATEGY_CLASSIC, [100]],
+            'fastest: root only' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, [100]],
+            'relevant subscales' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS, [100]],
+            'all subscales' => [LOCAL_CATQUIZ_STRATEGY_ALLSUBS, [100]],
+            // 101 (-1.0) would be the lowest and 102 (1.5) the highest; with both invalid, the root is
+            // the one valid scale left to choose.
+            'lowest skill gap: not the all-wrong scale' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, [100]],
+            'greatest strength: not the all-right scale' => [LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB, [100]],
+        ];
+    }
+
+    /**
+     * Scales answered all wrong or all right are invalid in every strategy (issue #140).
+     *
+     * @dataProvider fraction_rule
+     * @param int $strategyid
+     * @param int[] $expected
+     */
+    public function test_fraction_rule_in_every_strategy(int $strategyid, array $expected): void {
+        $this->resetAfterTest();
+
+        $fractions = [101 => 0.0, 102 => 1.0];
+        $written = $this->written_scales($strategyid, 'is_displayable', 1, 2, $fractions);
+        $this->assertSame($expected, $written);
     }
 }

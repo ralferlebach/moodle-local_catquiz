@@ -125,6 +125,8 @@ class classicalcat extends strategy {
         // limit both filters leave every scale as it is.
         $personabilities = $feedbacksettings->filter_nminscale($personabilities, $feedbackdata);
         $personabilities = $feedbacksettings->filter_semax($personabilities, $feedbackdata);
+        // Neither all productive items of a scale wrong nor all right (issue #140).
+        $personabilities = $feedbacksettings->filter_fraction($personabilities, $feedbackdata);
         foreach ($personabilities as $scaleid => $abilitiesarray) {
             $personabilities[$scaleid]['toreport'] = true;
             if ($estimated) {

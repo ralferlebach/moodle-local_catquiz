@@ -300,5 +300,26 @@
             <INDEX NAME="userid" UNIQUE="false" FIELDS="userid"/>
         </INDEXES>
     </TABLE>
+    <TABLE NAME="local_catquiz_trace" COMMENT="Timeline of attempt requests: where the time to a question goes (issue #136). Written only while the setting attempttrace is on; holds no question or answer content.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="adaptiveattemptid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="The attempt of the activity: adaptivequiz_attempt.id."/>
+        <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="kind" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="first_item or next_item."/>
+        <FIELD NAME="questionnumber" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Number of the item administered in the request, 1 for the first."/>
+        <FIELD NAME="requestms" TYPE="number" LENGTH="12" NOTNULL="false" SEQUENCE="false" DECIMALS="3" COMMENT="Milliseconds from the start of the request to the end of the trace."/>
+        <FIELD NAME="dbqueries" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Database queries of the request."/>
+        <FIELD NAME="spans" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON list of spans: name, depth, offsetms, ms, queries, meta."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="userid" TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="adaptiveattemptid" UNIQUE="false" FIELDS="adaptiveattemptid"/>
+        <INDEX NAME="timecreated" UNIQUE="false" FIELDS="timecreated"/>
+      </INDEXES>
+    </TABLE>
   </TABLES>
 </XMLDB>

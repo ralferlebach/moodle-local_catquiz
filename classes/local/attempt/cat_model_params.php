@@ -19,6 +19,7 @@ namespace local_catquiz\local\attempt;
 use core\persistent;
 use dml_missing_record_exception;
 use stdClass;
+use local_catquiz\local\monitoring\timeline;
 
 /**
  * Defines CAT algorithm parameters that are stored during performing an attempt.
@@ -71,7 +72,8 @@ final class cat_model_params extends persistent {
         $data->measure = 0;
 
         $params = new self(0, $data);
-        $params->create();
+        // Issue #136: part of the cold start of an attempt.
+        timeline::span('cat_model_params:create', fn() => $params->create());
 
         return $params;
     }
