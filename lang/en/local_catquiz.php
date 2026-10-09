@@ -719,6 +719,7 @@ $string['reportscale'] = 'Include scale for report';
 $string['requesttimeout'] = 'The connection request timed out before it could complete';
 $string['response'] = 'Response';
 $string['responsesbyusercharttitle'] = 'Total number of responses per person';
+$string['reviewquestionunavailable'] = 'This question of the attempt is no longer available.';
 $string['rootscale:tooltiptitle'] = 'root scale {$a}';
 $string['saveconfig'] = 'Save configuration';
 $string['scaledetailviewheading'] = 'Detailview of catscale {$a}';

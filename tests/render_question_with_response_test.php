@@ -213,4 +213,84 @@ final class render_question_with_response_test extends advanced_testcase {
         // A wrong question attempt id for this slot must be refused.
         $this->render($slot, $attemptid, $qaid + 9999);
     }
+
+    /**
+     * A finished attempt stays reviewable after the activity was hidden (mod_adaptivequiz #18).
+     *
+     * Validating the module context ran require_login() with the activity, and a hidden activity
+     * failed it for every participant - the modal stayed empty.
+     */
+    public function test_owner_reviews_finished_attempt_of_hidden_activity(): void {
+        [$attemptid, $slot, $qaid, $owner, $context] = $this->build_attempt();
+        set_coursemodule_visible($context->instanceid, 0);
+        \course_modinfo::clear_instance_cache();
+
+        $this->setUser($owner);
+        $result = $this->render($slot, $attemptid, $qaid);
+
+        $this->assertNotEmpty($result['body']);
+        $this->assertStringNotContainsString(get_string('questionfeedbackdisabled', 'local_catquiz'), $result['body']);
+    }
+
+    /**
+     * A running attempt keeps the rules of the activity: hidden means no access.
+     */
+    public function test_running_attempt_of_hidden_activity_is_refused(): void {
+        global $DB;
+        [$attemptid, $slot, $qaid, $owner, $context] = $this->build_attempt();
+        $DB->set_field('adaptivequiz_attempt', 'attemptstate', 'inprogress', ['id' => $attemptid]);
+        set_coursemodule_visible($context->instanceid, 0);
+        \course_modinfo::clear_instance_cache();
+
+        $this->setUser($owner);
+        $this->expectException(\moodle_exception::class);
+        $this->render($slot, $attemptid, $qaid);
+    }
+
+    /**
+     * Without access to the course there is no review, hidden activity or not.
+     */
+    public function test_no_review_without_course_access(): void {
+        [$attemptid, $slot, $qaid, $owner, $context] = $this->build_attempt();
+        $courseid = $context->get_course_context()->instanceid;
+        $enrol = enrol_get_plugin('manual');
+        $instance = array_values(enrol_get_instances($courseid, true))[0];
+        $enrol->unenrol_user($instance, $owner->id);
+
+        $this->setUser($owner);
+        $this->expectException(\moodle_exception::class);
+        $this->render($slot, $attemptid, $qaid);
+    }
+
+    /**
+     * The release of the questions follows the test setting.
+     */
+    public function test_release_follows_the_test_setting(): void {
+        global $DB;
+        [$attemptid] = $this->build_attempt();
+        $instanceid = (int) $DB->get_field('adaptivequiz_attempt', 'instance', ['id' => $attemptid]);
+
+        $this->assertTrue(\local_catquiz\local\access\question_review::released_to_owner($instanceid));
+        $DB->set_field('local_catquiz_tests', 'json', json_encode(['catquiz_showquestion' => 0]), ['componentid' => $instanceid]);
+        \cache_helper::purge_all();
+        $this->assertFalse(\local_catquiz\local\access\question_review::released_to_owner($instanceid));
+    }
+
+    /**
+     * A question usage that no longer exists gives a message, not a database error.
+     */
+    public function test_missing_usage_gives_a_message(): void {
+        global $DB;
+        [$attemptid, $slot, $qaid, $owner] = $this->build_attempt();
+        $uniqueid = (int) $DB->get_field('adaptivequiz_attempt', 'uniqueid', ['id' => $attemptid]);
+        question_engine::delete_questions_usage_by_activity($uniqueid);
+
+        $this->setUser($owner);
+        try {
+            $this->render($slot, $attemptid, $qaid);
+            $this->fail('A missing usage must be reported.');
+        } catch (\moodle_exception $e) {
+            $this->assertSame('reviewquestionunavailable', $e->errorcode);
+        }
+    }
 }
