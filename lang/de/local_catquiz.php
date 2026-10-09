@@ -738,6 +738,7 @@ $string['reportscale'] = 'Skala für den Report der Ergebnisse berücksichtigen'
 $string['requesttimeout'] = 'Zeitüberschreitung beim Verbindungsaufbau';
 $string['response'] = 'Antwort';
 $string['responsesbyusercharttitle'] = 'Gesamtanzahl der gegebenen Antworten pro Person';
+$string['reviewquestionunavailable'] = 'Diese Frage des Versuchs ist nicht mehr verfügbar.';
 $string['rootscale:tooltiptitle'] = 'Globalskala „{$a}“';
 $string['saveconfig'] = 'Konfiguration speicher';
 $string['scaledetailviewheading'] = 'Detailansicht der CAT-Skala „{$a}“';

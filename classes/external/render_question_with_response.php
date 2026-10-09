@@ -34,6 +34,7 @@ use dml_exception;
 use core_external\external_api;
 use core_external\external_value;
 use core_external\external_single_structure;
+use local_catquiz\local\access\question_review;
 use local_catquiz\testenvironment;
 use moodle_exception;
 use question_display_options;
@@ -140,10 +141,12 @@ class render_question_with_response extends external_api {
         $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $adaptiveattemptid], '*', MUST_EXIST);
         $instanceid = $attempt->instance;
 
+        // Login for the review (mod_adaptivequiz issue #18): a finished attempt is reviewed in the course,
+        // so an activity hidden afterwards no longer stops the modal - validating the module context
+        // ran require_login() with the activity and failed for every participant once it was hidden.
+        self::validate_context(question_review::login_context($attempt));
         $cm = get_coursemodule_from_instance('adaptivequiz', $instanceid, 0, false, MUST_EXIST);
         $context = context_module::instance($cm->id);
-        // Moodle-compliant context validation (also enforces login for the context).
-        self::validate_context($context);
         $PAGE->set_context($context);
 
         // Enforce access before revealing anything about the attempt.
@@ -164,6 +167,11 @@ class render_question_with_response extends external_api {
 
         // Get the question attempt.
         $uniqueid = $attempt->uniqueid;
+        // A usage that no longer exists - deleted questions, a restored course - gets a message the
+        // modal can show, not a database error (mod_adaptivequiz issue #18).
+        if (empty($uniqueid) || !$DB->record_exists('question_usages', ['id' => $uniqueid])) {
+            throw new moodle_exception('reviewquestionunavailable', 'local_catquiz');
+        }
         $quba = question_engine::load_questions_usage_by_activity($uniqueid);
 
         // Validate that the slot really exists in this usage and, when

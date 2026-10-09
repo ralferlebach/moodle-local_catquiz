@@ -2,6 +2,14 @@
 
 ## 1.2.1 (in Arbeit)
 
+- mod_adaptivequiz #18: Frage-Modals eines abgeschlossenen Versuchs funktionieren auch, wenn
+  die Aktivität inzwischen verborgen oder eingeschränkt ist. Der Endpunkt
+  `render_question_with_response` prüfte den Modulkontext; Moodles `validate_context()` ruft
+  dafür `require_login()` mit der Aktivität auf und scheiterte für alle Teilnehmenden. Ein
+  abgeschlossener Versuch wird jetzt im Kurs geprüft (Login, Einschreibung), ein laufender
+  weiter in der Aktivität (`local\access\question_review`). Besitzer oder
+  `view_users_feedback`, Freigabe über `catquiz_showquestion` bleiben verbindlich. Eine
+  fehlende Frageverwendung meldet „Diese Frage des Versuchs ist nicht mehr verfügbar.“
 - Issue #120: Ein Versuch ohne valides Ergebnis zeigt weiter Quizverlauf,
   Zusammenfassung und (für Berechtigte) den Export; nur ergebnisabhängige Bereiche
   (Peer-Vergleich, Lernfortschritt, Skalenfeedback) entfallen. Die Generatoren
