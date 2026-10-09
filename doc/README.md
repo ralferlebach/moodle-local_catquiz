@@ -16,6 +16,8 @@ Zwei Arten von Dokumenten:
   Abschluss+Ergebnisspeicherung; Privacy/Datenschutz; Performance CAT-Manager &
   Statistik; Performance Testadministration; Migration zu Moodle 5.x; zukünftige
   IRT-Modelle) inkl. Zweck, Inhalt, Priorität und Abhängigkeiten.
+- **result-contract.md** – Wie CATquiz-Ergebnisse über den Adapter ins Gradebook der
+  Aktivität kommen (mod_adaptivequiz #14, Adapter #7).
 - **attempt-trace.md** – Versuchs-Trace (#136): einschalten, Spans, Datenschutz, Export,
   Messvorgehen für LTI-Starts.
 - **id-namespaces.md** – Id-Namensräume: Benennung von Host- und CAT-Versuchs-Id, die
