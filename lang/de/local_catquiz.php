@@ -411,6 +411,7 @@ $string['feedbacknumber'] = 'Feedback für Fähigkeits-Stufe {$a}';
 $string['feedbackrange'] = 'Fähigkeits-Stufe {$a}';
 $string['feedbackrangeuncertain'] = 'Ihr Ergebnis liegt nahe an der Grenze zwischen zwei Feedbackbereichen, daher ist noch keine eindeutige Einordnung moeglich.';
 $string['feedbacksheader'] = 'Testversuch {$a}';
+$string['feedbacktabloadfailed'] = 'Dieser Teil des Feedbacks konnte nicht geladen werden.';
 $string['fetchempty'] = 'Parameter sind am aktuellsten Stand';
 $string['fetchingparameters'] = 'Parameter werden von der zentralen Instanz abgerufen...';
 $string['fetchparamheading'] = 'Parameter werden von {$a} abgerufen';
@@ -506,6 +507,8 @@ $string['labelidnotunique'] = 'Fragen-Label „{$a}“ ist nicht eindeutig.';
 $string['lang'] = 'Sprache';
 $string['lastattempttime'] = 'Letzter Testversuch';
 $string['lastcalculation'] = 'Letzte Nachberechnung';
+$string['lazyfeedbacktabs'] = 'Feedback-Tabs erst beim Öffnen laden';
+$string['lazyfeedbacktabs_desc'] = 'Die Ergebnisseite baut das Hauptfeedback sofort auf und jeden weiteren Tab (Quizverlauf, Vergleich, Lernfortschritt, Export) erst, wenn er geöffnet wird. Aus: alles wird wie bisher mit der Seite aufgebaut.';
 $string['learningprogress_description'] = 'Wie hat sich Ihr Fähigkeits-Wert über
     die letzten Versuche hin entwickelt? Haben Sie sich verbessert?<br/> Die
     folgende Grafik zeigt Ihnen die Entwicklung Ihres (allgemeinen)

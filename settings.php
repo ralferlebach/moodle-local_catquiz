@@ -184,6 +184,14 @@ if ($hassiteconfig) {
         PARAM_INT
     ));
 
+    // Issue #85: the tabs of the result page beyond the main feedback load when opened.
+    $settings->add(new admin_setting_configcheckbox(
+        'local_catquiz/lazyfeedbacktabs',
+        get_string('lazyfeedbacktabs', 'local_catquiz'),
+        get_string('lazyfeedbacktabs_desc', 'local_catquiz'),
+        1
+    ));
+
     // Issue #136: timeline of attempt requests, to find where the time to a question goes. Off by
     // default; it writes one row per request of an attempt while it is on.
     $settings->add(new admin_setting_configcheckbox(

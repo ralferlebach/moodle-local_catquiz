@@ -2,6 +2,14 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Issue #85: Die Ergebnisseite baut nur das Hauptfeedback sofort auf; Quizverlauf,
+  Zusammenfassung, Vergleich, Lernfortschritt, Export und Pilotfragen laden erst beim Öffnen
+  ihres Tabs (`local_catquiz_render_feedback_tab`, nur lesend, ohne Session-Sperre).
+  Zugriff wie die Seite: Besitzer oder `view_users_feedback`, Lehrkraft-Tabs mit
+  `view_teacher_feedback`, ergebnisabhängige Tabs nur bei validem Ergebnis. Ladeanzeige,
+  Fehlermeldung mit „Erneut versuchen“; ein fehlschlagender Tab lässt die Seite stehen.
+  Generatoren erklären ihr Publikum (`get_audiences()`), damit keine leeren Lehrkraft-Tabs
+  entstehen. Abschaltbar über `local_catquiz/lazyfeedbacktabs` (Standard: an).
 - Issue #30: Bootstrap-5-Markup. Tabs, Collapses und Modals nutzen `data-bs-*`; alte
   Klassen ersetzt (`text-end`, `ms-*`/`me-*`, `float-end`, `visually-hidden`,
   `text-bg-primary`, Grid statt `card-deck`, kein `form-inline`). Feedback-Tabs, die
