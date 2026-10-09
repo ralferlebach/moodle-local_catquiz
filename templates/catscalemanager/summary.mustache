@@ -61,12 +61,12 @@
 </div>
 <div>
   <h3>{{#str}} subscribedcatscalesheading, local_catquiz {{/str}}</h3>
-  <div class="card-deck dashboard-card-deck">
+  <div class="d-flex flex-wrap gap-3 dashboard-card-deck">
   {{#itemtree}}
     {{#subscribed}}
     <div class="card dashboard-card">
         <div class="card-img dashboard-card-img" style='background-image: url("{{{image}}}");'>
-            <span class="sr-only">{{#str}}aria:catscaleimage, local_catquiz{{/str}}</span>
+            <span class="visually-hidden">{{#str}}aria:catscaleimage, local_catquiz{{/str}}</span>
         </div>
         <div class="card-body">
           <h3><a href="{{viewlink}}">{{name}}</a></h3>
@@ -78,7 +78,7 @@
                 "0 unusable" line would be noise on every scale. The link leads
                 straight into the list filtered to those items. }}
             <div class="text-danger">
-              <i class="fa fa-exclamation-triangle mr-1" aria-hidden="true"></i>
+              <i class="fa fa-exclamation-triangle me-1" aria-hidden="true"></i>
               <a href="{{unusablelink}}">
                 {{#str}}catmanagernumberofunusableitems, local_catquiz{{/str}}:
                 {{numberofunusableitems}}

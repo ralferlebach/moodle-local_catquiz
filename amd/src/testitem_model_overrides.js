@@ -25,7 +25,7 @@ import {get_string as getString} from 'core/str';
 const SELECTORS = {
     FORMCONTAINER: '#lcq_model_override_form',
     NOEDITBUTTON: '[name="noedititemparams"]',
-    MODELSTATUSSELECTS: '#lcq_model_override_form .custom-select[name^="override_"]',
+    MODELSTATUSSELECTS: '#lcq_model_override_form select[name^="override_"]',
     ACTIVEMODELSELECT: '[name="active_model"]',
     TEMP_FIELDS_INPUT: '[name="temporaryfields"]',
     DELETED_PARAMS_FIELD: '[name="deletedparams"]'

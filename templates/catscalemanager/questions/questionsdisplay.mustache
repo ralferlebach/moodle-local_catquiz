@@ -33,33 +33,25 @@
     {{>local_catquiz/catscalemanager/scaleandcontextselector}}
     <div>
         {{^notable}}
-            <button type="button" class="btn btn-primary" data-toggle="modal" data-target=".bd-example-modal-xl">{{#str}}addtestitemtitle, local_catquiz{{/str}}</button>
-            <div class="modal fade bd-example-modal-xl" tabindex="-1" role="dialog" aria-label="myLargeModalLabel" aria-hidden="true">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">{{#str}}addtestitemtitle, local_catquiz{{/str}}</h5>
-                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <div>{{{modaltable}}}</div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-dismiss="modal">{{#str}}close, local_catquiz{{/str}}</button>
-                        </div>
-                    </div>
-                </div>
+            {{! A Moodle core modal (issue #30); the table is moved into it when the dialog first opens. }}
+            <div id="local-catquiz-addtestitems-{{uniqid}}">
+                <button type="button" class="btn btn-primary" data-action="local_catquiz-addtestitems"
+                        data-title="{{#str}}addtestitemtitle, local_catquiz{{/str}}">{{#str}}addtestitemtitle, local_catquiz{{/str}}</button>
+                <div class="d-none" data-region="local_catquiz-addtestitems-content">{{{modaltable}}}</div>
             </div>
+            {{#js}}
+                require(['local_catquiz/addtestitems_modal'], function(modal) {
+                    modal.init('local-catquiz-addtestitems-{{uniqid}}');
+                });
+            {{/js}}
         {{/notable}}
         {{^notable}}
-            <form method="get" class="form-inline my-2" id="catquiz-questiontext-search">
+            <form method="get" class="d-flex flex-wrap align-items-center my-2" id="catquiz-questiontext-search">
                 {{#hiddenparams}}
                     <input type="hidden" name="{{name}}" value="{{value}}">
                 {{/hiddenparams}}
-                <label class="mr-2" for="catquiz-qtsearch">{{#str}}questiontextsearch, local_catquiz{{/str}}</label>
-                <input type="text" class="form-control mr-2" id="catquiz-qtsearch" name="qtsearch"
+                <label class="me-2" for="catquiz-qtsearch">{{#str}}questiontextsearch, local_catquiz{{/str}}</label>
+                <input type="text" class="form-control w-auto me-2" id="catquiz-qtsearch" name="qtsearch"
                        value="{{qtsearch}}">
                 <button type="submit" class="btn btn-secondary">{{#str}}search, core{{/str}}</button>
             </form>

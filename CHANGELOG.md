@@ -2,6 +2,15 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Issue #30: Bootstrap-5-Markup. Tabs, Collapses und Modals nutzen `data-bs-*`; alte
+  Klassen ersetzt (`text-end`, `ms-*`/`me-*`, `float-end`, `visually-hidden`,
+  `text-bg-primary`, Grid statt `card-deck`, kein `form-inline`). Feedback-Tabs, die
+  Versuchsliste und der Statistik-Shortcode tragen instanzbezogene IDs (`{{uniqid}}`),
+  sodass mehrere Instanzen auf einer Seite sich nicht stören; Schüler- und Lehrkraft-Tab
+  desselben Generators hatten dieselbe Pane-ID. Der Dialog „Testitems hinzufügen“ ist
+  ein Core-Modal (`local_catquiz/addtestitems_modal`). Die Modellstatus-Auswahl im
+  Item-Override suchte `.custom-select`, das Moodle 5 nicht mehr rendert. Das ungenutzte
+  Template `modals/modal_confirm.mustache` ist entfernt.
 - mod_adaptivequiz #18: Frage-Modals eines abgeschlossenen Versuchs funktionieren auch, wenn
   die Aktivität inzwischen verborgen oder eingeschränkt ist. Der Endpunkt
   `render_question_with_response` prüfte den Modulkontext; Moodles `validate_context()` ruft

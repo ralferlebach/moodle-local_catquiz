@@ -617,12 +617,12 @@ class catscalequestions_table extends wunderbyte_table {
 
         return html_writer::span(
             html_writer::tag('i', '', [
-                'class' => 'fa fa-exclamation-triangle mr-1',
+                'class' => 'fa fa-exclamation-triangle me-1',
                 'aria-hidden' => 'true',
             ]) . s($label),
             'catquiz-itemparams-unusable text-danger',
             ['title' => $reason]
-        ) . html_writer::span(s($reason), 'sr-only');
+        ) . html_writer::span(s($reason), 'visually-hidden');
     }
 
     /**
@@ -749,7 +749,7 @@ class catscalequestions_table extends wunderbyte_table {
      * @return string
      */
     public function col_idnumber($values) {
-        return html_writer::tag('span', $values->idnumber, ['class' => 'badge badge-primary']);
+        return html_writer::tag('span', $values->idnumber, ['class' => 'badge text-bg-primary']);
     }
 
     /**

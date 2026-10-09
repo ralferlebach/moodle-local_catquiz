@@ -541,7 +541,7 @@ function setCopyButtonStatus(button, message) {
 
     if (!statusNode) {
         statusNode = document.createElement('span');
-        statusNode.className = 'ml-2 text-muted small';
+        statusNode.className = 'ms-2 text-muted small';
         statusNode.setAttribute('data-copy-status-for', button.name);
         statusNode.setAttribute('role', 'status');
         statusNode.setAttribute('aria-live', 'polite');

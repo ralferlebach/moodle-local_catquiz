@@ -441,7 +441,7 @@ class graphicalsummary extends feedbackgenerator {
                 $correctnesshtml = $icon . html_writer::tag(
                     'span',
                     $responsestring,
-                    ['class' => 'sr-only catquiz-response-verdict']
+                    ['class' => 'visually-hidden catquiz-response-verdict']
                 );
 
                 $responsesummary = $values['responsesummary'] ?? null;
@@ -454,11 +454,11 @@ class graphicalsummary extends feedbackgenerator {
                     $correctnesshtml .= html_writer::tag(
                         'span',
                         get_string('feedback_table_givenanswer', 'local_catquiz') . ' ',
-                        ['class' => 'sr-only catquiz-response-answerlabel']
+                        ['class' => 'visually-hidden catquiz-response-answerlabel']
                     ) . html_writer::tag(
                         'span',
                         $answerhtml,
-                        ['class' => 'sr-only catquiz-responsesummary']
+                        ['class' => 'visually-hidden catquiz-responsesummary']
                     );
                 }
 
