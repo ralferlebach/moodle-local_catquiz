@@ -175,6 +175,16 @@ class catscale {
     }
 
     /**
+     * Whether a stored bound is set: a number, 0 included.
+     *
+     * @param mixed $bound
+     * @return bool
+     */
+    private static function is_set($bound): bool {
+        return is_numeric($bound);
+    }
+
+    /**
      * Returns the minscalevalue and maxscalevalue of ability associated with a catscale.
      *
      * This returns the values of the main ancestor scale.
@@ -187,7 +197,12 @@ class catscale {
             $catscaleid = $this->catscaleid;
         }
         $catscale = self::return_catscale_object($catscaleid);
-        if ($catscale->minscalevalue && $catscale->maxscalevalue && $catscale->parentid == 0) {
+        // A bound of 0 is a bound (mod_adaptivequiz issue #14): the check used to be a truthiness
+        // test, which sent a numeric 0 to the default range. Only bounds that are not set fall
+        // back. Bounds that are set but form no range (upper <= lower) are returned as they are:
+        // replacing them with the default would hide a configuration error that has to stop
+        // grading, not be graded on a range nobody chose.
+        if ($catscale->parentid == 0 && self::is_set($catscale->minscalevalue) && self::is_set($catscale->maxscalevalue)) {
             return [
                 'minscalevalue' => $catscale->minscalevalue,
                 'maxscalevalue' => $catscale->maxscalevalue,

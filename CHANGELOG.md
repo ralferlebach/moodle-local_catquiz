@@ -2,6 +2,15 @@
 
 ## 1.3.0 (in Arbeit)
 
+- mod_adaptivequiz #14 / adaptivequizcatmodel_catquiz #7: `catscale::get_ability_range()`
+  prüfte die Skalengrenzen auf Wahrheitswert; ein numerisches 0 (z. B. in einem Skalenobjekt mit
+  Float-Grenzen) fiel auf den Standardbereich -5..5 zurück. Zurückgefallen wird jetzt nur, wenn
+  eine Grenze nicht gesetzt ist. Gesetzte Grenzen ohne Bereich (obere <= untere) werden
+  unverändert gemeldet, damit die Aktivität darauf keine Note vergibt, statt auf einem
+  untergeschobenen Bereich zu bewerten. (Werte aus der Datenbank kommen als Zeichenkette „0.00“
+  und waren schon vorher wahr; das Skalenformular verlangt ohnehin eine negative Untergrenze.)
+  Die Bewertung selbst liegt bei der Aktivität: CATquiz liefert über den Adapter Score,
+  Gültigkeit und Bereich, die Aktivität rechnet 0–100 % und schreibt ins Gradebook.
 - Issue #85: Die Ergebnisseite baut nur das Hauptfeedback sofort auf; Quizverlauf,
   Zusammenfassung, Vergleich, Lernfortschritt, Export und Pilotfragen laden erst beim Öffnen
   ihres Tabs (`local_catquiz_render_feedback_tab`, nur lesend, ohne Session-Sperre).
