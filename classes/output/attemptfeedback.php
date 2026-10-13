@@ -611,6 +611,7 @@ class attemptfeedback implements renderable, templatable {
      *
      * @param array $generators
      * @param array $feedbackdata
+     * @param bool $lazy Offer the tabs beyond the main feedback empty, to be loaded when opened (issue #85).
      *
      * @return array
      *
