@@ -987,7 +987,11 @@ class catquiz_handler {
      */
     public static function fetch_question_id(int $cmid, string $component, stdClass $attemptdata): array {
         // Issue #136: the trace of this request belongs to this attempt; first item or a following one.
-        timeline::attempt((int) $attemptdata->id, (int) $attemptdata->questionsattempted);
+        // Only an attempt that has an id can own a trace; a caller may hand over less (the adapter's
+        // tests pass a bare attempt object), and reading the missing id raised a warning.
+        if (isset($attemptdata->id)) {
+            timeline::attempt((int) $attemptdata->id, (int) ($attemptdata->questionsattempted ?? 0));
+        }
         return timeline::span('catquiz:fetch_question_id', fn() => self::fetch_question_id_traced($cmid, $component, $attemptdata));
     }
 

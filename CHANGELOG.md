@@ -2,6 +2,10 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Issue #136: `catquiz_handler::fetch_question_id()` las für den Versuchs-Trace `$attemptdata->id`
+  auch dann, wenn das übergebene Versuchsobjekt keine ID hat, und löste eine Warnung aus. Sie
+  ließ im Adapter `catquiz_item_administration_slot_reuse_test` (Zweig ALiSe-v-1.2.0-legacy)
+  rot werden. Der Trace wird jetzt nur einem Versuch mit ID zugeordnet.
 - Issue #123 (Behat `catquiz_settings.feature`): Nach dem Ändern der Anzahl der Feedbackoptionen
   ließ sich das Formular nicht mehr speichern („No gap in the feedbackrange allowed“). Die
   Grenzen der bisherigen Bereiche kamen mit der Anfrage zurück und wurden behalten; der neue
