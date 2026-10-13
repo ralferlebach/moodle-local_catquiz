@@ -3060,6 +3060,97 @@ final class strategy_test extends advanced_testcase {
     }
 
     /**
+     * After a pilot item the next question is a new one - not the question before the pilot (issue #141).
+     *
+     * The production attempt behind issues #141/#125/#126: 33 slots at a maximum of 25, and each of
+     * its four repetitions came right after a pilot item and repeated the question before it. The
+     * pilot item was not registered as the last question, so its answer did not match the last
+     * question, the request looked like a reload and the previous question was handed out again.
+     *
+     * Driven through the real selection with pilot items (the testing class makes the third, fifth,
+     * ninth ... question a pilot), answering every question in its own slot as the activity does.
+     *
+     * @dataProvider pilot_strategies_provider
+     * @param int $strategy
+     * @param string $label
+     * @return void
+     */
+    public function test_no_question_is_repeated_after_a_pilot(int $strategy, string $label): void {
+        global $DB, $USER;
+
+        putenv(
+            sprintf(
+                'USE_TESTING_CLASS_FOR=%s',
+                implode(',', [
+                    'local_catquiz\\teststrategy\\preselect_task\\updatepersonability',
+                    'local_catquiz\\teststrategy\\preselect_task\\maybe_return_pilot',
+                ])
+            )
+        );
+        putenv('CATQUIZ_TESTING_ABILITY=0.0');
+        putenv('CATQUIZ_TESTING_STANDARDERROR=1.0');
+        putenv('CATQUIZ_TESTING_SKIP_FEEDBACK=true');
+        $settings = [
+            'maxquestions' => 250,
+            'maxquestionspersubscale' => 25,
+            'pilot_ratio' => 50,
+            'standarderror_min' => 0.25,
+            'standarderror_max' => 0.5,
+        ];
+        $this->createtestenvironment($strategy, $settings)->save_or_update();
+        catquiz_handler::prepare_attempt_caches();
+        $this->preventResetByRollback();
+
+        $attemptid = (new attempt($this->adaptivequiz, $USER->id))->get_attempt()->id;
+        $administered = [];
+        $pilots = 0;
+        $hasqubaid = false;
+        for ($i = 0; $i < 12; $i++) {
+            $attemptrec = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
+            $adaptivequiz = $DB->get_record('adaptivequiz', ['id' => $attemptrec->instance], '*', MUST_EXIST);
+            $attempt = new attempt($adaptivequiz, $attemptrec->userid);
+            [$questionid] = catquiz_handler::fetch_question_id('1', 'mod_adaptivequiz', $attempt->get_attempt());
+            if (!$questionid) {
+                break;
+            }
+            $this->assertNotContains(
+                (int) $questionid,
+                $administered,
+                "$label: question $questionid handed out again after " . implode(', ', $administered) . '.'
+            );
+            $administered[] = (int) $questionid;
+            $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id((int) $attemptid, 'mod_adaptivequiz');
+            $saved = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]), true);
+            $pilots += empty($saved['playedquestions'][$questionid]['is_pilot']) ? 0 : 1;
+
+            $this->createresponse(question_bank::load_question($questionid), $i % 2 === 0);
+            $attemptrec = $attempt->get_attempt();
+            $attemptrec->timemodified = time();
+            $attemptrec->questionsattempted = ($attemptrec->questionsattempted ?? 0) + 1;
+            $DB->update_record('adaptivequiz_attempt', $attemptrec);
+            if (!$hasqubaid) {
+                $attempt->set_quba_id($this->quba->get_id());
+                $hasqubaid = true;
+            }
+        }
+
+        $this->assertGreaterThan(0, $pilots, "$label: no pilot item was handed out - the test proves nothing.");
+        $this->assertGreaterThan(5, count($administered), "$label: the attempt ended too early to tell.");
+    }
+
+    /**
+     * Strategies that hand out pilot items from the simulation pool.
+     *
+     * @return array
+     */
+    public static function pilot_strategies_provider(): array {
+        return [
+            'fastest' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, 'fastest'],
+            'balanced' => [LOCAL_CATQUIZ_STRATEGY_BALANCED, 'balanced'],
+        ];
+    }
+
+    /**
      * Strategies to drive through the two-question run.
      *
      * More than one, because a defect in a shared pipeline stage shows up in all of

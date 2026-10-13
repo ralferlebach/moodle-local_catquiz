@@ -746,6 +746,20 @@ class progress implements JsonSerializable {
     }
 
     /**
+     * Returns the number of ANSWERED questions of this attempt, pilot items included.
+     *
+     * The measure for the test's maximum (issue #141): the maximum limits every question a person
+     * is asked, productive or pilot, while the minimum - and every result - counts productive items
+     * only ({@see self::get_num_answered_productive_questions()}). Based on the responses, like the
+     * productive count, so a pending item after a resume does not count.
+     *
+     * @return int
+     */
+    public function get_num_answered_questions(): int {
+        return count($this->responses);
+    }
+
+    /**
      * Returns the number of ANSWERED productive questions of this attempt.
      *
      * This is the authoritative measure for the configured test length. It is

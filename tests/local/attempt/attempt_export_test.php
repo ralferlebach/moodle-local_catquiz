@@ -21,6 +21,12 @@ use local_catquiz\local\result\attempt_result_validator;
 use local_catquiz\local\result\personparam_repository;
 use local_catquiz\local\result\scale_result;
 
+defined('MOODLE_INTERNAL') || die();
+
+global $CFG;
+require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/measured_progress.php');
+require_once($CFG->dirroot . '/question/engine/lib.php');
+
 /**
  * The export of one attempt, valid result or not (issue #120).
  *
@@ -132,5 +138,62 @@ final class attempt_export_test extends advanced_testcase {
         $this->assertFalse(attempt_export::can_export($adaptiveattemptid));
         $this->setUser($other);
         $this->assertFalse(attempt_export::can_export($adaptiveattemptid));
+    }
+
+    /**
+     * The export tells what was asked and what counts: slots, repetitions, answered and productive items
+     * (issues #141, #125/#126).
+     *
+     * Five slots for three questions - two of them repetitions, as in the production case of 33 slots
+     * at a maximum of 25 - and four answers, one of them a pilot item.
+     */
+    public function test_counts_slots_repetitions_and_answered_items(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $adaptiveattemptid = $this->attempt('invalid');
+        $context = \context_course::instance($this->course->id);
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category(['contextid' => $context->id]);
+        $quba = \question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
+        $quba->set_preferred_behaviour('deferredfeedback');
+        $questions = [];
+        for ($i = 0; $i < 3; $i++) {
+            $questions[] = \question_bank::load_question(
+                $generator->create_question('truefalse', null, ['category' => $category->id])->id
+            );
+        }
+        foreach ([0, 1, 1, 2, 2] as $index) {
+            $quba->add_question($questions[$index]);
+        }
+        $quba->start_all_questions();
+        \question_engine::save_questions_usage_by_activity($quba);
+        $DB->set_field('adaptivequiz_attempt', 'uniqueid', $quba->get_id(), ['id' => $adaptiveattemptid]);
+        $DB->set_field('adaptivequiz_attempt', 'resultreason', 'min_questions_not_reached', ['id' => $adaptiveattemptid]);
+
+        $this->setUser($this->student);
+        local_catquiz_measured_progress($adaptiveattemptid, [7 => 3], 9, [], [], 1);
+
+        $row = attempt_export::rows($adaptiveattemptid)[0];
+
+        $this->assertSame(attempt_export::COLUMNS, array_keys($row));
+        $this->assertSame(5, $row['questionslots']);
+        $this->assertSame(2, $row['duplicateslots']);
+        $this->assertSame(4, $row['answeredquestions'], 'Pilot items are questions asked.');
+        $this->assertSame(3, $row['answeredproductive'], 'Pilot items do not count for the result.');
+        $this->assertSame('min_questions_not_reached', $row['resultreason']);
+    }
+
+    /**
+     * Without a usage or a progress the counts stay empty - not zero.
+     */
+    public function test_counts_are_empty_without_usage_and_progress(): void {
+        $this->resetAfterTest();
+
+        $row = attempt_export::rows($this->attempt(null))[0];
+
+        foreach (['questionslots', 'duplicateslots', 'answeredquestions', 'answeredproductive'] as $column) {
+            $this->assertSame('', $row[$column], $column);
+        }
     }
 }

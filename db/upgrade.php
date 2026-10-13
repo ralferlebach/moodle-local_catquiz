@@ -1532,6 +1532,17 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026100900, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026100909) {
+        // Issue #141: the activity's maximum now caps every question asked; it has to match the
+        // CAT limit of every activity, also of those not saved again since the limit changed.
+        $changed = \local_catquiz\catquiz_handler::sync_all_activity_question_limits();
+        if ($changed) {
+            mtrace("local_catquiz: maximum number of questions brought in line with the CAT settings in $changed activities.");
+        }
+
+        upgrade_plugin_savepoint(true, 2026100909, 'local', 'catquiz');
+    }
+
     return true;
 }
 
