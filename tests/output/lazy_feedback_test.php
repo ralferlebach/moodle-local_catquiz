@@ -321,6 +321,44 @@ final class lazy_feedback_test extends advanced_testcase {
     }
 
     /**
+     * The page carries the attempt into every lazy tab: the tab loads its content by it.
+     *
+     * The attempt-finished page and the review page render export_for_template() directly; the
+     * attempt id was not part of it, so every lazy region asked for attempt "" and failed.
+     */
+    public function test_page_carries_the_attempt_into_lazy_tabs(): void {
+        global $PAGE;
+        $this->resetAfterTest();
+        set_config('lazyfeedbacktabs', 1, 'local_catquiz');
+
+        $feedback = $this->getMockBuilder(attemptfeedback::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['load_feedbackdata', 'get_feedback_generators_for_teststrategy', 'get_progress'])
+            ->getMock();
+        $feedback->attemptid = 42;
+        $feedback->teststrategy = LOCAL_CATQUIZ_STRATEGY_LOWESTSUB;
+        $progress = $this->getMockBuilder(\local_catquiz\teststrategy\progress::class)
+            ->onlyMethods(['get_quiz_settings', 'get_num_playedquestions'])
+            ->getMock();
+        $progress->method('get_quiz_settings')->willReturn((object) []);
+        $progress->method('get_num_playedquestions')->willReturn(5);
+        $feedback->method('get_progress')->willReturn($progress);
+        $feedback->method('load_feedbackdata')->willReturn([
+            'attemptid' => 42, 'contextid' => 1, 'teststrategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB,
+            'customscalefeedback_abilities' => [5 => ['value' => 0.3, 'toreport' => true, 'primary' => true]],
+            'nbyscale' => [5 => 4],
+        ]);
+        $feedback->method('get_feedback_generators_for_teststrategy')->willReturn($this->generators(false));
+
+        $output = $PAGE->get_renderer('core');
+        $html = $output->render_from_template('local_catquiz/attemptfeedback', $feedback->export_for_template($output));
+
+        preg_match_all('/data-region="local_catquiz-lazyfeedback" data-attemptid="([^"]*)"/', $html, $matches);
+        $this->assertNotEmpty($matches[1], 'The page offers lazy tabs.');
+        $this->assertSame(['42'], array_values(array_unique($matches[1])));
+    }
+
+    /**
      * The endpoint: the owner gets the tab, others need the feedback permission, teacher tabs the
      * teacher permission - also for a hidden activity.
      */

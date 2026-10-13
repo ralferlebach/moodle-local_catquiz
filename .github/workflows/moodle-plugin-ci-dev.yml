@@ -161,7 +161,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        image: mirror.gcr.io/library/postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -318,7 +318,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        image: mirror.gcr.io/library/postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -424,7 +424,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        image: mirror.gcr.io/library/postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -432,7 +432,7 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       mariadb:
-        image: mariadb:11.4
+        image: mirror.gcr.io/library/mariadb:11.4
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -561,7 +561,7 @@ jobs:
 
     services:
       mariadb:
-        image: mariadb:11.4
+        image: mirror.gcr.io/library/mariadb:11.4
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -624,6 +624,23 @@ jobs:
           DB: mariadb
           MOODLE_BRANCH: main
 
+      # Docker Hub begrenzt anonyme Pulls (toomanyrequests). moodle-plugin-ci startet Selenium
+      # per docker run und holt das Image sonst von Docker Hub; liegt es lokal vor, wird nicht
+      # gezogen. Deshalb zuerst ueber den Google-Mirror, erst danach Docker Hub, mit Wiederholung.
+      - name: Selenium-Image vorladen (Docker-Hub-Ratenlimit)
+        if: ${{ always() }}
+        run: |
+          for src in mirror.gcr.io/selenium/standalone-chrome:4 selenium/standalone-chrome:4; do
+            for attempt in 1 2 3; do
+              if docker pull "$src"; then
+                docker tag "$src" selenium/standalone-chrome:4
+                exit 0
+              fi
+              sleep $((attempt * 15))
+            done
+          done
+          echo "::warning::Selenium-Image konnte nicht vorab geladen werden."
+
       - name: Behat features
         id: behat
         if: ${{ always() }}
@@ -674,7 +691,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17
+        image: mirror.gcr.io/library/postgres:17
         env:
           POSTGRES_USER: moodle
           POSTGRES_PASSWORD: moodle

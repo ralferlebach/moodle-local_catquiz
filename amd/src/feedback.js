@@ -54,7 +54,9 @@ const loadRegion = async(region) => {
             },
         }])[0];
         await icon;
-        await Templates.replaceNodeContents(region, response.html, response.javascript);
+        // Wrapped: replaceNodeContents() hands the HTML to jQuery, which reads a string that does not
+        // start with a tag as a selector - a feedback beginning with text then failed to load.
+        await Templates.replaceNodeContents(region, '<div>' + response.html + '</div>', response.javascript);
         region.dataset.state = 'loaded';
     } catch (error) {
         region.dataset.state = 'failed';

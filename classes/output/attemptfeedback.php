@@ -448,6 +448,8 @@ class attemptfeedback implements renderable, templatable {
 
         return [
             'feedback' => $this->get_feedback_for_attempt(),
+            // The tabs load their content by attempt (issue #85); without it every lazy tab failed.
+            'attemptid' => (int) $this->attemptid,
         ];
     }
 
