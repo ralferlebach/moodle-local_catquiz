@@ -112,3 +112,4 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).
+- `issue-141-testlaenge.md` – Testlänge (Minimum/Maximum), Produktionsbefund 33 Slots, Export, Regrade (#141, mod_adaptivequiz #19).

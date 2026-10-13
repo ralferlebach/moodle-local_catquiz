@@ -20,6 +20,7 @@ use local_catquiz\catquiz;
 use local_catquiz\local\access\context_resolver;
 use local_catquiz\local\access\feedback_access;
 use local_catquiz\local\result\personparam_repository;
+use local_catquiz\teststrategy\progress;
 
 /**
  * The export of one attempt: its state and the stored result of every scale (issue #120).
@@ -37,7 +38,8 @@ final class attempt_export {
     /** @var string[] Column names, in order. */
     public const COLUMNS = [
         'attemptid', 'userid', 'testid', 'timecreated', 'timefinished', 'attemptstate', 'stopreason',
-        'resultstatus', 'resultvalid', 'questionsattempted',
+        'resultstatus', 'resultvalid', 'resultreason', 'questionsattempted',
+        'questionslots', 'duplicateslots', 'answeredquestions', 'answeredproductive',
         'scaleid', 'scalename', 'isprimary', 'ability', 'standarderror', 'n', 'fraction', 'isvalid', 'validationstatus',
     ];
 
@@ -86,11 +88,13 @@ final class attempt_export {
             'stopreason' => (string) $attempt->attemptstopcriteria,
             'resultstatus' => $validated ? (string) $status : '',
             'resultvalid' => $validated ? (int) $attempt->resultvalid : '',
+            'resultreason' => property_exists($attempt, 'resultreason') ? (string) $attempt->resultreason : '',
             'questionsattempted' => (int) $attempt->questionsattempted,
         ];
+        $catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz');
+        $base += self::question_counts((int) $attempt->uniqueid, $catattemptid);
         $empty = array_fill_keys(array_slice(self::COLUMNS, count($base)), '');
 
-        $catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz');
         $results = $catattemptid === null ? [] : personparam_repository::get_for_attempt($catattemptid);
         if (!$results) {
             return [$base + $empty];
@@ -113,6 +117,39 @@ final class attempt_export {
         }
         usort($rows, fn($a, $b) => [$b['isprimary'], $a['scaleid']] <=> [$a['isprimary'], $b['scaleid']]);
         return $rows;
+    }
+
+    /**
+     * What was asked and what counts (issues #141, #125/#126).
+     *
+     * The slots are every question the activity administered, a repeated one included; the answered
+     * questions are those the CAT model counts - each once, pilot items included, which is what the
+     * maximum limits; the productive ones are what the minimum and the result count. Empty, not zero,
+     * where there is no usage or no progress to count from.
+     *
+     * @param int $usageid adaptivequiz_attempt.uniqueid
+     * @param int|null $catattemptid local_catquiz_attempts.id
+     * @return array
+     */
+    private static function question_counts(int $usageid, ?int $catattemptid): array {
+        global $DB;
+
+        $counts = ['questionslots' => '', 'duplicateslots' => '', 'answeredquestions' => '', 'answeredproductive' => ''];
+        if ($usageid > 0) {
+            $slots = $DB->count_records('question_attempts', ['questionusageid' => $usageid]);
+            $distinct = (int) $DB->count_records_sql(
+                'SELECT COUNT(DISTINCT questionid) FROM {question_attempts} WHERE questionusageid = :usageid',
+                ['usageid' => $usageid]
+            );
+            $counts['questionslots'] = $slots;
+            $counts['duplicateslots'] = $slots - $distinct;
+        }
+        $progress = $catattemptid === null ? null : progress::load_for_reading($catattemptid);
+        if ($progress !== null) {
+            $counts['answeredquestions'] = $progress->get_num_answered_questions();
+            $counts['answeredproductive'] = $progress->get_num_answered_productive_questions();
+        }
+        return $counts;
     }
 
     /**

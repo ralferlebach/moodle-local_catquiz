@@ -26,8 +26,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Files the progress of an attempt with N answered productive items per scale.
  *
@@ -46,7 +44,8 @@ function local_catquiz_measured_progress(
     array $nbyscale,
     int $contextid = 9,
     array $quizsettings = [],
-    array $fractionbyscale = []
+    array $fractionbyscale = [],
+    int $pilots = 0
 ): void {
     static $nextquestionid = 900000;
 
@@ -68,6 +67,12 @@ function local_catquiz_measured_progress(
             $fraction = (float) ($fractionbyscale[$scaleid] ?? 0.5);
             $responses[$q->id] = ['questionid' => $q->id, 'fraction' => $fraction];
         }
+    }
+    for ($i = 0; $i < $pilots; $i++) {
+        $q = (object) ['id' => ++$nextquestionid, 'catscaleid' => (int) array_key_first($nbyscale), 'is_pilot' => true,
+            'fisherinformation' => []];
+        $played[$q->id] = $q;
+        $responses[$q->id] = ['questionid' => $q->id, 'fraction' => 1.0];
     }
     $state = [
         'responses' => $responses,

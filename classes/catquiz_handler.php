@@ -780,6 +780,44 @@ class catquiz_handler {
     }
 
     /**
+     * Brings the maximum of every CATquiz activity in line with its CAT settings (issue #141).
+     *
+     * The activity now refuses any question beyond its own maximumquestions, pilot items and
+     * repetitions included. An activity whose CAT limit changed without the activity being saved
+     * again - through a template, say - would stop at a stale value. Activities without a CAT
+     * limit keep their own value, as on save.
+     *
+     * @return int Number of activities whose maximum was changed.
+     */
+    public static function sync_all_activity_question_limits(): int {
+        global $DB;
+
+        $changed = 0;
+        $tests = $DB->get_recordset_select(
+            'local_catquiz_tests',
+            "component = :component AND componentid > 0",
+            ['component' => 'mod_adaptivequiz'],
+            'id',
+            'id, componentid, json'
+        );
+        foreach ($tests as $test) {
+            $settings = json_decode((string) $test->json);
+            $catmax = (int) ($settings->maxquestionsgroup->catquiz_maxquestions ?? 0);
+            if ($catmax <= 0) {
+                continue;
+            }
+            $current = $DB->get_field('adaptivequiz', 'maximumquestions', ['id' => $test->componentid]);
+            if ($current === false || (int) $current === $catmax) {
+                continue;
+            }
+            $DB->set_field('adaptivequiz', 'maximumquestions', $catmax, ['id' => $test->componentid]);
+            $changed++;
+        }
+        $tests->close();
+        return $changed;
+    }
+
+    /**
      * We use this function to apply eg template data.
      * This is the latest moment where we can change the values.
      * We can override submitted values here.

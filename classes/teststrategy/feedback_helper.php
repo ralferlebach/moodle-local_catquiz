@@ -216,12 +216,17 @@ class feedback_helper {
             }
         }
 
+        // The minimum number of questions of the test (issue #141), with the progress at hand.
+        $progress = ($feedbackdata['progress'] ?? null) instanceof progress ? $feedbackdata['progress'] : null;
+
         return attempt_result_validator::from_personabilities(
             $personabilities,
             $sebyscale,
             $nbyscale,
             $fractionbyscale,
-            $primaryscaleid
+            $primaryscaleid,
+            $progress ? $progress->get_num_answered_productive_questions() : null,
+            $progress ? attempt_result_validator::min_questions($progress) : 0
         );
     }
 
@@ -333,6 +338,8 @@ class feedback_helper {
                         return get_string('error:semax', 'local_catquiz', $error['se'] ?? null);
                     case scale_result::REASON_N_MIN:
                         return get_string('error:nminscale', 'local_catquiz', $error['nminscale'] ?? null);
+                    case scale_result::REASON_MIN_QUESTIONS:
+                        return get_string('error:nminscale', 'local_catquiz');
                     case scale_result::REASON_FRACTION_ALL_CORRECT:
                         return get_string('error:fraction1', 'local_catquiz');
                     case scale_result::REASON_FRACTION_ALL_INCORRECT:

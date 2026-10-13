@@ -58,6 +58,8 @@ final class attempt_result_validator {
      *        fraction rule.
      * @param int|null $primaryscaleid When given, only this scale is primary;
      *        otherwise every 'toreport' scale is primary.
+     * @param int|null $answeredtotal Productive items answered in the whole attempt; null when unknown.
+     * @param int $minquestions The test's minimum number of questions; 0 for none (issue #141).
      * @return attempt_result
      */
     public static function from_personabilities(
@@ -65,8 +67,16 @@ final class attempt_result_validator {
         array $sebyscale = [],
         array $nbyscale = [],
         array $fractionbyscale = [],
-        ?int $primaryscaleid = null
+        ?int $primaryscaleid = null,
+        ?int $answeredtotal = null,
+        int $minquestions = 0
     ): attempt_result {
+        /* The minimum number of questions (issue #141), for the attempt as a whole. A test that
+           ended before its minimum - after 3 of at least 12 items, say - has a running estimate,
+           but no final result: every scale is invalid, whatever its own numbers look like. The
+           estimate stays for diagnostics and the export. */
+        $belowminimum = $minquestions > 0 && $answeredtotal !== null && $answeredtotal < $minquestions;
+
         $results = [];
 
         foreach ($personabilities as $scaleid => $entry) {
@@ -76,6 +86,12 @@ final class attempt_result_validator {
             $scaleid = (int) $scaleid;
             $error = $entry['error'] ?? [];
             $reasons = [];
+
+            // First: an attempt below the minimum has no result at all, and its reason is the one
+            // to tell - not, say, "all answers correct" after three items.
+            if ($belowminimum) {
+                $reasons[] = scale_result::REASON_MIN_QUESTIONS;
+            }
 
             // Measurement-quality (statistical) reasons.
             if (isset($error['se'])) {
@@ -259,7 +275,21 @@ final class attempt_result_validator {
             $sebyscale,
             $nbyscale,
             $fractionbyscale,
-            $primaryscaleid
+            $primaryscaleid,
+            $progress !== null ? $progress->get_num_answered_productive_questions() : null,
+            $progress !== null ? self::min_questions($progress) : 0
         );
+    }
+
+    /**
+     * The test's minimum number of questions, as the progress of the attempt carries it.
+     *
+     * @param progress $progress
+     * @return int 0 when the test sets none.
+     */
+    public static function min_questions(progress $progress): int {
+        $group = $progress->get_quiz_settings()->maxquestionsgroup ?? null;
+        $min = is_array($group) ? ($group['catquiz_minquestions'] ?? 0) : ($group->catquiz_minquestions ?? 0);
+        return max(0, (int) $min);
     }
 }

@@ -66,6 +66,9 @@ final class scale_result {
     /** @var string Rejection: the value was not measured in the current attempt (carry-over only). */
     public const REASON_NOT_MEASURED = 'not_measured_in_current_attempt';
 
+    /** @var string Rejection: the attempt ended with fewer answered productive items than the test's minimum (#141). */
+    public const REASON_MIN_QUESTIONS = 'min_questions_not_reached';
+
     /**
      * Constructor.
      *

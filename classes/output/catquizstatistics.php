@@ -213,6 +213,47 @@ class catquizstatistics {
     }
 
     /**
+     * The scale of an export: the one asked for, or the one the test or the course uses (issue #141).
+     *
+     * The export stopped with "required parameter scaleid missing" when it was opened without a scale.
+     * A test has its scale; a course whose tests all use one scale has that one. Where that leaves more
+     * than one, nothing is guessed - the scale has to be chosen.
+     *
+     * @param int $scaleid The scale asked for, 0 for none.
+     * @param int|null $courseid
+     * @param int|null $testid Instance id of the test (local_catquiz_tests.componentid).
+     * @return int
+     * @throws \moodle_exception When the scale asked for does not exist or none can be determined.
+     */
+    public static function resolve_scale_id(int $scaleid, ?int $courseid, ?int $testid): int {
+        global $DB;
+
+        if ($scaleid > 0) {
+            if (!$DB->record_exists('local_catquiz_catscales', ['id' => $scaleid])) {
+                throw new \moodle_exception('error:exportscaleunresolved', 'local_catquiz');
+            }
+            return $scaleid;
+        }
+
+        $params = ['component' => 'mod_adaptivequiz'];
+        $where = 'component = :component AND catscaleid IS NOT NULL AND catscaleid > 0';
+        if ($testid) {
+            $where .= ' AND componentid = :testid';
+            $params['testid'] = $testid;
+        } else if ($courseid) {
+            $where .= ' AND courseid = :courseid';
+            $params['courseid'] = $courseid;
+        } else {
+            throw new \moodle_exception('error:exportscaleunresolved', 'local_catquiz');
+        }
+        $scaleids = $DB->get_fieldset_sql("SELECT DISTINCT catscaleid FROM {local_catquiz_tests} WHERE $where", $params);
+        if (count($scaleids) !== 1) {
+            throw new \moodle_exception('error:exportscaleunresolved', 'local_catquiz');
+        }
+        return (int) reset($scaleids);
+    }
+
+    /**
      * Returns the context these statistics refer to.
      *
      * Resolved once from the most specific scope available (test

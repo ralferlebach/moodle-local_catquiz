@@ -2,6 +2,24 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Issue #141 / mod_adaptivequiz #19 (Testlänge): Das Minimum zählt die beantworteten
+  produktiven Fragen, das Maximum alle gestellten Fragen einschließlich Pilotfragen.
+  - Unter dem Minimum gibt es kein gültiges Ergebnis mehr: Der zentrale Validator markiert jede
+    Skala mit `min_questions_not_reached` (vor allen anderen Gründen), Abschluss und
+    Ergebnisseite sind sich einig, und die Seite zeigt „nicht genügend Fragen beantwortet“ statt
+    „alle Fragen richtig“. Der laufende Schätzwert bleibt für Diagnose und Export erhalten.
+  - `maximumquestionscheck` zählt jetzt alle beantworteten Fragen (`progress::get_num_answered_questions()`).
+  - Upgrade-Schritt 2026100909: `maximumquestions` jeder CATquiz-Aktivität wird an das
+    CAT-Maximum angeglichen, weil mod_adaptivequiz ab 2026100904 (v-3.0) bzw. 2026100903
+    (Legacy) über diesem Wert keinen Fragen-Slot mehr anlegt.
+  - Export: `export_statistics_csv.php` und `export_feedback_csv.php` verlangen keine `scaleid`
+    mehr; die Skala kommt aus dem Test oder – wenn eindeutig – aus dem Kurs, sonst eine klare
+    Meldung. Der Versuchsexport enthält zusätzlich Ergebnisgrund, Slots, Wiederholungs-Slots,
+    beantwortete und produktive Fragen.
+  - Nachträgliche Prüfung: `cli/revalidate_attempts.php` beurteilt abgeschlossene Versuche nach den
+    heutigen Regeln (Probelauf ohne `--execute`). Nur Versuche, deren Antworten noch gespeichert
+    sind; andere werden gemeldet und nicht verändert. Die Noten folgen erst mit dem Regrade der
+    Aktivität (`mod/adaptivequiz/cli/regrade_results.php --resnapshot=…`), den das Skript ausgibt.
 - CI (Quality/PHPDoc): Der Parameter `$lazy` von `attemptfeedback::generate_feedback()` (#85)
   fehlte im PHPDoc-Block; der PHPDoc-Checker meldete eine unvollständige Parameterliste.
 - Issue #136: `catquiz_handler::fetch_question_id()` las für den Versuchs-Trace `$attemptdata->id`
