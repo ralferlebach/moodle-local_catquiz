@@ -35,9 +35,24 @@ use local_catquiz\teststrategy\progress;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class attempt_export {
+    /** @var string The attempt is still running. */
+    public const LIFECYCLE_RUNNING = 'running';
+
+    /** @var string Completed with a valid result. */
+    public const LIFECYCLE_COMPLETED_VALID = 'completed_valid';
+
+    /** @var string Completed, but without a valid result. */
+    public const LIFECYCLE_COMPLETED_INVALID = 'completed_invalid';
+
+    /** @var string Ended before a single answer was processed. */
+    public const LIFECYCLE_ABORTED = 'aborted';
+
+    /** @var string Completed, but CATquiz has not judged the result (yet). */
+    public const LIFECYCLE_NOT_FINALISED = 'completed_not_finalised';
+
     /** @var string[] Column names, in order. */
     public const COLUMNS = [
-        'attemptid', 'userid', 'testid', 'timecreated', 'timefinished', 'attemptstate', 'stopreason',
+        'attemptid', 'userid', 'testid', 'timecreated', 'timefinished', 'attemptstate', 'lifecycle', 'stopreason',
         'resultstatus', 'resultvalid', 'resultreason', 'questionsattempted',
         'questionslots', 'duplicateslots', 'answeredquestions', 'answeredproductive',
         'scaleid', 'scalename', 'isprimary', 'ability', 'standarderror', 'n', 'fraction', 'isvalid', 'validationstatus',
@@ -85,6 +100,7 @@ final class attempt_export {
             'timecreated' => (int) $attempt->timecreated,
             'timefinished' => empty($attempt->timefinished) ? '' : (int) $attempt->timefinished,
             'attemptstate' => (string) $attempt->attemptstate,
+            'lifecycle' => self::lifecycle($attempt, $validated),
             'stopreason' => (string) $attempt->attemptstopcriteria,
             'resultstatus' => $validated ? (string) $status : '',
             'resultvalid' => $validated ? (int) $attempt->resultvalid : '',
@@ -117,6 +133,34 @@ final class attempt_export {
         }
         usort($rows, fn($a, $b) => [$b['isprimary'], $a['scaleid']] <=> [$a['isprimary'], $b['scaleid']]);
         return $rows;
+    }
+
+    /**
+     * Where the attempt stands, in one word (issue #141).
+     *
+     * Running, completed with a valid result, completed without one, ended before a single answer,
+     * or completed but not judged. A completed attempt is only called valid or invalid once
+     * CATquiz has judged it; until then "invalid" would be a guess.
+     *
+     * @param \stdClass $attempt adaptivequiz_attempt record.
+     * @param bool $validated Whether the finaliser wrote a result status.
+     * @return string One of the LIFECYCLE_* constants.
+     */
+    public static function lifecycle(\stdClass $attempt, bool $validated): string {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+
+        if ($attempt->attemptstate !== 'complete') {
+            return self::LIFECYCLE_RUNNING;
+        }
+        $catstatus = $DB->get_field('local_catquiz_attempts', 'status', ['attemptid' => $attempt->id]);
+        if ($catstatus !== false && (int) $catstatus === LOCAL_CATQUIZ_ATTEMPT_ABORTED) {
+            return self::LIFECYCLE_ABORTED;
+        }
+        if (!$validated) {
+            return self::LIFECYCLE_NOT_FINALISED;
+        }
+        return empty($attempt->resultvalid) ? self::LIFECYCLE_COMPLETED_INVALID : self::LIFECYCLE_COMPLETED_VALID;
     }
 
     /**
