@@ -98,6 +98,13 @@ class feedbackclass {
         $nfeedbpersubscale = empty($nfeedbpersubscale)
             ? LOCAL_CATQUIZ_DEFAULT_NUMBER_OF_FEEDBACKS_PER_SCALE : intval($nfeedbpersubscale);
 
+        /* The number of feedback options has just been changed (its reload button). The limits that
+           arrive with that request belong to the old number of ranges: kept, they leave the new last
+           range overlapping the old ones, and the form can no longer be saved ("No gap in the
+           feedbackrange allowed"). Every range is laid out anew, evenly over the scale. */
+        $rangesrelaidout = optional_param('submitnumberoffeedbackoptions', '', PARAM_ALPHANUMEXT)
+            === 'numberoffeedbackoptionssubmit';
+
         $element = $mform->addElement(
             'static',
             'disclaimer:numberoffeedbackchange',
@@ -246,11 +253,12 @@ class feedbackclass {
                         'feedback_scaleid_limit_lower_' . $scale->id . '_' . $j,
                         get_string('lowerlimit', 'local_catquiz')
                     );
-                    $lowerlimit = $defaultvalues['feedback_scaleid_limit_lower_' . $scale->id . '_' . $j]
+                    $lowerlimit = $rangesrelaidout ? LOCAL_CATQUIZ_RANDOM_DEFAULT
+                        : ($defaultvalues['feedback_scaleid_limit_lower_' . $scale->id . '_' . $j]
                         ?? self::optional_limit_param(
                             'feedback_scaleid_limit_lower_' . $scale->id . '_' . $j,
                             LOCAL_CATQUIZ_RANDOM_DEFAULT
-                        );
+                        ));
                     if ($lowerlimit === LOCAL_CATQUIZ_RANDOM_DEFAULT) {
                         $lowerlimit = self::return_limits_for_scale(
                             $nfeedbpersubscale,
@@ -261,6 +269,9 @@ class feedbackclass {
                         );
                     }
                     $element->setValue($lowerlimit);
+                    if ($rangesrelaidout) {
+                        self::replace_submitted_value($mform, $element->getName(), $lowerlimit);
+                    }
                 }
 
                 // If the Element is new, we set the default.
@@ -286,11 +297,12 @@ class feedbackclass {
                         'feedback_scaleid_limit_upper_' . $scale->id . '_' . $j,
                         get_string('upperlimit', 'local_catquiz')
                     );
-                    $upperlimit = $defaultvalues['feedback_scaleid_limit_upper_' . $scale->id . '_' . $j]
+                    $upperlimit = $rangesrelaidout ? LOCAL_CATQUIZ_RANDOM_DEFAULT
+                        : ($defaultvalues['feedback_scaleid_limit_upper_' . $scale->id . '_' . $j]
                         ?? self::optional_limit_param(
                             'feedback_scaleid_limit_upper_' . $scale->id . '_' . $j,
                             LOCAL_CATQUIZ_RANDOM_DEFAULT
-                        );
+                        ));
                     if ($upperlimit === LOCAL_CATQUIZ_RANDOM_DEFAULT) {
                         $upperlimit = self::return_limits_for_scale(
                             $nfeedbpersubscale,
@@ -301,6 +313,9 @@ class feedbackclass {
                         );
                     }
                     $element->setValue($upperlimit);
+                    if ($rangesrelaidout) {
+                        self::replace_submitted_value($mform, $element->getName(), $upperlimit);
+                    }
                 }
 
                 // If the Element is new, we set the default.
@@ -660,6 +675,22 @@ class feedbackclass {
         }
 
         return $default;
+    }
+
+    /**
+     * Replaces the submitted value of a form element.
+     *
+     * QuickForm takes the value of a submitted form from the submission whenever it refreshes an
+     * element (setDefaults() and friends refresh all of them); a value only set on the element
+     * would be replaced by the old one again before the form is shown.
+     *
+     * @param MoodleQuickForm $mform
+     * @param string $name Element name.
+     * @param mixed $value The value to show.
+     */
+    private static function replace_submitted_value(MoodleQuickForm $mform, string $name, $value): void {
+        $mform->_submitValues[$name] = $value;
+        $_POST[$name] = $value;
     }
 
     /**

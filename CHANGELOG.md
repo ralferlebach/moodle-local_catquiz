@@ -2,6 +2,19 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Issue #123 (Behat `catquiz_settings.feature`): Nach dem Ändern der Anzahl der Feedbackoptionen
+  ließ sich das Formular nicht mehr speichern („No gap in the feedbackrange allowed“). Die
+  Grenzen der bisherigen Bereiche kamen mit der Anfrage zurück und wurden behalten; der neue
+  letzte Bereich überlappte sie. Beim Neuladen über die Anzahl werden jetzt alle Bereiche
+  gleichmäßig über die Skala neu verteilt, auch im übermittelten Wert, den QuickForm beim
+  Auffrischen der Elemente erneut liest.
+- Issue #85 (Behat `catquiz_graphicalsummary_modal.feature`): Die erst beim Öffnen geladenen
+  Feedback-Tabs schlugen auf der Ergebnis- und der Review-Seite fehl („Dieser Teil des Feedbacks
+  konnte nicht geladen werden“). Die Seite gab die Versuchs-ID nicht an die Tabs weiter, und
+  `Templates.replaceNodeContents()` las ein Feedback, das mit Text statt mit einem Tag beginnt,
+  als jQuery-Selektor. Beides behoben; Test für die Versuchs-ID im gerenderten Tab.
+- CI: Service-Container (PostgreSQL, MariaDB) über `mirror.gcr.io` statt Docker Hub; das
+  Selenium-Image für Behat wird vorab über den Mirror geladen (Docker-Hub-Pull-Limit).
 - mod_adaptivequiz #14 / adaptivequizcatmodel_catquiz #7: `catscale::get_ability_range()`
   prüfte die Skalengrenzen auf Wahrheitswert; ein numerisches 0 (z. B. in einem Skalenobjekt mit
   Float-Grenzen) fiel auf den Standardbereich -5..5 zurück. Zurückgefallen wird jetzt nur, wenn
