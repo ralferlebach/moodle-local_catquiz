@@ -2,6 +2,8 @@
 
 ## 1.2.1 (in Arbeit)
 
+- CI (Quality/PHPDoc): Der Parameter `$lazy` von `attemptfeedback::generate_feedback()` (#85)
+  fehlte im PHPDoc-Block; der PHPDoc-Checker meldete eine unvollständige Parameterliste.
 - Issue #136: `catquiz_handler::fetch_question_id()` las für den Versuchs-Trace `$attemptdata->id`
   auch dann, wenn das übergebene Versuchsobjekt keine ID hat, und löste eine Warnung aus. Sie
   ließ im Adapter `catquiz_item_administration_slot_reuse_test` (Zweig ALiSe-v-1.2.0-legacy)
