@@ -2,7 +2,7 @@
 
 ## 1.3.0 (in Arbeit)
 
-- Issue #141 / mod_adaptivequiz #19 (Testlänge): Das Minimum zählt die beantworteten
+- Issue #141 / mod_adaptivequiz #19 (Testlänge, 2026100909–10): Das Minimum zählt die beantworteten
   produktiven Fragen, das Maximum alle gestellten Fragen einschließlich Pilotfragen.
   - Unter dem Minimum gibt es kein gültiges Ergebnis mehr: Der zentrale Validator markiert jede
     Skala mit `min_questions_not_reached` (vor allen anderen Gründen), Abschluss und
@@ -20,6 +20,10 @@
     heutigen Regeln (Probelauf ohne `--execute`). Nur Versuche, deren Antworten noch gespeichert
     sind; andere werden gemeldet und nicht verändert. Die Noten folgen erst mit dem Regrade der
     Aktivität (`mod/adaptivequiz/cli/regrade_results.php --resnapshot=…`), den das Skript ausgibt.
+  - Versuchsexport: Spalte `lifecycle` (running, completed_valid, completed_invalid, aborted,
+    completed_not_finalised) – wo der Versuch steht, in einem Wort.
+  - Behat `catquiz_test_length.feature`: Mit Pilotfragen (Anteil 100 %) endet der Versuch nach dem
+    Maximum von vier Fragen; Fixture `simulation_small_pilots.csv` (jedes zweite Item ein Pilot).
 - CI (Quality/PHPDoc): Der Parameter `$lazy` von `attemptfeedback::generate_feedback()` (#85)
   fehlte im PHPDoc-Block; der PHPDoc-Checker meldete eine unvollständige Parameterliste.
 - Issue #136: `catquiz_handler::fetch_question_id()` las für den Versuchs-Trace `$attemptdata->id`

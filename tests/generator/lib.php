@@ -172,6 +172,11 @@ class local_catquiz_generator extends testing_module_generator {
             }
         }
         unset($target);
+        // Pilot items (issue #141): a ratio switches them on.
+        if (property_exists($adaptivequiz, 'catquiz_pilotratio')) {
+            $jsondata->catquiz_includepilotquestions = '1';
+            $jsondata->catquiz_pilotratio = $adaptivequiz->catquiz_pilotratio;
+        }
         $jsondata->json = json_encode($jsondata);
 
         // Setup testenv finally.

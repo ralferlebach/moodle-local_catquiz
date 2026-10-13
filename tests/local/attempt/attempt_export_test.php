@@ -26,6 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 global $CFG;
 require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/measured_progress.php');
 require_once($CFG->dirroot . '/question/engine/lib.php');
+require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
 /**
  * The export of one attempt, valid result or not (issue #120).
@@ -194,6 +195,29 @@ final class attempt_export_test extends advanced_testcase {
 
         foreach (['questionslots', 'duplicateslots', 'answeredquestions', 'answeredproductive'] as $column) {
             $this->assertSame('', $row[$column], $column);
+        }
+    }
+
+    /**
+     * Where an attempt stands, in one word: running, valid, invalid, aborted or not yet judged (issue #141).
+     */
+    public function test_lifecycle_names_every_state(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $cases = [
+            'running' => ['inprogress', null, 0, 0, attempt_export::LIFECYCLE_RUNNING],
+            'not judged' => ['complete', null, 0, 0, attempt_export::LIFECYCLE_NOT_FINALISED],
+            'invalid' => ['complete', 'invalid', 0, 0, attempt_export::LIFECYCLE_COMPLETED_INVALID],
+            'valid' => ['complete', 'valid', 1, 0, attempt_export::LIFECYCLE_COMPLETED_VALID],
+            'aborted' => ['complete', 'invalid', 0, LOCAL_CATQUIZ_ATTEMPT_ABORTED, attempt_export::LIFECYCLE_ABORTED],
+        ];
+        foreach ($cases as $name => [$state, $resultstatus, $valid, $catstatus, $expected]) {
+            $id = $this->attempt($resultstatus);
+            $DB->update_record('adaptivequiz_attempt', (object) ['id' => $id, 'attemptstate' => $state, 'resultvalid' => $valid]);
+            $DB->set_field('local_catquiz_attempts', 'status', $catstatus, ['attemptid' => $id]);
+
+            $this->assertSame($expected, attempt_export::rows($id)[0]['lifecycle'], $name);
         }
     }
 }
