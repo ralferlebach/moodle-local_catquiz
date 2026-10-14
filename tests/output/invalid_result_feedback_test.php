@@ -229,6 +229,18 @@ final class invalid_result_feedback_test extends advanced_testcase {
     }
 
     /**
+     * The real export tab needs no debug storage: it is offered for every attempt (issue #120).
+     */
+    public function test_export_tab_does_not_need_debug_storage(): void {
+        $this->resetAfterTest();
+        set_config('store_debug_info', 0, 'local_catquiz');
+
+        $export = new debuginfo(new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB), new feedback_helper());
+
+        $this->assertTrue($export->has_data_for(['attemptid' => 7, 'contextid' => 1]));
+    }
+
+    /**
      * Valid: everything is shown, no notice.
      */
     public function test_valid_result_is_unchanged(): void {

@@ -198,8 +198,9 @@ class comparetotestaverage extends feedbackgenerator {
         $lowestlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_1";
         $highestlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $numberoffeedbackoptions;
 
-        $rangestart = (float) $quizsettings->$lowestlimitkey;
-        $rangeend = (float) $quizsettings->$highestlimitkey;
+        // A scale without feedback ranges has neither key; that is the error below, not a warning.
+        $rangestart = (float) ($quizsettings->$lowestlimitkey ?? 0);
+        $rangeend = (float) ($quizsettings->$highestlimitkey ?? 0);
 
         if (!($rangeend > $rangestart)) {
             throw new \moodle_exception('error:minmaxrangeequal', 'local_catquiz');
@@ -209,15 +210,17 @@ class comparetotestaverage extends feedbackgenerator {
             $lowerlimitkey = "feedback_scaleid_limit_lower_" . $catscaleid . "_" . $i;
             $upperlimitkey = "feedback_scaleid_limit_upper_" . $catscaleid . "_" . $i;
 
-            $lowerlimit = (float) $quizsettings->$lowerlimitkey;
-            $upperlimit = (float) $quizsettings->$upperlimitkey;
+            $lowerlimit = (float) ($quizsettings->$lowerlimitkey ?? $rangestart);
+            $upperlimit = (float) ($quizsettings->$upperlimitkey ?? $rangeend);
 
             $lowerpercentage = (($lowerlimit - $rangestart) / ($rangeend - $rangestart)) * 100 + $gradient;
             $upperpercentage = (($upperlimit - $rangestart) / ($rangeend - $rangestart)) * 100 - $gradient;
 
+            // A range without a chosen colour gets the colour the form offers for its position, not a
+            // warning: this runs with every answer, inside the selection of the next question.
             $colorkey = 'wb_colourpicker_' . $catscaleid . '_' . $i;
-            $colorname = $quizsettings->$colorkey;
-            $colorvalue = $colorarray[$colorname];
+            $colorname = $quizsettings->$colorkey ?? (array_keys($colorarray)[$i - 1] ?? null);
+            $colorvalue = $colorarray[$colorname] ?? reset($colorarray);
 
             $output .= "{$colorvalue} {$lowerpercentage}%, ";
             $output .= "{$colorvalue} {$upperpercentage}%, ";

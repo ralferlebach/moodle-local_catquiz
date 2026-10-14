@@ -35,7 +35,6 @@ use local_catquiz\teststrategy\feedbackgenerator\personabilities;
 use local_catquiz\teststrategy\feedbackgenerator\questionssummary;
 use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\teststrategy\preselect_task;
-use local_catquiz\teststrategy\preselect_task\filterbyquestionsperscale;
 use local_catquiz\teststrategy\preselect_task\inferallsubscalesscore;
 use local_catquiz\teststrategy\strategy;
 
@@ -150,13 +149,14 @@ class inferallsubscales extends strategy {
     }
 
     /**
-     * Filter by questions per scale
+     * ALLSUBS plays every scale up to its minimum before it goes on (issue #135).
      *
-     * @return result
+     * Scales that reached it are deactivated for a while and come back once every scale has; this
+     * coverage is what the strategy is for and stays as it is.
+     *
+     * @return bool
      */
-    protected function filterbyquestionsperscale(): result {
-        $filterbyquestionsperscale = new filterbyquestionsperscale();
-        $result = $filterbyquestionsperscale->run($this->context, fn ($context) => result::ok($context));
-        return $result;
+    public function requires_scale_coverage(): bool {
+        return true;
     }
 }

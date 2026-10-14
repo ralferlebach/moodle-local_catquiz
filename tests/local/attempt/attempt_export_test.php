@@ -186,6 +186,50 @@ final class attempt_export_test extends advanced_testcase {
     }
 
     /**
+     * The production attempt behind #141, anonymised: 33 slots at a maximum of 25 (usage 17666).
+     *
+     * 25 productive questions and 4 pilot items; each pilot followed by the question before it
+     * again (slots 5-6-7, 16-17-18, 23-24-25, 26-27-28). The repetitions are visible in the export
+     * and count nowhere: 29 questions answered, 25 of them productive - the maximum, not 33.
+     */
+    public function test_production_case_33_slots_at_maximum_25(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $adaptiveattemptid = $this->attempt('valid');
+        $context = \context_course::instance($this->course->id);
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category(['contextid' => $context->id]);
+        $question = fn() => \question_bank::load_question(
+            $generator->create_question('truefalse', null, ['category' => $category->id])->id
+        );
+        $quba = \question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
+        $quba->set_preferred_behaviour('deferredfeedback');
+        $slots = [];
+        for ($i = 1; $i <= 25; $i++) {
+            $productive = $question();
+            $slots[] = $quba->add_question($productive);
+            if (in_array(count($slots), [5, 16, 23, 26])) {
+                $quba->add_question($question());
+                $slots[] = $quba->add_question($productive);
+            }
+        }
+        $quba->start_all_questions();
+        \question_engine::save_questions_usage_by_activity($quba);
+        $DB->set_field('adaptivequiz_attempt', 'uniqueid', $quba->get_id(), ['id' => $adaptiveattemptid]);
+
+        $this->setUser($this->student);
+        local_catquiz_measured_progress($adaptiveattemptid, [7 => 25], 9, [], [], 4);
+
+        $row = attempt_export::rows($adaptiveattemptid)[0];
+
+        $this->assertSame(33, $row['questionslots']);
+        $this->assertSame(4, $row['duplicateslots']);
+        $this->assertSame(29, $row['answeredquestions']);
+        $this->assertSame(25, $row['answeredproductive'], 'The repetitions are not weighted a second time.');
+    }
+
+    /**
      * Without a usage or a progress the counts stay empty - not zero.
      */
     public function test_counts_are_empty_without_usage_and_progress(): void {

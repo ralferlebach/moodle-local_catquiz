@@ -1127,8 +1127,9 @@ class feedback_helper {
                 $text = $quizsettings->$feedbacktextkey;
             }
 
-            $colorname = $quizsettings->$colorkey;
-            $colorvalue = $colorarray[$colorname];
+            // As in the colour bar: a range without a chosen colour gets the one for its position.
+            $colorname = $quizsettings->$colorkey ?? (array_keys($colorarray)[$j - 1] ?? null);
+            $colorvalue = $colorarray[$colorname] ?? reset($colorarray);
 
             $feedbacks[] = [
                 'subcolorcode' => $colorvalue,

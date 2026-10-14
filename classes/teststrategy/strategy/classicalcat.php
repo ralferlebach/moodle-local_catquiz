@@ -192,20 +192,32 @@ class classicalcat extends strategy {
     }
 
     /**
-     * In this strategy, we do not need to calculate this.
+     * CLASSIC plays a fixed form: no scale is dropped, and no precision ends it (issue #135).
      *
-     * @return result
+     * Minimum questions and maximum standard error per scale only decide whether a scale is
+     * reported as valid (select_scales_for_report()); they never change which questions are asked.
+     *
+     * @return bool
      */
-    protected function filterbystandarderror(): result {
-        return result::ok($this->context);
+    public function uses_scale_dropping(): bool {
+        return false;
     }
 
     /**
-     * In this strategy, we do not need to calculate this.
+     * No per-scale maximum shortens the fixed form (issue #135).
      *
-     * @return result
+     * @return bool
      */
-    protected function filterbytestinfo(): result {
-        return result::ok($this->context);
+    public function uses_per_scale_selection_limits(): bool {
+        return false;
+    }
+
+    /**
+     * The test information of a scale deactivates nothing (issue #135).
+     *
+     * @return bool
+     */
+    public function uses_testinfo_filter(): bool {
+        return false;
     }
 }

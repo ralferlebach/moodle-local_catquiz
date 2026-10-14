@@ -26,11 +26,13 @@ global $CFG;
 require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
 /**
- * In the CAT strategy a subscale that has enough information does not end the test (issue #134).
+ * FASTEST ends only on the precision of the root, past the minimum (issues #134, #135).
  *
  * filter_for_cat() ended the whole test as soon as any updated scale - also a subscale - met its
  * dropping criterion. The minimum number of questions protects only the root, so attempts stopped
- * after 5 to 14 items with a minimum of 15, all with "no further questions".
+ * after 5 to 14 items with a minimum of 15, all with "no further questions". FASTEST now drops no
+ * scale at all and knows one stop besides the maximum and an empty pool: the root precise and stable
+ * past the minimum.
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -43,9 +45,10 @@ final class filterbystandarderror_fastest_test extends advanced_testcase {
      *
      * @param float $rootse Standard error of the root after the answer.
      * @param int $minimum Minimum number of questions of the test.
+     * @param array $overrides Further context values.
      * @return array{0: \local_catquiz\local\result, 1: progress, 2: int, 3: int} Result, progress, R, S.
      */
-    private function after_five_answers_in_the_subscale(float $rootse, int $minimum): array {
+    private function after_five_answers_in_the_subscale(float $rootse, int $minimum, array $overrides = []): array {
         global $DB;
 
         $root = (int) $DB->insert_record('local_catquiz_catscales', (object) [
@@ -99,22 +102,50 @@ final class filterbystandarderror_fastest_test extends advanced_testcase {
             'contextid' => 1,
             'questions' => [],
         ];
+        $context = array_merge($context, $overrides);
         $result = (new filterbystandarderror())->run($context);
 
         return [$result, $progress, $root, $sub];
     }
 
     /**
-     * A subscale meeting its criterion before the minimum is dropped; the test goes on.
+     * A subscale meeting its criterion neither ends the test nor is dropped: FASTEST chooses globally.
      */
     public function test_a_finished_subscale_does_not_end_the_test(): void {
+        global $DB;
         $this->resetAfterTest();
 
         [$result, $progress, $root, $sub] = $this->after_five_answers_in_the_subscale(0.5, 15);
 
         $this->assertFalse($result->iserr(), 'The whole test ended on a subscale.');
-        $this->assertNotContains($sub, $progress->get_active_scales(), 'The finished subscale was not dropped.');
-        $this->assertContains($root, $progress->get_active_scales());
+        $this->assertSame([$root, $sub], array_values($progress->get_active_scales()), 'FASTEST dropped a scale.');
+        $this->assertSame([], $progress->get_scale_state_trace());
+        $this->assertSame(0, $DB->count_records('local_catquiz_personparams'), 'A subscale handed on its ability.');
+    }
+
+    /**
+     * A per-scale maximum is no stop for FASTEST: the root at that count past the minimum goes on.
+     */
+    public function test_a_per_scale_maximum_does_not_end_the_test(): void {
+        $this->resetAfterTest();
+
+        [$result] = $this->after_five_answers_in_the_subscale(0.5, 3, ['max_attempts_per_scale' => 5]);
+
+        $this->assertFalse($result->iserr());
+    }
+
+    /**
+     * Past the minimum, precise but not stable - or stable but not precise - goes on.
+     */
+    public function test_precision_needs_stability_as_well(): void {
+        $this->resetAfterTest();
+
+        // The root moved by 0.01 with the last answer; a minimum increment of 0.0001 calls that unstable.
+        [$moving] = $this->after_five_answers_in_the_subscale(0.2, 3, ['pp_min_inc' => 0.0001]);
+        [$imprecise] = $this->after_five_answers_in_the_subscale(0.4, 3);
+
+        $this->assertFalse($moving->iserr(), 'Stopped while the ability still moved.');
+        $this->assertFalse($imprecise->iserr(), 'Stopped above the target error.');
     }
 
     /**

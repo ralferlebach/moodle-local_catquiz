@@ -2,6 +2,31 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Ein Feedbackbereich, der sich nicht aufbauen lässt, beendet den Versuch nicht mehr. Die
+  Feedbackdaten werden bei jeder Antwort mitten in der Auswahl der nächsten Frage aktualisiert. Ein
+  klassischer Test auf einer Skala ohne Feedbackbereiche endete deshalb nach der ersten Antwort mit
+  „technisches Problem“. Der Bereich wird jetzt ausgelassen und per `debugging()` benannt. Fehlende
+  Farben und Bereichstexte führen nicht mehr zu Warnungen.
+- #120: Der Export-Tab braucht keine Debug-Speicherung mehr. Er fehlte bisher überall, wo
+  `store_debug_info` aus war, auch bei ungültigen Versuchen.
+- Tests:
+  - Routing: Fraction-ungültige Skalen routen nicht, die übrigen gültigen schon (#138/#140).
+  - E2E mit echten Kurs- und Gruppenmitgliedschaften für CAT und den klassischen Test (#129/#130).
+  - Behat: „alles falsch“ und Verlauf/Export des ungültigen Versuchs (#120).
+  - Behat: Doppeladministration in der Ansicht der Prüfenden (#125).
+  - Versuchsexport mit dem Produktionsfall 33 Slots bei Maximum 25 (#141).
+- Issues #134/#135 (Strategie-Semantik, `doc/strategy-semantics.md`): Jede Strategie deklariert, welche
+  Mechanismen der gemeinsamen Pipeline sie nutzt (`strategy::get_capabilities()`: Skalen-Drop,
+  Kappung je Skala, Testpotenzial-Filter, Mindestabdeckung, globaler Präzisionsstopp).
+  - FASTEST wählt global aus dem ganzen Pool: kein Skalen-Drop, keine Vererbung, keine Kappung je
+    Skala. Es endet nur am Maximum, bei leerem Pool (vor dem Minimum mit eigenem Status) oder nach
+    dem Minimum, wenn der Standardfehler der Wurzel das Ziel erreicht und ihre Fähigkeit stabil ist.
+    Der Produktionsfall (Minimum 15, Abbrüche nach 5–14 Items) ist als Ganzversuch-Test nachgestellt.
+  - CLASSIC spielt die feste Form vollständig; die Kappung je Skala greift nicht mehr. Mindestfragen
+    je Skala und maximaler Standardfehler sind Berichtsschwellen. Das Formular zeigt sie bei CLASSIC
+    jetzt an, mit einem Hinweis, was wirkt und was nicht.
+  - ALLSUBS, LOWESTSUB, HIGHESTSUB und RELSUBS bleiben unverändert; ALLSUBS behält die
+    Mindestabdeckung je Skala.
 - Issue #137 (Ergebnis-Snapshot): Der Fähigkeitsbereich jeder Skala wird beim Finalisieren mit dem
   Ergebnis eingefroren (`local_catquiz_personparams.rangelower/rangeupper`, Upgrade 2026100913).
   Wird eine Zeile erneut geschrieben (z. B. Nachprüfung), bleibt ihr Bereich erhalten. Ältere Zeilen

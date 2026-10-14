@@ -1,0 +1,323 @@
+<?php
+// This file is part of Moodle - http://moodle.org/
+//
+// Moodle is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Moodle is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+
+namespace local_catquiz\teststrategy;
+
+use advanced_testcase;
+use context_course;
+use context_module;
+use core_question\local\bank\question_edit_contexts;
+use local_catquiz\catquiz_handler;
+use local_catquiz\catscale;
+use local_catquiz\importer\testitemimporter;
+use local_catquiz\local\question\question_answer_evaluation;
+use local_catquiz\local\status;
+use local_catquiz\testenvironment;
+use mod_adaptivequiz\local\attempt;
+use question_bank;
+use question_engine;
+use question_usage_by_activity;
+
+defined('MOODLE_INTERNAL') || die();
+global $CFG;
+require_once($CFG->libdir . '/questionlib.php');
+require_once($CFG->dirroot . '/question/format/xml/format.php');
+require_once($CFG->dirroot . '/question/format.php');
+require_once($CFG->dirroot . '/question/engine/tests/helpers.php');
+require_once($CFG->dirroot . '/question/editlib.php');
+require_once($CFG->dirroot . '/local/catquiz/lib.php');
+
+/**
+ * Whole attempts through the real selection, per strategy: when does a test end (issues #134, #135)?
+ *
+ * The simulation pool - 470 items in a hierarchy of scales below one root - and the real estimator.
+ * Each test plays an attempt the way the activity does: fetch a question, answer it in its own slot,
+ * count it, fetch the next, until the selection ends the test. What is checked is the length and the
+ * reason of the end: FASTEST is not ended by a subscale and not cut down by a per-scale maximum,
+ * CLASSIC is a fixed form, ALLSUBS still covers every scale.
+ *
+ * @package    local_catquiz
+ * @copyright  2026 onwards Ralf Erlebach
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers \local_catquiz\teststrategy\strategy
+ * @covers \local_catquiz\teststrategy\preselect_task\filterbystandarderror
+ */
+final class strategy_semantics_test extends advanced_testcase {
+    /** @var question_usage_by_activity The usage the answers go into. */
+    private question_usage_by_activity $quba;
+
+    /** @var \stdClass The activity. */
+    private \stdClass $adaptivequiz;
+
+    /** @var int The root scale of the pool. */
+    private int $rootid;
+
+    /**
+     * Imports the simulation pool and creates the activity.
+     */
+    public function setUp(): void {
+        global $DB;
+        parent::setUp();
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $this->adaptivequiz = $this->getDataGenerator()->get_plugin_generator('mod_adaptivequiz')->create_instance([
+            'highestlevel' => 10, 'lowestlevel' => 1, 'standarderror' => 14, 'course' => $course->id,
+        ]);
+        $this->assertTrue($this->qformat('simulation.xml', $course)->importprocess());
+        $importer = new testitemimporter();
+        $importer->execute_testitems_csv_import(
+            (object) ['delimiter_name' => 'semicolon', 'encoding' => null, 'dateparseformat' => null],
+            file_get_contents(__DIR__ . '/../fixtures/simulation.csv')
+        );
+        $root = $DB->get_record('local_catquiz_catscales', ['parentid' => 0], '*', MUST_EXIST);
+        $root->minscalevalue = -10.0;
+        $root->maxscalevalue = 10.0;
+        $DB->update_record('local_catquiz_catscales', $root);
+        $this->rootid = (int) $root->id;
+
+        $cm = get_coursemodule_from_instance('adaptivequiz', $this->adaptivequiz->id);
+        $this->quba = question_engine::make_questions_usage_by_activity('mod_adaptivequiz', context_module::instance($cm->id));
+        $this->quba->set_preferred_behaviour('deferredfeedback');
+    }
+
+    /**
+     * Unsets the switches of the testing classes again.
+     */
+    public function tearDown(): void {
+        $switches = ['USE_TESTING_CLASS_FOR', 'CATQUIZ_TESTING_ABILITY', 'CATQUIZ_TESTING_STANDARDERROR',
+            'CATQUIZ_TESTING_SKIP_FEEDBACK'];
+        foreach ($switches as $name) {
+            putenv($name);
+        }
+        parent::tearDown();
+    }
+
+    /**
+     * An XML importer for a fixture file.
+     *
+     * @param string $filename
+     * @param \stdClass $course
+     * @return \qformat_xml
+     */
+    private function qformat(string $filename, \stdClass $course): \qformat_xml {
+        $qformat = new \qformat_xml();
+        $qformat->setContexts((new question_edit_contexts(context_course::instance($course->id)))->all());
+        $qformat->setCourse($course);
+        if (class_exists('\core_question\local\bank\question_bank_helper')) {
+            $qbank = \core_question\local\bank\question_bank_helper::get_default_open_instance_system_type($course, true);
+            $category = question_get_default_category(context_module::instance($qbank->id)->id, true);
+        } else {
+            $category = question_get_default_category(context_course::instance($course->id)->id, true);
+        }
+        // Moodle 4.5 has no default category yet; the file names its categories itself.
+        if ($category) {
+            $qformat->setCategory($category);
+        }
+        $qformat->setFilename(__DIR__ . '/../fixtures/' . $filename);
+        $qformat->setRealfilename($filename);
+        $qformat->setMatchgrades('error');
+        $qformat->setCatfromfile(1);
+        $qformat->setContextfromfile(1);
+        $qformat->setStoponerror(1);
+        $qformat->setCattofile(1);
+        $qformat->setContexttofile(1);
+        $qformat->set_display_progress(false);
+        return $qformat;
+    }
+
+    /**
+     * The settings of the test, on top of the fixture's test environment.
+     *
+     * @param int $strategy
+     * @param array $settings minquestions, maxquestions, maxperscale, minperscale, semin, semax, ppmininc
+     * @return void
+     */
+    private function settings(int $strategy, array $settings): void {
+        $data = json_decode(file_get_contents(__DIR__ . '/../fixtures/testenvironment.json'));
+        $data->catquiz_catscales = $this->rootid;
+        $data->catscaleid = $this->rootid;
+        foreach ([$this->rootid, ...catscale::get_subscale_ids($this->rootid)] as $scaleid) {
+            $data->{'catquiz_subscalecheckbox_' . $scaleid} = true;
+        }
+        $data->componentid = '1';
+        $data->component = 'mod_adaptivequiz';
+        $data->catquiz_selectteststrategy = $strategy;
+        $data->maxquestionsgroup->catquiz_minquestions = $settings['minquestions'];
+        $data->maxquestionsgroup->catquiz_maxquestions = $settings['maxquestions'];
+        $data->maxquestionsscalegroup->catquiz_maxquestionspersubscale = $settings['maxperscale'] ?? 0;
+        $data->maxquestionsscalegroup->catquiz_minquestionspersubscale = $settings['minperscale'] ?? 0;
+        $data->catquiz_standarderrorgroup->catquiz_standarderror_min = $settings['semin'];
+        $data->catquiz_standarderrorgroup->catquiz_standarderror_max = $settings['semax'] ?? 1.0;
+        $data->catquiz_pp_min_inc = $settings['ppmininc'] ?? 0.05;
+        $data->catquiz_includepilotquestions = false;
+        $data->json = json_encode($data);
+        (new testenvironment($data))->save_or_update();
+    }
+
+    /**
+     * Plays an attempt to its end: every question answered in its own slot, as the activity does.
+     *
+     * @param int $limit Safety stop; no test here comes near it.
+     * @param callable|null $correct fn(int $i): bool - whether the i-th answer is right (default alternating).
+     * @return array [question ids, status of the end, scale ids of the questions]
+     */
+    private function play(int $limit = 80, ?callable $correct = null): array {
+        global $DB, $USER;
+        putenv('CATQUIZ_TESTING_SKIP_FEEDBACK=true');
+        catquiz_handler::prepare_attempt_caches();
+
+        $attemptid = (new attempt($this->adaptivequiz, $USER->id))->get_attempt()->id;
+        $ids = [];
+        $scales = [];
+        $status = null;
+        for ($i = 0; $i < $limit; $i++) {
+            $record = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
+            $attempt = new attempt($this->adaptivequiz, $record->userid);
+            $result = catquiz_handler::fetch_question_id(1, 'mod_adaptivequiz', $attempt->get_attempt());
+            if (empty($result[0])) {
+                $status = $result[2] ?? null;
+                break;
+            }
+            $ids[] = (int) $result[0];
+            $scales[] = (int) $DB->get_field('local_catquiz_items', 'catscaleid', ['componentid' => $result[0]]);
+
+            $slot = $this->quba->add_question(question_bank::load_question($result[0]));
+            $this->quba->start_question($slot);
+            $right = $correct ? $correct($i) : ($i % 2 === 0);
+            $answer = $this->quba->get_correct_response($slot)['answer'];
+            $this->quba->process_action($slot, ['answer' => $right ? $answer : ($answer >= 1 ? $answer - 1 : $answer + 1)]);
+            $this->quba->finish_all_questions(time());
+            (new question_answer_evaluation($this->quba))->perform($slot);
+            question_engine::save_questions_usage_by_activity($this->quba);
+
+            $record = $attempt->get_attempt();
+            $record->timemodified = time();
+            $record->questionsattempted = ($record->questionsattempted ?? 0) + 1;
+            $DB->update_record('adaptivequiz_attempt', $record);
+            if ($i === 0) {
+                $attempt->set_quba_id($this->quba->get_id());
+            }
+        }
+        return [$ids, $status, $scales];
+    }
+
+    /**
+     * FASTEST, minimum 15, maximum 35, target error 0.35, a per-scale maximum of 3 (issues #134, #135).
+     *
+     * The production configuration of #134. Subscales reach their target error after a few items each;
+     * the per-scale maximum is reached after three. Neither ends the test or shrinks the pool: the
+     * attempt runs to at least the minimum, every question is new, and it ends on the precision of
+     * the root or on the maximum - never on "no further questions".
+     */
+    public function test_fastest_runs_to_the_minimum_and_ends_globally(): void {
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, [
+            'minquestions' => 15, 'maxquestions' => 35, 'semin' => 0.35, 'maxperscale' => 3, 'minperscale' => 2,
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertGreaterThanOrEqual(15, count($ids), 'Ended before the minimum with ' . $status);
+        $this->assertLessThanOrEqual(35, count($ids));
+        $this->assertSame(count($ids), count(array_unique($ids)), 'A question was asked twice.');
+        $this->assertContains($status, [status::STOP_TARGET_PRECISION, status::ERROR_REACHED_MAXIMUM_QUESTIONS]);
+    }
+
+    /**
+     * FASTEST past the minimum stops on precision - right after the minimum when the root is precise.
+     *
+     * With a lax target error the root is precise early; the test still plays the minimum and stops
+     * right there, on the precision of the root.
+     */
+    public function test_fastest_stops_on_root_precision_after_the_minimum(): void {
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, [
+            'minquestions' => 8, 'maxquestions' => 35, 'semin' => 5.0, 'ppmininc' => 10.0,
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertCount(8, $ids);
+        $this->assertSame(status::STOP_TARGET_PRECISION, $status);
+    }
+
+    /**
+     * FASTEST never precise enough plays up to the maximum, a hard global stop.
+     */
+    public function test_fastest_ends_at_the_maximum(): void {
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, [
+            'minquestions' => 5, 'maxquestions' => 12, 'semin' => 0.0001, 'maxperscale' => 2,
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertCount(12, $ids);
+        $this->assertSame(status::ERROR_REACHED_MAXIMUM_QUESTIONS, $status);
+    }
+
+    /**
+     * CLASSIC is a fixed form: neither a per-scale maximum nor a precision shortens it (issue #135).
+     *
+     * Fixed order by item id; with a maximum of 3 per scale and a lax target error the form is still
+     * played up to the maximum number of questions.
+     */
+    public function test_classic_plays_the_whole_form(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, [
+            'minquestions' => 0, 'maxquestions' => 20, 'semin' => 5.0, 'maxperscale' => 3, 'ppmininc' => 10.0,
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertCount(20, $ids);
+        $this->assertSame(status::ERROR_REACHED_MAXIMUM_QUESTIONS, $status);
+        // Exactly the first twenty items of the pool by item id: none skipped, none taken out.
+        $form = array_map('intval', array_keys($DB->get_records_menu(
+            'local_catquiz_items',
+            ['componentname' => 'question'],
+            'id ASC',
+            'componentid, id',
+            0,
+            20
+        )));
+        $this->assertSame($form, $ids, 'The fixed form was changed.');
+    }
+
+    /**
+     * ALLSUBS still covers every scale before it repeats one (issue #135, DoD 14).
+     *
+     * With a minimum of 1 per scale every scale of the test has its question before any scale gets
+     * a third.
+     */
+    public function test_allsubs_keeps_the_coverage_per_scale(): void {
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_ALLSUBS, [
+            'minquestions' => 0, 'maxquestions' => 40, 'semin' => 0.0001, 'minperscale' => 1, 'maxperscale' => 0,
+        ]);
+
+        [$ids, , $scales] = $this->play();
+
+        $this->assertNotEmpty($ids);
+        $counts = [];
+        $leaves = array_unique($scales);
+        foreach ($scales as $scaleid) {
+            $counts[$scaleid] = ($counts[$scaleid] ?? 0) + 1;
+            if ($counts[$scaleid] === 3) {
+                $missing = array_diff($leaves, array_keys($counts));
+                $this->assertSame([], array_values($missing), 'A scale got a third question before another had one.');
+            }
+        }
+    }
+}

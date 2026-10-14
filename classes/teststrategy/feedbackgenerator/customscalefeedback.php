@@ -326,7 +326,8 @@ class customscalefeedback extends feedbackgenerator {
         if (!array_key_exists($quizsettingskey, $quizsettings)) {
              $quizsettingskey .= '_editor';
         }
-        $content = $quizsettings[$quizsettingskey];
+        // A range without a text has nothing to say - and does not take the result page down.
+        $content = $quizsettings[$quizsettingskey] ?? '';
         if (is_object($content) && property_exists($content, 'text')) {
             $content = $content->text;
         }
