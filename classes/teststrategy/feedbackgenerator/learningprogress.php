@@ -554,4 +554,13 @@ class learningprogress extends feedbackgenerator {
         $questionpreview = new questionpreview($record);
         return $questionpreview->render_questionpreview();
     }
+
+    /**
+     * Shows the valid results over time; an invalid attempt adds no point but keeps the history (2026-10-14).
+     *
+     * @return string
+     */
+    public function get_result_dependency(): string {
+        return self::DEPENDS_ON_ATTEMPT;
+    }
 }

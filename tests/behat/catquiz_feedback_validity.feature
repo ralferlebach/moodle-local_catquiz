@@ -67,7 +67,8 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "richtige Antwort" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should see "No valid test result could be determined for this attempt."
+    Then I should see "No overall result can be determined"
+    And I should see "because in the whole test all answers were correct"
 
   @javascript
   Scenario: A valid attempt shows feedback and not the central notice
@@ -88,7 +89,7 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should not see "No valid test result could be determined for this attempt."
+    Then I should not see "No overall result can be determined"
 
   @javascript
   Scenario: An invalid attempt keeps its quiz history and, for authorised users, its export (issue #120)
@@ -110,7 +111,7 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "richtige Antwort" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should see "No valid test result could be determined for this attempt."
+    Then I should see "No overall result can be determined"
     And I should see "Quiz progress summary"
     And I should not see "Overview"
     And "Statistics & export" "link" should not exist
@@ -121,7 +122,7 @@ Feature: Feedback output is bound to a valid CAT result.
     ## The export is for users allowed to export attempts - here the administrator.
     When I log in as "admin"
     And I visit the CAT attempt feedback page for the last attempt of "student1"
-    Then I should see "No valid test result could be determined for this attempt."
+    Then I should see "No overall result can be determined"
     And I should see "Quiz progress summary"
     When I click on "Statistics & export" "link"
     Then I should see "Export attempt (CSV)"
@@ -146,12 +147,13 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should see "No valid test result could be determined for this attempt."
+    Then I should see "No overall result can be determined"
+    And I should see "because in the whole test all answers were wrong"
     And I log out
     ## The invalid attempt is not hidden away: the teacher opens it like any other.
     When I log in as "teacher"
     And I visit the CAT attempt feedback page for the last attempt of "student1"
-    Then I should see "No valid test result could be determined for this attempt."
+    Then I should see "No overall result can be determined"
 
   @javascript
   Scenario: A question administered twice is named for the reviewer and changes nothing (issue #125)
@@ -178,7 +180,7 @@ Feature: Feedback output is bound to a valid CAT result.
     Then I should see "Technical note: questions administered more than once"
     And I should see "original slot 1, duplicate slot 5"
     And I should see "was not used as a reason to invalidate the result"
-    And I should not see "No valid test result could be determined for this attempt."
+    And I should not see "No overall result can be determined"
 
   ## A scale whose reporting checkbox is switched off: catquiz_written_feedback.feature (issue #117) sets
   ## it in the stored settings, for the reason below.

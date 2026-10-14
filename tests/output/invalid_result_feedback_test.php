@@ -25,7 +25,6 @@ use local_catquiz\teststrategy\feedbackgenerator\debuginfo;
 use local_catquiz\teststrategy\feedbackgenerator\graphicalsummary;
 use local_catquiz\teststrategy\feedbackgenerator\learningprogress;
 use local_catquiz\teststrategy\feedbackgenerator\personabilities;
-use local_catquiz\teststrategy\feedbackgenerator\pilotquestions;
 use local_catquiz\teststrategy\feedbacksettings;
 
 defined('MOODLE_INTERNAL') || die();
@@ -53,10 +52,9 @@ final class invalid_result_feedback_test extends advanced_testcase {
     public function test_generators_declare_their_dependency(): void {
         $expected = [
             customscalefeedback::class => feedbackgenerator::DEPENDS_ON_RESULT,
-            comparetotestaverage::class => feedbackgenerator::DEPENDS_ON_RESULT,
+            comparetotestaverage::class => feedbackgenerator::DEPENDS_ON_GLOBAL,
             personabilities::class => feedbackgenerator::DEPENDS_ON_RESULT,
-            learningprogress::class => feedbackgenerator::DEPENDS_ON_RESULT,
-            pilotquestions::class => feedbackgenerator::DEPENDS_ON_RESULT,
+            learningprogress::class => feedbackgenerator::DEPENDS_ON_ATTEMPT,
             graphicalsummary::class => feedbackgenerator::DEPENDS_ON_ATTEMPT,
             debuginfo::class => feedbackgenerator::DIAGNOSTIC,
         ];
@@ -178,22 +176,30 @@ final class invalid_result_feedback_test extends advanced_testcase {
     /**
      * Runs generate_feedback() with the usual set of generator kinds.
      *
-     * @param bool $valid Whether the one scale counts as measured in this attempt.
+     * The global scale 1 and the subscale 5, which the strategy reports first. Valid: the subscale was
+     * measured. Global only: the subscale was not, the global scale was. None: neither.
+     *
+     * @param string $state valid, global or none
      * @return array The feedback context.
      */
-    private function feedback(bool $valid): array {
+    private function feedback(string $state): array {
         $generators = [
             $this->generator('customscalefeedback', feedbackgenerator::DEPENDS_ON_RESULT),
-            $this->generator('comparetotestaverage', feedbackgenerator::DEPENDS_ON_RESULT),
-            $this->generator('learningprogress', feedbackgenerator::DEPENDS_ON_RESULT),
+            $this->generator('comparetotestaverage', feedbackgenerator::DEPENDS_ON_GLOBAL),
+            $this->generator('learningprogress', feedbackgenerator::DEPENDS_ON_ATTEMPT),
             $this->generator('graphicalsummary', feedbackgenerator::DEPENDS_ON_ATTEMPT),
             $this->generator('debuginfo', feedbackgenerator::DIAGNOSTIC),
         ];
         $feedbackdata = [
             'attemptid' => 0,
-            'customscalefeedback_abilities' => [5 => ['value' => 0.3, 'toreport' => true, 'primary' => true]],
-            // Measured or not: without a productive answer the scale has no result.
-            'nbyscale' => [5 => $valid ? 4 : 0],
+            'catscaleid' => 1,
+            'teststrategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB,
+            'customscalefeedback_abilities' => [
+                1 => ['value' => 0.1],
+                5 => ['value' => 0.3, 'toreport' => true, 'primary' => true],
+            ],
+            // Measured or not: without a productive answer a scale has no result.
+            'nbyscale' => [1 => $state === 'none' ? 0 : 8, 5 => $state === 'valid' ? 4 : 0],
         ];
 
         $reflection = new \ReflectionClass(attemptfeedback::class);
@@ -204,20 +210,49 @@ final class invalid_result_feedback_test extends advanced_testcase {
     }
 
     /**
-     * Invalid: the notice comes first, the quiz history stays, what reads the result goes.
+     * The strategy reached no target, but the global scale is valid: "Your result" stays, and the
+     * notice says why the target was missed and where the global estimate is (decision of 2026-10-14).
+     */
+    public function test_global_scale_valid_without_target(): void {
+        $this->resetAfterTest();
+
+        $context = $this->feedback('global');
+        $student = array_column($context['studentfeedback'], 'generatorname');
+
+        $this->assertSame(
+            ['novalidresult', 'comparetotestaverage', 'learningprogress', 'graphicalsummary', 'debuginfo'],
+            $student
+        );
+        $notice = $context['studentfeedback'][0]['content'];
+        $this->assertStringContainsString(get_string('feedbacktarget_lowestsub', 'local_catquiz'), $notice);
+        $this->assertStringContainsString(get_string('feedbackreason_nmin', 'local_catquiz'), $notice);
+        $this->assertStringContainsString(get_string('comparetotestaverage', 'local_catquiz'), $notice);
+    }
+
+    /**
+     * Not even the global scale is valid: no "Your result", and the notice names the reason in the
+     * whole test; quiz history and learning progress stay.
      */
     public function test_invalid_result_keeps_the_attempt_and_the_export(): void {
         $this->resetAfterTest();
 
-        $context = $this->feedback(false);
+        $context = $this->feedback('none');
         $student = array_column($context['studentfeedback'], 'generatorname');
         $teacher = array_column($context['teacherfeedback'], 'generatorname');
 
-        $this->assertSame('novalidresult', $student[0], 'The notice comes first.');
-        $this->assertContains('graphicalsummary', $student);
-        $this->assertNotContains('comparetotestaverage', $student);
-        $this->assertNotContains('learningprogress', $student);
-        $this->assertNotContains('customscalefeedback', $student, 'No scale feedback for an invalid result.');
+        $this->assertSame(
+            ['novalidresult', 'learningprogress', 'graphicalsummary', 'debuginfo'],
+            $student,
+            'The notice comes first; the test generators write for both audiences.'
+        );
+        $this->assertStringContainsString(
+            get_string('feedbacknoglobalresult', 'local_catquiz', (object) [
+                'reason' => get_string('feedbackreason_nmin', 'local_catquiz'),
+                'historytab' => get_string('quizgraphicalsummary', 'local_catquiz'),
+                'progresstab' => get_string('learningprogresstitle', 'local_catquiz'),
+            ]),
+            $context['studentfeedback'][0]['content']
+        );
 
         $this->assertContains('debuginfo', $teacher, 'The export stays for authorised users.');
         $this->assertContains('customscalefeedback', $teacher, 'Teachers still see the reason.');
@@ -242,7 +277,7 @@ final class invalid_result_feedback_test extends advanced_testcase {
     public function test_valid_result_is_unchanged(): void {
         $this->resetAfterTest();
 
-        $student = array_column($this->feedback(true)['studentfeedback'], 'generatorname');
+        $student = array_column($this->feedback('valid')['studentfeedback'], 'generatorname');
 
         $this->assertSame(
             [
@@ -251,5 +286,20 @@ final class invalid_result_feedback_test extends advanced_testcase {
             ],
             $student
         );
+    }
+
+    /**
+     * One reason only, the first that applies: N, then fraction, then SE (decision of 2026-10-14).
+     */
+    public function test_one_reason_by_priority(): void {
+        $method = new \ReflectionMethod(attemptfeedback::class, 'reason_phrase');
+        $method->setAccessible(true);
+        $phrase = fn(array $categories) => $method->invoke(null, $categories);
+
+        $this->assertSame(get_string('feedbackreason_nmin', 'local_catquiz'), $phrase(['se', 'allcorrect', 'nmin']));
+        $this->assertSame(get_string('feedbackreason_allcorrect', 'local_catquiz'), $phrase(['se', 'allcorrect']));
+        $this->assertSame(get_string('feedbackreason_allincorrect', 'local_catquiz'), $phrase(['se', 'allincorrect']));
+        $this->assertSame(get_string('feedbackreason_se', 'local_catquiz'), $phrase(['se']));
+        $this->assertSame(get_string('feedbackreason_other', 'local_catquiz'), $phrase([]));
     }
 }

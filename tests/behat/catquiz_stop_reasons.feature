@@ -43,8 +43,7 @@ Feature: An attempt ends for a reason the participant is told, and the result fo
     And I wait until the page is ready
     Then I should see "There are no further suitable questions for you at the moment" in the "Your test has ended" "dialogue"
     And I click on "OK" "button" in the "Your test has ended" "dialogue"
-    And I should see "No valid test result could be determined for this attempt."
-    And I should see "Test result can not be calculated because minimum number of questions was not reached"
+    And I should see "No overall result can be determined because in the whole test the minimum number of questions was not reached."
     And I should not see "Question 3"
     And "Submit answer" "button" should not exist
     ## Issue #120: below the minimum the attempt is shown all the same - the quiz history with content.
@@ -80,7 +79,7 @@ Feature: An attempt ends for a reason the participant is told, and the result fo
     Then I should see "There are no further suitable questions for you at the moment" in the "Your test has ended" "dialogue"
     And I click on "OK" "button" in the "Your test has ended" "dialogue"
     And I should not see "minimum number of questions was not reached"
-    And I should not see "No valid test result could be determined for this attempt."
+    And I should not see "No overall result can be determined"
     And I should see "Written feedback for Ressourcen"
 
   @javascript

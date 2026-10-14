@@ -48,7 +48,13 @@ abstract class feedbackgenerator {
     /** @var string Needs a valid result: peer comparison, learning progress, scale feedback (issue #120). */
     public const DEPENDS_ON_RESULT = 'result';
 
-    /** @var string Shows what happened in the attempt, valid result or not: summary, quiz history. */
+    /**
+     * @var string Needs a valid global scale, not a reported scale: the result of the global scale ("Your
+     *      result"). Shown when the strategy reached no target but the global scale is valid (2026-10-14).
+     */
+    public const DEPENDS_ON_GLOBAL = 'global';
+
+    /** @var string Shows what happened in the attempt, valid result or not: quiz history, learning progress. */
     public const DEPENDS_ON_ATTEMPT = 'attempt';
 
     /** @var string Diagnosis and export for authorised users, valid result or not. */

@@ -136,32 +136,46 @@ class debuginfo extends feedbackgenerator {
 
         $descriptionheading = get_string('debuginfo_desc_title', 'local_catquiz', $this->get_progress()->get_attemptid());
         $description = get_string('debuginfo_desc', 'local_catquiz');
-        // Decision of 2026-10-14: the figures of the attempt for teachers, above the exports.
+        // Decision of 2026-10-14: the figures of the attempt for teachers, above the exports. With pilot
+        // questions switched on, a second column counts the pilot items, which are not scored.
         $pilotids = array_keys($this->get_progress()->get_played_pilot_questions());
         $figures = attempt_statistics::for_attempt((int) $attemptid, $pilotids);
-        $statistics = [
-            ['label' => get_string('numberofanswerscorrect', 'local_catquiz'), 'value' => $figures->right],
-            ['label' => get_string('numberofanswersincorrect', 'local_catquiz'), 'value' => $figures->wrong],
-            ['label' => get_string('numberofanswerspartlycorrect', 'local_catquiz'), 'value' => $figures->partial],
-            ['label' => get_string('numberofanswersunanswered', 'local_catquiz'), 'value' => $figures->unanswered],
-            ['label' => get_string('statistics_pilots', 'local_catquiz'), 'value' => $figures->pilots],
+        $haspilots = !empty($this->get_progress()->get_quiz_settings()->catquiz_includepilotquestions)
+            || $figures->pilots > 0;
+        $statistics = [];
+        foreach (
             [
-                'label' => get_string('statistics_duration', 'local_catquiz'),
-                'value' => attempt_statistics::format_seconds($figures->duration),
-            ],
-            [
-                'label' => get_string('statistics_timeperitem', 'local_catquiz', $figures->itemcount),
-                'value' => $figures->itemsd === null
-                    ? attempt_statistics::format_seconds($figures->itemmean)
-                    : attempt_statistics::format_seconds($figures->itemmean) . ' ± '
-                        . attempt_statistics::format_seconds($figures->itemsd),
-            ],
+                'right' => 'numberofanswerscorrect',
+                'wrong' => 'numberofanswersincorrect',
+                'partial' => 'numberofanswerspartlycorrect',
+                'unanswered' => 'numberofanswersunanswered',
+            ] as $key => $label
+        ) {
+            $statistics[] = [
+                'label' => get_string($label, 'local_catquiz'),
+                'value' => $figures->$key,
+                'pilotvalue' => $figures->pilot[$key],
+            ];
+        }
+        $statistics[] = [
+            'label' => get_string('statistics_duration', 'local_catquiz'),
+            'value' => attempt_statistics::format_seconds($figures->duration),
+            'pilotvalue' => '',
+        ];
+        $statistics[] = [
+            'label' => get_string('statistics_timeperitem', 'local_catquiz', $figures->itemcount),
+            'value' => $figures->itemsd === null
+                ? attempt_statistics::format_seconds($figures->itemmean)
+                : attempt_statistics::format_seconds($figures->itemmean) . ' ± '
+                    . attempt_statistics::format_seconds($figures->itemsd),
+            'pilotvalue' => '',
         ];
 
         $feedback = $OUTPUT->render_from_template(
             'local_catquiz/feedback/exportattempt',
             [
                 'statistics' => $statistics,
+                'haspilots' => $haspilots,
                 'data' => rawurlencode($csvstring),
                 'cid' => $contextid,
                 'attemptid' => $attemptid,
