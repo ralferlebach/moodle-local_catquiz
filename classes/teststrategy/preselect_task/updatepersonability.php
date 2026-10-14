@@ -31,6 +31,7 @@ use local_catquiz\catcalc;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
+use local_catquiz\local\model\model_raschmodel;
 use local_catquiz\local\model\model_responses;
 use local_catquiz\local\result;
 use local_catquiz\local\status;
@@ -424,7 +425,8 @@ class updatepersonability extends preselect_task {
         }
 
         // If we already have more than 50 abilities for this test, get the mean from there.
-        if ($mean = $this->calculate_mean_from_past_attempts()) {
+        // A mean of exactly 0.0 is a mean too.
+        if (($mean = $this->calculate_mean_from_past_attempts()) !== null) {
             $this->meanability = $mean;
             return $mean;
         }
@@ -494,18 +496,29 @@ class updatepersonability extends preselect_task {
      * @return ?float
      */
     private function calculate_mean_from_past_attempts() {
-        $existingabilities = $this->get_existing_personparams();
+        $existingabilities = $this->get_finite_past_abilities();
         if (count($existingabilities) < self::NUM_ESTIMATION_THRESHOLD) {
             return null;
         }
 
-        $sum = 0.0;
-        foreach ($existingabilities as $pp) {
-            $sum += floatval($pp->ability);
-        }
-        $mean = $sum / count($existingabilities);
+        $mean = array_sum($existingabilities) / count($existingabilities);
         $this->meanability = $mean;
         return $mean;
+    }
+
+    /**
+     * The abilities of past attempts that are numbers, NaN and infinities left out (issue #116).
+     *
+     * @return float[]
+     */
+    private function get_finite_past_abilities(): array {
+        $abilities = [];
+        foreach ($this->get_existing_personparams() as $pp) {
+            if (isset($pp->ability) && is_numeric($pp->ability) && is_finite((float) $pp->ability)) {
+                $abilities[] = (float) $pp->ability;
+            }
+        }
+        return $abilities;
     }
 
     /**
@@ -513,19 +526,35 @@ class updatepersonability extends preselect_task {
      * @return ?float
      */
     private function calculate_sd_from_past_attempts() {
-        $existingabilities = $this->get_existing_personparams();
+        $existingabilities = $this->get_finite_past_abilities();
 
+        // Too few - or, after leaving out what is not a number, none at all: the default spread.
         if (count($existingabilities) < self::NUM_ESTIMATION_THRESHOLD) {
             return 1.0;
         }
 
-        $mean = $this->meanability ?? calculate_mean_from_past_attempts() ?? 0.0;
+        // This called a global function of the same name, which does not exist.
+        $mean = $this->meanability ?? $this->calculate_mean_from_past_attempts() ?? 0.0;
 
         $sum = 0.0;
-        foreach ($existingabilities as $pp) {
-            $sum += floatval(($pp->ability - $mean) ** 2);
+        foreach ($existingabilities as $ability) {
+            $sum += ($ability - $mean) ** 2;
         }
         $sd = sqrt($sum / count($existingabilities));
+        if (model_raschmodel::sanitize_trusted_region_sd($sd) > $sd) {
+            // Issue #116: e.g. every past ability the same. Kept as it is - the estimator raises the
+            // spread to its minimum - but made visible, without any person's value.
+            debugging(
+                sprintf(
+                    'local_catquiz: past abilities of scale %d have (almost) no spread (N %d, mean %.4f, sd %s).',
+                    (int) ($this->context['catscaleid'] ?? 0),
+                    count($existingabilities),
+                    $mean,
+                    var_export($sd, true)
+                ),
+                DEBUG_DEVELOPER
+            );
+        }
         $this->sdability = $sd;
         return $sd;
     }

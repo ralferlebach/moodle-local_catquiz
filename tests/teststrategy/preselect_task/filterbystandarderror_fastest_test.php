@@ -137,7 +137,7 @@ final class filterbystandarderror_fastest_test extends advanced_testcase {
         [$result] = $this->after_five_answers_in_the_subscale(0.2, 3);
 
         $this->assertTrue($result->iserr());
-        $this->assertSame(status::ERROR_NO_REMAINING_QUESTIONS, $result->get_status());
+        $this->assertSame(status::STOP_TARGET_PRECISION, $result->get_status(), 'Precise enough is not out of questions.');
     }
     /**
      * Running out of questions before the minimum has its own status, not a regular end (FASTEST-004).

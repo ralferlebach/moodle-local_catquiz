@@ -58,6 +58,14 @@ class status {
      * No question left before the minimum number of questions was reached (issue #134).
      */
     const ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM = 'noremainingquestionsbeforeminimum';
+
+    /**
+     * The main scale is measured precisely enough: the test ends before its maximum (mod_adaptivequiz #20).
+     *
+     * This used to be reported as "no remaining questions", which a participant cannot tell from a
+     * pool that ran dry.
+     */
+    const STOP_TARGET_PRECISION = 'stoptargetprecision';
     /**
      * ERROR_TESTITEM_ALREADY_IN_RELATED_SCALE
      *
@@ -137,6 +145,7 @@ class status {
         self::EXCEEDED_MAX_ATTEMPT_TIME => 8,
         self::CLOSED_BY_TIMELIMIT => 9,
         self::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM => 10,
+        self::STOP_TARGET_PRECISION => 11,
     ];
 
     /**

@@ -209,7 +209,8 @@ class filterbystandarderror extends preselect_task {
                 $this->context['person_ability'][$subscaleid] = $inheritval;
             }
             if ((int) $scaleid === $mainscaleid) {
-                return result::err(status::ERROR_NO_REMAINING_QUESTIONS);
+                // Precise enough - not out of questions (mod_adaptivequiz #20).
+                return result::err(status::STOP_TARGET_PRECISION);
             }
             if (in_array($scaleid, $this->progress->get_active_scales())) {
                 $this->progress->drop_scale($scaleid);

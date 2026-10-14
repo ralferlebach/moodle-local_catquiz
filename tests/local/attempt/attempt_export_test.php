@@ -212,9 +212,15 @@ final class attempt_export_test extends advanced_testcase {
             'valid' => ['complete', 'valid', 1, 0, attempt_export::LIFECYCLE_COMPLETED_VALID],
             'aborted' => ['complete', 'invalid', 0, LOCAL_CATQUIZ_ATTEMPT_ABORTED, attempt_export::LIFECYCLE_ABORTED],
         ];
-        foreach ($cases as $name => [$state, $resultstatus, $valid, $catstatus, $expected]) {
+        // Status 1 is also "no remaining questions": with answers that is a regular stop, not an abort.
+        $cases['no remaining questions'] = ['complete', 'invalid', 0, 1, attempt_export::LIFECYCLE_COMPLETED_INVALID, 3];
+        $cases['aborted'][] = 0;
+        foreach ($cases as $name => $case) {
+            [$state, $resultstatus, $valid, $catstatus, $expected] = $case;
             $id = $this->attempt($resultstatus);
-            $DB->update_record('adaptivequiz_attempt', (object) ['id' => $id, 'attemptstate' => $state, 'resultvalid' => $valid]);
+            $DB->update_record('adaptivequiz_attempt', (object) [
+                'id' => $id, 'attemptstate' => $state, 'resultvalid' => $valid, 'questionsattempted' => $case[5] ?? 3,
+            ]);
             $DB->set_field('local_catquiz_attempts', 'status', $catstatus, ['attemptid' => $id]);
 
             $this->assertSame($expected, attempt_export::rows($id)[0]['lifecycle'], $name);

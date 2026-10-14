@@ -181,7 +181,13 @@ jobs:
         run: |
           set -euo pipefail
           MOODLE="${MOODLE_DIR:-$(pwd)/moodle}"
+          # Since Moodle 5.1 the code lives under public/. Looking only at local/catquiz
+          # skipped this rebuild on main, and moodle-plugin-ci grunt then reported the
+          # committed files as stale.
           PLUGIN="$MOODLE/local/catquiz"
+          if [ -d "$MOODLE/public/local/catquiz" ]; then
+            PLUGIN="$MOODLE/public/local/catquiz"
+          fi
 
           if [ ! -d "$PLUGIN/amd/build" ]; then
             echo "No amd/build directory - nothing to verify."
@@ -192,7 +198,9 @@ jobs:
           mkdir -p /tmp/amd-before
           cp -a "$PLUGIN/amd/build/." /tmp/amd-before/
 
-          ( cd "$MOODLE" && npx grunt amd --root=local/catquiz )
+          # Run from the component directory: the Gruntfile picks the component from there,
+          # with or without public/.
+          ( cd "$PLUGIN" && npx grunt amd )
 
           if ! diff -ruN /tmp/amd-before "$PLUGIN/amd/build" > /tmp/amd-diff.txt; then
             echo "::warning::The rebuilt amd/build differs from the committed one."

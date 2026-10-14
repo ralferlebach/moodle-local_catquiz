@@ -790,6 +790,7 @@ $string['statistics_month_12'] = 'December {$a->y}';
 $string['statusactiveorinactive'] = 'The activity status of the item. Set to “1” to make sure, item will not be used. Leave empty or set “0” for “active”.';
 $string['statusok'] = 'Ok';
 $string['statusundefined'] = 'Undefined status';
+$string['stoptargetprecision'] = 'Your result is determined precisely enough';
 $string['store_debug_info_desc'] = 'When set, additional data for each quiz
     attempt are saved and provided as CSV download. This can take up a lot of
     space.';
