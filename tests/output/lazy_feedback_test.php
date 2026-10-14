@@ -156,6 +156,16 @@ final class lazy_feedback_test extends advanced_testcase {
             }
 
             /**
+             * The settings hide the generator as a whole.
+             *
+             * @param array $feedbackdata
+             * @return array
+             */
+            public function apply_settings_to_feedbackdata(array $feedbackdata) {
+                return empty($this->options['hidden']) ? $feedbackdata : [];
+            }
+
+            /**
              * Teacher permission.
              *
              * @param array $feedbackdata
@@ -254,6 +264,24 @@ final class lazy_feedback_test extends advanced_testcase {
     }
 
     /**
+     * A generator the settings hide gets no tab: the former summary tab, hidden by default, was offered
+     * all the same and then showed "No feedback available".
+     */
+    public function test_hidden_generator_has_no_lazy_tab(): void {
+        $this->resetAfterTest();
+        $generators = $this->generators(true);
+        $generators[] = $this->generator('hiddenbysettings', [
+            'dependency' => feedbackgenerator::DEPENDS_ON_ATTEMPT,
+            'hidden' => true,
+        ]);
+
+        $context = $this->generate($generators, true, true);
+
+        $this->assertNotContains('hiddenbysettings', array_column($context['studentfeedback'], 'generatorname'));
+        $this->assertContains('graphicalsummary', array_column($context['studentfeedback'], 'generatorname'));
+    }
+
+    /**
      * Invalid result: tabs that read the result are not even offered (issue #120 still holds).
      */
     public function test_lazy_tabs_follow_the_validity_rule(): void {
@@ -289,7 +317,7 @@ final class lazy_feedback_test extends advanced_testcase {
     public function test_single_feedback(): void {
         $this->resetAfterTest();
 
-        $single = function (bool $valid, string $name, string $audience): array {
+        $single = function (bool $valid, string $name, string $audience, int $played = 5): array {
             $feedback = $this->getMockBuilder(attemptfeedback::class)
                 ->disableOriginalConstructor()
                 ->onlyMethods(['load_feedbackdata', 'get_feedback_generators_for_teststrategy', 'get_progress'])
@@ -299,8 +327,10 @@ final class lazy_feedback_test extends advanced_testcase {
             $progress = $this->getMockBuilder(\local_catquiz\teststrategy\progress::class)
                 ->onlyMethods(['get_quiz_settings', 'get_num_playedquestions'])
                 ->getMock();
-            $progress->method('get_quiz_settings')->willReturn((object) []);
-            $progress->method('get_num_playedquestions')->willReturn(5);
+            $progress->method('get_quiz_settings')->willReturn((object) [
+                'maxquestionsgroup' => (object) ['catquiz_minquestions' => 3],
+            ]);
+            $progress->method('get_num_playedquestions')->willReturn($played);
             $feedback->method('get_progress')->willReturn($progress);
             $feedback->method('load_feedbackdata')->willReturn([
                 'attemptid' => 42, 'contextid' => 1, 'teststrategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB,
@@ -318,6 +348,10 @@ final class lazy_feedback_test extends advanced_testcase {
         $this->assertSame([], $single(false, 'comparetotestaverage', 'student'), 'Reads the result: nothing for an invalid one.');
         $this->assertSame('student graphicalsummary', $single(false, 'graphicalsummary', 'student')['content']);
         $this->assertSame([], $single(true, 'nosuchgenerator', 'student'));
+        // Below the minimum (one of three questions): the quiz history and the export stay (issue #120).
+        $this->assertSame('student graphicalsummary', $single(false, 'graphicalsummary', 'student', 1)['content']);
+        $this->assertSame('teacher debuginfo', $single(false, 'debuginfo', 'teacher', 1)['content']);
+        $this->assertSame([], $single(false, 'comparetotestaverage', 'student', 1));
     }
 
     /**

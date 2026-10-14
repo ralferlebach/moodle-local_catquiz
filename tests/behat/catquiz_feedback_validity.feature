@@ -113,7 +113,8 @@ Feature: Feedback output is bound to a valid CAT result.
     Then I should see "No valid test result could be determined for this attempt."
     And I should see "Quiz progress summary"
     And I should not see "Overview"
-    And "Export" "link" should not exist
+    And "Statistics & export" "link" should not exist
+    And "Summary" "link" should not exist
     When I click on "Quiz progress summary" "link"
     Then I should see "During an attempt your ability is recalculated after each response"
     And I log out
@@ -122,8 +123,10 @@ Feature: Feedback output is bound to a valid CAT result.
     And I visit the CAT attempt feedback page for the last attempt of "student1"
     Then I should see "No valid test result could be determined for this attempt."
     And I should see "Quiz progress summary"
-    When I click on "Export" "link"
+    When I click on "Statistics & export" "link"
     Then I should see "Export attempt (CSV)"
+    And "//table[contains(@class, 'catquiz-attempt-statistics')]//tr[th[normalize-space(.)='Correct']]/td[normalize-space(.)='4']" "xpath_element" should exist
+    And I should see "Time taken" in the ".catquiz-attempt-statistics" "css_element"
 
   @javascript
   Scenario: All answers wrong is not a valid result either, and the attempt stays reviewable (issues #138, #140)

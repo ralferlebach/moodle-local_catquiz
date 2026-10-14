@@ -31,7 +31,6 @@ use local_catquiz\teststrategy\feedbackgenerator\customscalefeedback;
 use local_catquiz\teststrategy\feedbackgenerator\debuginfo;
 use local_catquiz\teststrategy\feedbackgenerator\graphicalsummary;
 use local_catquiz\teststrategy\feedbackgenerator\learningprogress;
-use local_catquiz\teststrategy\feedbackgenerator\questionssummary;
 use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\preselect_task\strategyfastestscore;
@@ -99,7 +98,6 @@ class teststrategy_fastest extends strategy {
         return [
             new customscalefeedback($this->feedbacksettings, $feedbackhelper),
             new comparetotestaverage($this->feedbacksettings, $feedbackhelper),
-            new questionssummary($this->feedbacksettings, $feedbackhelper),
             new learningprogress($this->feedbacksettings, $feedbackhelper),
             new graphicalsummary($this->feedbacksettings, $feedbackhelper),
             new debuginfo($this->feedbacksettings, $feedbackhelper),
