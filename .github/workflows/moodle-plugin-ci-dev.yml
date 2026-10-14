@@ -222,7 +222,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --no-init
         env:
           DB: pgsql
-          MOODLE_BRANCH: main
+          MOODLE_BRANCH: MOODLE_503_STABLE
 
       - name: Cache npm downloads
         uses: actions/cache@v4
@@ -386,7 +386,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1 --no-init
         env:
           DB: pgsql
-          MOODLE_BRANCH: main
+          MOODLE_BRANCH: MOODLE_503_STABLE
 
       - name: Moodle PHPDoc Checker
         if: ${{ always() }}
@@ -510,7 +510,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
-          MOODLE_BRANCH: main
+          MOODLE_BRANCH: MOODLE_503_STABLE
 
       - name: PHPUnit tests
         if: ${{ always() }}
@@ -606,8 +606,21 @@ jobs:
           sudo locale-gen en_AU.UTF-8
           echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
 
+      # The question modal is checked with a STACK question as well (issue #139). STACK grades
+      # with Maxima, which runs in the PHP process of the Behat web server on this runner.
+      - name: Install Maxima for STACK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends maxima
+          echo "diff(x^2,x);" | maxima --very-quiet
+
       - name: Install Moodle, dependencies and plugin
         run: |
+          moodle-plugin-ci add-plugin maths/moodle-qbehaviour_dfexplicitvaildate
+          moodle-plugin-ci add-plugin maths/moodle-qbehaviour_dfcbmexplicitvaildate
+          moodle-plugin-ci add-plugin maths/moodle-qbehaviour_adaptivemultipart
+          moodle-plugin-ci add-plugin maths/moodle-qbank_importasversion
+          moodle-plugin-ci add-plugin maths/moodle-qtype_stack
           moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
           moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
@@ -628,9 +641,23 @@ jobs:
             rmdir "$placeholder"
           done
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+
+          # Maxima for STACK, as STACK's own CI configures it. Without these lines the STACK
+          # scenario of catquiz_question_modal.feature is skipped, not failed.
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLATFORM", "linux");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMAVERSION", "default");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMAND", "maxima");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDOPT", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMACOMMANDSERVER", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASTIMEOUT", "100");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_MAXIMALIBRARIES", "stats, distrib, descriptive, simplex");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASPREPARSE", "true");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASRESULTSCACHE", "db");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_PLOTCOMMAND", "");'
+          moodle-plugin-ci add-config 'define("QTYPE_STACK_TEST_CONFIG_CASDEBUGGING", "0");'
         env:
           DB: mariadb
-          MOODLE_BRANCH: main
+          MOODLE_BRANCH: MOODLE_503_STABLE
 
       # Docker Hub begrenzt anonyme Pulls (toomanyrequests). moodle-plugin-ci startet Selenium
       # per docker run und holt das Image sonst von Docker Hub; liegt es lokal vor, wird nicht
@@ -711,7 +738,7 @@ jobs:
           --health-timeout=5s --health-retries=5
 
     env:
-      MOODLE_BRANCH: main
+      MOODLE_BRANCH: MOODLE_503_STABLE
       MOODLE_WWWROOT: http://127.0.0.1:8000
 
     steps:
@@ -766,7 +793,7 @@ jobs:
         run: |
           mkdir -p /tmp/moodledata
           cd moodle
-          # main is the 5.3 development line and currently a beta; the installer refuses
+          # MOODLE_503_STABLE may still carry a beta or RC maturity; the installer refuses
           # unstable code unless told otherwise. The plugin targets 5.3, so it has to run there.
           php admin/cli/install.php \
             --non-interactive --agree-license --allow-unstable \

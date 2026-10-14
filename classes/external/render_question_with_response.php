@@ -191,6 +191,9 @@ class render_question_with_response extends external_api {
         $displayoptions = new question_display_options();
         $displayoptions->readonly = true; // Set to false if you want the question to be interactive.
         $displayoptions->marks = question_display_options::MARK_AND_MAX;
+        // A review shows the question; it does not offer to flag it (issue #139). The flag of the
+        // question engine needs the attempt page around it and would be a dead control in the modal.
+        $displayoptions->flags = question_display_options::HIDDEN;
         // Show an indicator if the given response was correct or wrong.
         $showresponse = boolval($testsettings->catquiz_questionfeedbacksettings->catquiz_showquestionresponse)
             ? question_display_options::VISIBLE

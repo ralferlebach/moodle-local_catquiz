@@ -20,7 +20,8 @@
             "^core/templates$": "<rootDir>/tests/jest/mocks/templates.js",
             "^core/notification$": "<rootDir>/tests/jest/mocks/notification.js",
             "^core/modal$": "<rootDir>/tests/jest/mocks/modal.js",
-            "^core/str$": "<rootDir>/tests/jest/mocks/str.js"
+            "^core/str$": "<rootDir>/tests/jest/mocks/str.js",
+            "^core/fragment$": "<rootDir>/tests/jest/mocks/fragment.js"
         }
     },
     "devDependencies": {

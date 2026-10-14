@@ -45,7 +45,7 @@ jobs:
           --health-timeout=5s --health-retries=5
 
     env:
-      MOODLE_BRANCH: main  # Moodle 5.3; bis zum Verzweigen am 5. Oktober nur als main.
+      MOODLE_BRANCH: MOODLE_503_STABLE  # Moodle 5.3; seit dem 5. Oktober verzweigt, main ist 5.4dev.
       DB: pgsql
       MOODLE_WWWROOT: http://127.0.0.1:8000
 
@@ -160,7 +160,7 @@ jobs:
         run: |
           mkdir -p /tmp/moodledata
           cd moodle
-          # main is the 5.3 development line and currently a beta; the installer refuses
+          # MOODLE_503_STABLE may still carry a beta or RC maturity; the installer refuses
           # unstable code unless told otherwise. The plugin targets 5.3, so it has to run there.
           php admin/cli/install.php \
             --non-interactive --agree-license --allow-unstable \

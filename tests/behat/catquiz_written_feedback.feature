@@ -207,3 +207,121 @@ Feature: Which scales the written feedback and the detail tab show (issues #117,
     And I should not see "selected" in the "SimB01" "table_row"
     And I should not see "selected" in the "SimB03" "table_row"
     And I should see "Reference scale"
+
+  @javascript
+  Scenario: Greatest strength: one scale in writing, every valid one in the detail tab, the selected one marked (issues #118, #128)
+    Given the following "local_catquiz > testsettings" exist:
+      | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | scalefeedbacktexts |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer greatest strength | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | 1                  |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I click on "Save and return to course" "button"
+    And I log out
+    When I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "button"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 5"
+    And I click on "richtige Antwort" "text" in the "Question 5" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 6"
+    And I click on "falsche Antwort 1" "text" in the "Question 6" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 7"
+    And I click on "richtige Antwort" "text" in the "Question 7" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 8"
+    And I click on "falsche Antwort 1" "text" in the "Question 8" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 9"
+    And I click on "richtige Antwort" "text" in the "Question 9" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 10"
+    And I click on "falsche Antwort 1" "text" in the "Question 10" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 11"
+    And I click on "richtige Antwort" "text" in the "Question 11" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 12"
+    And I click on "falsche Antwort 1" "text" in the "Question 12" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    ## The strongest valid subscale is SimC01 (ability 0.00 against -0.38 for SimB02 and -0.13 for SimC02).
+    Then I should see "Written feedback for SimC01"
+    And I should not see "Written feedback for SimB02"
+    And I should not see "Written feedback for SimC02"
+    When I click on "Details of your result" "link"
+    Then I should see "selected" in the "SimC01" "table_row"
+    And I should see "SimB02" in the "region-main" "region"
+    And I should see "SimC02" in the "region-main" "region"
+    And I should not see "selected" in the "SimB02" "table_row"
+    And I should not see "selected" in the "SimC02" "table_row"
+    And I should see "Reference scale"
+
+  @javascript
+  Scenario: Relevant subscales: a scale whose reporting is switched off has no written feedback (issue #117)
+    ## The answers of the scenario above; SimB01 is valid but not to be reported.
+    Given the following "local_catquiz > testsettings" exist:
+      | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | scalefeedbacktexts |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer relevant subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | 1                  |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I click on "Save and return to course" "button"
+    And I log out
+    And the scale "SimB01" is not reported by "adaptivecatquiz1"
+    When I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "button"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 5"
+    And I click on "richtige Antwort" "text" in the "Question 5" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 6"
+    And I click on "falsche Antwort 1" "text" in the "Question 6" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 7"
+    And I click on "richtige Antwort" "text" in the "Question 7" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 8"
+    And I click on "falsche Antwort 1" "text" in the "Question 8" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 9"
+    And I click on "richtige Antwort" "text" in the "Question 9" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 10"
+    And I click on "falsche Antwort 1" "text" in the "Question 10" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 11"
+    And I click on "richtige Antwort" "text" in the "Question 11" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 12"
+    And I click on "falsche Antwort 1" "text" in the "Question 12" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    Then I should not see "Written feedback for SimB01"
+    And I should see "Written feedback for SimB02"
+    And I should see "Written feedback for SimC02"

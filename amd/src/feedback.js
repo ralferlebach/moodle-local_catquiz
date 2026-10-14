@@ -22,6 +22,7 @@
  */
 
 import Ajax from 'core/ajax';
+import Fragment from 'core/fragment';
 import Templates from 'core/templates';
 import {addIconToContainer} from 'core/loadingicon';
 import {getString} from 'core/str';
@@ -56,7 +57,14 @@ const loadRegion = async(region) => {
         await icon;
         // Wrapped: replaceNodeContents() hands the HTML to jQuery, which reads a string that does not
         // start with a tag as a selector - a feedback beginning with text then failed to load.
-        await Templates.replaceNodeContents(region, '<div>' + response.html + '</div>', response.javascript);
+        // The JavaScript comes as the page would print it, inside <script> tags. Handed over like that,
+        // it ran twice - jQuery runs the inner tag, the page the outer one - and every chart was drawn
+        // a second time over the table below it. Fragment unwraps it, as core's dynamic tabs do.
+        await Templates.replaceNodeContents(
+            region,
+            '<div>' + response.html + '</div>',
+            Fragment.processCollectedJavascript(response.javascript)
+        );
         region.dataset.state = 'loaded';
     } catch (error) {
         region.dataset.state = 'failed';

@@ -177,7 +177,8 @@ Feature: Feedback output is bound to a valid CAT result.
     And I should see "was not used as a reason to invalidate the result"
     And I should not see "No valid test result could be determined for this attempt."
 
-  ## NOT covered here: a scale whose reporting checkbox is switched off (issue #7).
+  ## A scale whose reporting checkbox is switched off: catquiz_written_feedback.feature (issue #117) sets
+  ## it in the stored settings, for the reason below.
   ## The setting is an advcheckbox, so Moodle renders TWO inputs per scale with the
   ## same name and label - a hidden value="0" input plus the visible checkbox - and
   ## the label-based Behat step matches the hidden one first ("element not

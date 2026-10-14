@@ -501,3 +501,109 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     Then I should not see "Classic test: the questions are asked in a fixed order"
     And "maxquestionsscalegroup[catquiz_minquestionspersubscale]" "field" should not be visible
     And "catquiz_standarderrorgroup[catquiz_standarderror_min]" "field" should be visible
+
+  @javascript
+  Scenario: CATquiz settings: a switched-on subscale gets all its fields, takes feedback and is saved (issue #124)
+    Given the following "activities" exist:
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
+    And I follow "Settings"
+    ## And I wait until the page is ready
+    ## The 3.0 host shows the fields of a CAT model only after the choice has been
+    ## applied with its "Apply CAT model selection" button. The selector sits in a
+    ## collapsed section on the settings page and has to be expanded first.
+    And I expand all fieldsets
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    And I set the following fields to these values:
+      | Select CAT scale                                      | Simulation        |
+      | catquiz_selectteststrategy                            | 1                 |
+      | catquiz_standarderrorgroup[catquiz_standarderror_min] | 0.4               |
+      | catquiz_standarderrorgroup[catquiz_standarderror_max] | 0.6               |
+    When I wait until the page is ready
+    And I set the field with xpath "//input[@data-name='SimC']" to ""
+    And I wait until the page is ready
+    And I should not see "Feedback for “SimC”" in the "//div[contains(@aria-labelledby, 'catquiz_feedback_header_')]" "xpath_element"
+    And I click on "Save and display" "button"
+    And "Save and display" "button" should not exist
+    And I follow "Settings"
+    And I expand all fieldsets
+    ## Switched on again after the reload: the subtree and every field of the scale come back.
+    When I set the field with xpath "//input[@data-name='SimC']" to "1"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    Then I should see "SimC01" in the "#id_catquiz_headercontainer" "css_element"
+    And the field with xpath "//input[@data-name='SimC01']" matches value "checked"
+    And I click on "Feedback for “Simulation”" "text"
+    And I should see "Feedback for “SimC”" in the "//div[@data-name='catquiz_feedback_header_Simulation']" "xpath_element"
+    And "//div[@data-name='catquiz_feedback_header_SimC01']" "xpath_element" should exist
+    And "//div[@data-name='feedback_scale_SimC_range_1']" "xpath_element" should exist
+    And "//div[@data-name='feedback_scale_SimC_range_2']" "xpath_element" should exist
+    ## Feedback for the scale just switched on, then saved.
+    And I click on "Feedback for “SimC”" "text"
+    And I set the field "Feedback" in the "//div[@data-name='feedback_scale_SimC_range_1']" "xpath_element" to "Feedback-SimC_range_1"
+    And I click on "Save and display" "button"
+    And "Save and display" "button" should not exist
+    And I follow "Settings"
+    And I expand all fieldsets
+    Then the field with xpath "//input[@data-name='SimC']" matches value "checked"
+    And I click on "Feedback for “Simulation”" "text"
+    And I click on "Feedback for “SimC”" "text"
+    And the field "Feedback" in the "//div[@data-name='feedback_scale_SimC_range_1']" "xpath_element" matches value "Feedback-SimC_range_1"
+
+  @javascript
+  Scenario: CATquiz settings: another root scale brings its own subtree and saves without the old fields (issue #124)
+    Given the following "local_catquiz > questions" exist:
+      | filepath                                              | filename                 | course |
+      | local/catquiz/tests/fixtures/catquiz_resources_mc.xml | catquiz_resources_mc.xml | C1     |
+    And the following "local_catquiz > importedcatscales" exist:
+      | filepath                                              | filename                 |
+      | local/catquiz/tests/fixtures/catquiz_resources_mc.csv | catquiz_resources_mc.csv |
+    And the following "activities" exist:
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
+    And I follow "Settings"
+    ## And I wait until the page is ready
+    ## The 3.0 host shows the fields of a CAT model only after the choice has been
+    ## applied with its "Apply CAT model selection" button. The selector sits in a
+    ## collapsed section on the settings page and has to be expanded first.
+    And I expand all fieldsets
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    And I set the following fields to these values:
+      | Select CAT scale                                      | Simulation        |
+      | catquiz_selectteststrategy                            | 1                 |
+      | catquiz_standarderrorgroup[catquiz_standarderror_min] | 0.4               |
+      | catquiz_standarderrorgroup[catquiz_standarderror_max] | 0.6               |
+    When I wait until the page is ready
+    And I click on "Save and display" "button"
+    And "Save and display" "button" should not exist
+    And I follow "Settings"
+    And I expand all fieldsets
+    ## Another root scale after the reload: its complete subtree, nothing of the old one.
+    When I set the field "Select CAT scale" to "Ressourcen"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    Then I should see "Ressourcen A" in the "#id_catquiz_headercontainer" "css_element"
+    And the field with xpath "//input[@data-name='Ressourcen A']" matches value "checked"
+    And I should not see "SimA" in the "#id_catquiz_headercontainer" "css_element"
+    And "//div[@data-name='catquiz_feedback_header_Ressourcen']" "xpath_element" should exist
+    And "//div[@data-name='catquiz_feedback_header_Ressourcen A']" "xpath_element" should exist
+    And "//div[starts-with(@data-name, 'catquiz_feedback_header_Sim')]" "xpath_element" should not exist
+    And "//div[@data-name='feedback_scale_Ressourcen_range_1']" "xpath_element" should exist
+    And "//div[starts-with(@data-name, 'feedback_scale_Sim')]" "xpath_element" should not exist
+    ## Saved without validation errors for fields of the old scale.
+    And I click on "Save and display" "button"
+    And "Save and display" "button" should not exist
+    And I follow "Settings"
+    And I expand all fieldsets
+    Then the field "Select CAT scale" matches value "Ressourcen"
+    And the field with xpath "//input[@data-name='Ressourcen A']" matches value "checked"
+    And I should not see "SimA" in the "#id_catquiz_headercontainer" "css_element"
+    And "//div[starts-with(@data-name, 'feedback_scale_Sim')]" "xpath_element" should not exist

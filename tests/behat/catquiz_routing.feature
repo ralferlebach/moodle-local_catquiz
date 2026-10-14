@@ -24,6 +24,11 @@ Feature: An attempt routes its participant into courses and groups (issues #129,
       | Routed SimA01     | C1     | RA01     |
       | Routed SimA02     | C1     | RA02     |
       | Routed SimB       | C1     | RB       |
+      | Routed SimB01     | C1     | RB01     |
+      | Routed SimB02     | C1     | RB02     |
+      | Routed SimB03     | C1     | RB03     |
+      | Routed SimC01     | C1     | RC01     |
+      | Routed SimC02     | C1     | RC02     |
     And the following "local_catquiz > questions" exist:
       | filepath                                                            | filename                               | course |
       | local/catquiz/tests/fixtures/quiz-adaptivetest-Simulation-small.xml | quiz-adaptivetest-Simulation-small.xml | C1     |
@@ -118,3 +123,128 @@ Feature: An attempt routes its participant into courses and groups (issues #129,
     And I should see "Routed SimA01" in the "Student1 Test" "table_row"
     And I should see "Routed SimA02" in the "Student1 Test" "table_row"
     And I should not see "Routed SimB" in the "Student1 Test" "table_row"
+
+  @javascript
+  Scenario: All subscales route every measured, valid subscale - three and more at once
+    ## The answers of catquiz_written_feedback.feature: SimA01 and SimA02 get one answer each, below the
+    ## minimum of two per scale; every other subscale is measured validly.
+    Given the following "local_catquiz > testsettings" exist:
+      | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | routinggroupprefix |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | Routed             |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I click on "Save and return to course" "button"
+    And I log out
+    When I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "button"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 5"
+    And I click on "richtige Antwort" "text" in the "Question 5" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 6"
+    And I click on "falsche Antwort 1" "text" in the "Question 6" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 7"
+    And I click on "richtige Antwort" "text" in the "Question 7" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 8"
+    And I click on "falsche Antwort 1" "text" in the "Question 8" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 9"
+    And I click on "richtige Antwort" "text" in the "Question 9" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 10"
+    And I click on "falsche Antwort 1" "text" in the "Question 10" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 11"
+    And I click on "richtige Antwort" "text" in the "Question 11" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 12"
+    And I click on "falsche Antwort 1" "text" in the "Question 12" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    And I log out
+    And I log in as "admin"
+    And I am on the "Course 1" "enrolled users" page
+    Then I should see "Routed SimB01" in the "Student1 Test" "table_row"
+    And I should see "Routed SimB02" in the "Student1 Test" "table_row"
+    And I should see "Routed SimB03" in the "Student1 Test" "table_row"
+    And I should see "Routed SimC01" in the "Student1 Test" "table_row"
+    And I should see "Routed SimC02" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimA01" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimA02" in the "Student1 Test" "table_row"
+
+  @javascript
+  Scenario: Relevant subscales route the valid ones and not the fraction-invalid ones (issues #129, #140)
+    ## The answers of catquiz_written_feedback.feature: SimB03 all wrong, SimC01 all right - no valid
+    ## result, no routing; SimB01, SimB02 and SimC02 are valid and route.
+    Given the following "local_catquiz > testsettings" exist:
+      | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | routinggroupprefix |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer relevant subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | Routed             |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I click on "Save and return to course" "button"
+    And I log out
+    When I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "button"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 5"
+    And I click on "richtige Antwort" "text" in the "Question 5" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 6"
+    And I click on "falsche Antwort 1" "text" in the "Question 6" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 7"
+    And I click on "richtige Antwort" "text" in the "Question 7" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 8"
+    And I click on "falsche Antwort 1" "text" in the "Question 8" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 9"
+    And I click on "richtige Antwort" "text" in the "Question 9" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 10"
+    And I click on "falsche Antwort 1" "text" in the "Question 10" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 11"
+    And I click on "richtige Antwort" "text" in the "Question 11" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 12"
+    And I click on "falsche Antwort 1" "text" in the "Question 12" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    And I log out
+    And I log in as "admin"
+    And I am on the "Course 1" "enrolled users" page
+    Then I should see "Routed SimB01" in the "Student1 Test" "table_row"
+    And I should see "Routed SimB02" in the "Student1 Test" "table_row"
+    And I should see "Routed SimC02" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimB03" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimC01" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimA" in the "Student1 Test" "table_row"

@@ -320,4 +320,44 @@ final class strategy_semantics_test extends advanced_testcase {
             }
         }
     }
+
+    /**
+     * The six strategies.
+     *
+     * @return array
+     */
+    public static function all_strategies(): array {
+        return [
+            'FASTEST' => [LOCAL_CATQUIZ_STRATEGY_FASTEST],
+            'CLASSIC' => [LOCAL_CATQUIZ_STRATEGY_CLASSIC],
+            'ALLSUBS' => [LOCAL_CATQUIZ_STRATEGY_ALLSUBS],
+            'LOWESTSUB' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB],
+            'HIGHESTSUB' => [LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB],
+            'RELSUBS' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS],
+        ];
+    }
+
+    /**
+     * Every strategy, a whole attempt: never beyond the maximum, no question twice, and ending before
+     * the minimum only with the status that says so (issues #134, #135, #141).
+     *
+     * @param int $strategy
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('all_strategies')]
+    public function test_every_strategy_keeps_minimum_maximum_and_uniqueness(int $strategy): void {
+        $this->settings($strategy, [
+            'minquestions' => 8, 'maxquestions' => 15, 'semin' => 0.0001, 'minperscale' => 1, 'maxperscale' => 4,
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertLessThanOrEqual(15, count($ids), 'An item beyond the maximum.');
+        $this->assertSame(count($ids), count(array_unique($ids)), 'A question was asked twice.');
+        if (count($ids) < 8) {
+            $this->assertSame(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM, $status, 'Ended before the minimum.');
+        }
+        if (count($ids) === 15) {
+            $this->assertSame(status::ERROR_REACHED_MAXIMUM_QUESTIONS, $status);
+        }
+    }
 }

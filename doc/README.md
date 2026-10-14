@@ -117,5 +117,8 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).
 - `issue-141-testlaenge.md` – Testlänge (Minimum/Maximum), Produktionsbefund 33 Slots, Export, Regrade (#141, mod_adaptivequiz #19).
+- `audit-2026-10-14.md` – Abnahmebericht der BUG-Audit-Restarbeiten: AK/DoD je Issue mit Nachweis, Testläufe, offene Punkte.
+- `statistik-119-132.md` – Lernverlauf als kumulative Reihe (#119), Grundgesamtheit „Ohne Versuch“ (#132), Nachweise.
+- `issue-139-frage-modal.md` – Frage-Modal: Zugriffsregeln, Fehlerpfad, STACK, doppelt ausgeführtes JS der lazy Tabs, Nachweise (#139).
 - `trusted-region-prior.md` – Streuung null/nahe null/keine Zahl im Trusted-Region-Prior: Regel, Audit, Tests (#116).
 - `speicher-und-rechenpfade.md` – Ableitungs-Cache, kompakter Fortschritt, CLASSIC ohne Pool-Fisher-Information: Messungen, Kompatibilität (#143–#145).
