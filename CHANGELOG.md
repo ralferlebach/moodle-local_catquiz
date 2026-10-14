@@ -2,6 +2,58 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Moodle 5.2/5.3: Das Frage-Modal öffnete sich dort nicht mehr. Es lud `core/modal_factory`, das seit
+  Moodle 4.3 veraltet und in 5.2 entfernt ist. Jetzt `core/modal` (`Modal.create()`, ab 4.3 vorhanden, also
+  auch in 4.5). Gefunden durch Behat auf 5.2/5.3.
+- Moodle 5.3: `user_get_users_by_id()` ist dort veraltet und meldete sich bei jeder Skalenänderung
+  (Benachrichtigung der Abonnenten) und in der Detailansicht von Teilnehmenden. Ersetzt durch den
+  direkten Lesezugriff, den die Funktion selbst ausführte. Gefunden durch den vollen PHPUnit-Lauf auf 5.3.
+- Issue #117: Behat – eine Skala mit abgeschalteter Berichtsfreigabe erhält kein schriftliches Feedback,
+  die übrigen gültigen schon (`catquiz_written_feedback.feature`).
+- Issues #134/#135/#141: Ganzversuch-Test für alle sechs Strategien (nie über das Maximum, keine Frage
+  doppelt, vor dem Minimum nur mit eigenem Status), `strategy_semantics_test`.
+- Issue #137: Test des Upgrade-Schritts 2026100913 (Spalten kommen, ältere Ergebnisse behalten „kein
+  Bereich“, Schritt wiederholbar). Behat: Frage-Modal besteht axe-core, nimmt den Fokus, schließt mit
+  Escape und gibt den Fokus an die auslösende Schaltfläche zurück.
+- Behat: Mehrskalen-Routing für „alle Subskalen“ (fünf Routing-Skalen) und „relevante Subskalen“
+  (gültige routen, fraction-ungültige nicht; #129/#130/#140); „größte Stärke“ mit einer Skala im Text und
+  allen gültigen im Detail-Tab (#118/#128).
+- Behat `catquiz_stop_reasons.feature`: Pool erschöpft vor dem Minimum (Hinweis, kein gültiges
+  Ergebnis), Pool erschöpft nach dem Minimum mit der CAT-Strategie (Hinweis, Ergebnis), Zeitlimit
+  (Hinweis, Ende mit dem rechtzeitig Beantworteten).
+- Behat für #117/#118 (schriftliches Feedback und Detail-Tab je Strategie,
+  `catquiz_written_feedback.feature`) und #121 (Abschluss nach gültigem Ergebnis, Ergebnisseite nach
+  Verfügbarkeitsende, `catquiz_completion_availability.feature`) – bisher nur im Commit vermerkt.
+- Issue #119 (Lernverlauf, `doc/statistik-119-132.md`): Die Kohortenkurve ist eine kumulative Reihe
+  „letztes gültiges Ergebnis je Person bis zum Zeitpunkt“. Personen bleiben ohne neuen Versuch im
+  Mittel, treten mit dem ersten gültigen Ergebnis ein, ungültige Ergebnisse ersetzen nichts, 0.0 ist
+  ein Wert, es wird nichts interpoliert. Quelle ist das beim Finalisieren gespeicherte Ergebnis, nicht
+  der heutige Personenparameter. Feedback und Statistik-Shortcode nutzen denselben Rechenweg
+  (`local\statistics\learning_progress_series`) und laden die Versuche nach historischer Teilnahme.
+  Die Diagramme sind nicht mehr geglättet und haben eine Wertetabelle. Die persönliche Kurve zeigt nur
+  noch gültige Ergebnisse.
+- Issue #132 („Ohne Versuch“): Gezählt werden nur Personen, die einen Test des Scopes hätten ablegen
+  können: aktiv eingeschrieben, mit `mod/adaptivequiz:attempt`, Aktivität sichtbar, und
+  Verfügbarkeitsbedingungen, die Personen auswählen (Gruppe, Gruppierung, Profil …), erfüllt. Mehrere
+  Tests ergeben die Vereinigung, der Testfilter nur diesen Test. Ohne Kursfilter zählen nie mehr alle
+  Eingeschriebenen der Plattform. Ein abgelaufenes Zeitfenster schließt niemanden aus. Die Säulen mit
+  Versuchen bleiben unverändert (`local\statistics\eligible_population`).
+- Issue #124: Behat für Aktivierung → Feedback → Speichern und Wurzelwechsel → Reload → Speichern
+  (vollständiger Teilbaum, keine Felder der alten Skala, keine Validierungsfehler).
+- Issue #139 (Frage-Modal, `doc/issue-139-frage-modal.md`):
+  - Per AJAX geliefertes JavaScript lief zweimal, weil es noch in `<script>`-Tags steckte. Betroffen
+    waren das Frage-Modal und jeder lazy geladene Feedback-Tab (#85). Diagramme wurden dadurch doppelt
+    gezeichnet, das zweite über die Tabelle darunter, und STACK/MathJax banden sich doppelt. Die
+    Skripte werden jetzt mit `core/fragment` ausgepackt.
+  - Meldungen des Servers (Frage nicht mehr vorhanden, kein Zugriff) erscheinen im Modal der Frage
+    statt als Ausnahme-Dialog. Der Ladeindikator endet in jedem Fall.
+  - Das Prüf-Modal zeigt keine Fragen-Markierung mehr.
+  - Behat `catquiz_question_modal.feature`: Ergebnisseite mit Bildern der Fragen, nach
+    Verfügbarkeitsende und nach dem Verbergen; Lehrkraft; `[catquizfeedback]`-Parität; Fehlerpfad;
+    echte STACK-Frage mit Maxima (übersprungen ohne STACK/Maxima). PHPUnit für die Prüfrolle mit
+    und ohne Capability.
+- CI: Die Behat-Jobs installieren Maxima und STACK (`maths/moodle-qtype_stack` mit Abhängigkeiten) und setzen dessen
+  Testkonfiguration.
 - Ein Feedbackbereich, der sich nicht aufbauen lässt, beendet den Versuch nicht mehr. Die
   Feedbackdaten werden bei jeder Antwort mitten in der Auswahl der nächsten Frage aktualisiert. Ein
   klassischer Test auf einer Skala ohne Feedbackbereiche endete deshalb nach der ersten Antwort mit

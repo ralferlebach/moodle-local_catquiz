@@ -242,6 +242,17 @@ stellt, nicht nur „kein Absturz".
   bestehenden privaten Methode eingefügt, kann deren Docblock verwaisen
   (phpcs: „Missing docblock"). Nach solchen Einfügungen immer phpcs laufen lassen
   und die Docblock-Zuordnung visuell prüfen.
+- **Behat-Falle Gherkin-Cache:** Behat speichert geparste Features unter
+  `/tmp/behat_gherkin_cache` und hält einen Eintrag für frisch, solange er jünger ist als
+  die Feature-Datei. `cp -a` und `tar` erhalten die alte mtime der Quelle. Eine geänderte
+  Feature-Datei kann dann *älter* sein als ihr Cacheeintrag, und Behat führt den alten
+  Stand aus, ohne Warnung. Nach jedem Spiegeln mit erhaltenen Zeitstempeln
+  `rm -rf /tmp/behat_gherkin_cache` – aber nie, während ein Behat-Lauf läuft, sonst bricht
+  dieser beim Schreiben in den Cache ab. Ein neues Feature braucht `admin/tool/behat/cli/init.php`
+  (oder einen Eintrag in der generierten `behat.yml`), sonst findet Behat es nicht.
+- **Per AJAX geliefertes JavaScript** (`$PAGE->requires->get_end_code()`) steckt in
+  `<script>`-Tags. Vor `Templates.*NodeContents()` mit `core/fragment`
+  `processCollectedJavascript()` auspacken, sonst läuft es doppelt (#139).
 
 ---
 

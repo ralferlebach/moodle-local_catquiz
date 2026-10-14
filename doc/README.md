@@ -22,6 +22,11 @@ Zwei Arten von Dokumenten:
   Messvorgehen für LTI-Starts.
 - **strategy-semantics.md** – Wann endet ein Test? Ursachen von #134/#135, Fähigkeitsmatrix der
   Strategien, Stopps je Strategie, Tests und Zahn-Tests.
+- **audit-2026-10-14.md** – Abnahmebericht der BUG-Audit-Restarbeiten: AK/DoD je Issue mit Nachweis, Testläufe 4.5/5.1/5.2/5.3, offene Punkte.
+- **statistik-119-132.md** – Lernverlauf als kumulative Reihe (#119), Grundgesamtheit „Ohne Versuch“ (#132),
+  Nachweise.
+- **issue-139-frage-modal.md** – Frage-Modal (#139): Zugriffsregeln, Fehlerpfad, STACK, doppelt
+  ausgeführtes JS der lazy Tabs, Nachweise.
 - **experiment-136-slo.md** – Anleitung zur Messung der Antwortzeiten im Betrieb (#136): Steckbrief,
   Messläufe kalt/warm/parallel, Export, Auswertung.
 - **id-namespaces.md** – Id-Namensräume: Benennung von Host- und CAT-Versuchs-Id, die

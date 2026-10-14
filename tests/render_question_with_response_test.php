@@ -171,6 +171,8 @@ final class render_question_with_response_test extends advanced_testcase {
         $result = $this->render($slot, $attemptid, $qaid);
         $this->assertArrayHasKey('body', $result);
         $this->assertNotEmpty($result['body']);
+        // A review offers no flag (issue #139).
+        $this->assertStringNotContainsString('questionflag', $result['body']);
     }
 
     /**
@@ -185,6 +187,48 @@ final class render_question_with_response_test extends advanced_testcase {
         $other = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($other->id, $courseid, 'student');
         $this->setUser($other);
+        $this->expectException(\required_capability_exception::class);
+        $this->render($slot, $attemptid, $qaid);
+    }
+
+    /**
+     * A teacher of the course reviews a participant's question (issue #139), also once the
+     * activity is hidden: the review of a finished attempt is done in the course.
+     *
+     * @return void
+     */
+    public function test_reviewer_role_renders_foreign_attempt(): void {
+        [$attemptid, $slot, $qaid, , $context] = $this->build_attempt();
+        $courseid = $context->get_course_context()->instanceid;
+        $teacher = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($teacher->id, $courseid, 'teacher');
+        $this->setUser($teacher);
+
+        $result = $this->render($slot, $attemptid, $qaid);
+        $this->assertStringContainsString('class="que ', $result['body']);
+
+        set_coursemodule_visible($context->instanceid, 0);
+        \course_modinfo::clear_instance_cache();
+        $result = $this->render($slot, $attemptid, $qaid);
+        $this->assertStringContainsString('class="que ', $result['body']);
+    }
+
+    /**
+     * The teacher role is a reviewer by its capability, not by its name: without
+     * local/catquiz:view_users_feedback the participant's question stays closed (issue #139).
+     *
+     * @return void
+     */
+    public function test_reviewer_role_without_the_capability_is_refused(): void {
+        global $DB;
+        [$attemptid, $slot, $qaid, , $context] = $this->build_attempt();
+        $courseid = $context->get_course_context()->instanceid;
+        $teacher = $this->getDataGenerator()->create_user();
+        $this->getDataGenerator()->enrol_user($teacher->id, $courseid, 'teacher');
+        $roleid = (int) $DB->get_field('role', 'id', ['shortname' => 'teacher']);
+        assign_capability('local/catquiz:view_users_feedback', CAP_PROHIBIT, $roleid, $context->get_course_context()->id);
+        $this->setUser($teacher);
+
         $this->expectException(\required_capability_exception::class);
         $this->render($slot, $attemptid, $qaid);
     }

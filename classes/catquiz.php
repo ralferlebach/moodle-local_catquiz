@@ -3431,15 +3431,17 @@ class catquiz {
             $params['endtime'] = $endtime;
         }
 
+        // The bar "no attempt" counts the people who could have taken a test of the scope - actively
+        // enrolled, allowed to attempt it, the activity visible and available to them - not everyone
+        // enrolled in the course, let alone on the platform (issue #132, eligible_population).
+        $population = \local_catquiz\local\statistics\eligible_population::userids($scaleid, $courseid, $testid);
+
         // Null means no restriction; an empty array means nothing is visible and has
         // to yield no rows rather than all of them.
-        $enrolwhere = $courseid ? 'e.courseid = :enrolcourseid' : '1 = 1';
-        $enrolparams = $courseid ? ['enrolcourseid' => $courseid] : [];
-
         if ($alloweduserids !== null) {
+            $population = array_values(array_intersect($population, array_map('intval', $alloweduserids)));
             if (empty($alloweduserids)) {
                 $where .= ' AND 1 = 0';
-                $enrolwhere .= ' AND 1 = 0';
             } else {
                 [$insql, $inparams] = $DB->get_in_or_equal(
                     $alloweduserids,
@@ -3448,15 +3450,14 @@ class catquiz {
                 );
                 $where .= " AND a.userid $insql";
                 $params = array_merge($params, $inparams);
-
-                [$insql2, $inparams2] = $DB->get_in_or_equal(
-                    $alloweduserids,
-                    SQL_PARAMS_NAMED,
-                    'allowedenrol'
-                );
-                $enrolwhere .= " AND ue.userid $insql2";
-                $enrolparams = array_merge($enrolparams, $inparams2);
             }
+        }
+        $enrolparams = [];
+        if ($population) {
+            [$populationsql, $enrolparams] = $DB->get_in_or_equal($population, SQL_PARAMS_NAMED, 'eligible');
+            $populationwhere = "u.id $populationsql";
+        } else {
+            $populationwhere = '1 = 0';
         }
 
         // The ability that colours the bar comes from the person's last attempt in
@@ -3485,9 +3486,8 @@ class catquiz {
             $notexistsparams['ne' . $name] = $value;
         }
 
-        // People enrolled today who have no attempt at all form the "no attempt"
-        // bucket. They are the one thing the attempts table cannot supply, so the
-        // enrolments are consulted for that alone - without any join on {role}.
+        // The people of the population without an attempt in the selection form the
+        // "no attempt" bucket. They are the one thing the attempts table cannot supply.
         //
         // The NOT EXISTS repeats $where deliberately. It used to test the scale
         // alone, while the counting half above also filtered course, test and period.
@@ -3504,14 +3504,13 @@ class catquiz {
 
                          UNION ALL
 
-                        SELECT DISTINCT ue.userid, CAST(NULL AS DECIMAL(10,5)) ability, 0 attempts
-                          FROM {enrol} e
-                          JOIN {user_enrolments} ue ON e.id = ue.enrolid
-                         WHERE $enrolwhere
+                        SELECT u.id userid, CAST(NULL AS DECIMAL(10,5)) ability, 0 attempts
+                          FROM {user} u
+                         WHERE $populationwhere
                            AND NOT EXISTS (
                                SELECT 1
                                  FROM {local_catquiz_attempts} a
-                                WHERE a.userid = ue.userid
+                                WHERE a.userid = u.id
                                   AND $notexistswhere
                            )
                   ) counted

@@ -115,6 +115,277 @@ class behat_catquiz extends behat_base {
     }
 
     /**
+     * Hides an activity from participants after the fact (issue #139).
+     *
+     * @Given /^the activity "([^"]*)" is hidden from participants$/
+     *
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_activity_is_hidden_from_participants(string $idnumber): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/course/lib.php');
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        set_coursemodule_visible($cm->id, 0);
+        rebuild_course_cache($cm->course, true);
+    }
+
+    /**
+     * Deletes the question usage of a user's last attempt, as a restore or a clean-up can (issue #139).
+     *
+     * A page that was opened before still offers the questions; the modal must then report the
+     * missing question instead of loading for ever.
+     *
+     * @Given /^the questions of the last attempt of "([^"]*)" no longer exist$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function the_questions_of_the_last_attempt_no_longer_exist(string $username): void {
+        global $CFG, $DB;
+        require_once($CFG->libdir . '/questionlib.php');
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, uniqueid', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException('No attempt of ' . $username, $this->getSession());
+        }
+        \question_engine::delete_questions_usage_by_activity((int) reset($attempts)->uniqueid);
+    }
+
+    /**
+     * Connects STACK to Maxima with the test configuration of config.php (issue #139).
+     *
+     * The scenario is skipped where qtype_stack is not installed or no Maxima is configured - the
+     * same rule as STACK's own step "I set up STACK using the PHPUnit configuration", which cannot be
+     * used here because it does not exist without STACK.
+     *
+     * @Given /^STACK is connected to Maxima for this test$/
+     *
+     * @return void
+     */
+    public function stack_is_connected_to_maxima(): void {
+        $dir = \core_component::get_plugin_directory('qtype', 'stack');
+        if (!$dir || !file_exists($dir . '/version.php')) {
+            throw new \Moodle\BehatExtension\Exception\SkippedException('qtype_stack is not installed.');
+        }
+        require_once($dir . '/tests/fixtures/test_maxima_configuration.php');
+        if (!\qtype_stack_test_config::is_test_config_available()) {
+            throw new \Moodle\BehatExtension\Exception\SkippedException(
+                'No Maxima configuration for tests (QTYPE_STACK_TEST_CONFIG_* in config.php).'
+            );
+        }
+        \qtype_stack_test_config::setup_test_maxima_connection();
+    }
+
+    /**
+     * Checks that an image of the question in the open dialogue was delivered (issue #139).
+     *
+     * An image the browser could not load - refused or missing file - has no natural width.
+     *
+     * @Then /^the image "([^"]*)" in the question dialogue has loaded$/
+     *
+     * @param string $alt Alternative text of the image.
+     * @return void
+     */
+    public function the_image_in_the_question_dialogue_has_loaded(string $alt): void {
+        $alt = json_encode($alt);
+        $script = "return (function() {"
+            . " var img = Array.from(document.querySelectorAll('.modal.show img'))"
+            . "   .find(function(i) { return i.getAttribute('alt') === $alt; });"
+            . " if (!img) { return 'missing'; }"
+            . " if (!img.complete) { return 'loading'; }"
+            . " return img.naturalWidth > 0 ? 'loaded' : 'broken ' + img.src;"
+            . "})();";
+        $this->spin(function () use ($script) {
+            $state = $this->getSession()->evaluateScript($script);
+            if ($state !== 'loaded') {
+                throw new \Behat\Mink\Exception\ExpectationException('Image state: ' . $state, $this->getSession());
+            }
+            return true;
+        }, [], behat_base::get_extended_timeout());
+    }
+
+    /**
+     * Restricts an activity to the members of a group (issue #132).
+     *
+     * @Given /^the activity "([^"]*)" is restricted to the group "([^"]*)"$/
+     *
+     * @param string $idnumber
+     * @param string $groupname
+     * @return void
+     */
+    public function the_activity_is_restricted_to_the_group(string $idnumber, string $groupname): void {
+        global $DB;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $groupid = $DB->get_field('groups', 'id', ['courseid' => $cm->course, 'name' => $groupname], MUST_EXIST);
+        $availability = \core_availability\tree::get_root_json([\availability_group\condition::get_json((int) $groupid)]);
+        $DB->set_field('course_modules', 'availability', json_encode($availability), ['id' => $cm->id]);
+        rebuild_course_cache($cm->course, true);
+    }
+
+    /**
+     * Stores finished CAT results of a test, as the finalisation stores them (issues #119, #132).
+     *
+     * One row per result: user, how many days ago it was finished, the ability on the test's scale and
+     * its subscales, and whether it is valid. Builds a history without taking the test day after day.
+     *
+     * @Given /^the following CAT results of "([^"]*)" exist:$/
+     *
+     * @param string $idnumber
+     * @param \Behat\Gherkin\Node\TableNode $table Columns: user, days ago, ability, valid.
+     * @return void
+     */
+    public function the_following_cat_results_exist(string $idnumber, \Behat\Gherkin\Node\TableNode $table): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+        static $hostattemptid = 900000;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            '*',
+            MUST_EXIST
+        );
+        $rootid = (int) $test->catscaleid;
+        $scales = [$rootid, ...\local_catquiz\catscale::get_subscale_ids($rootid)];
+        $contextid = (int) \local_catquiz\catscale::get_context_id($rootid);
+        foreach ($table->getHash() as $row) {
+            $userid = (int) $DB->get_field('user', 'id', ['username' => $row['user']], MUST_EXIST);
+            $end = time() - (int) $row['days ago'] * DAYSECS;
+            $ability = (float) $row['ability'];
+            $id = $DB->insert_record('local_catquiz_attempts', (object) [
+                'userid' => $userid, 'scaleid' => $rootid, 'contextid' => $contextid, 'courseid' => $cm->course,
+                'attemptid' => ++$hostattemptid, 'component' => 'mod_adaptivequiz', 'instanceid' => $cm->instance,
+                'teststrategy' => LOCAL_CATQUIZ_STRATEGY_CLASSIC, 'status' => 0, 'starttime' => $end - 600,
+                'endtime' => $end, 'personability_after_attempt' => $ability,
+                'json' => json_encode(['personabilities' => array_fill_keys($scales, $ability)]),
+                'timecreated' => $end, 'timemodified' => $end,
+            ]);
+            foreach ($scales as $scaleid) {
+                $DB->insert_record('local_catquiz_personparams', (object) [
+                    'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $contextid, 'attemptid' => $id,
+                    'ability' => $ability, 'isvalid' => $row['valid'] === 'yes' ? 1 : 0, 'resultsource' => 'current',
+                    'isprimary' => $scaleid === $rootid ? 1 : 0, 'status' => 0, 'timecreated' => $end, 'timemodified' => $end,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Limits the time of an attempt in the stored CAT settings of a test (issue #141, stop reasons).
+     *
+     * @Given /^the CAT settings of "([^"]*)" limit an attempt to (\d+) minutes$/
+     *
+     * @param string $idnumber
+     * @param int $minutes
+     * @return void
+     */
+    public function the_cat_settings_limit_an_attempt(string $idnumber, int $minutes): void {
+        global $DB;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            '*',
+            MUST_EXIST
+        );
+        $json = json_decode($test->json);
+        $json->catquiz_includetimelimit = 1;
+        $json->catquiz_timelimitgroup = (object) [
+            'catquiz_maxtimeperattempt' => $minutes,
+            'catquiz_timeselect_attempt' => 'min',
+            'catquiz_maxtimeperitem' => 0,
+            'catquiz_timeselect_item' => 'min',
+        ];
+        $DB->set_field('local_catquiz_tests', 'json', json_encode($json), ['id' => $test->id]);
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * Moves the start of a user's running CAT attempt into the past (issue #141, stop reasons).
+     *
+     * Saves waiting for a time limit in real time. The progress is read again from the database on the
+     * next request.
+     *
+     * @Given /^the running CAT attempt of "([^"]*)" started (\d+) minutes ago$/
+     *
+     * @param string $username
+     * @param int $minutes
+     * @return void
+     */
+    public function the_running_cat_attempt_started_minutes_ago(string $username, int $minutes): void {
+        global $DB;
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $rows = $DB->get_records('local_catquiz_progress', ['userid' => $userid], 'id DESC', '*', 0, 1);
+        if (!$rows) {
+            throw new \Behat\Mink\Exception\ExpectationException('No running CAT attempt of ' . $username, $this->getSession());
+        }
+        $row = reset($rows);
+        $json = json_decode($row->json);
+        $json->starttime = (int) ($json->starttime ?? time()) - $minutes * MINSECS;
+        $DB->set_field('local_catquiz_progress', 'json', json_encode($json), ['id' => $row->id]);
+        // The progress lives in the session cache as well; the invalidation event empties it.
+        \cache_helper::purge_by_event('changesinadaptivequizattempt');
+    }
+
+    /**
+     * Switches the reporting of a scale off in the stored CAT settings of a test (issue #117).
+     *
+     * @Given /^the scale "([^"]*)" is not reported by "([^"]*)"$/
+     *
+     * @param string $scalename
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_scale_is_not_reported_by(string $scalename, string $idnumber): void {
+        global $DB;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            '*',
+            MUST_EXIST
+        );
+        $scaleid = $DB->get_field('local_catquiz_catscales', 'id', ['name' => $scalename], MUST_EXIST);
+        $json = json_decode($test->json);
+        $json->{'catquiz_scalereportcheckbox_' . $scaleid} = '0';
+        $DB->set_field('local_catquiz_tests', 'json', json_encode($json), ['id' => $test->id]);
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * Checks that the keyboard focus is inside the open dialogue (issue #139).
+     *
+     * Moodle decides which element of a dialogue takes the focus; what matters is that it is in the
+     * dialogue and not left on the page behind it.
+     *
+     * @Then /^the focus is inside the open dialogue$/
+     *
+     * @return void
+     */
+    public function the_focus_is_inside_the_open_dialogue(): void {
+        $this->spin(function () {
+            $inside = $this->getSession()->evaluateScript(
+                "return !!(document.activeElement && document.activeElement.closest('.modal.show'));"
+            );
+            if (!$inside) {
+                throw new \Behat\Mink\Exception\ExpectationException(
+                    'The focus is not in the open dialogue.',
+                    $this->getSession()
+                );
+            }
+            return true;
+        });
+    }
+
+    /**
      * Puts the first question of a user's last attempt into its usage a second time (issue #125).
      *
      * Reproduces what older versions of the activity did on a reload: the same question in a further
