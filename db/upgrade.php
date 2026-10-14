@@ -1560,6 +1560,20 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026100913, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026100916) {
+        // Issue #137: marks a range that was not recorded at finalisation but taken from the scale
+        // later - by the recovery of older results (adaptivequizcatmodel_catquiz,
+        // cli/recover_legacy_results.php) or a revalidation. Nothing is filled here: older results
+        // keep no range until a recovery run, within its time window, judges them again.
+        $table = new xmldb_table('local_catquiz_personparams');
+        $field = new xmldb_field('rangebackfilled', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'rangeupper');
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026100916, 'local', 'catquiz');
+    }
+
     return true;
 }
 

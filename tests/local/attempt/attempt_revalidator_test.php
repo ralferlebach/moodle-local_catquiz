@@ -136,6 +136,36 @@ final class attempt_revalidator_test extends advanced_testcase {
     }
 
     /**
+     * A result written again without a recorded range takes today's range, marked as taken later;
+     * a recorded range stays (issue #137).
+     */
+    public function test_revalidation_marks_a_range_taken_later(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $DB->import_record('local_catquiz_catscales', (object) [
+            'id' => 5, 'name' => 'Root', 'parentid' => 0, 'minscalevalue' => -4, 'maxscalevalue' => 4,
+            'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $older = $this->attempt(12);
+        $catattemptid = $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $older]);
+
+        attempt_revalidator::revalidate($older, true);
+
+        $row = $DB->get_record('local_catquiz_personparams', ['attemptid' => $catattemptid, 'catscaleid' => 5]);
+        $this->assertEqualsWithDelta(-4.0, (float) $row->rangelower, 1e-9);
+        $this->assertEqualsWithDelta(4.0, (float) $row->rangeupper, 1e-9);
+        $this->assertSame(1, (int) $row->rangebackfilled);
+
+        // Recorded now, it stays as it is when the attempt is judged again after a change of the scale.
+        $DB->set_field('local_catquiz_catscales', 'maxscalevalue', 2, ['id' => 5]);
+        \cache::make('local_catquiz', 'catscales')->purge();
+        attempt_revalidator::revalidate($older, true);
+        $row = $DB->get_record('local_catquiz_personparams', ['attemptid' => $catattemptid, 'catscaleid' => 5]);
+        $this->assertEqualsWithDelta(4.0, (float) $row->rangeupper, 1e-9);
+        $this->assertSame(1, (int) $row->rangebackfilled);
+    }
+
+    /**
      * Without the answers or without finalisation nothing is judged and nothing is changed.
      */
     public function test_attempts_that_cannot_be_reconstructed_are_left_alone(): void {
