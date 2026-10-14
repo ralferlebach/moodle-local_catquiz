@@ -27,6 +27,7 @@ namespace local_catquiz\teststrategy\feedbackgenerator;
 use context_system;
 use local_catquiz\catquiz;
 use local_catquiz\local\access\context_resolver;
+use local_catquiz\local\attempt\attempt_statistics;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\teststrategy\info;
 
@@ -135,9 +136,32 @@ class debuginfo extends feedbackgenerator {
 
         $descriptionheading = get_string('debuginfo_desc_title', 'local_catquiz', $this->get_progress()->get_attemptid());
         $description = get_string('debuginfo_desc', 'local_catquiz');
+        // Decision of 2026-10-14: the figures of the attempt for teachers, above the exports.
+        $pilotids = array_keys($this->get_progress()->get_played_pilot_questions());
+        $figures = attempt_statistics::for_attempt((int) $attemptid, $pilotids);
+        $statistics = [
+            ['label' => get_string('numberofanswerscorrect', 'local_catquiz'), 'value' => $figures->right],
+            ['label' => get_string('numberofanswersincorrect', 'local_catquiz'), 'value' => $figures->wrong],
+            ['label' => get_string('numberofanswerspartlycorrect', 'local_catquiz'), 'value' => $figures->partial],
+            ['label' => get_string('numberofanswersunanswered', 'local_catquiz'), 'value' => $figures->unanswered],
+            ['label' => get_string('statistics_pilots', 'local_catquiz'), 'value' => $figures->pilots],
+            [
+                'label' => get_string('statistics_duration', 'local_catquiz'),
+                'value' => attempt_statistics::format_seconds($figures->duration),
+            ],
+            [
+                'label' => get_string('statistics_timeperitem', 'local_catquiz', $figures->itemcount),
+                'value' => $figures->itemsd === null
+                    ? attempt_statistics::format_seconds($figures->itemmean)
+                    : attempt_statistics::format_seconds($figures->itemmean) . ' ± '
+                        . attempt_statistics::format_seconds($figures->itemsd),
+            ],
+        ];
+
         $feedback = $OUTPUT->render_from_template(
             'local_catquiz/feedback/exportattempt',
             [
+                'statistics' => $statistics,
                 'data' => rawurlencode($csvstring),
                 'cid' => $contextid,
                 'attemptid' => $attemptid,
@@ -253,7 +277,7 @@ class debuginfo extends feedbackgenerator {
      *
      */
     public function get_heading(): string {
-        return 'Export';
+        return get_string('statisticsexport', 'local_catquiz');
     }
 
     /**

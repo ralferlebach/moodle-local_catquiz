@@ -144,7 +144,9 @@ class feedbacksettings {
         // Default sortorder is descendent.
         $this->sortorder = LOCAL_CATQUIZ_SORTORDER_DESC;
 
-        $this->areashiddenbydefault = ['questionssummary'];
+        // The former summary tab (Wunderbyte) was the only area hidden by default; its figures are in the
+        // tab "Statistics & export" now (decision of 2026-10-14).
+        $this->areashiddenbydefault = [];
     }
 
     /**

@@ -43,9 +43,25 @@ Feature: An attempt ends for a reason the participant is told, and the result fo
     And I wait until the page is ready
     Then I should see "There are no further suitable questions for you at the moment" in the "Your test has ended" "dialogue"
     And I click on "OK" "button" in the "Your test has ended" "dialogue"
+    And I should see "No valid test result could be determined for this attempt."
     And I should see "Test result can not be calculated because minimum number of questions was not reached"
     And I should not see "Question 3"
     And "Submit answer" "button" should not exist
+    ## Issue #120: below the minimum the attempt is shown all the same - the quiz history with content.
+    And "Summary" "link" should not exist
+    When I click on "Quiz progress summary" "link" in the "#region-main" "css_element"
+    And I wait until ".catquiz-graphicalsummary-table" "css_element" exists
+    Then I should see "Resource question one" in the ".catquiz-graphicalsummary-table" "css_element"
+    And I should not see "No feedback available"
+    And I log out
+    ## Teachers: statistics and export, with the answers counted.
+    When I log in as "admin"
+    And I visit the CAT attempt feedback page for the last attempt of "student1"
+    And I click on "Statistics & export" "link"
+    And I wait until ".catquiz-attempt-statistics" "css_element" exists
+    Then "//table[contains(@class, 'catquiz-attempt-statistics')]//tr[th[normalize-space(.)='Correct']]/td[normalize-space(.)='1']" "xpath_element" should exist
+    And "//table[contains(@class, 'catquiz-attempt-statistics')]//tr[th[normalize-space(.)='Wrong']]/td[normalize-space(.)='1']" "xpath_element" should exist
+    And I should see "Export attempt (CSV)"
 
   @javascript
   Scenario: The pool runs out after the minimum: the participant is told, and the result stands

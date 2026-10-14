@@ -190,14 +190,14 @@ final class administration_history_test extends advanced_testcase {
         );
 
         $rows = \local_catquiz\catquiz::get_attempt_statistics($attemptid);
-        $summary = \local_catquiz\teststrategy\feedbackgenerator\questionssummary::count_graded($rows, []);
+        $summary = \local_catquiz\local\attempt\attempt_statistics::count_answers($rows, []);
 
         $this->assertSame(
             2,
-            $summary['gradedright'] + $summary['gradedwrong'] + $summary['gradedpartial'] + $summary['gradedunanswered'],
+            $summary['right'] + $summary['wrong'] + $summary['partial'] + $summary['unanswered'],
             'The repeated question was counted twice.'
         );
-        $this->assertSame(0, $summary['gradedwrong'], 'The answer of the repeated administration was counted.');
+        $this->assertSame(0, $summary['wrong'], 'The answer of the repeated administration was counted.');
     }
     /**
      * The measurement takes the first answer of a repeated question and counts it once.

@@ -32,9 +32,20 @@
         "questions": [{"id": 1, "score": 0.3}, {"id": 2, "score": 0.01}],
         "active_scales": ["scale1", "scale2", "scale3"],
         "lastquestion": {"id": 1, "score": 1.2},
-        "selectedscale": "Deutsch"
+        "selectedscale": "Deutsch",
+        "statistics": [{"label": "Richtig", "value": 3}, {"label": "Bearbeitungszeit", "value": "4:10 min"}]
     }
 }}
+{{#statistics.0}}
+<table class="table table-sm w-auto catquiz-attempt-statistics">
+    <caption class="sr-only">{{#str}}statistics_caption, local_catquiz{{/str}}</caption>
+    <tbody>
+    {{#statistics}}
+        <tr><th scope="row" class="font-weight-normal">{{label}}</th><td class="text-right">{{value}}</td></tr>
+    {{/statistics}}
+    </tbody>
+</table>
+{{/statistics.0}}
 <p>{{description}}</p>
 
 <div style="text-align: center;">

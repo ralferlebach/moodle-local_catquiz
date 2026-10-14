@@ -26,7 +26,6 @@ use local_catquiz\teststrategy\feedbackgenerator\graphicalsummary;
 use local_catquiz\teststrategy\feedbackgenerator\learningprogress;
 use local_catquiz\teststrategy\feedbackgenerator\personabilities;
 use local_catquiz\teststrategy\feedbackgenerator\pilotquestions;
-use local_catquiz\teststrategy\feedbackgenerator\questionssummary;
 use local_catquiz\teststrategy\feedbacksettings;
 
 defined('MOODLE_INTERNAL') || die();
@@ -58,7 +57,6 @@ final class invalid_result_feedback_test extends advanced_testcase {
             personabilities::class => feedbackgenerator::DEPENDS_ON_RESULT,
             learningprogress::class => feedbackgenerator::DEPENDS_ON_RESULT,
             pilotquestions::class => feedbackgenerator::DEPENDS_ON_RESULT,
-            questionssummary::class => feedbackgenerator::DEPENDS_ON_ATTEMPT,
             graphicalsummary::class => feedbackgenerator::DEPENDS_ON_ATTEMPT,
             debuginfo::class => feedbackgenerator::DIAGNOSTIC,
         ];
@@ -188,7 +186,6 @@ final class invalid_result_feedback_test extends advanced_testcase {
             $this->generator('customscalefeedback', feedbackgenerator::DEPENDS_ON_RESULT),
             $this->generator('comparetotestaverage', feedbackgenerator::DEPENDS_ON_RESULT),
             $this->generator('learningprogress', feedbackgenerator::DEPENDS_ON_RESULT),
-            $this->generator('questionssummary', feedbackgenerator::DEPENDS_ON_ATTEMPT),
             $this->generator('graphicalsummary', feedbackgenerator::DEPENDS_ON_ATTEMPT),
             $this->generator('debuginfo', feedbackgenerator::DIAGNOSTIC),
         ];
@@ -207,7 +204,7 @@ final class invalid_result_feedback_test extends advanced_testcase {
     }
 
     /**
-     * Invalid: the notice comes first, quiz history and summary stay, what reads the result goes.
+     * Invalid: the notice comes first, the quiz history stays, what reads the result goes.
      */
     public function test_invalid_result_keeps_the_attempt_and_the_export(): void {
         $this->resetAfterTest();
@@ -218,7 +215,6 @@ final class invalid_result_feedback_test extends advanced_testcase {
 
         $this->assertSame('novalidresult', $student[0], 'The notice comes first.');
         $this->assertContains('graphicalsummary', $student);
-        $this->assertContains('questionssummary', $student);
         $this->assertNotContains('comparetotestaverage', $student);
         $this->assertNotContains('learningprogress', $student);
         $this->assertNotContains('customscalefeedback', $student, 'No scale feedback for an invalid result.');
@@ -251,7 +247,7 @@ final class invalid_result_feedback_test extends advanced_testcase {
         $this->assertSame(
             [
                 'customscalefeedback', 'comparetotestaverage', 'learningprogress',
-                'questionssummary', 'graphicalsummary', 'debuginfo',
+                'graphicalsummary', 'debuginfo',
             ],
             $student
         );

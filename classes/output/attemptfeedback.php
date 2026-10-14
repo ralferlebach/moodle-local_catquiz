@@ -451,13 +451,9 @@ class attemptfeedback implements renderable, templatable {
      *
      */
     public function export_for_template(\renderer_base $output): array {
-        // If the minimum number of questions was not reached, we do not display feedback.
-        $numplayed = $this->get_progress()->get_num_playedquestions();
-        $minquestions = $this->get_progress()->get_quiz_settings()->maxquestionsgroup->catquiz_minquestions ?? 0;
-        if ($numplayed < $minquestions) {
-            return ['nofeedback' => true];
-        }
-
+        // Below the minimum number of questions there is no result, but the attempt is shown all the
+        // same: the notice with the reason, the quiz history and, for teachers, statistics and export
+        // (issue #120). The page used to show the notice alone (GH-577).
         return [
             'feedback' => $this->get_feedback_for_attempt(),
             // The tabs load their content by attempt (issue #85); without it every lazy tab failed.
@@ -700,7 +696,9 @@ class attemptfeedback implements renderable, templatable {
         // exclusion blocks across several tabs.
         if (!$hasvalidresult && is_array($abilities)) {
             $context['studentfeedback'] = $context['studentfeedback'] ?? [];
-            $reason = feedback_helper::get_exclusion_reason_string($abilities);
+            $reason = $this->below_minimum()
+                ? get_string('minquestionsnotreached', 'local_catquiz')
+                : feedback_helper::get_exclusion_reason_string($abilities);
             $content = get_string('feedbacknovalidresult', 'local_catquiz');
             if ($reason !== '') {
                 $content .= ' ' . $reason;
@@ -740,6 +738,21 @@ class attemptfeedback implements renderable, templatable {
     }
 
     /**
+     * Whether the attempt ended below the test's minimum number of questions.
+     *
+     * @return bool
+     */
+    private function below_minimum(): bool {
+        try {
+            $progress = $this->get_progress();
+        } catch (\Throwable $e) {
+            return false;
+        }
+        $minquestions = (int) ($progress->get_quiz_settings()->maxquestionsgroup->catquiz_minquestions ?? 0);
+        return $minquestions > 0 && $progress->get_num_answered_productive_questions() < $minquestions;
+    }
+
+    /**
      * The tabs a generator offers without building its content (issue #85).
      *
      * A student tab for every generator writing for participants, a teacher tab only for users
@@ -751,6 +764,11 @@ class attemptfeedback implements renderable, templatable {
      */
     private function lazy_tabs(feedbackgenerator $generator, array $feedbackdata): array {
         if (!$generator->has_data_for($feedbackdata)) {
+            return [];
+        }
+        // A generator the settings hide has no tab: its content would be empty. That is how the former
+        // summary tab, hidden by default, came to show "No feedback available".
+        if (!$generator->apply_settings_to_feedbackdata($feedbackdata)) {
             return [];
         }
         $tabs = [];
@@ -784,11 +802,8 @@ class attemptfeedback implements renderable, templatable {
         if (!$this->attemptid || !$this->teststrategy || $generatorname === self::PRIMARY_GENERATOR) {
             return [];
         }
-        // As on the page: below the minimum number of questions there is no feedback.
-        $minquestions = $this->get_progress()->get_quiz_settings()->maxquestionsgroup->catquiz_minquestions ?? 0;
-        if ($this->get_progress()->get_num_playedquestions() < $minquestions) {
-            return [];
-        }
+        // Below the minimum number of questions only what reads the result stays out - as on the page
+        // (issue #120): the check of the result dependency below covers it.
         $feedbackdata = $this->load_feedbackdata();
         $generators = $this->get_feedback_generators_for_teststrategy((int) ($feedbackdata['teststrategy'] ?? $this->teststrategy));
         foreach ($generators as $generator) {

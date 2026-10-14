@@ -2,6 +2,23 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Feedback (Entscheidung vom 14.10.2026, #120):
+  - Der Tab „Zusammenfassung“ (Wunderbyte, GH-110, 2023; standardmäßig ausgeblendet) entfällt. Durch die
+    nachgeladenen Tabs (#85, 2026100904) erschien er trotzdem, leer mit „Kein Feedback verfügbar“.
+    Nachgeladene Tabs berücksichtigen jetzt die Ausblend-Einstellungen.
+  - Der Export-Tab heißt „Statistik & Export“ (nur Berechtigte): oben die Kennzahlen des Versuchs –
+    richtig, falsch, teilweise, unbeantwortet (jede Frage einmal, ohne Pilotfragen), Pilotfragen,
+    Bearbeitungszeit, mittlere Zeit pro beantworteter Frage ± SD –, darunter die Export-Angebote
+    (`local\attempt\attempt_statistics`).
+  - Quizverlauf: Pilotfragen nur für Lehrende, ohne Fragenummer, mit grauem Symbol, ohne
+    Fähigkeitswert und nicht im Diagramm; die Nummern bleiben die des Diagramms.
+  - Unter der Mindestfragenzahl gibt es keine Sperre mehr: Hinweis mit dem Grund, Quizverlauf und
+    „Statistik & Export“ erscheinen, auf der Ergebnisseite wie in den nachgeladenen Tabs (die Sperre
+    der Tabs kam aus 2026100904, die der Seite aus GH-577).
+  - Tests: `local/attempt/attempt_statistics_test`, `teststrategy/feedbackgenerator/graphicalsummary_pilot_test`,
+    `output/lazy_feedback_test` (ausgeblendeter Generator, unter dem Minimum); Behat
+    `catquiz_stop_reasons` (unter dem Minimum: Quizverlauf mit Inhalt, Statistik für Lehrende),
+    `catquiz_feedback_validity`.
 - Issue #137, Altbestand (14.10.2026): neues Feld `local_catquiz_personparams.rangebackfilled` (Upgrade
   2026100916). Es kennzeichnet einen Bereich, der nicht beim Finalisieren eingefroren, sondern später von
   der heutigen Skala übernommen wurde – durch eine Revalidierung, also auch durch die Recovery älterer
