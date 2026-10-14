@@ -72,6 +72,77 @@ class behat_catquiz extends behat_base {
     }
 
     /**
+     * Opens the result page of a user's last attempt, as the end of the attempt shows it (issue #121).
+     *
+     * @Given /^I open the result page of the last attempt of "([^"]*)"$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function i_open_the_result_page_of_the_last_attempt_of(string $username): void {
+        global $DB;
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, instance, uniqueid', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException('No attempt of ' . $username, $this->getSession());
+        }
+        $attempt = reset($attempts);
+        $cm = get_coursemodule_from_instance('adaptivequiz', $attempt->instance, 0, false, MUST_EXIST);
+        $url = new moodle_url('/mod/adaptivequiz/attemptfinished.php', [
+            'cmid' => $cm->id, 'id' => $attempt->instance, 'uattid' => $attempt->uniqueid,
+        ]);
+        $this->execute('behat_general::i_visit', [$url->out_as_local_url(false)]);
+    }
+
+    /**
+     * Makes an activity unavailable to participants: a date restriction that ended an hour ago (issue #121).
+     *
+     * @Given /^the activity "([^"]*)" is no longer available to participants$/
+     *
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_activity_is_no_longer_available_to_participants(string $idnumber): void {
+        global $DB;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $availability = \core_availability\tree::get_root_json([
+            \availability_date\condition::get_json(\availability_date\condition::DIRECTION_UNTIL, time() - HOURSECS),
+        ]);
+        $DB->set_field('course_modules', 'availability', json_encode($availability), ['id' => $cm->id]);
+        rebuild_course_cache($cm->course, true);
+    }
+
+    /**
+     * Puts the first question of a user's last attempt into its usage a second time (issue #125).
+     *
+     * Reproduces what older versions of the activity did on a reload: the same question in a further
+     * slot of the same usage. The host no longer does it, so the state is built here - the reviewer's
+     * view of such an attempt is what the scenario checks.
+     *
+     * @Given /^the last CAT attempt of "([^"]*)" administered its first question a second time$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function the_last_cat_attempt_administered_its_first_question_again(string $username): void {
+        global $CFG, $DB;
+        require_once($CFG->libdir . '/questionlib.php');
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, uniqueid', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException('No attempt of ' . $username, $this->getSession());
+        }
+        $quba = \question_engine::load_questions_usage_by_activity((int) reset($attempts)->uniqueid);
+        $first = $quba->get_question(1, false);
+        $slot = $quba->add_question(\question_bank::load_question($first->id));
+        $quba->start_question($slot);
+        \question_engine::save_questions_usage_by_activity($quba);
+    }
+
+    /**
      * Fill specified HTMLQuickForm element by its number under goven xpath with a value.
      * @When /^I fill in the "([^"]*)" element number "([^"]*)" with the dynamic identifier "([^"]*)" with "([^"]*)"$/
      *

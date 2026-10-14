@@ -207,6 +207,7 @@ $string['choosetags'] = 'Tag(s) auswählen';
 $string['choosetags:disclaimer'] = 'Mehrfachauswahl mit „⌘ command“ (Apple) oder „Ctrl“ (Windows, Linux)';
 $string['choosetemplate'] = 'Einstellungs-Vorlage wählen';
 $string['classicalcat'] = 'Klassischer Test';
+$string['classicreportingnote'] = 'Klassischer Test: Die Fragen kommen in fester Reihenfolge, und die Einstellungen je Skala ändern daran nichts. Mindestfragen je Skala und maximaler Standardfehler entscheiden nur, ob eine Skala im Bericht als gültig gilt. Höchstfragen je Skala und minimaler Standardfehler wirken nicht.';
 $string['cleanupprogress'] = 'Attempt-Fortschritt aufräumen';
 $string['close'] = 'Schließen';
 $string['cogwheeltitle'] = 'Details anzeigen';

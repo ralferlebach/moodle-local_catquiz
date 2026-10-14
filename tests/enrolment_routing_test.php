@@ -194,4 +194,83 @@ final class enrolment_routing_test extends advanced_testcase {
 
         $this->assertSame([$root => 0.4], attemptfeedback::routing_scores(98001));
     }
+
+    /**
+     * Files a finished attempt: its progress (answers per scale) and what the strategy left behind.
+     *
+     * @param int $attemptid adaptivequiz_attempt.id
+     * @param array $fractions Per scale id the fractions of its productive answers.
+     * @param array $abilities Per scale id the strategy's entry (value, toreport, primary ...).
+     * @return void
+     */
+    private function finished_attempt(int $attemptid, array $fractions, array $abilities): void {
+        global $DB;
+        $DB->import_record('adaptivequiz_attempt', (object) [
+            'id' => $attemptid, 'instance' => 1, 'userid' => 2, 'uniqueid' => 500000 + $attemptid,
+            'attemptstate' => 'complete', 'attemptstopcriteria' => '', 'questionsattempted' => 6, 'difficultysum' => 0,
+            'standarderror' => 0.3, 'measure' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $progress = progress::load($attemptid, 'mod_adaptivequiz', 9, (object) []);
+        $played = [];
+        $byscale = [];
+        $responses = [];
+        $qid = $attemptid * 100;
+        foreach ($fractions as $scaleid => $list) {
+            foreach ($list as $fraction) {
+                $q = (object) ['id' => ++$qid, 'catscaleid' => $scaleid, 'is_pilot' => false, 'fisherinformation' => []];
+                $played[$q->id] = $q;
+                $byscale[$scaleid][] = $q;
+                $responses[$q->id] = ['questionid' => $q->id, 'fraction' => $fraction];
+            }
+        }
+        $state = ['responses' => $responses, 'playedquestions' => $played, 'lastquestion' => end($played),
+            'playedquestionsbyscale' => $byscale];
+        foreach ($state as $name => $value) {
+            $property = new \ReflectionProperty($progress, $name);
+            $property->setAccessible(true);
+            $property->setValue($progress, $value);
+        }
+        $progress->save();
+        $DB->set_field('local_catquiz_attempts', 'contextid', 9, ['attemptid' => $attemptid]);
+        $DB->set_field('local_catquiz_attempts', 'json', json_encode([
+            'personabilities_abilities' => $abilities,
+            'se' => array_fill_keys(array_keys($abilities), 0.3),
+        ]), ['attemptid' => $attemptid]);
+    }
+
+    /**
+     * All answers right - or all wrong - routes nowhere: the result is not valid (issues #138, #140).
+     */
+    public function test_a_fraction_invalid_result_routes_nowhere(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $abilities = [200 => ['value' => 2.5, 'toreport' => true, 'primary' => true]];
+
+        $this->finished_attempt(98101, [200 => [1.0, 1.0, 1.0]], $abilities);
+        $this->finished_attempt(98102, [200 => [0.0, 0.0, 0.0]], $abilities);
+        $this->finished_attempt(98103, [200 => [1.0, 0.0, 1.0]], $abilities);
+
+        $this->assertSame([], attemptfeedback::routing_scores(98101), 'All right routed.');
+        $this->assertSame([], attemptfeedback::routing_scores(98102), 'All wrong routed.');
+        $this->assertSame([200 => 2.5], attemptfeedback::routing_scores(98103), 'A mixed result must route.');
+    }
+
+    /**
+     * Several routing scales: the one with all answers right is left out, the valid ones still route.
+     *
+     * One invalid scale does not take the others with it - not even when it is the primary one.
+     */
+    public function test_an_invalid_scale_does_not_take_the_valid_ones_with_it(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $abilities = [
+            301 => ['value' => 1.5, 'toreport' => true, 'primary' => true],
+            302 => ['value' => -0.5, 'toreport' => true],
+            303 => ['value' => 0.7, 'toreport' => true],
+        ];
+
+        $this->finished_attempt(98201, [301 => [1.0, 1.0], 302 => [0.0, 1.0, 0.0], 303 => [1.0, 0.0]], $abilities);
+
+        $this->assertSame([302 => -0.5, 303 => 0.7], attemptfeedback::routing_scores(98201));
+    }
 }

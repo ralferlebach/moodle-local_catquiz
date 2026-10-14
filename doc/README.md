@@ -20,6 +20,8 @@ Zwei Arten von Dokumenten:
   Aktivität kommen (mod_adaptivequiz #14, Adapter #7).
 - **attempt-trace.md** – Versuchs-Trace (#136): einschalten, Spans, Datenschutz, Export,
   Messvorgehen für LTI-Starts.
+- **strategy-semantics.md** – Wann endet ein Test? Ursachen von #134/#135, Fähigkeitsmatrix der
+  Strategien, Stopps je Strategie, Tests und Zahn-Tests.
 - **experiment-136-slo.md** – Anleitung zur Messung der Antwortzeiten im Betrieb (#136): Steckbrief,
   Messläufe kalt/warm/parallel, Export, Auswertung.
 - **id-namespaces.md** – Id-Namensräume: Benennung von Host- und CAT-Versuchs-Id, die

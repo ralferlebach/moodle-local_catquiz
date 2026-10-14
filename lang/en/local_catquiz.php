@@ -206,6 +206,7 @@ $string['choosetags'] = 'Choose tag(s)';
 $string['choosetags:disclaimer'] = 'Multiple selection with key “⌘ command” (apple) or “Ctrl” (windows, linux)';
 $string['choosetemplate'] = 'Choose a test environment';
 $string['classicalcat'] = 'Classical test';
+$string['classicreportingnote'] = 'Classic test: the questions are asked in a fixed order, and the settings per scale do not change that. The minimum number of questions per scale and the maximum standard error only decide whether a scale is reported as valid. The maximum number of questions per scale and the minimum standard error have no effect.';
 $string['cleanupprogress'] = 'Clean up attempt progress';
 $string['close'] = 'Close';
 $string['cogwheeltitle'] = 'Display details';

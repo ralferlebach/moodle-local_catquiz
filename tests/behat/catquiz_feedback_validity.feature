@@ -90,6 +90,93 @@ Feature: Feedback output is bound to a valid CAT result.
     And I wait until the page is ready
     Then I should not see "No valid test result could be determined for this attempt."
 
+  @javascript
+  Scenario: An invalid attempt keeps its quiz history and, for authorised users, its export (issue #120)
+    ## What reads the result stays out - the overview compares with others and is not offered.
+    ## What the attempt contained stays: the quiz progress summary, and the export for a teacher.
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "button"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "richtige Antwort" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "richtige Antwort" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    Then I should see "No valid test result could be determined for this attempt."
+    And I should see "Quiz progress summary"
+    And I should not see "Overview"
+    And "Export" "link" should not exist
+    When I click on "Quiz progress summary" "link"
+    Then I should see "During an attempt your ability is recalculated after each response"
+    And I log out
+    ## The export is for users allowed to export attempts - here the administrator.
+    When I log in as "admin"
+    And I visit the CAT attempt feedback page for the last attempt of "student1"
+    Then I should see "No valid test result could be determined for this attempt."
+    And I should see "Quiz progress summary"
+    When I click on "Export" "link"
+    Then I should see "Export attempt (CSV)"
+
+  @javascript
+  Scenario: All answers wrong is not a valid result either, and the attempt stays reviewable (issues #138, #140)
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "button"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "falsche Antwort 1" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "falsche Antwort 1" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 1" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    Then I should see "No valid test result could be determined for this attempt."
+    And I log out
+    ## The invalid attempt is not hidden away: the teacher opens it like any other.
+    When I log in as "teacher"
+    And I visit the CAT attempt feedback page for the last attempt of "student1"
+    Then I should see "No valid test result could be determined for this attempt."
+
+  @javascript
+  Scenario: A question administered twice is named for the reviewer and changes nothing (issue #125)
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "button"
+    And I wait until the page is ready
+    And I should see "Question 1"
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 2"
+    And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 3"
+    And I click on "richtige Antwort" "text" in the "Question 3" "question"
+    And I click on "Submit answer" "button"
+    And I should see "Question 4"
+    And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    And I log out
+    And the last CAT attempt of "student1" administered its first question a second time
+    When I log in as "teacher"
+    And I visit the CAT attempt feedback page for the last attempt of "student1"
+    Then I should see "Technical note: questions administered more than once"
+    And I should see "original slot 1, duplicate slot 5"
+    And I should see "was not used as a reason to invalidate the result"
+    And I should not see "No valid test result could be determined for this attempt."
+
   ## NOT covered here: a scale whose reporting checkbox is switched off (issue #7).
   ## The setting is an advcheckbox, so Moodle renders TWO inputs per scale with the
   ## same name and label - a hidden value="0" input plus the visible checkbox - and

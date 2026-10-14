@@ -291,7 +291,10 @@ class debuginfo extends feedbackgenerator {
      *
      */
     public function get_required_context_keys(): array {
-        return ['debuginfo'];
+        // The export of the attempt needs nothing but the attempt (issue #120). The rows of the debug
+        // storage are an addition when it is switched on; requiring them hid the export tab - also for
+        // invalid attempts, the ones most in need of it - wherever debug storage was off.
+        return [];
     }
 
     /**

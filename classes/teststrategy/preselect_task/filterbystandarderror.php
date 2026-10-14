@@ -92,12 +92,17 @@ class filterbystandarderror extends preselect_task {
             return result::ok($context);
         }
 
+        // Issue #135: a strategy without scale dropping (FASTEST) only knows the global precision stop.
+        // The flag comes from the strategy's capabilities; without it, FASTEST is recognised by its id.
+        $globalonly = $context['global_precision_only']
+            ?? ((int) $context['teststrategy'] === LOCAL_CATQUIZ_STRATEGY_FASTEST);
+        if ($globalonly) {
+            return $this->filter_for_global_precision();
+        }
+
         $lastquestion = $this->progress->get_last_question();
         $scaleid = $lastquestion->catscaleid;
         $updatedscales = [$scaleid, ...catscale::get_ancestors($scaleid)];
-        if ($context['teststrategy'] == LOCAL_CATQUIZ_STRATEGY_FASTEST) {
-            return $this->filter_for_cat($updatedscales);
-        }
         foreach ($updatedscales as $scaleid) {
             $drop = $this->check_scale_should_be_dropped($scaleid);
 
@@ -179,42 +184,30 @@ class filterbystandarderror extends preselect_task {
     }
 
     /**
-     * Contains the filtering logic for the CAT test strategy
+     * The only stop a globally choosing strategy knows besides the maximum and an empty pool (issue #135).
      *
-     * @param array $updatedscales
+     * The root scale - the one the test measures - ends the test when the minimum number of productive
+     * questions is reached, its standard error is at or below the target and its ability changed by
+     * no more than the minimum increment. Nothing else is looked at: no subscale is dropped, no
+     * per-scale maximum or minimum applies, and a subscale that is measured well enough leaves the
+     * pool untouched. Ending on such a local condition stopped attempts after 5 to 14 items with a
+     * minimum of 15 (issue #134).
+     *
      * @return result
-     * @throws UnexpectedValueException
      */
-    private function filter_for_cat(array $updatedscales): result {
-        /* Issue #134: a scale that has all the information it needs is not the end of the test.
-           Only the scale the CAT measures - the root, protected until the minimum number of
-           questions - ends it. A subscale that reaches its criterion is dropped and leaves the
-           selection; the test goes on with the remaining scales. Ending the whole test on a
-           subscale's drop let attempts stop after 5 to 14 items with a minimum of 15. */
-        $mainscaleid = (int) $this->context['catscaleid'];
-        foreach (array_reverse($updatedscales) as $scaleid) {
-            if (!$this->check_scale_should_be_dropped($scaleid)) {
-                continue;
-            }
-            $inheritval = $this->context['person_ability'][$scaleid];
-            $inheritscales = $this->get_scale_heirs($scaleid);
-            foreach ($inheritscales as $subscaleid) {
-                catquiz::update_person_param(
-                    $this->context['userid'],
-                    $this->context['contextid'],
-                    $subscaleid,
-                    $inheritval,
-                    $this->cat_attempt_id()
-                );
-                $this->context['person_ability'][$subscaleid] = $inheritval;
-            }
-            if ((int) $scaleid === $mainscaleid) {
-                // Precise enough - not out of questions (mod_adaptivequiz #20).
-                return result::err(status::STOP_TARGET_PRECISION);
-            }
-            if (in_array($scaleid, $this->progress->get_active_scales())) {
-                $this->progress->drop_scale($scaleid);
-            }
+    private function filter_for_global_precision(): result {
+        $rootid = (int) $this->context['catscaleid'];
+        if ($this->progress->get_num_answered_productive_questions() < (int) $this->context['minimumquestions']) {
+            return result::ok($this->context);
+        }
+        $se = $this->context['se'][$rootid] ?? INF;
+        $precise = $se <= $this->context['se_min'];
+        $stable = isset($this->context['prev_ability'][$rootid], $this->context['person_ability'][$rootid])
+            && abs($this->context['prev_ability'][$rootid] - $this->context['person_ability'][$rootid])
+                <= $this->context['pp_min_inc'];
+        if ($precise && $stable) {
+            // Precise enough - not out of questions (mod_adaptivequiz #20).
+            return result::err(status::STOP_TARGET_PRECISION);
         }
         return result::ok($this->context);
     }

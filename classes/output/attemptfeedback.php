@@ -355,7 +355,19 @@ class attemptfeedback implements renderable, templatable {
         $newdata = array_filter($newdata, fn ($k) => !in_array($k, $excludekeys), ARRAY_FILTER_USE_KEY);
         $newdata = $this->add_default_data($newdata);
         foreach ($generators as $generator) {
-            $generatordata = $generator->update_data($this->attemptid, $feedbackdata, $newdata);
+            try {
+                $generatordata = $generator->update_data($this->attemptid, $feedbackdata, $newdata);
+            } catch (\moodle_exception $e) {
+                /* This runs with every answer, inside the selection of the next question. A feedback
+                   area that cannot be built - the colour bar of a scale without feedback ranges, say -
+                   ended the whole attempt as a technical problem after the first answer. The area is
+                   left out instead; the reason goes to the developer debugging output. */
+                debugging(
+                    'Feedback area ' . $generator->get_generatorname() . ' left out: ' . $e->getMessage(),
+                    DEBUG_DEVELOPER
+                );
+                continue;
+            }
             if (! $generatordata) {
                 continue;
             }

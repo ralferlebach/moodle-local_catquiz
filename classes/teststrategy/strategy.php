@@ -38,6 +38,7 @@ use local_catquiz\local\status;
 use local_catquiz\output\attemptfeedback;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\preselect_task\addscalestandarderror;
+use local_catquiz\teststrategy\preselect_task\filterbyquestionsperscale;
 use local_catquiz\teststrategy\preselect_task\filterbystandarderror;
 use local_catquiz\teststrategy\preselect_task\filterbytestinfo;
 use local_catquiz\teststrategy\context\loader\questions_loader;
@@ -154,6 +155,73 @@ abstract class strategy {
      * @return preselect_task
      */
     abstract public function get_selector(): preselect_task;
+
+    /**
+     * Whether the strategy drops and deactivates scales on their own measurement (issue #135).
+     *
+     * The shared pipeline runs scale-related steps before the selector. They belong to strategies
+     * that measure subscales; a strategy that chooses globally (FASTEST) or in a fixed order
+     * (CLASSIC) declares here that it does not use them, and the pipeline skips them for it.
+     *
+     * @return bool
+     */
+    public function uses_scale_dropping(): bool {
+        return true;
+    }
+
+    /**
+     * Whether the maximum number of questions per scale removes items from the pool (issue #135).
+     *
+     * @return bool
+     */
+    public function uses_per_scale_selection_limits(): bool {
+        return true;
+    }
+
+    /**
+     * Whether scales are deactivated by their test information - the remaining potential (issue #135).
+     *
+     * @return bool
+     */
+    public function uses_testinfo_filter(): bool {
+        return true;
+    }
+
+    /**
+     * Whether every scale is played up to its minimum number of questions first (issue #135).
+     *
+     * @return bool
+     */
+    public function requires_scale_coverage(): bool {
+        return false;
+    }
+
+    /**
+     * Whether the test ends on the precision of the measured (root) scale alone (issue #135).
+     *
+     * Past the minimum number of questions, with the standard error of that scale at or below the
+     * target and its ability stable. Local conditions of subscales never end such a test.
+     *
+     * @return bool
+     */
+    public function stops_on_global_precision(): bool {
+        return false;
+    }
+
+    /**
+     * The mechanisms of the shared pipeline the strategy uses, by name (issue #135).
+     *
+     * @return array<string, bool>
+     */
+    public function get_capabilities(): array {
+        return [
+            'scale_dropping' => $this->uses_scale_dropping(),
+            'per_scale_selection_limits' => $this->uses_per_scale_selection_limits(),
+            'testinfo_filter' => $this->uses_testinfo_filter(),
+            'scale_coverage' => $this->requires_scale_coverage(),
+            'global_precision_stop' => $this->stops_on_global_precision(),
+        ];
+    }
 
     /**
      * Returns the actual question or an error.
@@ -658,6 +726,10 @@ abstract class strategy {
      * @return result
      */
     protected function mayberemovescale(): result {
+        // Issue #135: a global or fixed-order selection is not cut down by a per-scale maximum.
+        if (!$this->uses_per_scale_selection_limits()) {
+            return result::ok($this->context);
+        }
         $mayberemovescale = new mayberemovescale();
         return $mayberemovescale->run($this->context);
     }
@@ -764,6 +836,11 @@ abstract class strategy {
      * Now, this is just a wrapper to call the respective pre-select task.
      */
     protected function filterbystandarderror(): result {
+        // Issue #135: without scale dropping, only a global precision stop - or nothing at all.
+        if (!$this->uses_scale_dropping() && !$this->stops_on_global_precision()) {
+            return result::ok($this->context);
+        }
+        $this->context['global_precision_only'] = !$this->uses_scale_dropping();
         $filterbystandarderror = new filterbystandarderror();
         return $filterbystandarderror->run($this->context);
     }
@@ -774,6 +851,9 @@ abstract class strategy {
      * Now, this is just a wrapper to call the respective pre-select task.
      */
     protected function filterbytestinfo(): result {
+        if (!$this->uses_testinfo_filter()) {
+            return result::ok($this->context);
+        }
         $filterbytestinfo = new filterbytestinfo();
         return $filterbytestinfo->run($this->context);
     }
@@ -786,7 +866,10 @@ abstract class strategy {
      * @return result
      */
     protected function filterbyquestionsperscale(): result {
-        return result::ok($this->context);
+        if (!$this->requires_scale_coverage()) {
+            return result::ok($this->context);
+        }
+        return (new filterbyquestionsperscale())->run($this->context);
     }
 
     /**

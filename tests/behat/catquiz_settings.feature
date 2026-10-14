@@ -476,3 +476,28 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     Then "//div[@data-name='feedback_scale_Simulation_range_3']" "xpath_element" should exist
     And the field with xpath "//input[@data-name='SimC']" matches value ""
     And the field with xpath "//input[@data-name='SimB03']" matches value ""
+
+  @javascript
+  Scenario: CATquiz settings: the strategy decides which thresholds per scale apply (issue #135)
+    ## CLASSIC keeps the reporting thresholds - minimum per scale, maximum standard error - and
+    ## says that they do not change the fixed form; FASTEST has no thresholds per scale at all.
+    Given the following "activities" exist:
+      | activity     | name             | course | section | idnumber         |
+      | adaptivequiz | Adaptive CATquiz | C1     | 1       | adaptivecatquiz1 |
+    And I am on the "adaptivecatquiz1" Activity page logged in as teacher1
+    And I follow "Settings"
+    And I expand all fieldsets
+    And I set the field "catmodel" to "Catquiz CAT model"
+    And I press "Apply CAT model selection"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    And I set the field "Select CAT scale" to "Simulation"
+    And I wait until the page is ready
+    When I set the field "catquiz_selectteststrategy" to "7"
+    Then I should see "Classic test: the questions are asked in a fixed order"
+    And "maxquestionsscalegroup[catquiz_minquestionspersubscale]" "field" should be visible
+    And "catquiz_standarderrorgroup[catquiz_standarderror_max]" "field" should be visible
+    When I set the field "catquiz_selectteststrategy" to "1"
+    Then I should not see "Classic test: the questions are asked in a fixed order"
+    And "maxquestionsscalegroup[catquiz_minquestionspersubscale]" "field" should not be visible
+    And "catquiz_standarderrorgroup[catquiz_standarderror_min]" "field" should be visible
