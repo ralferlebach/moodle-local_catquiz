@@ -20,6 +20,8 @@ Zwei Arten von Dokumenten:
   Aktivität kommen (mod_adaptivequiz #14, Adapter #7).
 - **attempt-trace.md** – Versuchs-Trace (#136): einschalten, Spans, Datenschutz, Export,
   Messvorgehen für LTI-Starts.
+- **experiment-136-slo.md** – Anleitung zur Messung der Antwortzeiten im Betrieb (#136): Steckbrief,
+  Messläufe kalt/warm/parallel, Export, Auswertung.
 - **id-namespaces.md** – Id-Namensräume: Benennung von Host- und CAT-Versuchs-Id, die
   bewusste Ausnahme `local_catquiz_attempts.attemptid`, zentrale Übersetzung,
   id-geschlüsselte Arrays, Kollisionstests (#107).
@@ -113,3 +115,5 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).
 - `issue-141-testlaenge.md` – Testlänge (Minimum/Maximum), Produktionsbefund 33 Slots, Export, Regrade (#141, mod_adaptivequiz #19).
+- `trusted-region-prior.md` – Streuung null/nahe null/keine Zahl im Trusted-Region-Prior: Regel, Audit, Tests (#116).
+- `speicher-und-rechenpfade.md` – Ableitungs-Cache, kompakter Fortschritt, CLASSIC ohne Pool-Fisher-Information: Messungen, Kompatibilität (#143–#145).

@@ -135,7 +135,11 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
                 $quiz,
                 $context,
                 (int) $record->userid,
-                $statusmessage
+                (string) $record->standarderror,
+                $statusmessage,
+                // The code of mod_adaptivequiz's stop_reason::TIMELIMIT (issue #20), written out:
+                // an older activity has neither the class nor the parameter and ignores it.
+                'timelimit'
             );
             catquiz::set_final_attempt_status($record->id, status::CLOSED_BY_TIMELIMIT);
             cache_helper::purge_by_event('changesinquizattempts');
@@ -194,7 +198,8 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
      * @return bool
      */
     public function exceeds_maxtime(stdClass $record): bool {
-        $quizmaxtime = $this->maxtimepertest[$record->instance];
+        // An activity without CAT settings has no limit of its own; the default applies.
+        $quizmaxtime = $this->maxtimepertest[$record->instance] ?? null;
 
         // If the maximum attempt time is set to 0, it means it has no limit.
         if ($quizmaxtime === 0) {

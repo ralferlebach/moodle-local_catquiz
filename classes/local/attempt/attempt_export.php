@@ -153,8 +153,10 @@ final class attempt_export {
         if ($attempt->attemptstate !== 'complete') {
             return self::LIFECYCLE_RUNNING;
         }
+        // The status column also carries the stop codes of local\status, and 1 is "no remaining
+        // questions" there as well: aborted is only an attempt without a single answer.
         $catstatus = $DB->get_field('local_catquiz_attempts', 'status', ['attemptid' => $attempt->id]);
-        if ($catstatus !== false && (int) $catstatus === LOCAL_CATQUIZ_ATTEMPT_ABORTED) {
+        if ($catstatus !== false && (int) $catstatus === LOCAL_CATQUIZ_ATTEMPT_ABORTED && empty($attempt->questionsattempted)) {
             return self::LIFECYCLE_ABORTED;
         }
         if (!$validated) {

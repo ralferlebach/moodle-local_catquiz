@@ -2,6 +2,49 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Issue #137 (Ergebnis-Snapshot): Der Fähigkeitsbereich jeder Skala wird beim Finalisieren mit dem
+  Ergebnis eingefroren (`local_catquiz_personparams.rangelower/rangeupper`, Upgrade 2026100913).
+  Wird eine Zeile erneut geschrieben (z. B. Nachprüfung), bleibt ihr Bereich erhalten. Ältere Zeilen
+  bleiben ohne Bereich: Er wird nicht aus der heutigen Skala rekonstruiert.
+- Issue #133 (Skalenverlauf): Im Aufbewahrungsmodus `trace` hält der Fortschritt jede Änderung des
+  Skalenzustands fest (aktiviert, deaktiviert, gesperrt, entsperrt, entfernt) mit der Fragennummer.
+  `progress::replay_scale_state_trace()` rekonstruiert daraus den Zustand. Ohne `trace` wird nichts
+  zusätzlich gespeichert, und ältere Fortschritte bleiben lesbar.
+- Doku: `doc/experiment-136-slo.md` beschreibt die Messung der Antwortzeiten im Betrieb (#136).
+- Issue #116, Korrektur der Regel aus 2026100911: Der Prior wird an etlichen Stellen unmittelbar
+  gebraucht und entfällt deshalb nicht mehr. Die Streuung wird stattdessen von null weggezwungen:
+  `max(sd, 10^-PRECISION)` (`model_raschmodel::PRECISION` = 3, also 0,001). 0, Werte darunter,
+  negative Werte und NaN werden zu 0,001; +INF bleibt (Prior ohne Krümmung). Ableitungen, Trusted
+  Region und Schätzung nutzen dieselbe Streuung; das Anheben wird per `debugging()` gemeldet.
+- mod_adaptivequiz #20 (Testende erklären): CATquiz meldet das Erreichen der Zielgenauigkeit der
+  Hauptskala mit eigenem Status `stoptargetprecision` statt „keine Fragen mehr“;
+  `catquiz_handler::fetch_question_id()` liefert den Status als drittes Element.
+- Zeitlimit-Task `cancel_expired_attempts`: Auf Moodle 5.x (mod_adaptivequiz v-3.0) rief er
+  `adaptivequiz_complete_attempt()` mit zu wenigen Argumenten auf und brach ab – abgelaufene
+  Versuche blieben offen. Er übergibt jetzt Standardfehler, Meldung und den Code `timelimit`;
+  ein Test ohne eigene CAT-Einstellungen löst keine Warnung mehr aus. Neuer Test führt den Task aus.
+- Issues #143–#145 (Speicher und Rechenzeit beim Antworten, `doc/speicher-und-rechenpfade.md`):
+  - #145: Der Ableitungs-Cache der Fähigkeitsschätzung hält je Antwort 2 statt bis zu 500
+    Stützstellen; Spitzen-Speicher einer Schätzung mit 150 Antworten 18 MiB → 0,6 MiB,
+    Fähigkeiten bitgleich.
+  - #143: Der gespeicherte Fortschritt enthält jede gestellte Frage einmal; Skalenzuordnung und
+    letzte Frage verweisen per ID (`progressformat` 2). JSON je Speichern 73–82 % kleiner;
+    ältere Datensätze bleiben lesbar.
+  - #144: CLASSIC berechnet keine Fisher-Information mehr für den ganzen Pool, nur für das
+    ausgegebene Item; Itemfolge, Information, Fähigkeiten bitgleich.
+  - Versuchsexport: „aborted“ nur noch ohne Antwort – Status 1 bedeutet auch „keine Fragen mehr“.
+- Issue #116 (Numerik): Der Trusted-Region-Prior teilte durch `sd²`; bei gleichen Personenparametern
+  (sd = 0, typisch ab 50 Teilnehmenden, ab denen die Streuung aus den PP berechnet wird) brach die
+  Schätzung mit `DivisionByZeroError` ab. Eine Stelle entscheidet für alle Modelle
+  (`model_raschmodel::sanitize_trusted_region_sd()`, Regel siehe Korrektur oben); der Normalfall
+  bleibt bitgleich. Dabei behoben: `calculate_sd_from_past_attempts()` rief eine nicht existierende
+  globale Funktion, ein Mittelwert von 0.0 galt als „kein Mittelwert“, NaN/INF unter den PP verdarben
+  Mittelwert und Streuung. Siehe `doc/trusted-region-prior.md`.
+- CI: Die AMD-Neuerstellung vor `moodle-plugin-ci grunt` suchte das Plugin unter `local/catquiz`
+  und lief seit Moodle 5.1 (`public/`) ins Leere; grunt meldete die eingecheckten Build-Dateien als
+  veraltet. Sie wird jetzt im Komponentenverzeichnis ausgeführt, mit und ohne `public/`.
+- ERPNext-Workflow: legt im Repository von ralferlebach keine Aufgaben an
+  (`if: github.repository_owner != 'ralferlebach'`).
 - Issue #141 / mod_adaptivequiz #19 (Testlänge, 2026100909–10): Das Minimum zählt die beantworteten
   produktiven Fragen, das Maximum alle gestellten Fragen einschließlich Pilotfragen.
   - Unter dem Minimum gibt es kein gültiges Ergebnis mehr: Der zentrale Validator markiert jede

@@ -36,6 +36,7 @@ use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\attempt\attempt_finalizer;
 use local_catquiz\local\model\model_strategy;
 use local_catquiz\local\monitoring\timeline;
+use local_catquiz\local\status;
 use local_catquiz\output\attemptfeedback;
 use local_catquiz\teststrategy\info;
 use local_catquiz\teststrategy\progress;
@@ -1077,11 +1078,13 @@ class catquiz_handler {
         $result = timeline::span('strategy', fn() => $teststrategy->return_next_testitem($selectioncontext));
         if (!$result->isOk()) {
             catquiz::set_final_attempt_status($attemptdata->id, $result->get_status());
-            return [0, $result->getErrorMessage()];
+            // The third element is the status as a code, so the activity can tell why the test ended
+            // without reading the message (mod_adaptivequiz #20).
+            return [0, $result->getErrorMessage(), (string) $result->get_status()];
         }
 
         $question = $result->unwrap();
-        return [$question->id, ""];
+        return [$question->id, "", status::OK];
     }
 
     /**

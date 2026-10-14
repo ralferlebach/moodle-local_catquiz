@@ -808,6 +808,7 @@ $string['statistics_month_12'] = 'Dezember {$a->y}';
 $string['statusactiveorinactive'] = 'Der Aktivitätsstatus. Geben Sie „1“ an um sicher zu stellen, um den Datensatz von der Verwendung auszuschließen. Lassen Sie das Feld leer oder setzen „0“, gilt der Datensatz als aktiv.';
 $string['statusok'] = 'Ok';
 $string['statusundefined'] = 'Undefinierter Status';
+$string['stoptargetprecision'] = 'Ihr Ergebnis ist genau genug bestimmt';
 $string['store_debug_info_desc'] = 'Wenn diese Option aktiviert ist, werden
     zusätzliche Daten gespeichert und als CSV Datei zur Verfügung gestellt.
     Dadurch steigt der benötigte Speicherplatz.';

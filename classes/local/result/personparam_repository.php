@@ -84,8 +84,17 @@ final class personparam_repository {
             $existing = $DB->get_record(
                 self::TABLE,
                 ['attemptid' => $catattemptid, 'catscaleid' => $scaleresult->scaleid],
-                'id'
+                'id, rangelower, rangeupper'
             );
+            // Issue #137: the range the result was measured on, frozen with it. A row written again -
+            // a revalidation, say - keeps the range of its finalisation; only a row without one gets
+            // today's, and only because it is being written now.
+            if ($existing && is_numeric($existing->rangelower) && is_numeric($existing->rangeupper)) {
+                $record->rangelower = $existing->rangelower;
+                $record->rangeupper = $existing->rangeupper;
+            } else {
+                [$record->rangelower, $record->rangeupper] = self::range_of((int) $scaleresult->scaleid);
+            }
             if ($existing) {
                 $record->id = $existing->id;
                 $DB->update_record(self::TABLE, $record);
@@ -93,6 +102,24 @@ final class personparam_repository {
                 $DB->insert_record(self::TABLE, $record);
             }
         }
+    }
+
+    /**
+     * The ability range of a scale as it stands now: [lower, upper], or [null, null] when there is none.
+     *
+     * @param int $scaleid
+     * @return array
+     */
+    private static function range_of(int $scaleid): array {
+        try {
+            $range = (new \local_catquiz\catscale($scaleid))->get_ability_range();
+        } catch (\Throwable $e) {
+            return [null, null];
+        }
+        if (!is_numeric($range['minscalevalue'] ?? null) || !is_numeric($range['maxscalevalue'] ?? null)) {
+            return [null, null];
+        }
+        return [(float) $range['minscalevalue'], (float) $range['maxscalevalue']];
     }
 
     /**

@@ -35,6 +35,7 @@ use local_catquiz\teststrategy\feedbackgenerator\personabilities;
 use local_catquiz\teststrategy\feedbackgenerator\questionssummary;
 use local_catquiz\teststrategy\feedbacksettings;
 use local_catquiz\teststrategy\preselect_task;
+use local_catquiz\teststrategy\preselect_task\fisherinformation;
 use local_catquiz\teststrategy\preselect_task\strategyclassicscore;
 use local_catquiz\teststrategy\strategy;
 
@@ -148,6 +149,37 @@ class classicalcat extends strategy {
      */
     protected function first_question_selector(): result {
         return result::ok($this->context);
+    }
+
+    /**
+     * No fisher information over the whole pool: CLASSIC chooses by item id, not by information (issue #144).
+     *
+     * Every remaining item got its information for every scale on every answer, for a choice that
+     * never looks at it. The item that is handed out gets it in select_question(), with the same
+     * abilities, so the progress and the feedback keep their values. Pilot items are chosen by a
+     * score that does use the information; with pilots switched on the pool is annotated as before.
+     *
+     * @return result
+     */
+    protected function fisherinformation(): result {
+        if (!empty($this->context['pilot_ratio'])) {
+            return parent::fisherinformation();
+        }
+        return result::ok($this->context);
+    }
+
+    /**
+     * The next item in fixed order, with its fisher information.
+     *
+     * @return result
+     */
+    public function select_question(): result {
+        $result = parent::select_question();
+        $question = $result->unwrap();
+        if (is_object($question)) {
+            (new fisherinformation())->annotate($question, $this->context);
+        }
+        return $result;
     }
 
     /**

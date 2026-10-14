@@ -1571,6 +1571,23 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026100909, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026100913) {
+        // Issue #137: the ability range of each scale, frozen when the attempt is finalised. Older
+        // rows stay without one - a range nobody recorded is not reconstructed from today's scale.
+        $table = new xmldb_table('local_catquiz_personparams');
+        $fields = [
+            new xmldb_field('rangelower', XMLDB_TYPE_NUMBER, '10, 5', null, null, null, null, 'validationstatus'),
+            new xmldb_field('rangeupper', XMLDB_TYPE_NUMBER, '10, 5', null, null, null, null, 'rangelower'),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        upgrade_plugin_savepoint(true, 2026100913, 'local', 'catquiz');
+    }
+
     return true;
 }
 

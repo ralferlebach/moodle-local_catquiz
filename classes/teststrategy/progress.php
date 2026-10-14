@@ -48,6 +48,24 @@ require_once(__DIR__ . '/../../../../config.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class progress implements JsonSerializable {
+    /** @var string A scale became active (issue #133). */
+    public const SCALE_ACTIVATED = 'activated';
+
+    /** @var string A scale stopped being active. */
+    public const SCALE_DEACTIVATED = 'deactivated';
+
+    /** @var string A scale was locked: only a forced activation brings it back. */
+    public const SCALE_LOCKED = 'locked';
+
+    /** @var string A lock was lifted. */
+    public const SCALE_UNLOCKED = 'unlocked';
+
+    /** @var string A scale was removed for the rest of the attempt. */
+    public const SCALE_REMOVED = 'removed';
+
+    /** @var int JSON format that refers to played questions by id (issue #143). */
+    public const FORMAT_COMPACT = 2;
+
     /**
      * @var ?int $id The ID in the database.
      */
@@ -145,6 +163,12 @@ class progress implements JsonSerializable {
      * @var array
      */
     private array $abilitytrace = [];
+
+    /**
+     * Changes of the scales' state, recorded in trace mode only (issue #133): step, scaleid, event.
+     * @var array
+     */
+    private array $scalestatetrace = [];
 
     /**
      * @var array Holds the person abilities as they were BEFORE this attempt,
@@ -496,13 +520,21 @@ class progress implements JsonSerializable {
                 $pq->fisherinformation = (array) $pq->fisherinformation;
             }
         }
-        $instance->playedquestionsbyscale = (array) $data->playedquestionsbyscale;
-        $instance->isfirstquestion = $data->isfirstquestion;
-        $instance->lastquestion = $data->lastquestion;
-        if ($instance->playedquestions) {
-            if (!$instance->lastquestion->is_pilot) {
-                $instance->lastquestion->fisherinformation = (array) $data->lastquestion->fisherinformation;
+        // Issue #143: entries by id point at the very same played question again.
+        $instance->playedquestionsbyscale = [];
+        foreach ((array) $data->playedquestionsbyscale as $scaleid => $entries) {
+            $instance->playedquestionsbyscale[$scaleid] = [];
+            foreach ((array) $entries as $entry) {
+                $question = self::resolve_played($entry, $instance->playedquestions);
+                if ($question !== null) {
+                    $instance->playedquestionsbyscale[$scaleid][] = $question;
+                }
             }
+        }
+        $instance->isfirstquestion = $data->isfirstquestion;
+        $instance->lastquestion = self::resolve_played($data->lastquestion ?? null, $instance->playedquestions);
+        if ($instance->lastquestion !== null && empty($instance->lastquestion->is_pilot)) {
+            $instance->lastquestion->fisherinformation = (array) ($instance->lastquestion->fisherinformation ?? []);
         }
 
         $instance->breakend = $data->breakend;
@@ -517,6 +549,10 @@ class progress implements JsonSerializable {
             // version removes it. This sits on the abilitytrace load path, so the
             // removal would turn a loadable attempt into a fatal.
             ? array_map([static::class, 'to_array'], (array) $data->abilitytrace)
+            : [];
+        // Issue #133: progress written before the scale state was traced has none.
+        $instance->scalestatetrace = property_exists($data, 'scalestatetrace')
+            ? array_values(array_map([static::class, 'to_array'], (array) $data->scalestatetrace))
             : [];
         $instance->responses = (array) $data->responses;
         foreach ($instance->responses as $id => $val) {
@@ -610,11 +646,24 @@ class progress implements JsonSerializable {
      * 'json' column in the database.
      */
     public function jsonSerialize(): array {
-        return [
+        /* Issue #143: every administered question once. playedquestionsbyscale held the full
+           question again for its scale and every ancestor, lastquestion once more - in the JSON
+           written on every answer, three to five copies of each question. Both now refer to the
+           played questions by id; a question that is not among them (none should be) is still
+           written in full, so nothing is lost. */
+        $byscale = [];
+        foreach ($this->playedquestionsbyscale as $scaleid => $questions) {
+            $byscale[$scaleid] = [];
+            foreach ($questions as $question) {
+                $byscale[$scaleid][] = $this->played_reference($question);
+            }
+        }
+        $data = [
+            'progressformat' => self::FORMAT_COMPACT,
             'playedquestions' => $this->playedquestions,
-            'playedquestionsbyscale' => $this->playedquestionsbyscale,
+            'playedquestionsbyscale' => $byscale,
             'isfirstquestion' => $this->isfirstquestion,
-            'lastquestion' => $this->lastquestion,
+            'lastquestion' => $this->lastquestion === null ? null : $this->played_reference($this->lastquestion),
             'breakend' => $this->breakend,
             'activescales' => $this->activescales,
             'droppedscales' => $this->droppedscales,
@@ -636,6 +685,43 @@ class progress implements JsonSerializable {
             // history.
             'abilitytrace' => $this->abilitytrace,
         ];
+        // Issue #133: outside trace mode the stored JSON stays exactly as it was - not even an empty key.
+        if ($this->scalestatetrace) {
+            $data['scalestatetrace'] = $this->scalestatetrace;
+        }
+        return $data;
+    }
+
+    /**
+     * A played question as the JSON refers to it: its id when it is among the played questions.
+     *
+     * @param stdClass $question
+     * @return int|string|stdClass
+     */
+    private function played_reference(stdClass $question) {
+        if (isset($question->id) && isset($this->playedquestions[$question->id])) {
+            return $question->id;
+        }
+        return $question;
+    }
+
+    /**
+     * The played question an entry of the JSON stands for: by id, or written in full (issue #143).
+     *
+     * Older records hold full copies; those are taken as they are.
+     *
+     * @param mixed $entry
+     * @param array $played Played questions by id.
+     * @return stdClass|null
+     */
+    private static function resolve_played($entry, array $played): ?stdClass {
+        if (is_object($entry)) {
+            return $entry;
+        }
+        if ((is_int($entry) || is_string($entry)) && isset($played[$entry])) {
+            return $played[$entry];
+        }
+        return null;
     }
 
     /**
@@ -1025,8 +1111,12 @@ class progress implements JsonSerializable {
             !in_array($scaleid, $this->activescales)
             && (!array_key_exists($scaleid, $this->lockedscales) || $force)
         ) {
-            unset($this->lockedscales[$scaleid]);
+            if (array_key_exists($scaleid, $this->lockedscales)) {
+                unset($this->lockedscales[$scaleid]);
+                $this->trace_scale_state($scaleid, self::SCALE_UNLOCKED);
+            }
             $this->activescales[] = $scaleid;
+            $this->trace_scale_state($scaleid, self::SCALE_ACTIVATED);
         }
         return $this;
     }
@@ -1053,13 +1143,15 @@ class progress implements JsonSerializable {
      * @return $this
      */
     public function deactivate_scale(int $scaleid, bool $lock = false) {
-        if ($lock) {
+        if ($lock && !array_key_exists($scaleid, $this->lockedscales)) {
             $this->lockedscales[$scaleid] = true;
+            $this->trace_scale_state($scaleid, self::SCALE_LOCKED);
         }
         if (!in_array($scaleid, $this->activescales)) {
             return $this;
         }
         unset($this->activescales[array_search($scaleid, $this->activescales)]);
+        $this->trace_scale_state($scaleid, self::SCALE_DEACTIVATED);
         return $this;
     }
 
@@ -1071,7 +1163,10 @@ class progress implements JsonSerializable {
      */
     public function drop_scale(int $scaleid) {
         $this->deactivate_scale($scaleid);
-        $this->droppedscales[$scaleid] = $scaleid;
+        if (!isset($this->droppedscales[$scaleid])) {
+            $this->droppedscales[$scaleid] = $scaleid;
+            $this->trace_scale_state($scaleid, self::SCALE_REMOVED);
+        }
         return $this;
     }
 
@@ -1095,8 +1190,79 @@ class progress implements JsonSerializable {
      * @return self
      */
     public function unlock_scale($scaleid): self {
-        unset($this->lockedscales[$scaleid]);
+        if (array_key_exists($scaleid, $this->lockedscales)) {
+            unset($this->lockedscales[$scaleid]);
+            $this->trace_scale_state((int) $scaleid, self::SCALE_UNLOCKED);
+        }
         return $this;
+    }
+
+    /**
+     * Records a change of a scale's state, in trace mode only (issue #133).
+     *
+     * The step is the one of the ability trace: the number of questions played so far.
+     *
+     * @param int $scaleid
+     * @param string $event One of the SCALE_* constants.
+     * @return void
+     */
+    private function trace_scale_state(int $scaleid, string $event): void {
+        if (!progress_retention::should_trace()) {
+            return;
+        }
+        $this->scalestatetrace[] = [
+            'step' => $this->get_num_playedquestions(),
+            'scaleid' => $scaleid,
+            'event' => $event,
+        ];
+    }
+
+    /**
+     * The recorded changes of the scales' state: step, scaleid, event. Empty unless in trace mode.
+     *
+     * @return array
+     */
+    public function get_scale_state_trace(): array {
+        return $this->scalestatetrace;
+    }
+
+    /**
+     * The state the scales are in after a trace: active, dropped and locked scale ids, sorted.
+     *
+     * @param array $trace As get_scale_state_trace() returns it.
+     * @return array active, dropped, locked
+     */
+    public static function replay_scale_state_trace(array $trace): array {
+        $active = [];
+        $dropped = [];
+        $locked = [];
+        foreach ($trace as $entry) {
+            $scaleid = (int) $entry['scaleid'];
+            switch ($entry['event']) {
+                case self::SCALE_ACTIVATED:
+                    $active[$scaleid] = $scaleid;
+                    break;
+                case self::SCALE_DEACTIVATED:
+                    unset($active[$scaleid]);
+                    break;
+                case self::SCALE_LOCKED:
+                    $locked[$scaleid] = $scaleid;
+                    break;
+                case self::SCALE_UNLOCKED:
+                    unset($locked[$scaleid]);
+                    break;
+                case self::SCALE_REMOVED:
+                    unset($active[$scaleid]);
+                    $dropped[$scaleid] = $scaleid;
+                    break;
+            }
+        }
+        foreach ([&$active, &$dropped, &$locked] as &$ids) {
+            $ids = array_values($ids);
+            sort($ids);
+        }
+        unset($ids);
+        return ['active' => $active, 'dropped' => $dropped, 'locked' => $locked];
     }
 
     /**
