@@ -2,6 +2,15 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Issue #137, Altbestand (14.10.2026): neues Feld `local_catquiz_personparams.rangebackfilled` (Upgrade
+  2026100916). Es kennzeichnet einen Bereich, der nicht beim Finalisieren eingefroren, sondern später von
+  der heutigen Skala übernommen wurde – durch eine Revalidierung, also auch durch die Recovery älterer
+  Ergebnisse im Adapter (`adaptivequizcatmodel_catquiz`, `cli/recover_legacy_results.php`). Das Upgrade
+  selbst trägt nichts nach. Tests: `upgrade_range_snapshot_test`,
+  `attempt_revalidator_test::test_revalidation_marks_a_range_taken_later`.
+- CI: STACK und Maxima aus den Behat-Jobs entfernt; das STACK-Szenario des Frage-Modals wird dort
+  übersprungen und lokal bzw. in der Praxis geprüft. Ursache des Ausfalls vom 14.10.: `maxima-share` fehlte
+  (nur „empfohlen“), STACKs Installation brach ab und Behat startete nicht.
 - Moodle 5.2/5.3: Das Frage-Modal öffnete sich dort nicht mehr. Es lud `core/modal_factory`, das seit
   Moodle 4.3 veraltet und in 5.2 entfernt ist. Jetzt `core/modal` (`Modal.create()`, ab 4.3 vorhanden, also
   auch in 4.5). Gefunden durch Behat auf 5.2/5.3.

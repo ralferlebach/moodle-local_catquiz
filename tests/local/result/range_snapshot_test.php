@@ -78,6 +78,7 @@ final class range_snapshot_test extends advanced_testcase {
         foreach ($rows as $row) {
             $this->assertEqualsWithDelta(-5.0, (float) $row->rangelower, 1e-9, "Scale {$row->catscaleid}");
             $this->assertEqualsWithDelta(5.0, (float) $row->rangeupper, 1e-9, "Scale {$row->catscaleid}");
+            $this->assertSame(0, (int) $row->rangebackfilled, 'Recorded at finalisation, not taken later.');
         }
 
         // The scale is widened afterwards.
@@ -99,7 +100,8 @@ final class range_snapshot_test extends advanced_testcase {
     }
 
     /**
-     * A row from before ranges were recorded keeps none - nothing is reconstructed from today's scale.
+     * A row from before ranges were recorded gets none by being read or stored as it is: only a
+     * revalidation - the recovery of older results - gives it today's range, marked (attempt_revalidator_test).
      */
     public function test_older_rows_keep_no_range(): void {
         global $DB;

@@ -46,13 +46,16 @@ final class personparam_repository {
      * @param int $userid
      * @param int|null $contextid
      * @param attempt_result $result
+     * @param bool $older True when an older attempt is written again (revalidation): a range set now is
+     *      marked as taken later, not recorded at finalisation.
      * @return void
      */
     public static function save_attempt_result(
         int $catattemptid,
         int $userid,
         ?int $contextid,
-        attempt_result $result
+        attempt_result $result,
+        bool $older = false
     ): void {
         global $DB;
 
@@ -84,7 +87,7 @@ final class personparam_repository {
             $existing = $DB->get_record(
                 self::TABLE,
                 ['attemptid' => $catattemptid, 'catscaleid' => $scaleresult->scaleid],
-                'id, rangelower, rangeupper'
+                'id, rangelower, rangeupper, rangebackfilled'
             );
             // Issue #137: the range the result was measured on, frozen with it. A row written again -
             // a revalidation, say - keeps the range of its finalisation; only a row without one gets
@@ -92,8 +95,10 @@ final class personparam_repository {
             if ($existing && is_numeric($existing->rangelower) && is_numeric($existing->rangeupper)) {
                 $record->rangelower = $existing->rangelower;
                 $record->rangeupper = $existing->rangeupper;
+                $record->rangebackfilled = (int) $existing->rangebackfilled;
             } else {
-                [$record->rangelower, $record->rangeupper] = self::range_of((int) $scaleresult->scaleid);
+                [$record->rangelower, $record->rangeupper] = self::current_range((int) $scaleresult->scaleid);
+                $record->rangebackfilled = $older && $record->rangelower !== null ? 1 : 0;
             }
             if ($existing) {
                 $record->id = $existing->id;
@@ -110,7 +115,7 @@ final class personparam_repository {
      * @param int $scaleid
      * @return array
      */
-    private static function range_of(int $scaleid): array {
+    public static function current_range(int $scaleid): array {
         try {
             $range = (new \local_catquiz\catscale($scaleid))->get_ability_range();
         } catch (\Throwable $e) {

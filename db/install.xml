@@ -177,6 +177,7 @@
         <FIELD NAME="validationstatus" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="comma-separated machine-readable rejection reason codes"/>
         <FIELD NAME="rangelower" TYPE="number" LENGTH="10" NOTNULL="false" SEQUENCE="false" DECIMALS="5" COMMENT="Lower bound of the scale's ability range when the attempt was finalised; null when not recorded."/>
         <FIELD NAME="rangeupper" TYPE="number" LENGTH="10" NOTNULL="false" SEQUENCE="false" DECIMALS="5" COMMENT="Upper bound of the scale's ability range when the attempt was finalised; null when not recorded."/>
+        <FIELD NAME="rangebackfilled" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="1 when the range was not recorded at finalisation but taken from the scale later (upgrade or revalidation of an older attempt)."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>

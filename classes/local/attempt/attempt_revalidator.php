@@ -98,7 +98,8 @@ final class attempt_revalidator {
             (int) $catattempt->id,
             (int) $catattempt->userid,
             $catattempt->contextid !== null ? (int) $catattempt->contextid : null,
-            $result
+            $result,
+            true
         );
         // As at finalisation; the activity reads its own result from here.
         if ($DB->get_manager()->field_exists('adaptivequiz_attempt', 'resultvalid')) {
