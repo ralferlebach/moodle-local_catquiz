@@ -216,10 +216,13 @@ final class feedback_gating_test extends advanced_testcase {
         $this->assertCount(1, $context['studentfeedback'], 'Exactly one central notice must be shown.');
         $notice = $context['studentfeedback'][0];
         $this->assertSame('novalidresult', $notice['generatorname']);
+        // Since 2026100919 the notice names the one reason (decision of 2026-10-14);
+        // its fixed opening is the part before the first placeholder.
+        $raw = get_string('feedbacknoglobalresult', 'local_catquiz');
         $this->assertStringContainsString(
-            get_string('feedbacknovalidresult', 'local_catquiz'),
+            trim(substr($raw, 0, strpos($raw, '{'))),
             $notice['content'],
-            'The notice must state that no valid result could be determined.'
+            'The notice must state that no overall result could be determined.'
         );
         $this->assertStringNotContainsString(
             'Scale feedback',

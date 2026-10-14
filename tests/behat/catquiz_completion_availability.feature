@@ -60,7 +60,7 @@ Feature: Completion follows the valid result, and the result stays readable (iss
     And I click on "falsche Antwort 2" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should not see "No valid test result could be determined for this attempt."
+    Then I should not see "No overall result can be determined"
     And I should not see "Question 5"
     ## The result page stays the result page: no new attempt is started on it.
     And "Submit answer" "button" should not exist
@@ -69,7 +69,7 @@ Feature: Completion follows the valid result, and the result stays readable (iss
     ## The activity becomes unavailable; the own result stays readable.
     And the activity "adaptivecatquiz1" is no longer available to participants
     When I open the result page of the last attempt of "student1"
-    Then I should not see "No valid test result could be determined for this attempt."
+    Then I should not see "No overall result can be determined"
     And I should see "Details of your result"
     And "Submit answer" "button" should not exist
 
@@ -91,10 +91,10 @@ Feature: Completion follows the valid result, and the result stays readable (iss
     And I click on "richtige Antwort" "text" in the "Question 4" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should see "No valid test result could be determined for this attempt."
+    Then I should see "No overall result can be determined"
     And "Submit answer" "button" should not exist
     When I am on "Course 1" course homepage
     Then the "Achieve a valid result" completion condition of "My Adaptive Quiz" is displayed as "todo"
     And the activity "adaptivecatquiz1" is no longer available to participants
     When I open the result page of the last attempt of "student1"
-    Then I should see "No valid test result could be determined for this attempt."
+    Then I should see "No overall result can be determined"

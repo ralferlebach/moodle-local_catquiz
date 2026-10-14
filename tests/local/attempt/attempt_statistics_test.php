@@ -186,6 +186,7 @@ final class attempt_statistics_test extends advanced_testcase {
         $this->assertSame(1, $figures->right);
         $this->assertSame(0, $figures->wrong, 'The wrong answer was a pilot and is not counted as wrong.');
         $this->assertSame(1, $figures->pilots);
+        $this->assertSame(['right' => 0, 'wrong' => 1, 'partial' => 0, 'unanswered' => 0], $figures->pilot, 'The pilot column.');
         $this->assertSame(1, $figures->unanswered, 'The started-but-unanswered question is unanswered, not wrong.');
         $this->assertSame(0, $figures->partial);
     }

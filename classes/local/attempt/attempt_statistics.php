@@ -40,8 +40,8 @@ final class attempt_statistics {
      *
      * @param int $adaptiveattemptid adaptivequiz_attempt.id
      * @param int[] $pilotids Ids of the questions played as pilot items.
-     * @return stdClass right, wrong, partial, unanswered, pilots, duration (seconds or null),
-     *      itemcount, itemmean, itemsd (seconds or null).
+     * @return stdClass right, wrong, partial, unanswered, pilots, pilot (the same four counts for the pilot
+     *      items), duration (seconds or null), itemcount, itemmean, itemsd (seconds or null).
      */
     public static function for_attempt(int $adaptiveattemptid, array $pilotids): stdClass {
         global $DB;
@@ -65,6 +65,7 @@ final class attempt_statistics {
             'partial' => $counts['partial'],
             'unanswered' => $counts['unanswered'],
             'pilots' => $counts['pilots'],
+            'pilot' => $counts['pilot'],
             'duration' => $duration,
             'itemcount' => count($times),
             'itemmean' => $mean,
@@ -80,10 +81,12 @@ final class attempt_statistics {
      *
      * @param stdClass[] $rows Question attempts with questionid and fraction, in slot order.
      * @param int[] $pilotids
-     * @return array right, wrong, partial, unanswered, pilots.
+     * @return array right, wrong, partial, unanswered, pilots, pilot (right, wrong, partial, unanswered of the
+     *      pilot items).
      */
     public static function count_answers(array $rows, array $pilotids): array {
-        $counts = ['right' => 0, 'wrong' => 0, 'partial' => 0, 'unanswered' => 0, 'pilots' => 0];
+        $empty = ['right' => 0, 'wrong' => 0, 'partial' => 0, 'unanswered' => 0];
+        $counts = $empty + ['pilots' => 0, 'pilot' => $empty];
         $seen = [];
         foreach ($rows as $row) {
             $questionid = (int) $row->questionid;
@@ -91,21 +94,31 @@ final class attempt_statistics {
                 continue;
             }
             $seen[$questionid] = true;
+            $category = self::category($row->fraction);
             if (in_array($questionid, $pilotids, true)) {
                 $counts['pilots']++;
+                $counts['pilot'][$category]++;
                 continue;
             }
-            if ($row->fraction === null) {
-                $counts['unanswered']++;
-            } else if ((float) $row->fraction >= 1.0) {
-                $counts['right']++;
-            } else if ((float) $row->fraction <= 0.0) {
-                $counts['wrong']++;
-            } else {
-                $counts['partial']++;
-            }
+            $counts[$category]++;
         }
         return $counts;
+    }
+
+    /**
+     * The category of an answer by its fraction.
+     *
+     * @param mixed $fraction Null when the question has no graded step.
+     * @return string right, wrong, partial or unanswered
+     */
+    private static function category($fraction): string {
+        if ($fraction === null) {
+            return 'unanswered';
+        }
+        if ((float) $fraction >= 1.0) {
+            return 'right';
+        }
+        return (float) $fraction <= 0.0 ? 'wrong' : 'partial';
     }
 
     /**

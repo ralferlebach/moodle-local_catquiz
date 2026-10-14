@@ -477,4 +477,13 @@ class comparetotestaverage extends feedbackgenerator {
             'charttitle' => get_string('abilityprofile_title', 'local_catquiz'),
         ];
     }
+
+    /**
+     * Shows the result of the global scale: needs it valid, not a reported scale (2026-10-14).
+     *
+     * @return string
+     */
+    public function get_result_dependency(): string {
+        return self::DEPENDS_ON_GLOBAL;
+    }
 }

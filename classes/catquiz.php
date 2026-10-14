@@ -255,6 +255,75 @@ class catquiz {
     ];
 
     /**
+     * The usage statistics of the items in a CAT context, as a grouped statement.
+     *
+     * Issue #136: one number per question - the answers it got in attempts of the
+     * given global scale(s) and context. "Answered" is read off
+     * question_attempts.responsesummary, which is set as soon as a response exists;
+     * the steps are not needed for it. The time of the last answer is
+     * question_attempts.timemodified.
+     *
+     * The grouping column is the expression questionid + 0, not the bare column. Joined
+     * on the bare column, MariaDB 10.11 evaluated this subquery once per outer row
+     * ("lateral derived", split materialization) and read every attempt of that
+     * question on the whole site each time: 12 s instead of 0.4 s on a production
+     * instance. An expression gives it no index to split on, so the statistics are
+     * computed once. PostgreSQL and MySQL accept the expression as well.
+     *
+     * @param string $scalesin The "IN (...)" / "= :x" part for the global scale ids
+     * @param string $contextparam Name of the parameter holding the CAT context id
+     * @return string
+     */
+    private static function pool_statistics_sql(string $scalesin, string $contextparam): string {
+        return "SELECT lca.scaleid, qa.questionid + 0 AS questionid,
+                       COUNT(qa.id) AS numberattempts, MAX(qa.timemodified) AS lastattempt
+                  FROM {local_catquiz_attempts} lca
+                  JOIN {adaptivequiz_attempt} aqa ON lca.attemptid = aqa.id
+                  JOIN {question_attempts} qa ON qa.questionusageid = aqa.uniqueid
+                 WHERE lca.contextid = :$contextparam AND lca.scaleid $scalesin
+                   AND qa.responsesummary IS NOT NULL
+              GROUP BY lca.scaleid, qa.questionid + 0";
+    }
+
+    /**
+     * Number of answers per question in a CAT context (issue #136).
+     *
+     * Counts the answers in attempts with the same global scale and the same CAT
+     * context - the same number the pool and the manager tables carry as attempts,
+     * from the same statement ({@see self::pool_statistics_sql()}). The reference
+     * computation for checks and repairs of the number (planned nightly cure task,
+     * doc/issue-136-instanzcache.md).
+     *
+     * @param array $catscaleids Scale ids of the pool; their global scale is used
+     * @param int $contextid CAT context
+     * @return array<int, stdClass> keyed by question id: attempts, lastattempt
+     */
+    public static function get_pool_statistics(array $catscaleids, int $contextid): array {
+        global $DB;
+        $ids = array_values(array_filter(array_map('intval', $catscaleids), fn($id) => $id > 0));
+        if (empty($ids)) {
+            return [];
+        }
+        $globalscaleids = array_values(array_unique(self::get_global_scale($ids)));
+        if (empty($globalscaleids)) {
+            return [];
+        }
+        [$insql, $params] = $DB->get_in_or_equal($globalscaleids, SQL_PARAMS_NAMED, 'poolstatscale');
+        $params['poolstatcontextid'] = $contextid;
+        $sql = "SELECT questionid, SUM(numberattempts) AS attempts, MAX(lastattempt) AS lastattempt
+                  FROM (" . self::pool_statistics_sql($insql, 'poolstatcontextid') . ") stats
+              GROUP BY questionid";
+        $result = [];
+        foreach ($DB->get_recordset_sql($sql, $params) as $row) {
+            $result[(int) $row->questionid] = (object) [
+                'attempts' => (int) $row->attempts,
+                'lastattempt' => (int) $row->lastattempt,
+            ];
+        }
+        return $result;
+    }
+
+    /**
      * Returns the sql to get all the questions wanted.
      *
      * @param array $catscaleids
@@ -343,6 +412,29 @@ class catquiz {
             ));
         }
 
+        // Issue #136: the usage statistics, for the runtime pool and the manager tables
+        // alike. See pool_statistics_sql() for why the grouping is on an expression.
+        //
+        // They stay in this statement on purpose. A first version fetched them in their
+        // own queries and ran the pool join alone; on test data PostgreSQL had no table
+        // statistics for yet, that join of seven tables got nested loops without index
+        // conditions and a pool of 420 items did not come back within five minutes.
+        // With the derived tables the planner behaves as before the change
+        // (strategy_semantics_test: 180 s before, 188 s after).
+        $statcolumns = ",
+            -- Information about usage statistics
+            COALESCE(astat.numberattempts,0) attempts,
+            COALESCE(astat.lastattempt,0) as astatlastattempttime,
+            ustat.userid, ustat.numberattempts userattempts,
+            ustat.lastattempt as userlastattempttime";
+        if (isset($parentscales1, $parentscales3)) {
+            $statjoins = 'LEFT JOIN (' . self::pool_statistics_sql($parentscales3, 'statcontextid') . ') astat
+              ON astat.questionid = q.id
+                AND astat.scaleid ' . $parentscales1;
+        } else {
+            $statjoins = 'LEFT JOIN (SELECT NULL AS scaleid, NULL AS numberattempts, NULL AS lastattempt) astat ON 1=1';
+        }
+
         $from = <<<SQL
         ( SELECT
             -- Information about the question
@@ -375,12 +467,7 @@ class catquiz {
             -- the clicked header is called. Without the alias an ORDER BY on it would
             -- refer to a column that does not exist.
             lcip.usable AS itemparamvalidity,
-            lcip.contextid AS lcipcontextid,
-            -- Information about usage statisitcs
-            COALESCE(astat.numberattempts,0) attempts,
-            COALESCE(astat.lastattempt,0) as astatlastattempttime,
-            ustat.userid, ustat.numberattempts userattempts,
-            ustat.lastattempt as userlastattempttime
+            lcip.contextid AS lcipcontextid{$statcolumns}
           FROM {local_catquiz_catscales} lccs
           -- Get all corresponding items of those scales, skip if not existent
           -- (INNER JOIN)
@@ -403,57 +490,23 @@ class catquiz {
             JOIN {question_bank_entries} qbe ON qbe.id=qv.questionbankentryid
             JOIN {question_categories} qc ON qc.id=qbe.questioncategoryid
 
-          -- Get all information about the attempts in the scale(s)
-          -- and context(s) in general and for specific user(s)
-            -- Issue #21: the restriction to context and scales lives inside the
-            -- aggregation, not only in the outer join. Without it this subquery
-            -- aggregated every CAT attempt of the whole site before a single row was
-            -- discarded, and an outer LIMIT did nothing to shrink that work.
-            --
-            -- COUNT(DISTINCT qa.id): a question attempt has one step per interaction,
-            -- and the join to question_attempt_steps multiplies the rows accordingly.
-            -- A plain COUNT counted steps and reported them as attempts.
-            LEFT JOIN (SELECT lca.scaleid, lca.contextid, qa.questionid,
-                COUNT(DISTINCT qa.id) numberattempts,
-              MAX(qas.timecreated) as lastattempt
-              FROM {local_catquiz_attempts} lca
-              JOIN {adaptivequiz_attempt} aqa ON lca.attemptid = aqa.id
-              JOIN {question_attempts} qa ON qa.questionusageid = aqa.uniqueid
-              JOIN {question_attempt_steps} qas
-                ON qas.questionattemptid = qa.id AND qas.fraction IS NOT NULL
-              WHERE lca.contextid = :statcontextid AND lca.scaleid $parentscales3
-              GROUP BY lca.scaleid, lca.contextid, qa.questionid
-            ) astat
-              -- Issue #54: joined on lcip.contextid before, which is NULL for items
-              -- without an active parameter - so pilot items lost their statistics,
-              -- the very numbers that matter while an item is being piloted. The
-              -- subquery already restricts the context itself (issue #21), so
-              -- matching the context here again was redundant anyway.
-              ON astat.questionid = q.id
-                AND astat.scaleid $parentscales1
+            {$statjoins}
         SQL;
 
         if (!empty($userid)) {
+            // Issue #136: when a person last saw a question, anywhere on the site. Step 0
+            // is written when the question is presented, so it counts what the person
+            // saw, answered or not, and needs neither catquiz nor adaptivequiz tables.
             $from .= <<<SQL
                 LEFT JOIN (
-                    SELECT
-                        lca.scaleid,
-                        lca.contextid,
-                        qa.questionid,
-                        lca.userid,
-                        COUNT(DISTINCT qa.id) numberattempts,
-                        MAX(qas.timecreated) as lastattempt
-                    FROM {local_catquiz_attempts} lca
-                      JOIN {adaptivequiz_attempt} aqa ON lca.attemptid = aqa.id
-                      JOIN {question_attempts} qa ON qa.questionusageid = aqa.uniqueid
-                      JOIN {question_attempt_steps} qas
-                        ON qas.questionattemptid = qa.id AND qas.fraction IS NOT NULL
-                    WHERE lca.userid = :statuserid AND lca.contextid = :statcontextid2
-                      AND lca.scaleid $parentscales4
-                    GROUP BY lca.scaleid, lca.contextid, qa.questionid, lca.userid
+                    SELECT qas.userid, qa.questionid + 0 AS questionid,
+                           COUNT(qa.id) AS numberattempts, MAX(qas.timecreated) AS lastattempt
+                      FROM {question_attempt_steps} qas
+                      JOIN {question_attempts} qa ON qa.id = qas.questionattemptid
+                     WHERE qas.userid = :statuserid AND qas.sequencenumber = 0
+                  GROUP BY qas.userid, qa.questionid + 0
                 ) ustat
-                  ON ustat.userid = :userid AND ustat.questionid = q.id
-                    AND ustat.scaleid $parentscales2 ) s
+                  ON ustat.questionid = q.id ) s
             SQL;
         } else {
             $from .= <<<SQL

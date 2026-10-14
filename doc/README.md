@@ -24,6 +24,8 @@ Zwei Arten von Dokumenten:
   Strategien, Stopps je Strategie, Tests und Zahn-Tests.
 - **experiment-136-slo.md** – Anleitung zur Messung der Antwortzeiten im Betrieb (#136): Steckbrief,
   Messläufe kalt/warm/parallel, Export, Auswertung.
+- **issue-136-instanzcache.md** – Konzept-Issue für 1.3: instanzweiter Cache des Item-Pools mit
+  inkrementell gepflegter Pilotzahl, Generationszählern und nächtlichem Heil-Task.
 - **id-namespaces.md** – Id-Namensräume: Benennung von Host- und CAT-Versuchs-Id, die
   bewusste Ausnahme `local_catquiz_attempts.attemptid`, zentrale Übersetzung,
   id-geschlüsselte Arrays, Kollisionstests (#107).

@@ -25,6 +25,8 @@ use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\data\catscale_structure;
 use local_catquiz\local\result\attempt_result_validator;
+use local_catquiz\local\result\global_scale_validity;
+use local_catquiz\local\result\scale_result;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbacksettings;
@@ -646,7 +648,8 @@ class attemptfeedback implements renderable, templatable {
         // only ever sees the single central notice below. Teacher feedback is
         // still produced so teachers can inspect the (invalid) details.
         $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
-        $hasvalidresult = $this->has_valid_result($feedbackdata);
+        $state = $this->result_state($feedbackdata);
+        $hasvalidresult = $state->reportable;
 
         $context = [];
         foreach ($generators as $generator) {
@@ -657,8 +660,7 @@ class attemptfeedback implements renderable, templatable {
                Validity used to switch off every generator but the primary one, and with them the
                quiz history and the export of exactly the attempts that most need looking into.
                The primary generator still runs: it carries the reason for the central notice. */
-            $dependency = $generator->get_result_dependency();
-            if (!$hasvalidresult && !$isprimary && $dependency === feedbackgenerator::DEPENDS_ON_RESULT) {
+            if (!$isprimary && !self::shown_in_state($generator, $state)) {
                 continue;
             }
             if ($lazy && !$isprimary) {
@@ -696,13 +698,7 @@ class attemptfeedback implements renderable, templatable {
         // exclusion blocks across several tabs.
         if (!$hasvalidresult && is_array($abilities)) {
             $context['studentfeedback'] = $context['studentfeedback'] ?? [];
-            $reason = $this->below_minimum()
-                ? get_string('minquestionsnotreached', 'local_catquiz')
-                : feedback_helper::get_exclusion_reason_string($abilities);
-            $content = get_string('feedbacknovalidresult', 'local_catquiz');
-            if ($reason !== '') {
-                $content .= ' ' . $reason;
-            }
+            $content = $this->notice($state, (int) ($feedbackdata['teststrategy'] ?? $this->teststrategy ?? 0));
             // In front of what remains, not instead of it: the quiz history stays (issue #120).
             array_unshift($context['studentfeedback'], [
                 'heading' => get_string('feedbacknovalidresultheading', 'local_catquiz'),
@@ -716,40 +712,156 @@ class attemptfeedback implements renderable, templatable {
     }
 
     /**
-     * Whether the attempt has a valid result for the feedback: at least one reportable scale.
+     * What the attempt allows the feedback to show (decision of 2026-10-14).
+     *
+     * reportable: the strategy reached its target - at least one reportable scale. global: the global
+     * scale is valid by the criteria of the test (global_scale_validity), the same rule as the grade.
+     * With a reportable scale the global scale is valid as well: its N is never smaller.
      *
      * @param array $feedbackdata
-     * @return bool
+     * @return stdClass reportable, global, globalreasons (global_scale_validity), subreasons (of the other scales).
      */
-    private function has_valid_result(array $feedbackdata): bool {
+    public function result_state(array $feedbackdata): stdClass {
+        $state = (object) ['reportable' => true, 'global' => true, 'globalreasons' => [], 'subreasons' => []];
         $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
         if (!is_array($abilities)) {
-            return true;
+            return $state;
         }
         // With the per-scale N of this attempt (issue #128): without it every scale counted as measured.
         $adaptiveattemptid = (int) ($feedbackdata['attemptid'] ?? $this->attemptid ?? 0);
         $catattemptid = $adaptiveattemptid ? catquiz::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz') : null;
         $progress = $catattemptid === null ? null : progress::load_for_reading($catattemptid);
-        return feedback_helper::build_attempt_result(
+        $result = feedback_helper::build_attempt_result(
             $abilities,
             ['se' => $feedbackdata['se'] ?? [], 'nbyscale' => $feedbackdata['nbyscale'] ?? []]
                 + ($progress ? ['progress' => $progress] : [])
-        )->has_reportable_result();
+        );
+        $state->reportable = $result->has_reportable_result();
+
+        $settings = $progress ? $progress->get_quiz_settings() : null;
+        $globalscaleid = (int) ($settings->catquiz_catscales ?? $feedbackdata['catscaleid'] ?? 0);
+        $global = null;
+        foreach ($result->get_scale_results() as $scaleresult) {
+            if ((int) $scaleresult->scaleid === $globalscaleid) {
+                $global = $scaleresult;
+                continue;
+            }
+            $state->subreasons[(int) $scaleresult->scaleid] = $scaleresult->rejectionreasons;
+        }
+        $state->globalreasons = $global === null
+            ? [scale_result::REASON_NOT_MEASURED]
+            : global_scale_validity::reasons((object) [
+                'n' => $global->n,
+                'standarderror' => $global->standarderror,
+                'fraction' => $global->fraction,
+            ], $settings);
+        $state->global = $state->reportable || $state->globalreasons === [];
+        return $state;
     }
 
     /**
-     * Whether the attempt ended below the test's minimum number of questions.
+     * Whether a generator has its tab in a result state.
      *
+     * @param feedbackgenerator $generator
+     * @param stdClass $state See result_state().
      * @return bool
      */
-    private function below_minimum(): bool {
-        try {
-            $progress = $this->get_progress();
-        } catch (\Throwable $e) {
-            return false;
+    private static function shown_in_state(feedbackgenerator $generator, stdClass $state): bool {
+        switch ($generator->get_result_dependency()) {
+            case feedbackgenerator::DEPENDS_ON_RESULT:
+                return $state->reportable;
+            case feedbackgenerator::DEPENDS_ON_GLOBAL:
+                return $state->global;
+            default:
+                return true;
         }
-        $minquestions = (int) ($progress->get_quiz_settings()->maxquestionsgroup->catquiz_minquestions ?? 0);
-        return $minquestions > 0 && $progress->get_num_answered_productive_questions() < $minquestions;
+    }
+
+    /**
+     * The central notice for an attempt whose strategy reached no target (decision of 2026-10-14).
+     *
+     * Global scale valid: the target was not reached, for this reason, but "Your result" gives a global
+     * estimate. Global scale invalid as well: no overall result, for that reason. Quiz history and
+     * learning progress stay in both cases.
+     *
+     * @param stdClass $state See result_state().
+     * @param int $strategy
+     * @return string
+     */
+    private function notice(stdClass $state, int $strategy): string {
+        $a = (object) [
+            'resulttab' => get_string('comparetotestaverage', 'local_catquiz'),
+            'historytab' => get_string('quizgraphicalsummary', 'local_catquiz'),
+            'progresstab' => get_string('learningprogresstitle', 'local_catquiz'),
+        ];
+        if ($state->global) {
+            $categories = [];
+            foreach ($state->subreasons as $reasons) {
+                $categories = array_merge($categories, self::reason_categories($reasons));
+            }
+            $a->target = self::target_string($strategy);
+            $a->reason = self::reason_phrase($categories);
+            return get_string('feedbacktargetnotreached', 'local_catquiz', $a);
+        }
+        $a->reason = self::reason_phrase(self::reason_categories($state->globalreasons));
+        return get_string('feedbacknoglobalresult', 'local_catquiz', $a);
+    }
+
+    /**
+     * What a strategy sets out to measure.
+     *
+     * @param int $strategy
+     * @return string
+     */
+    private static function target_string(int $strategy): string {
+        $keys = [
+            LOCAL_CATQUIZ_STRATEGY_LOWESTSUB => 'feedbacktarget_lowestsub',
+            LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB => 'feedbacktarget_highestsub',
+            LOCAL_CATQUIZ_STRATEGY_RELSUBS => 'feedbacktarget_relsubs',
+            LOCAL_CATQUIZ_STRATEGY_ALLSUBS => 'feedbacktarget_allsubs',
+        ];
+        return get_string($keys[$strategy] ?? 'feedbacktarget_default', 'local_catquiz');
+    }
+
+    /**
+     * The kinds of a scale's reasons that the notice names: too few questions, too imprecise, every
+     * answer right, every answer wrong. Reasons about how a scale is shown are none of them.
+     *
+     * @param string[] $reasons
+     * @return string[] nmin, se, allcorrect, allincorrect
+     */
+    private static function reason_categories(array $reasons): array {
+        $map = [
+            scale_result::REASON_N_MIN => 'nmin',
+            scale_result::REASON_MIN_QUESTIONS => 'nmin',
+            scale_result::REASON_NOT_MEASURED => 'nmin',
+            scale_result::REASON_SE_MAX => 'se',
+            scale_result::REASON_FRACTION_ALL_CORRECT => 'allcorrect',
+            scale_result::REASON_FRACTION_ALL_INCORRECT => 'allincorrect',
+        ];
+        $categories = [];
+        foreach ($reasons as $reason) {
+            if (isset($map[$reason])) {
+                $categories[] = $map[$reason];
+            }
+        }
+        return $categories;
+    }
+
+    /**
+     * The one reason the notice names: the first that applies of too few questions, every answer right or
+     * every answer wrong, too imprecise (decision of 2026-10-14: N, then fraction, then SE).
+     *
+     * @param string[] $categories
+     * @return string
+     */
+    private static function reason_phrase(array $categories): string {
+        foreach (['nmin', 'allcorrect', 'allincorrect', 'se'] as $category) {
+            if (in_array($category, $categories, true)) {
+                return get_string("feedbackreason_{$category}", 'local_catquiz');
+            }
+        }
+        return get_string('feedbackreason_other', 'local_catquiz');
     }
 
     /**
@@ -766,11 +878,7 @@ class attemptfeedback implements renderable, templatable {
         if (!$generator->has_data_for($feedbackdata)) {
             return [];
         }
-        // A generator the settings hide has no tab: its content would be empty. That is how the former
-        // summary tab, hidden by default, came to show "No feedback available".
-        if (!$generator->apply_settings_to_feedbackdata($feedbackdata)) {
-            return [];
-        }
+
         $tabs = [];
         foreach ($generator->get_audiences() as $audience) {
             if ($audience === feedbackgenerator::AUDIENCE_TEACHER && !$generator->may_show_teacher_feedback($feedbackdata)) {
@@ -813,10 +921,7 @@ class attemptfeedback implements renderable, templatable {
             if (!in_array($audience, $generator->get_audiences(), true)) {
                 return [];
             }
-            if (
-                $generator->get_result_dependency() === feedbackgenerator::DEPENDS_ON_RESULT
-                && !$this->has_valid_result($feedbackdata)
-            ) {
+            if (!self::shown_in_state($generator, $this->result_state($feedbackdata))) {
                 return [];
             }
             $feedback = $generator->get_feedback($feedbackdata)[$audience . 'feedback'] ?? [];

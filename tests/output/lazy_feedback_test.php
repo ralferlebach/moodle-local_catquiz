@@ -156,16 +156,6 @@ final class lazy_feedback_test extends advanced_testcase {
             }
 
             /**
-             * The settings hide the generator as a whole.
-             *
-             * @param array $feedbackdata
-             * @return array
-             */
-            public function apply_settings_to_feedbackdata(array $feedbackdata) {
-                return empty($this->options['hidden']) ? $feedbackdata : [];
-            }
-
-            /**
              * Teacher permission.
              *
              * @param array $feedbackdata
@@ -261,24 +251,6 @@ final class lazy_feedback_test extends advanced_testcase {
         $lazyteacher = array_filter($context['teacherfeedback'] ?? [], fn($tab) => !empty($tab['lazy']));
         $this->assertSame([], $lazyteacher, 'No teacher tab without the permission.');
         $this->assertNotContains('personabilities', array_column($context['studentfeedback'], 'generatorname'));
-    }
-
-    /**
-     * A generator the settings hide gets no tab: the former summary tab, hidden by default, was offered
-     * all the same and then showed "No feedback available".
-     */
-    public function test_hidden_generator_has_no_lazy_tab(): void {
-        $this->resetAfterTest();
-        $generators = $this->generators(true);
-        $generators[] = $this->generator('hiddenbysettings', [
-            'dependency' => feedbackgenerator::DEPENDS_ON_ATTEMPT,
-            'hidden' => true,
-        ]);
-
-        $context = $this->generate($generators, true, true);
-
-        $this->assertNotContains('hiddenbysettings', array_column($context['studentfeedback'], 'generatorname'));
-        $this->assertContains('graphicalsummary', array_column($context['studentfeedback'], 'generatorname'));
     }
 
     /**

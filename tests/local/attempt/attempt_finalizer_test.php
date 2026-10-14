@@ -296,10 +296,8 @@ final class attempt_finalizer_test extends advanced_testcase {
 
         // The invalid scale's snapshot is reset to the last valid value (0.7),
         // not left at the intermediate 0.15.
-        $snapshot = $DB->get_record(
-            'local_catquiz_personparams',
-            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5]
-        );
+        // The newest valid row, not the only one: the table keeps the history.
+        $snapshot = catquiz::get_current_person_param($userid, $contextid, 5);
         $this->assertEquals(0.7, (float) $snapshot->ability);
     }
 
