@@ -2,10 +2,58 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Item-Pool schneller, Statistik neu definiert (#136, Entscheidungen vom 14.10.2026; 2026100920):
+  - Ursache der 12 s bis zur ersten Frage (Trace auf lti, `pool:query`): MariaDB 10.11 rechnete die
+    gruppierte Statistik-Unterabfrage je Pool-Item neu („lateral derived“/split materialization) und las
+    dabei jedes Mal alle Fragenversuche dieser Frage auf der ganzen Website. Gemessen: 18,2 s mit, 1,24 s
+    ohne diese Optimierung.
+  - Fix: Die Statistik-Unterabfragen gruppieren auf `qa.questionid + 0` statt auf der Spalte. Damit hat
+    MariaDB keinen Index, an dem es die Unterabfrage je Item aufteilen könnte, und rechnet sie einmal
+    (auf MariaDB 10.11.14 mit synthetischen Daten geprüft: lateral mit der Spalte, nicht mit dem Ausdruck;
+    auf PostgreSQL nicht reproduzierbar). Gilt für den Laufzeit-Pool und die CAT-Manager-Tabelle.
+  - Verworfen: die Statistik in eigenen Abfragen zu holen und den Pool-Join allein laufen zu lassen. Auf
+    Testdaten ohne Tabellenstatistik plante PostgreSQL diesen Join mit Nested Loops ohne Indexbedingung,
+    ein Pool mit 420 Items kam nach fünf Minuten nicht zurück. Mit der Statistik im Statement bleibt der
+    Plan wie vorher (`strategy_semantics_test`: 180 s vorher, 188 s nachher).
+  - `catquiz::get_pool_statistics()` berechnet die Pilotzahl mit derselben Unterabfrage für sich, als
+    Referenz für Prüfungen (Tests, geplanter Heil-Task).
+  - Pilotzahl („attempts“): Anzahl der Antworten (`question_attempts.responsesummary IS NOT NULL`) in
+    Versuchen mit derselben Globalskala und demselben CAT-Kontext; ohne Schritte (`question_attempt_steps`).
+    Zuletzt beantwortet: `question_attempts.timemodified`.
+  - Zeitstrafe für kürzlich gesehene Fragen: systemweit, wann die Person die Frage irgendwo zuletzt gesehen
+    hat (Schritt 0 des Fragenversuchs), unabhängig vom Kontext.
+  - Auswahl unter den Pilotfragen (`numberofgeneralattempts`): dieselbe Pilotzahl statt einer Zählung über
+    alle Fragenversuche der Website (las bei jeder Pilotentscheidung die ganze Tabelle).
+  - CAT-Manager-Tabelle: Spalten „Versuche“ und „Letzter Versuch“ mit derselben Definition.
+  - Tests: `pool_statistics_test` (neu), `question_statistics_scope_test` angepasst.
+  - Konzept für einen instanzweiten, inkrementell gepflegten Cache: `doc/issue-136-instanzcache.md`
+    (für 1.3).
+- Feedback ohne erreichtes Ziel (Entscheidung vom 14.10.2026, Variante B):
+  - Globalskala gültig (nach `global_scale_validity`, wie die Note): „<Ziel der Strategie> konnte nicht
+    erreicht werden, weil in den Teilbereichen <Mindestanzahl | Messgenauigkeit nicht erreicht | alle
+    Antworten richtig | alle falsch>. Eine globale Einschätzung ist aber möglich …“; „Ihr Ergebnis“,
+    Quizverlauf und Lernfortschritt bleiben.
+  - Globalskala ungültig: kein „Ihr Ergebnis“; „Ein Gesamtergebnis kann nicht bestimmt werden, weil im
+    gesamten Test <Grund> …“; Quizverlauf und Lernfortschritt bleiben.
+  - Genannt wird genau ein Grund, der erste zutreffende in der Reihenfolge Mindestanzahl → Fraction
+    (alle richtig / alle falsch) → Messgenauigkeit.
+  - „Ihr Ergebnis“ hängt an der Globalskala (`DEPENDS_ON_GLOBAL`), der Lernfortschritt nicht mehr an der
+    Gültigkeit des Versuchs.
+- „Statistik & Export“: zweite Spalte „Pilotfragen (nicht gewertet)“ mit Richtig/Falsch/Teilweise/
+  Unbeantwortet, wenn Pilotfragen eingeschaltet sind oder im Versuch vorkamen.
+- Der Lehrenden-Tab „Pilotfragen“ (nur in „größte Stärke“, zeigte nur die Anzahl) entfällt; die Ausblend-
+  Prüfung der nachgeladenen Tabs aus 2026100917 ist wieder entfernt. Der Ausblend-Mechanismus der
+  Feedback-Einstellungen wird nirgends mehr befüllt.
+- Gültigkeit der Globalskala als Note (Entscheidung vom 14.10.2026): neue Prüfung
+  `local\result\global_scale_validity`. Die Globalskala ist als Note gültig, wenn sie gemessen ist und jedes
+  Kriterium erfüllt, das der Test setzt: Mindestfragen pro Skala (auf die Globalskala angewandt),
+  Mindestfragen des Tests, maximaler Standardfehler; dazu die allgemeine Fraction-Regel (#140), deren
+  Neuverhandlung aussteht. Nicht primär, Bericht abgeschaltet, verborgen, minimaler Standardfehler und
+  Maximalzahl spielen keine Rolle. Der Adapter (ab 2026100904) bewertet damit. Test:
+  `local/result/global_scale_validity_test`.
 - Feedback (Entscheidung vom 14.10.2026, #120):
-  - Der Tab „Zusammenfassung“ (Wunderbyte, GH-110, 2023; standardmäßig ausgeblendet) entfällt. Durch die
-    nachgeladenen Tabs (#85, 2026100904) erschien er trotzdem, leer mit „Kein Feedback verfügbar“.
-    Nachgeladene Tabs berücksichtigen jetzt die Ausblend-Einstellungen.
+  - Der Tab „Zusammenfassung“ (Wunderbyte, GH-110, 2023; standardmäßig ausgeblendet) entfällt samt Code.
+    Durch die nachgeladenen Tabs (#85, 2026100904) erschien er trotzdem, leer mit „Kein Feedback verfügbar“.
   - Der Export-Tab heißt „Statistik & Export“ (nur Berechtigte): oben die Kennzahlen des Versuchs –
     richtig, falsch, teilweise, unbeantwortet (jede Frage einmal, ohne Pilotfragen), Pilotfragen,
     Bearbeitungszeit, mittlere Zeit pro beantworteter Frage ± SD –, darunter die Export-Angebote
