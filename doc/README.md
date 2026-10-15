@@ -23,6 +23,7 @@ Zwei Arten von Dokumenten:
 - **strategy-semantics.md** – Wann endet ein Test? Ursachen von #134/#135, Fähigkeitsmatrix der
   Strategien, Stopps je Strategie, Tests und Zahn-Tests.
 - **audit-2026-10-14.md** – Abnahmebericht der BUG-Audit-Restarbeiten: AK/DoD je Issue mit Nachweis, Testläufe 4.5/5.1/5.2/5.3, offene Punkte.
+- **re-audit-2026-10-15.md** – Abarbeitung des Re-Audits: Stand je AK/DoD für mod_adaptivequiz #14 und #136, #142–#145, was erledigt ist und was nur mit Staging-Messung oder 1.3 schließbar ist.
 - **statistik-119-132.md** – Lernverlauf als kumulative Reihe (#119), Grundgesamtheit „Ohne Versuch“ (#132),
   Nachweise.
 - **issue-139-frage-modal.md** – Frage-Modal (#139): Zugriffsregeln, Fehlerpfad, STACK, doppelt

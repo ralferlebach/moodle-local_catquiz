@@ -229,21 +229,12 @@ class attemptfeedback implements renderable, templatable {
 
         // Try to get the attemptfeedback from the cache.
         // For the same number of questions played, the data do not change.
-        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $cachekey = $this->get_feedback_cache_key();
-        if ($feedbackdata = $cache->get($cachekey)) {
-            if ($numplayed = $this->get_progress()->get_num_playedquestions() >= 1) {
-                // Release the cache for the last number of questions played.
-                $previouskey = sprintf(
-                    'feedbackdata_%d_%d',
-                    $this->attemptid,
-                    $numplayed - 1
-                );
-                $cache->delete($previouskey);
-            }
-
-            return $feedbackdata;
+        if (($cached = $this->load_from_cache()) !== null) {
+            return $cached;
         }
+        // Unchanged from before issue #142: the cache lookup used to overwrite the passed JSON, so
+        // a miss always read the attempt from the database (which also restores primaryscale).
+        $feedbackdata = null;
 
         if (!$feedbackdata) {
             $feedbackdata = json_decode(
@@ -931,27 +922,65 @@ class attemptfeedback implements renderable, templatable {
     }
 
     /**
-     * Returns the cache key for the current progress state
+     * The session cache key of the feedback snapshot of this attempt (issue #142).
+     *
+     * One key per attempt. The snapshot carries the number of questions it was taken at; a snapshot
+     * taken at another number is out of date and is not used.
+     *
+     * Before, every number of played questions had a key of its own (feedbackdata_<attempt>_<n>),
+     * and the one meant to release the previous snapshot was computed as
+     * `$numplayed = get_num_playedquestions() >= 1` - the comparison binds before the
+     * assignment, so $numplayed was true, "_0" was deleted every time and _1 … _n-1 stayed. Each
+     * of them holds the full feedback state including the progress, so the session cache grew with
+     * the square of the test length - and the session is read on every request.
      *
      * @return string
      */
-    private function get_feedback_cache_key() {
-        return sprintf(
-            'feedbackdata_%d_%d',
-            $this->attemptid,
-            $this->get_progress()->get_num_playedquestions()
-        );
+    private function get_feedback_cache_key(): string {
+        return sprintf('feedbackdata_%d', $this->attemptid);
     }
 
     /**
-     * Update the feedback data in the cache
+     * The cached feedback snapshot of this attempt, if it was taken at the current number of
+     * played questions.
+     *
+     * @return array|null
+     */
+    private function load_from_cache(): ?array {
+        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
+        $entry = $cache->get($this->get_feedback_cache_key());
+        if (
+            !is_array($entry)
+            || !array_key_exists('numplayed', $entry)
+            || !is_array($entry['data'] ?? null)
+            || (int) $entry['numplayed'] !== $this->get_progress()->get_num_playedquestions()
+        ) {
+            return null;
+        }
+        return $entry['data'];
+    }
+
+    /**
+     * Stores the feedback snapshot of this attempt, replacing the previous one.
+     *
+     * Retention (issue #142): at most one snapshot per attempt in the session cache, whatever the
+     * number of questions, on a cache hit as on a miss. Snapshots of other attempts are not
+     * touched. The first write for an attempt also removes the per-question keys the earlier code
+     * may have left for it (an attempt that was running during the upgrade).
      *
      * @param array $data
      * @return void
      */
     private function save_to_cache(array $data) {
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $cachekey = $this->get_feedback_cache_key();
-        $cache->set($cachekey, $data);
+        $key = $this->get_feedback_cache_key();
+        $numplayed = $this->get_progress()->get_num_playedquestions();
+        if ($cache->get($key) === false) {
+            $cache->delete_many(array_map(
+                fn(int $n) => sprintf('feedbackdata_%d_%d', $this->attemptid, $n),
+                range(0, $numplayed)
+            ));
+        }
+        $cache->set($key, ['numplayed' => $numplayed, 'data' => $data]);
     }
 }

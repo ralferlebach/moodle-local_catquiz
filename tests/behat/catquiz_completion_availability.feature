@@ -1,5 +1,5 @@
 @local @local_catquiz @javascript
-Feature: Completion follows the valid result, and the result stays readable (issue #121).
+Feature: Completion and grade follow the valid result, and the result stays readable (issues #121, mod_adaptivequiz #14).
   With the rule "valid result" the activity is complete after a valid attempt and not after an
   invalid one. Either way the attempt ends on its result page - no new attempt is started - and
   the result stays readable after the activity has become unavailable.
@@ -66,6 +66,12 @@ Feature: Completion follows the valid result, and the result stays readable (iss
     And "Submit answer" "button" should not exist
     When I am on "Course 1" course homepage
     Then the "Achieve a valid CAT result" completion condition of "My Adaptive Quiz" is displayed as "done"
+    ## Gradebook and completion read the same result (mod_adaptivequiz #14).
+    And I am on the "Course 1" "grades > User report > View" page
+    And the following should exist in the "user-grade" table:
+      | Grade item       | Grade      |
+      | My Adaptive Quiz | 45.70      |
+    And I am on "Course 1" course homepage
     ## The activity becomes unavailable; the own result stays readable.
     And the activity "adaptivecatquiz1" is no longer available to participants
     When I open the result page of the last attempt of "student1"
@@ -95,6 +101,12 @@ Feature: Completion follows the valid result, and the result stays readable (iss
     And "Submit answer" "button" should not exist
     When I am on "Course 1" course homepage
     Then the "Achieve a valid CAT result" completion condition of "My Adaptive Quiz" is displayed as "todo"
+    ## No valid result, no grade - not 0 (mod_adaptivequiz #14).
+    And I am on the "Course 1" "grades > User report > View" page
+    And the following should exist in the "user-grade" table:
+      | Grade item       | Grade |
+      | My Adaptive Quiz | -     |
+    And I am on "Course 1" course homepage
     And the activity "adaptivecatquiz1" is no longer available to participants
     When I open the result page of the last attempt of "student1"
     Then I should see "No overall result can be determined"
