@@ -2,6 +2,11 @@
 
 ## 1.3.0 (in Arbeit)
 
+- CI (2026100921): Die Last- und Messworkflows (`load-k6`, `load-jmeter`, `load-runtime-pool`,
+  `compare-versions`) riefen die Plugin-Skripte unter `moodle/local/catquiz/…` auf. Ab Moodle 5.1 liegt
+  der Code unter `public/`, die Skripte fehlten dort („Could not open input file“). Pfade auf
+  `public/local/catquiz/…` umgestellt; `loadtest_seed.php`, `measure_runtime_pool.php`,
+  `verify_recalculation_lock.php` und `tests/load/seed_large.php` lokal auf 5.1 aus `public/` geprüft.
 - Item-Pool schneller, Statistik neu definiert (#136, Entscheidungen vom 14.10.2026; 2026100920):
   - Ursache der 12 s bis zur ersten Frage (Trace auf lti, `pool:query`): MariaDB 10.11 rechnete die
     gruppierte Statistik-Unterabfrage je Pool-Item neu („lateral derived“/split materialization) und las

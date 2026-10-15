@@ -206,7 +206,7 @@ jobs:
           # rendering: without an item pool the manager and the statistics pages run
           # their pool queries against nothing, and the result says little about how
           # they behave in an installation that is actually in use.
-          php "$MOODLE_DIR/local/catquiz/tests/load/seed_large.php" \
+          php "$MOODLE_DIR/public/local/catquiz/tests/load/seed_large.php" \
             --users='${{ github.event.inputs.users || 2000 }}' \
             --items='${{ github.event.inputs.items || 20000 }}' > /tmp/seed.env
           cat /tmp/seed.env

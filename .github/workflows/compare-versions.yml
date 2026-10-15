@@ -252,7 +252,7 @@ jobs:
       - name: Seed ${{ matrix.items }} items
         run: |
           cd moodle
-          php -d memory_limit=4G local/catquiz/cli/loadtest_seed.php --reset \
+          php -d memory_limit=4G public/local/catquiz/cli/loadtest_seed.php --reset \
             --questions=${{ matrix.questions }} \
             --items=${{ matrix.items }} \
             --users=500 --attempts=500 --steps=2
@@ -313,7 +313,7 @@ jobs:
       - name: Measure
         run: |
           cd moodle
-          php -d memory_limit=4G local/catquiz/cli/measure_runtime_pool.php \
+          php -d memory_limit=4G public/local/catquiz/cli/measure_runtime_pool.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} \
             --contextid=${{ steps.pool.outputs.contextid }} \
             --repeats=${{ github.event.inputs.repeats || '7' }} \
@@ -341,7 +341,7 @@ jobs:
         working-directory: moodle
         run: |
           php admin/cli/purge_caches.php
-          php -d memory_limit=4G local/catquiz/cli/measure_screens.php \
+          php -d memory_limit=4G public/local/catquiz/cli/measure_screens.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} \
             --contextid=${{ steps.pool.outputs.contextid }} \
             --repeats=${{ github.event.inputs.repeats || '20' }} \
@@ -368,7 +368,7 @@ jobs:
         working-directory: moodle
         run: |
           php admin/cli/purge_caches.php
-          php -d memory_limit=4G local/catquiz/cli/measure_screens.php \
+          php -d memory_limit=4G public/local/catquiz/cli/measure_screens.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} \
             --contextid=${{ steps.pool.outputs.contextid }} \
             --repeats=${{ github.event.inputs.repeats || '20' }} \
@@ -381,7 +381,7 @@ jobs:
         working-directory: moodle
         run: |
           php admin/cli/purge_caches.php
-          php -d memory_limit=4G local/catquiz/cli/measure_screens.php \
+          php -d memory_limit=4G public/local/catquiz/cli/measure_screens.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} \
             --contextid=${{ steps.pool.outputs.contextid }} \
             --repeats=${{ github.event.inputs.repeats || '20' }} \
@@ -391,10 +391,10 @@ jobs:
       - name: "Restore this version and measure again (second pass)"
         working-directory: moodle
         run: |
-          rm -rf local/catquiz
-          cp -a "${{ github.workspace }}/plugin" local/catquiz
+          rm -rf public/local/catquiz
+          cp -a "${{ github.workspace }}/plugin" public/local/catquiz
           php admin/cli/purge_caches.php
-          php -d memory_limit=4G local/catquiz/cli/measure_screens.php \
+          php -d memory_limit=4G public/local/catquiz/cli/measure_screens.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} \
             --contextid=${{ steps.pool.outputs.contextid }} \
             --repeats=${{ github.event.inputs.repeats || '20' }} \
@@ -404,14 +404,14 @@ jobs:
       - name: Compare the two runs and gate on result equality
         working-directory: moodle
         run: |
-          php local/catquiz/cli/compare_runs.php \
+          php public/local/catquiz/cli/compare_runs.php \
             --a=/tmp/current-first.txt \
             --b=/tmp/compare-first.txt \
             --labela=current \
             --labelb=compare \
             | tee /tmp/verdict-first.txt
 
-          php local/catquiz/cli/compare_runs.php \
+          php public/local/catquiz/cli/compare_runs.php \
             --a=/tmp/current-second.txt \
             --b=/tmp/compare-second.txt \
             --labela=current \
@@ -442,19 +442,19 @@ jobs:
           # The first call holds the lock in the background; the second has to be
           # refused rather than wait, because a scheduled run that waits occupies the
           # queue instead of reporting that the work is already under way.
-          php local/catquiz/cli/verify_recalculation_lock.php \
+          php public/local/catquiz/cli/verify_recalculation_lock.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} --hold=15 &
           holder=$!
 
           sleep 4
-          php local/catquiz/cli/verify_recalculation_lock.php \
+          php public/local/catquiz/cli/verify_recalculation_lock.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} --expect=refused
 
           wait $holder
 
           # And once it is released the next run may start again - otherwise the first
           # check would also pass with a lock that is never given back.
-          php local/catquiz/cli/verify_recalculation_lock.php \
+          php public/local/catquiz/cli/verify_recalculation_lock.php \
             --scaleid=${{ steps.pool.outputs.scaleid }} --expect=granted
 
       - name: Upload the measurement
