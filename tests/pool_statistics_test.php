@@ -424,4 +424,53 @@ final class pool_statistics_test extends advanced_testcase {
         $this->assertSame(0, $context['questions'][102]->numberofgeneralattempts);
         $this->assertSame(9, $context['generalnumberofattempts_max']);
     }
+
+    /**
+     * The pool cache keeps CAT context, scope and subscale selection apart (issue #136, DoD
+     * "Cache-Schlüssel").
+     *
+     * One session can hold the pools of several tests. A key that left out one of these parts
+     * would hand one test the pool of another: other items, or the statistics of another CAT
+     * context. Every pool is checked built (cold) and from the cache (warm), each warm read after
+     * all other pools were cached.
+     *
+     * @return void
+     */
+    public function test_pool_cache_keys_keep_context_scope_and_subscales_apart(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $contextid = $this->make_context();
+        $othercontextid = $this->make_context();
+        $globalid = $this->make_scale(0, $contextid);
+        $sub1 = $this->make_scale($globalid, $contextid);
+        $sub2 = $this->make_scale($globalid, $contextid);
+        $onglobal = $this->make_item($globalid, $contextid);
+        $insub1 = $this->make_item($sub1, $contextid);
+        $insub2 = $this->make_item($sub2, $contextid);
+        // Two answers to the item of subscale 1 in the first context, none in the other.
+        $this->make_cat_attempt($insub1, $globalid, $contextid, 11, true, 1700000000);
+        $this->make_cat_attempt($insub1, $globalid, $contextid, 12, true, 1700000500);
+
+        // Name => [context, with subscales, selected subscales, items, pilot number of $insub1].
+        $cases = [
+            'global scale only' => [$contextid, false, [], [$onglobal], null],
+            'with all subscales' => [$contextid, true, [], [$onglobal, $insub1, $insub2], 2],
+            'subscale 1 selected' => [$contextid, true, [$sub1], [$onglobal, $insub1], 2],
+            'subscale 2 selected' => [$contextid, true, [$sub2], [$onglobal, $insub2], null],
+            'other context' => [$othercontextid, true, [], [$onglobal, $insub1, $insub2], 0],
+        ];
+        cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+        foreach (['built' => $cases, 'from the cache' => array_reverse($cases, true)] as $how => $run) {
+            foreach ($run as $name => [$context, $withsubscales, $selected, $items, $pilot]) {
+                $pool = (new catscale($globalid))->get_testitems($context, $withsubscales, null, $selected);
+                $ids = array_map('intval', array_keys($pool));
+                sort($ids);
+                sort($items);
+                $this->assertSame($items, $ids, "$name, $how: items");
+                if ($pilot !== null) {
+                    $this->assertEquals($pilot, $pool[$insub1]->attempts, "$name, $how: pilot number");
+                }
+            }
+        }
+    }
 }

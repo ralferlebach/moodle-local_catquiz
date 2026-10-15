@@ -120,6 +120,7 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 `../README.md` (Plugin-Beschreibung).
 - `issue-141-testlaenge.md` – Testlänge (Minimum/Maximum), Produktionsbefund 33 Slots, Export, Regrade (#141, mod_adaptivequiz #19).
 - `audit-2026-10-14.md` – Abnahmebericht der BUG-Audit-Restarbeiten: AK/DoD je Issue mit Nachweis, Testläufe, offene Punkte.
+- `re-audit-2026-10-15.md` – Abarbeitung des Re-Audits: Stand je AK/DoD für mod_adaptivequiz #14 und #136, #142–#145, was erledigt ist und was nur mit Staging-Messung oder 1.3 schließbar ist.
 - `statistik-119-132.md` – Lernverlauf als kumulative Reihe (#119), Grundgesamtheit „Ohne Versuch“ (#132), Nachweise.
 - `issue-139-frage-modal.md` – Frage-Modal: Zugriffsregeln, Fehlerpfad, STACK, doppelt ausgeführtes JS der lazy Tabs, Nachweise (#139).
 - `trusted-region-prior.md` – Streuung null/nahe null/keine Zahl im Trusted-Region-Prior: Regel, Audit, Tests (#116).

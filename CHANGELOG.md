@@ -2,6 +2,32 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Re-Audit vom 15.10.2026 (2026100922): Nachweise zu #136 und Stand #142–#145, siehe
+  `doc/re-audit-2026-10-15.md`.
+  - #136, „Kalter und warmer Cache liefern dieselbe Auswahl“: `teststrategy/cold_warm_selection_test`
+    spielt denselben Versuch (FASTEST, CLASSIC; Simulationspool) einmal mit vor jeder Frage geleerten
+    Caches und einmal normal; Fragenfolge und Ende identisch. Gegenprobe: ein aus dem Cache nur halb
+    geliefertes Pool lässt den Test rot werden.
+  - #136, Cache-Schlüssel: `pool_statistics_test::test_pool_cache_keys_keep_context_scope_and_subscales_apart`
+    – CAT-Kontext, Skalenumfang und Unterskalenauswahl getrennt, gebaut und aus dem Cache. Zahn-Test:
+    jeder der drei Schlüsselteile weggelassen – rot.
+  - mod_adaptivequiz #14 im Browser: `catquiz_completion_availability.feature` prüft zusätzlich das
+    Gradebook – gültiger Versuch mit Note, ungültiger ohne Note („-“, nicht 0).
+  - #142 ist mit diesem Stand ausgeliefert (Eintrag unten).
+- Issue #142 (Feedback-Snapshots im Session-Cache):
+  - Ursache: `attemptfeedback::load_feedbackdata()` schrieb je Zahl gespielter Fragen einen eigenen
+    Schlüssel `feedbackdata_<versuch>_<n>` und wollte beim Cache-Treffer den vorigen löschen, aber
+    `$numplayed = get_num_playedquestions() >= 1` bindet den Vergleich vor der Zuweisung: `$numplayed`
+    war `true`, gelöscht wurde immer `_0`, `_1 … _n-1` blieben. Beim Cache-Fehltreffer wurde gar nichts
+    gelöscht. Jeder Snapshot hält den ganzen Feedbackstand samt Fortschritt; die Sitzung wuchs mit dem
+    Quadrat der Testlänge (Simulation, 2.000 Bytes je Frage: 150 Snapshots / 22,8 MB nach 150 Fragen).
+  - Jetzt ein Snapshot je Versuch (`feedbackdata_<versuch>`), gestempelt mit der Fragenzahl; ein
+    Snapshot einer anderen Zahl wird nicht verwendet. Treffer und Fehltreffer enden gleich, andere
+    Versuche bleiben unberührt, Schlüssel der alten Form werden beim ersten Schreiben eines laufenden
+    Versuchs entfernt. Nach 150 Fragen: 1 Snapshot / 0,3 MB (gleiche Simulation).
+  - Inhalte unverändert (auch der bisherige Effekt, dass ein Fehltreffer den Versuch aus der DB liest).
+  - Test: `output/feedback_snapshot_retention_test` (0/1/2/42/150 Fragen, Altschlüssel nach Item 42,
+    Treffer/Fehltreffer, Wiederaufnahme/Retry, zwei Versuche); Messung: `cli/measure_feedback_cache.php`.
 - CI (2026100921): Die Last- und Messworkflows (`load-k6`, `load-jmeter`, `load-runtime-pool`,
   `compare-versions`) riefen die Plugin-Skripte unter `moodle/local/catquiz/…` auf. Ab Moodle 5.1 liegt
   der Code unter `public/`, die Skripte fehlten dort („Could not open input file“). Pfade auf
