@@ -33,7 +33,9 @@ use stdClass;
  *   belongs to the validity check in general and is to be negotiated again there.
  *
  * Not reported first, reporting switched off, hidden, the minimum standard error (a stopping criterion)
- * and the maximum number of questions play no part. A criterion the test does not set does not apply.
+ * and reaching the maximum number of questions play no part. A criterion the test does not set does not
+ * apply. Exceeding the maximum does (adaptivequizcatmodel_catquiz #8): it needs the question slots of the
+ * attempt, which the stored row does not hold, so the reason the validation recorded with the row is kept.
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -68,6 +70,10 @@ final class global_scale_validity {
         // Without a recorded standard error the maximum cannot be shown to be kept.
         if ($semax !== null && ($se === null || $se > $semax)) {
             $reasons[] = scale_result::REASON_SE_MAX;
+        }
+        $recorded = array_map('trim', explode(',', (string) ($row->validationstatus ?? '')));
+        if (in_array(scale_result::REASON_MAX_QUESTIONS_EXCEEDED, $recorded, true)) {
+            $reasons[] = scale_result::REASON_MAX_QUESTIONS_EXCEEDED;
         }
         if ($fraction !== null && ($n ?? 0) > 0) {
             if ($fraction <= 0.0) {

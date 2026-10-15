@@ -182,4 +182,82 @@ final class attempt_revalidator_test extends advanced_testcase {
         $this->assertSame(attempt_revalidator::NOT_FINALISED, $report->reason);
         $this->assertSame([1, 1, ''], $this->stored($running));
     }
+
+    /**
+     * Gives the attempt a question usage with this many slots.
+     *
+     * @param int $adaptiveattemptid
+     * @param int $slots
+     * @return void
+     */
+    private function slots(int $adaptiveattemptid, int $slots): void {
+        global $DB;
+        $context = \context_course::instance($this->getDataGenerator()->create_course()->id);
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category(['contextid' => $context->id]);
+        $quba = \question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
+        $quba->set_preferred_behaviour('deferredfeedback');
+        for ($i = 0; $i < $slots; $i++) {
+            $quba->add_question(\question_bank::load_question(
+                $generator->create_question('truefalse', null, ['category' => $category->id])->id
+            ));
+        }
+        $quba->start_all_questions();
+        \question_engine::save_questions_usage_by_activity($quba);
+        $DB->set_field('adaptivequiz_attempt', 'uniqueid', $quba->get_id(), ['id' => $adaptiveattemptid]);
+    }
+
+    /**
+     * Production regression 33/25 (adaptivequizcatmodel_catquiz #8): more items administered than the maximum
+     * is no valid result; the maximum itself is.
+     */
+    public function test_more_items_than_the_maximum_is_invalid(): void {
+        $this->resetAfterTest();
+        $over = $this->attempt(25);
+        $this->slots($over, 33);
+
+        $report = attempt_revalidator::revalidate($over, true);
+
+        $this->assertFalse($report->after);
+        $this->assertStringContainsString(scale_result::REASON_MAX_QUESTIONS_EXCEEDED, $report->reasons);
+        [$activity, $scale, $status] = $this->stored($over);
+        $this->assertSame([0, 0], [$activity, $scale]);
+        $this->assertStringContainsString(scale_result::REASON_MAX_QUESTIONS_EXCEEDED, $status);
+        // Carried to the grading of the global scale, which reads the stored row.
+        global $DB;
+        $catattemptid = $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $over]);
+        $row = $DB->get_record('local_catquiz_personparams', ['attemptid' => $catattemptid, 'catscaleid' => 5]);
+        $this->assertContains(
+            scale_result::REASON_MAX_QUESTIONS_EXCEEDED,
+            \local_catquiz\local\result\global_scale_validity::reasons($row, null)
+        );
+
+        $at = $this->attempt(24);
+        $this->slots($at, 25);
+        $this->assertTrue(attempt_revalidator::revalidate($at, true)->after, '25 of 25 is a regular end.');
+    }
+
+    /**
+     * A write that fails keeps nothing and leaves no transaction open - a batch over many attempts goes on.
+     */
+    public function test_a_failed_write_keeps_nothing(): void {
+        global $DB;
+        $this->preventResetByRollback();
+        $this->resetAfterTest();
+        $full = $this->attempt(12);
+        // An ability the column cannot hold: the write of the result fails.
+        $json = json_decode($DB->get_field('local_catquiz_attempts', 'json', ['attemptid' => $full]), true);
+        $json['personabilities_abilities'][5]['value'] = 1.0e12;
+        $DB->set_field('local_catquiz_attempts', 'json', json_encode($json), ['attemptid' => $full]);
+
+        try {
+            attempt_revalidator::revalidate($full, true);
+            $this->fail('The write was expected to fail.');
+        } catch (\dml_exception $e) {
+            $this->assertNotEmpty($e->getMessage());
+        }
+
+        $this->assertFalse($DB->is_transaction_started(), 'No transaction is left open.');
+        $this->assertSame([1, 1, ''], $this->stored($full));
+    }
 }
