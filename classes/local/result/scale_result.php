@@ -70,6 +70,12 @@ final class scale_result {
     public const REASON_MIN_QUESTIONS = 'min_questions_not_reached';
 
     /**
+     * @var string Rejection: the attempt administered more items than the test's maximum - the
+     *      production case of 33 slots at a maximum of 25 (adaptivequizcatmodel_catquiz #8).
+     */
+    public const REASON_MAX_QUESTIONS_EXCEEDED = 'max_questions_exceeded';
+
+    /**
      * Constructor.
      *
      * @param int $scaleid

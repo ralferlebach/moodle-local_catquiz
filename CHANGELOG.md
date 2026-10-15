@@ -2,6 +2,20 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Gültigkeit, Maximum überschritten (2026100923; adaptivequizcatmodel_catquiz #8): Ein Versuch mit mehr
+  gestellten Fragen als dem Maximum ist ungültig (`max_questions_exceeded`). Gezählt werden die
+  Fragen-Slots der Nutzung, verglichen mit dem CAT-Maximum aus dem Fortschritt, sonst mit
+  `maximumquestions` der Aktivität. Das ist der Produktionsfall 33 Slots bei Maximum 25 (Wiederholungen
+  nach Pilotfragen, vor 2026092901 und vor dem Slot-Riegel des Hosts).
+  - Wer betroffen ist: Neue Versuche können das Maximum nicht mehr überschreiten. Die Regel wirkt auf ältere
+    Versuche, wenn sie neu beurteilt werden (`revalidate_attempts.php`, Legacy-Recovery des Adapters).
+  - Das Erreichen des Maximums bleibt ein regulärer Abschluss.
+  - `global_scale_validity` übernimmt den Grund aus der gespeicherten Zeile, weil diese die Slots nicht
+    kennt.
+  - `attempt_revalidator`: Ein fehlgeschlagenes Schreiben rollt zurück und lässt keine offene Transaktion
+    stehen. Vorher hätte es einen Stapellauf über viele Versuche mitgerissen.
+  - Tests: `attempt_revalidator_test::test_more_items_than_the_maximum_is_invalid` und
+    `::test_a_failed_write_keeps_nothing`, mit Zahn-Tests.
 - Re-Audit vom 15.10.2026 (2026100922): Nachweise zu #136 und Stand #142–#145, siehe
   `doc/re-audit-2026-10-15.md`.
   - #136, „Kalter und warmer Cache liefern dieselbe Auswahl“: `teststrategy/cold_warm_selection_test`

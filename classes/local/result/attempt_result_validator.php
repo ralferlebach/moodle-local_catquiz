@@ -60,6 +60,8 @@ final class attempt_result_validator {
      *        otherwise every 'toreport' scale is primary.
      * @param int|null $answeredtotal Productive items answered in the whole attempt; null when unknown.
      * @param int $minquestions The test's minimum number of questions; 0 for none (issue #141).
+     * @param int|null $administered Items administered in the attempt (question slots); null when unknown.
+     * @param int $maxquestions The test's maximum number of questions; 0 for none.
      * @return attempt_result
      */
     public static function from_personabilities(
@@ -69,13 +71,19 @@ final class attempt_result_validator {
         array $fractionbyscale = [],
         ?int $primaryscaleid = null,
         ?int $answeredtotal = null,
-        int $minquestions = 0
+        int $minquestions = 0,
+        ?int $administered = null,
+        int $maxquestions = 0
     ): attempt_result {
         /* The minimum number of questions (issue #141), for the attempt as a whole. A test that
            ended before its minimum - after 3 of at least 12 items, say - has a running estimate,
            but no final result: every scale is invalid, whatever its own numbers look like. The
            estimate stays for diagnostics and the export. */
         $belowminimum = $minquestions > 0 && $answeredtotal !== null && $answeredtotal < $minquestions;
+        /* The maximum (adaptivequizcatmodel_catquiz #8). Reaching it is a regular end; administering
+           more is not - it happened before the host refused a slot beyond the maximum (33 slots at a
+           maximum of 25: repetitions after pilot items). Such an attempt has no valid result. */
+        $abovemaximum = $maxquestions > 0 && $administered !== null && $administered > $maxquestions;
 
         $results = [];
 
@@ -91,6 +99,9 @@ final class attempt_result_validator {
             // to tell - not, say, "all answers correct" after three items.
             if ($belowminimum) {
                 $reasons[] = scale_result::REASON_MIN_QUESTIONS;
+            }
+            if ($abovemaximum) {
+                $reasons[] = scale_result::REASON_MAX_QUESTIONS_EXCEEDED;
             }
 
             // Measurement-quality (statistical) reasons.
@@ -277,8 +288,51 @@ final class attempt_result_validator {
             $fractionbyscale,
             $primaryscaleid,
             $progress !== null ? $progress->get_num_answered_productive_questions() : null,
-            $progress !== null ? self::min_questions($progress) : 0
+            $progress !== null ? self::min_questions($progress) : 0,
+            self::administered_items($adaptiveattemptid),
+            self::max_questions($progress, $adaptiveattemptid)
         );
+    }
+
+    /**
+     * The items administered in an attempt: the question slots of its question usage.
+     *
+     * @param int $adaptiveattemptid
+     * @return int|null null when the attempt has no question usage.
+     */
+    public static function administered_items(int $adaptiveattemptid): ?int {
+        global $DB;
+        $uniqueid = $DB->get_field('adaptivequiz_attempt', 'uniqueid', ['id' => $adaptiveattemptid]);
+        if (empty($uniqueid)) {
+            return null;
+        }
+        return $DB->count_records('question_attempts', ['questionusageid' => $uniqueid]);
+    }
+
+    /**
+     * The test's maximum number of questions: the CAT maximum the progress carries, else the activity's.
+     *
+     * @param progress|null $progress
+     * @param int $adaptiveattemptid
+     * @return int 0 when neither sets one.
+     */
+    public static function max_questions(?progress $progress, int $adaptiveattemptid): int {
+        global $DB;
+        if ($progress !== null) {
+            $group = $progress->get_quiz_settings()->maxquestionsgroup ?? null;
+            $max = is_array($group) ? ($group['catquiz_maxquestions'] ?? 0) : ($group->catquiz_maxquestions ?? 0);
+            if ((int) $max > 0) {
+                return (int) $max;
+            }
+        }
+        $max = $DB->get_field_sql(
+            'SELECT q.maximumquestions
+               FROM {adaptivequiz_attempt} a
+               JOIN {adaptivequiz} q ON q.id = a.instance
+              WHERE a.id = :id',
+            ['id' => $adaptiveattemptid]
+        );
+        return max(0, (int) $max);
     }
 
     /**

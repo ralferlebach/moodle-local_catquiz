@@ -94,22 +94,28 @@ final class attempt_revalidator {
         }
 
         $transaction = $DB->start_delegated_transaction();
-        personparam_repository::save_attempt_result(
-            (int) $catattempt->id,
-            (int) $catattempt->userid,
-            $catattempt->contextid !== null ? (int) $catattempt->contextid : null,
-            $result,
-            true
-        );
-        // As at finalisation; the activity reads its own result from here.
-        if ($DB->get_manager()->field_exists('adaptivequiz_attempt', 'resultvalid')) {
-            $DB->update_record('adaptivequiz_attempt', (object) [
-                'id' => $adaptiveattemptid,
-                'resultvalid' => $report->after ? 1 : 0,
-                'resultstatus' => $report->after ? 'valid' : 'invalid',
-            ]);
+        try {
+            personparam_repository::save_attempt_result(
+                (int) $catattempt->id,
+                (int) $catattempt->userid,
+                $catattempt->contextid !== null ? (int) $catattempt->contextid : null,
+                $result,
+                true
+            );
+            // As at finalisation; the activity reads its own result from here.
+            if ($DB->get_manager()->field_exists('adaptivequiz_attempt', 'resultvalid')) {
+                $DB->update_record('adaptivequiz_attempt', (object) [
+                    'id' => $adaptiveattemptid,
+                    'resultvalid' => $report->after ? 1 : 0,
+                    'resultstatus' => $report->after ? 'valid' : 'invalid',
+                ]);
+            }
+            $transaction->allow_commit();
+        } catch (\Throwable $e) {
+            // Nothing of a failed attempt is kept, and the caller - a batch over many attempts, say -
+            // is not left inside an open transaction that would take the rest down with it.
+            $transaction->rollback($e);
         }
-        $transaction->allow_commit();
 
         return $report;
     }
