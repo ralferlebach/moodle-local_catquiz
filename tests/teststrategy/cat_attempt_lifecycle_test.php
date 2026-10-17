@@ -173,4 +173,113 @@ final class cat_attempt_lifecycle_test extends advanced_testcase {
 
         $this->assertSame([], $listed, 'A running attempt must not be listed.');
     }
+
+    /**
+     * Starting a CAT attempt through a reflection of the private start, as load() does.
+     *
+     * @param int $adaptiveattemptid
+     * @return int|null
+     */
+    private function start(int $adaptiveattemptid): ?int {
+        $method = new \ReflectionMethod(progress::class, 'start_cat_attempt');
+        $method->setAccessible(true);
+        return $method->invoke(null, $adaptiveattemptid, 'mod_adaptivequiz');
+    }
+
+    /**
+     * An activity attempt of a person.
+     *
+     * @param int $userid
+     * @return int
+     */
+    private function activity_attempt(int $userid): int {
+        global $DB;
+        return (int) $DB->insert_record('adaptivequiz_attempt', (object) [
+            'instance' => 1, 'userid' => $userid, 'uniqueid' => 0, 'attemptstate' => 'inprogress',
+            'attemptstopcriteria' => '', 'questionsattempted' => 0, 'difficultysum' => 0, 'standarderror' => 1,
+            'measure' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+    }
+
+    /**
+     * A CAT attempt a parallel request filed already is taken over, not refused (issue #95); one of
+     * another person or component is not.
+     */
+    public function test_an_existing_cat_attempt_is_taken_over_only_when_it_is_the_same(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $student = $this->getDataGenerator()->create_user();
+        $other = $this->getDataGenerator()->create_user();
+        $this->setUser($student);
+
+        $mine = $this->activity_attempt((int) $student->id);
+        $existing = (int) $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $student->id, 'attemptid' => $mine, 'component' => 'mod_adaptivequiz', 'status' => 2,
+            'json' => '{}', 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $this->assertSame($existing, $this->start($mine), 'The CAT attempt of a parallel request is this one.');
+
+        $theirs = $this->activity_attempt((int) $other->id);
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $student->id, 'attemptid' => $theirs, 'component' => 'mod_adaptivequiz', 'status' => 2,
+            'json' => '{}', 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $this->assertNull($this->start($theirs), 'A CAT attempt of the wrong person is not taken over.');
+        $this->assertDebuggingCalled();
+    }
+
+    /**
+     * Whoever is first to touch it, the CAT attempt belongs to the owner of the activity attempt (issue #95).
+     */
+    public function test_the_cat_attempt_belongs_to_the_owner_of_the_attempt(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $student = $this->getDataGenerator()->create_user();
+        $this->setAdminUser();
+
+        $attemptid = $this->activity_attempt((int) $student->id);
+        $catid = $this->start($attemptid);
+
+        $this->assertSame((int) $student->id, (int) $DB->get_field('local_catquiz_attempts', 'userid', ['id' => $catid]));
+    }
+
+    /**
+     * Cross collision (issues #95, #101): the activity attempt of B has the number of A's CAT attempt. B gets
+     * a CAT attempt and a progress of their own; A's attempt and progress stay as they are, and A goes on
+     * with their own progress.
+     */
+    public function test_the_attempt_id_of_one_person_is_the_cat_id_of_another(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $a = $this->getDataGenerator()->create_user();
+        $b = $this->getDataGenerator()->create_user();
+
+        $this->setUser($a);
+        $attempta = $this->activity_attempt((int) $a->id);
+        $progressa = progress::load($attempta, 'mod_adaptivequiz', 9, (object) []);
+        $progressa->save();
+        $cata = $DB->get_record('local_catquiz_attempts', ['id' => $progressa->get_catattemptid()], '*', MUST_EXIST);
+        $this->assertNotEquals((int) $cata->id, $attempta, 'Without different numbers there is nothing to test.');
+        $DB->import_record('adaptivequiz_attempt', (object) [
+            'id' => $cata->id, 'instance' => 1, 'userid' => $b->id, 'uniqueid' => 0, 'attemptstate' => 'inprogress',
+            'attemptstopcriteria' => '', 'questionsattempted' => 0, 'difficultysum' => 0, 'standarderror' => 1,
+            'measure' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+
+        $this->setUser($b);
+        $progressb = progress::load((int) $cata->id, 'mod_adaptivequiz', 9, (object) []);
+        $progressb->save();
+
+        $catb = $DB->get_record('local_catquiz_attempts', ['id' => $progressb->get_catattemptid()], '*', MUST_EXIST);
+        $this->assertSame((int) $cata->id, (int) $catb->attemptid, 'B files under their own activity attempt.');
+        $this->assertSame((int) $b->id, (int) $catb->userid);
+        $this->assertNotEquals((int) $cata->id, (int) $catb->id);
+        $this->assertEquals($cata, $DB->get_record('local_catquiz_attempts', ['id' => $cata->id]), 'A is unchanged.');
+        $this->assertSame((int) $a->id, (int) $DB->get_field('local_catquiz_progress', 'userid', ['attemptid' => $cata->id]));
+        $this->assertSame((int) $b->id, (int) $DB->get_field('local_catquiz_progress', 'userid', ['attemptid' => $catb->id]));
+
+        $this->setUser($a);
+        \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+        $this->assertEquals($progressa->get_id(), progress::load($attempta, 'mod_adaptivequiz', 9, (object) [])->get_id());
+    }
 }

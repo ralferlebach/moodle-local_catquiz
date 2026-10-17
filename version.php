@@ -27,11 +27,11 @@ defined('MOODLE_INTERNAL') || die();
 $plugin->component = 'local_catquiz';
 // Moodle 5.1 to 5.3. The declaration is backed by what has actually been run: the
 // plugin installs on 5.3 and its PHPUnit suite passes there, and the CI matrix
-// builds 5.1, 5.2 and main. The browser side - Bootstrap 5 markup, core modals,
+// builds 5.1, 5.2 and 5.3. The browser side - Bootstrap 5 markup, core modals,
 // the public webroot - is not verified yet; narrow this again if that work stalls.
 $plugin->supported = [501, 503];
 $plugin->release = '1.3.0';
-$plugin->version = 2026100923;
+$plugin->version = 2026101702;
 $plugin->requires = 2025100600;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [

@@ -239,6 +239,7 @@ final class ability_trace_roundtrip_test extends advanced_testcase {
         // Everything in-process is dropped, so the reload has to come from storage.
 
         \cache::make("local_catquiz", "adaptivequizattempt")->purge();
+        \cache::make("local_catquiz", "runtimepool")->purge();
 
         $reloaded = progress::load($attemptid, 'mod_adaptivequiz', $contextid, $quizsettings);
         $trace = $reloaded->get_ability_trace();

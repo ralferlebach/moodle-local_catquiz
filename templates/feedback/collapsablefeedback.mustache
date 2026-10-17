@@ -43,6 +43,9 @@
     }
 }}
 <h5>{{#str}}attemptscollapsableheading, local_catquiz {{/str}}</h5>
+{{! The accordion around the attempts - once per render, not once per attempt (issue #30). }}
+<div id="local-catquiz-attempts-{{uniqid}}">
 {{#attempt}}
     {{>local_catquiz/feedback/feedbacklist}}
 {{/attempt}}
+</div>

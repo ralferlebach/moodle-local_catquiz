@@ -26,6 +26,8 @@
 namespace local_catquiz;
 
 use Closure;
+use local_catquiz\event\numeric_fallback_applied;
+use local_catquiz\local\monitoring\numeric_notice;
 use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_item_response;
@@ -203,21 +205,16 @@ class catcalc {
 
         /* Issue #116: the prior's spread is forced away from zero - max(sd, 10^-PRECISION) - in
            model_raschmodel::sanitize_trusted_region_sd(), for every model. A spread raised to that
-           minimum is reported, not corrected silently. */
+           minimum is reported, not corrected silently - as an event, issue #106. */
         $effectivesd = model_raschmodel::sanitize_trusted_region_sd($sd);
         if (is_nan($sd) || $effectivesd > $sd) {
-            debugging(
-                sprintf(
-                    'local_catquiz: spread of the trusted-region prior raised to %s '
-                        . '(responses %d, mean %s, sd %s, models %s).',
-                    var_export($effectivesd, true),
-                    count($jfuns),
-                    var_export($mean, true),
-                    var_export($sd, true),
-                    implode(',', array_keys($modelnames))
-                ),
-                DEBUG_DEVELOPER
-            );
+            numeric_notice::report(numeric_fallback_applied::SPREAD_RAISED, [
+                'n' => count($jfuns),
+                'mean' => (float) $mean,
+                'sd' => (float) $sd,
+                'effectivesd' => (float) $effectivesd,
+                'models' => implode(',', array_keys($modelnames)),
+            ]);
         }
         $trfunction = fn($ability) => model_raschmodel::get_ability_tr_jacobian($ability, $mean, $effectivesd);
         $trderivate = fn($ability) => model_raschmodel::get_ability_tr_hessian($ability, $mean, $effectivesd);

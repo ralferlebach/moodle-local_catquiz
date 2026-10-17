@@ -308,7 +308,7 @@
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="adaptiveattemptid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="The attempt of the activity: adaptivequiz_attempt.id."/>
         <FIELD NAME="userid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="kind" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="first_item or next_item."/>
+        <FIELD NAME="kind" TYPE="char" LENGTH="20" NOTNULL="true" SEQUENCE="false" COMMENT="first_item, next_item or reload."/>
         <FIELD NAME="questionnumber" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Number of the item administered in the request, 1 for the first."/>
         <FIELD NAME="requestms" TYPE="number" LENGTH="12" NOTNULL="false" SEQUENCE="false" DECIMALS="3" COMMENT="Milliseconds from the start of the request to the end of the trace."/>
         <FIELD NAME="dbqueries" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="Database queries of the request."/>

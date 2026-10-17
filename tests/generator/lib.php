@@ -184,6 +184,7 @@ class local_catquiz_generator extends testing_module_generator {
             property_exists($adaptivequiz, 'routingcourse')
             || property_exists($adaptivequiz, 'routinggroupprefix')
             || property_exists($adaptivequiz, 'scalefeedbacktexts')
+            || property_exists($adaptivequiz, 'scalefeedbackprefix')
         ) {
             $targetid = property_exists($adaptivequiz, 'routingcourse')
                 ? (int) $DB->get_field('course', 'id', ['shortname' => $adaptivequiz->routingcourse], MUST_EXIST)
@@ -194,8 +195,12 @@ class local_catquiz_generator extends testing_module_generator {
                 $jsondata->{'feedback_scaleid_limit_upper_' . $scaleid . '_1'} = '100';
                 $jsondata->{'enrolment_message_checkbox_' . $scaleid . '_1'} = '1';
                 $scalename = $DB->get_field('local_catquiz_catscales', 'name', ['id' => $scaleid]);
+                // A prefix of its own tells the feedback of one activity from another's (mod_adaptivequiz #22).
+                $prefix = property_exists($adaptivequiz, 'scalefeedbackprefix')
+                    ? $adaptivequiz->scalefeedbackprefix
+                    : 'Written feedback for';
                 $jsondata->{'feedbackeditor_scaleid_' . $scaleid . '_1_editor'} = (object) [
-                    'text' => 'Written feedback for ' . $scalename, 'format' => FORMAT_HTML,
+                    'text' => $prefix . ' ' . $scalename, 'format' => FORMAT_HTML,
                 ];
                 // A scale routes only when it is reported (issue #117).
                 $jsondata->{'catquiz_scalereportcheckbox_' . $scaleid} = '1';

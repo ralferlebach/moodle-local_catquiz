@@ -1290,7 +1290,7 @@ class catquizstatistics {
 
         $url = (new moodle_url('/local/catquiz/export_statistics_csv.php', $params))->out(false);
         return sprintf(
-            '<a class="btn btn-info" style="margin: 1em 0" id="download-link" href="%s">%s</a>',
+            '<a class="btn btn-info" style="margin: 1em 0" href="%s">%s</a>',
             $url,
             get_string('download', 'admin')
         );

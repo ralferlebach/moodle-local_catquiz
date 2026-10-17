@@ -149,7 +149,42 @@ final class progress_rekey_upgrade_test extends advanced_testcase {
             'Several rows without a CAT attempt must coexist - that is what broke on MySQL with 0.'
         );
 
-        $this->assertSame(['rekeyed' => 3, 'started' => 1, 'orphans' => 2, 'duplicates' => 1], $result);
+        $this->assertSame(['rekeyed' => 3, 'started' => 1, 'orphans' => 2, 'duplicates' => 1, 'mismatched' => 0], $result);
+    }
+
+    /**
+     * Progress of one person is never filed under another person's CAT attempt or attempt (issue #95):
+     * the row stays unassigned, is counted, and the other person's rows are untouched.
+     */
+    public function test_progress_of_another_person_is_not_rekeyed(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->drop_the_new_key();
+
+        // CAT attempt of user 2; progress with the same pair, but of user 3.
+        $catid = $this->cat_attempt(52001);
+        $foreign = (int) $DB->insert_record('local_catquiz_progress', (object) [
+            'userid' => 3, 'component' => 'mod_adaptivequiz', 'attemptid' => 52001, 'json' => '{}', 'quizsettings' => '{}',
+        ]);
+        // A running attempt of user 2; progress with its number, but of user 3.
+        $DB->import_record('adaptivequiz_attempt', (object) [
+            'id' => 52002, 'instance' => 1, 'userid' => 2, 'uniqueid' => 9004,
+            'attemptstate' => 'inprogress', 'attemptstopcriteria' => '', 'questionsattempted' => 1,
+            'difficultysum' => 0, 'standarderror' => 1, 'measure' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $foreignrunning = (int) $DB->insert_record('local_catquiz_progress', (object) [
+            'userid' => 3, 'component' => 'mod_adaptivequiz', 'attemptid' => 52002, 'json' => '{}', 'quizsettings' => '{}',
+        ]);
+        $cats = $DB->count_records('local_catquiz_attempts');
+
+        $result = local_catquiz_rekey_progress_attempts();
+
+        $this->assertNull($DB->get_field('local_catquiz_progress', 'attemptid', ['id' => $foreign]));
+        $this->assertNull($DB->get_field('local_catquiz_progress', 'attemptid', ['id' => $foreignrunning]));
+        $this->assertSame(2, $result['mismatched']);
+        $this->assertSame($cats, $DB->count_records('local_catquiz_attempts'), 'No CAT attempt was filed for the wrong person.');
+        $this->assertSame(2, (int) $DB->get_field('local_catquiz_attempts', 'userid', ['id' => $catid]));
     }
 
     /**

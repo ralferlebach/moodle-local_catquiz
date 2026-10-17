@@ -55,6 +55,10 @@ class shortcodes {
      * @return string
      */
     public static function allquizattempts($shortcode, $args, $content, $env, $next) {
+        // The attempts of the whole site, with names and abilities: for CAT managers only, as in the CAT manager.
+        if (!has_capability('local/catquiz:manage_catscales', \context_system::instance())) {
+            return '';
+        }
         return (new quizattemptsdisplay())->render_table();
     }
 
@@ -132,6 +136,11 @@ class shortcodes {
         $courseid = $populated['course'];
         $globalscale = $populated['globalscale'];
         $testid = $populated['testid'];
+        // The statistics show the results of other people: the rule of the statistics export applies (#17).
+        $statisticscontext = \local_catquiz\local\access\context_resolver::for_statistics($courseid, $testid);
+        if (!\local_catquiz\local\access\feedback_access::can_view_other_users($statisticscontext)) {
+            return '';
+        }
         $endtime = $args['endtime'] ?? null;
         $starttime = $args['starttime'] ?? null;
 

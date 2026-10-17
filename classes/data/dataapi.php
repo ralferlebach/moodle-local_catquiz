@@ -25,6 +25,7 @@
 namespace local_catquiz\data;
 
 use cache;
+use cache_helper;
 use coding_exception;
 use context_system;
 use InvalidArgumentException;
@@ -326,15 +327,21 @@ class dataapi {
     public static function create_catscale(catscale_structure $catscale): int {
         global $DB;
 
-        $id = $DB->insert_record('local_catquiz_catscales', $catscale, true);
+        $isroot = intval($catscale->parentid) === 0;
+        $contextmissing = !empty($catscale->contextid)
+            && !$DB->record_exists('local_catquiz_catcontext', ['id' => $catscale->contextid]);
+        if ($isroot && $contextmissing) {
+            throw new moodle_exception('invalidcatcontext', 'local_catquiz');
+        }
 
-        // For a new parent catscale, create new auto-context.
-        if (
-            intval($catscale->parentid) === 0
-            && $catscale->contextid == 0
-        ) {
+        // Issue #81: the scale and its context are created together or not at all. A root scale used to be
+        // stored with context 0 first; a failure before its context existed left it pointing to nothing.
+        $transaction = $DB->start_delegated_transaction();
+        $id = $DB->insert_record('local_catquiz_catscales', $catscale, true);
+        if ($isroot && empty($catscale->contextid)) {
             $catcontext = self::create_new_context_for_scale($id, $catscale->name);
         }
+        $transaction->allow_commit();
 
         // Trigger catscale created event.
         $event = catscale_created::create([
@@ -349,9 +356,7 @@ class dataapi {
             ]);
         $event->trigger();
 
-        // Invalidate cache. TODO: Instead of invalidating cache, add the item to the cache.
-        $cache = cache::make('local_catquiz', 'catscales');
-        $cache->delete('allcatscales');
+        self::invalidate_catscale_caches();
         return $id;
     }
 
@@ -365,35 +370,35 @@ class dataapi {
      */
     public static function delete_catscale(int $catscaleid): array {
         global $DB;
-        $allcatscales = self::get_all_catscales();
-        $catscaleids = [];
-        foreach ($allcatscales as $catscale) {
-            $catscaleids[] = $catscale->parentid;
-        }
-        if (!in_array($catscaleid, $catscaleids)) {
-            $result = $DB->delete_records('local_catquiz_catscales', ['id' => $catscaleid]);
-        } else {
-            // Throw new moodle_exception('', 'local_catquiz').
-            // Cannot delete catscale which has children.
-            $result = false;
-            $message = get_string('cannotdeletescalewithchildren', 'local_catquiz');
-        }
-
-        // Invalidate cache. TODO: Instead of invalidating cache, delete the item from the cache.
-        $cache = cache::make('local_catquiz', 'catscales');
-        $cache->delete('allcatscales');
-        $cache->delete($catscaleid);
-
-        if ($result) {
-            return [
-                'success' => true,
-            ];
-        } else {
+        // Issue #52: the children are asked of the database, not of a cache that may not know them yet.
+        if ($DB->record_exists('local_catquiz_catscales', ['parentid' => $catscaleid])) {
             return [
                 'success' => false,
-                'message' => $message,
+                'message' => get_string('cannotdeletescalewithchildren', 'local_catquiz'),
             ];
         }
+        $result = $DB->delete_records('local_catquiz_catscales', ['id' => $catscaleid]);
+        self::invalidate_catscale_caches();
+
+        return $result ? ['success' => true] : [
+            'success' => false,
+            'message' => get_string('cannotdeletescale', 'local_catquiz'),
+        ];
+    }
+
+    /**
+     * Invalidates every cache that holds scales or what depends on them (issue #52).
+     *
+     * One place for create, update, delete and moving a scale: the scales themselves, the active scales
+     * and item numbers of the tests, the item parameters, the item tables, and the item pools - since
+     * issue #146 in a cache of their own, invalidated by the same events. The state of the running
+     * attempts in the sessions is left alone: it holds no pool any more.
+     *
+     * @return void
+     */
+    public static function invalidate_catscale_caches(): void {
+        cache_helper::purge_by_event('changesincatscales');
+        cache_helper::purge_by_event('changesintestitems');
     }
 
     /**
@@ -409,6 +414,15 @@ class dataapi {
         }
 
         $oldrecord = $DB->get_record('local_catquiz_catscales', ['id' => $catscale->id]);
+        // Issue #52: a scale cannot become a child of itself or of one of its descendants - the tree would
+        // become a cycle and every walk through it endless.
+        if (isset($catscale->parentid) && (int) $catscale->parentid !== 0) {
+            $descendants = catscale::get_subscale_ids((int) $catscale->id);
+            $newparent = (int) $catscale->parentid;
+            if ($newparent === (int) $catscale->id || in_array($newparent, array_map('intval', $descendants), true)) {
+                throw new moodle_exception('cannotmovescaleintoitself', 'local_catquiz');
+            }
+        }
         // If the context of the scale was changed, we have to update the active item params.
         // Only migrate when a (non-null) new context was actually supplied: a webservice
         // update that does not carry a contextid must not trigger a context migration.
@@ -431,10 +445,7 @@ class dataapi {
         ]);
         $event->trigger();
 
-        // Invalidate cache. TODO: Instead of invalidating cache, delete and add the item from the cache.
-        $cache = cache::make('local_catquiz', 'catscales');
-        $cache->delete('allcatscales');
-        $cache->delete($catscale->id);
+        self::invalidate_catscale_caches();
         return $result;
     }
 

@@ -30,6 +30,8 @@ use Exception;
 use local_catquiz\catcalc;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
+use local_catquiz\event\numeric_fallback_applied;
+use local_catquiz\local\monitoring\numeric_notice;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_raschmodel;
 use local_catquiz\local\model\model_responses;
@@ -229,8 +231,6 @@ class updatepersonability extends preselect_task {
      *
      */
     private function updateability(array $context, int $catscaleid, $isancestor = false, $parentscale = null) {
-        global $CFG;
-
         $startvalue = $context['person_ability'][$catscaleid] ?? $this->parentability;
         if ($parentscale && $this->ability_was_calculated($parentscale)) {
             $startvalue = $this->parentability;
@@ -265,21 +265,21 @@ class updatepersonability extends preselect_task {
             throw new Exception($message);
         }
 
-        if (is_nan($updatedability)) {
-            // In a production environment, we can use fallback values. However,
-            // during development we want to see when we get unexpected values.
-            if ($CFG->debug > 0) {
-                throw new moodle_exception('error', 'local_catquiz');
-            }
-            // If we already have an ability, just continue with that one and do not update it.
-            // Otherwise, use 0 as default value.
+        if (!is_finite($updatedability)) {
+            // Issue #106: NaN and INF alike. The previous ability is kept - or 0, when there is none - and
+            // the fallback is reported as an event, in development as in production, instead of silently
+            // or by an exception that only development saw.
+            $previous = $context['person_ability'][$catscaleid] ?? null;
+            $keep = is_numeric($previous) && is_finite((float) $previous);
             $context['skip_reason'] = 'abilityisnan';
-            if (!is_nan($context['person_ability'][$catscaleid])) {
-                return $context;
-            } else {
-                $context['person_ability'][$catscaleid] = 0;
-                return $context;
-            }
+            $context['person_ability'][$catscaleid] = $keep ? (float) $previous : 0;
+            numeric_notice::report(numeric_fallback_applied::ABILITY_NOT_FINITE, [
+                'catscaleid' => $catscaleid,
+                'n' => is_countable($this->arrayresponses) ? count($this->arrayresponses) : 0,
+                'value' => (float) $updatedability,
+                'kept' => $keep ? 'previous' : 'zero',
+            ]);
+            return $context;
         }
 
         if ($this->ability_was_calculated($catscaleid)) {
@@ -543,17 +543,13 @@ class updatepersonability extends preselect_task {
         $sd = sqrt($sum / count($existingabilities));
         if (model_raschmodel::sanitize_trusted_region_sd($sd) > $sd) {
             // Issue #116: e.g. every past ability the same. Kept as it is - the estimator raises the
-            // spread to its minimum - but made visible, without any person's value.
-            debugging(
-                sprintf(
-                    'local_catquiz: past abilities of scale %d have (almost) no spread (N %d, mean %.4f, sd %s).',
-                    (int) ($this->context['catscaleid'] ?? 0),
-                    count($existingabilities),
-                    $mean,
-                    var_export($sd, true)
-                ),
-                DEBUG_DEVELOPER
-            );
+            // spread to its minimum - but made visible, without any person's value: an event, issue #106.
+            numeric_notice::report(numeric_fallback_applied::NO_SPREAD, [
+                'catscaleid' => (int) ($this->context['catscaleid'] ?? 0),
+                'n' => count($existingabilities),
+                'mean' => (float) $mean,
+                'sd' => (float) $sd,
+            ]);
         }
         $this->sdability = $sd;
         return $sd;

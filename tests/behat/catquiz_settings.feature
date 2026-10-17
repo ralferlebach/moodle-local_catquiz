@@ -540,10 +540,11 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And I click on "Feedback for “Simulation”" "text"
     And I should see "Feedback for “SimC”" in the "//div[@data-name='catquiz_feedback_header_Simulation']" "xpath_element"
     And "//div[@data-name='catquiz_feedback_header_SimC01']" "xpath_element" should exist
+    ## Feedback for the scale just switched on, then saved. Its fields come when it is opened (issue #51).
+    And I click on "Feedback for “SimC”" "text"
+    And I wait until the page is ready
     And "//div[@data-name='feedback_scale_SimC_range_1']" "xpath_element" should exist
     And "//div[@data-name='feedback_scale_SimC_range_2']" "xpath_element" should exist
-    ## Feedback for the scale just switched on, then saved.
-    And I click on "Feedback for “SimC”" "text"
     And I set the field "Feedback" in the "//div[@data-name='feedback_scale_SimC_range_1']" "xpath_element" to "Feedback-SimC_range_1"
     And I click on "Save and display" "button"
     And "Save and display" "button" should not exist
@@ -552,6 +553,7 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     Then the field with xpath "//input[@data-name='SimC']" matches value "checked"
     And I click on "Feedback for “Simulation”" "text"
     And I click on "Feedback for “SimC”" "text"
+    And I wait until the page is ready
     And the field "Feedback" in the "//div[@data-name='feedback_scale_SimC_range_1']" "xpath_element" matches value "Feedback-SimC_range_1"
 
   @javascript
@@ -598,7 +600,9 @@ Feature: As a teacher I setup adaptive quiz with CATquiz Scales and Feedbacks.
     And "//div[starts-with(@data-name, 'catquiz_feedback_header_Sim')]" "xpath_element" should not exist
     And "//div[@data-name='feedback_scale_Ressourcen_range_1']" "xpath_element" should exist
     And "//div[starts-with(@data-name, 'feedback_scale_Sim')]" "xpath_element" should not exist
-    ## Saved without validation errors for fields of the old scale.
+    ## Saved without validation errors for fields of the old scale. The new scale has two questions: a
+    ## minimum above that is refused (issue #60), so it is set to what the pool allows.
+    And I set the field "maxquestionsgroup[catquiz_minquestions]" to "1"
     And I click on "Save and display" "button"
     And "Save and display" "button" should not exist
     And I follow "Settings"

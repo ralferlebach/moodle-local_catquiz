@@ -24,6 +24,7 @@
 
 namespace local_catquiz\teststrategy\context\loader;
 
+use local_catquiz\local\attempt_cache;
 use cache;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
@@ -98,6 +99,12 @@ class personability_loader implements contextloaderinterface {
             $this->progress->capture_preattempt_abilities($personparams);
 
             $cache->set('abilitybeforeattempt', $personparams[$context['catscaleid']]);
+            // Issue #146: also under the attempt's own key - another attempt of the session does not overwrite it.
+            attempt_cache::set(
+                'abilitybeforeattempt',
+                (int) $this->progress->get_attemptid(),
+                $personparams[$context['catscaleid']]
+            );
             // For the lowest skillgap teststrategy, we need at least the ability of the main scale.
             $this->progress->set_ability($personparams[$context['catscaleid']], $context['catscaleid']);
 

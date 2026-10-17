@@ -146,6 +146,8 @@ class status {
         self::CLOSED_BY_TIMELIMIT => 9,
         self::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM => 10,
         self::STOP_TARGET_PRECISION => 11,
+        // Issue #64: a general error is stored as such, not as "undefined". A new number; none is reused.
+        self::ERROR_GENERAL => 12,
     ];
 
     /**

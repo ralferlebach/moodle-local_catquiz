@@ -297,7 +297,8 @@ final class pool_statistics_test extends advanced_testcase {
         [$globalid, $subid, $contextid, $questionid, $lastanswer] = $this->fixture();
 
         [$select, $from, $where, , $params] = catquiz::return_sql_for_catscalequestions([$globalid, $subid], $contextid);
-        $rows = $DB->get_records_sql("SELECT $select FROM $from WHERE $where", $params);
+        // One row per item, keyed by the item (issue #104); the question is the column id.
+        $rows = array_column(array_values($DB->get_records_sql("SELECT $select FROM $from WHERE $where", $params)), null, 'id');
 
         $this->assertEquals(2, $rows[$questionid]->attempts);
         $this->assertEquals($lastanswer, $rows[$questionid]->astatlastattempttime);
@@ -369,7 +370,7 @@ final class pool_statistics_test extends advanced_testcase {
             [],
             (int) $user->id
         );
-        $full = $DB->get_records_sql("SELECT $select FROM $from WHERE $where", $params);
+        $full = array_column(array_values($DB->get_records_sql("SELECT $select FROM $from WHERE $where", $params)), null, 'id');
         $this->assertEquals($full[$questionid]->attempts, $pool[$questionid]->attempts);
         $this->assertEquals($full[$questionid]->userlastattempttime, $pool[$questionid]->userlastattempttime);
     }

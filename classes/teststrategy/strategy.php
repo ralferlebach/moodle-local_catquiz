@@ -24,6 +24,7 @@
 
 namespace local_catquiz\teststrategy;
 
+use local_catquiz\local\attempt_cache;
 use cache;
 use coding_exception;
 use Exception;
@@ -264,6 +265,11 @@ abstract class strategy {
             // attempt time).
             $this->cache->set('endtime', $maxtime);
             $this->cache->set('catquizerror', status::EXCEEDED_MAX_ATTEMPT_TIME);
+            // Mod_adaptivequiz #22: the error belongs to this attempt, not to whatever page reads it next.
+            $this->cache->set('catquizerrorattempt', (int) ($context['attemptid'] ?? 0));
+            // Issue #146: also under the attempt's own keys - another attempt of the session does not overwrite them.
+            attempt_cache::set('endtime', (int) ($context['attemptid'] ?? 0), $maxtime);
+            attempt_cache::set('catquizerror', (int) ($context['attemptid'] ?? 0), status::EXCEEDED_MAX_ATTEMPT_TIME);
             $this->persist_stage_counts();
 
             return result::err(status::EXCEEDED_MAX_ATTEMPT_TIME);
@@ -400,9 +406,16 @@ abstract class strategy {
         }
 
         if (!$selectedquestion) {
+            /* Issue #64: a filter after noremainingquestions emptied the pool. That ended the test with a
+               general error, stored as "undefined", and without saving the progress or the feedback. It is
+               the same end as an empty pool - before the minimum, a status of its own - and goes the same way. */
+            $minimum = (int) ($this->context['minimumquestions'] ?? 0);
+            $answered = $this->progress->get_num_answered_productive_questions();
+            $status = $minimum > 0 && $answered < $minimum
+                ? status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM
+                : status::ERROR_NO_REMAINING_QUESTIONS;
             $this->persist_stage_counts();
-
-            return result::err();
+            return $this->after_error(result::err($status));
         }
 
         $this->register_administered_question($selectedquestion, $context);
@@ -423,6 +436,9 @@ abstract class strategy {
         $this->update_attemptfeedback($this->context);
         $this->cache->set('endtime', time());
         $this->cache->set('catquizerror', $result->get_status());
+        $this->cache->set('catquizerrorattempt', (int) ($this->context['attemptid'] ?? 0));
+        attempt_cache::set('endtime', (int) ($this->context['attemptid'] ?? 0), time());
+        attempt_cache::set('catquizerror', (int) ($this->context['attemptid'] ?? 0), $result->get_status());
 
         // The counts are written by persist_stage_counts(), which runs on
         // every completed selection - not only here. The reported abort never reaches

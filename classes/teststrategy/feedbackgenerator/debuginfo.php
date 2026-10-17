@@ -95,7 +95,7 @@ class debuginfo extends feedbackgenerator {
      *
      */
     protected function get_teacherfeedback(array $data): array {
-        global $OUTPUT, $DB, $CFG;
+        global $OUTPUT, $DB;
 
         // The export tab is always available to users with the feedback
         // permission. The raw debug exports below are added only when debug
@@ -181,7 +181,15 @@ class debuginfo extends feedbackgenerator {
                 'attemptid' => $attemptid,
                 'description' => $description,
                 'debuginfo_raw' => rawurlencode(nl2br(str_replace(" ", "&nbsp;", var_export($data, true)))),
-                'cfg->root' => $CFG->wwwroot,
+                // Issue #32: full addresses instead of a root to glue paths to.
+                'exportcsvurl' => (new \moodle_url(
+                    '/local/catquiz/export_attempt_csv.php',
+                    ['attemptid' => $attemptid]
+                ))->out(false),
+                'exportpdfurl' => (new \moodle_url(
+                    '/local/catquiz/export_debuginfo_pdf.php',
+                    ['attemptid' => $attemptid, 'cid' => $contextid]
+                ))->out(false),
                 'isteacher' => true,
                 'debugenabled' => $debugenabled,
                 'iscatmanager' => $debugenabled && has_capability(

@@ -28,7 +28,7 @@
 use local_catquiz\local\access\context_resolver;
 use local_catquiz\local\attempt\attempt_export;
 
-require_once('../../config.php');
+require_once(__DIR__ . '/../../config.php');
 require_once($CFG->libdir . '/csvlib.class.php');
 
 $adaptiveattemptid = required_param('attemptid', PARAM_INT);

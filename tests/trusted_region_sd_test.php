@@ -22,7 +22,10 @@ use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_item_response;
 use local_catquiz\local\model\model_person_param;
 use local_catquiz\local\model\model_raschmodel;
+use local_catquiz\event\numeric_fallback_applied;
+use local_catquiz\local\monitoring\numeric_notice;
 use local_catquiz\teststrategy\preselect_task\updatepersonability;
+use local_catquiz\teststrategy\progress;
 
 /**
  * The trusted-region prior with a spread of zero, near zero or no number at all (issue #116).
@@ -31,6 +34,8 @@ use local_catquiz\teststrategy\preselect_task\updatepersonability;
  * derivatives divided by zero. The prior is needed wherever the estimate leaves the trusted region, so
  * its spread is forced away from zero in one place for every model: max(sd, 10^-PRECISION).
  *
+ * Every fallback is reported as an event with figures only, not as a developer notice (issue #106).
+ *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -38,7 +43,32 @@ use local_catquiz\teststrategy\preselect_task\updatepersonability;
 #[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_raschmodel::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\catcalc::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\updatepersonability::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(numeric_notice::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(numeric_fallback_applied::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(mathcat::class)]
 final class trusted_region_sd_test extends advanced_testcase {
+    /**
+     * Every test is a request of its own.
+     */
+    protected function setUp(): void {
+        parent::setUp();
+        numeric_notice::reset();
+    }
+
+    /**
+     * The numeric fallbacks a call reported.
+     *
+     * @param callable $call
+     * @return array [result of the call, the reasons reported, the events]
+     */
+    private function reported(callable $call): array {
+        $sink = $this->redirectEvents();
+        $result = $call();
+        $events = array_values(array_filter($sink->get_events(), fn($e) => $e instanceof numeric_fallback_applied));
+        $sink->close();
+        return [$result, array_map(fn($e) => $e->other['reason'], $events), $events];
+    }
+
     /**
      * The smallest spread the prior is built from.
      *
@@ -148,20 +178,153 @@ final class trusted_region_sd_test extends advanced_testcase {
     public function test_estimation_stays_finite_with_a_raised_spread(float $sd): void {
         $this->resetAfterTest();
         foreach ([1.0, 0.0] as $fraction) {
+            // The same figures are reported once per request; each fraction stands for a request of its own.
+            numeric_notice::reset();
             [$responses, $items] = $this->sequence($fraction);
-            $ability = catcalc::estimate_person_ability($responses, $items, 0.0, 0.2, $sd, -10.0, 10.0, true);
-            $this->assertDebuggingCalled(null, DEBUG_DEVELOPER);
+            [$ability, $reasons, $events] = $this->reported(
+                fn() => catcalc::estimate_person_ability($responses, $items, 0.0, 0.2, $sd, -10.0, 10.0, true)
+            );
+            $this->assertSame([numeric_fallback_applied::SPREAD_RAISED], $reasons, "fraction $fraction");
+            $this->assertSame(self::minimum(), $events[0]->other['effectivesd']);
+            $this->assertSame(8, $events[0]->other['n']);
+            $this->assertStringContainsString('spreadraised', $events[0]->get_description());
 
             $this->assertTrue(is_finite($ability), "fraction $fraction");
             $this->assertGreaterThanOrEqual(-10.0, $ability);
             $this->assertLessThanOrEqual(10.0, $ability);
-            $this->assertSame(
-                $ability,
-                catcalc::estimate_person_ability($responses, $items, 0.0, 0.2, self::minimum(), -10.0, 10.0, true),
-                'The same as the estimate with the minimum spread.'
+            [$minimumability, $reasons] = $this->reported(
+                fn() => catcalc::estimate_person_ability($responses, $items, 0.0, 0.2, self::minimum(), -10.0, 10.0, true)
             );
-            $this->assertDebuggingNotCalled();
+            $this->assertSame($ability, $minimumability, 'The same as the estimate with the minimum spread.');
+            $this->assertSame([], $reasons, 'The minimum itself is no fallback.');
         }
+        $this->assertDebuggingNotCalled();
+    }
+
+    /**
+     * The same fallback with the same figures is reported once per request; other figures, or a new
+     * request, are reported again. The event data can be stored, also for a spread that is no number.
+     */
+    public function test_a_fallback_is_reported_once_per_request(): void {
+        $this->resetAfterTest();
+        [$responses, $items] = $this->sequence(1.0);
+        $estimate = fn($sd) => catcalc::estimate_person_ability($responses, $items, 0.0, 0.2, $sd, -10.0, 10.0, true);
+
+        [, $reasons] = $this->reported(fn() => [$estimate(0.0), $estimate(0.0), $estimate(1e-15)]);
+        $this->assertCount(2, $reasons, 'Twice the same figures, once others.');
+
+        numeric_notice::reset();
+        [, $reasons, $events] = $this->reported(fn() => $estimate(NAN));
+        $this->assertCount(1, $reasons);
+        $this->assertSame('NAN', $events[0]->other['sd']);
+        $this->assertNotFalse(json_encode($events[0]->other));
+        $this->assertDebuggingNotCalled();
+    }
+
+    /**
+     * An estimate that is no finite number keeps the previous ability, or 0 - reported, without an
+     * exception and without a developer notice.
+     */
+    public function test_an_ability_that_is_no_finite_number_keeps_the_previous_one(): void {
+        $this->resetAfterTest();
+        [$responses] = $this->sequence(1.0, 4);
+        // An item parameter that is no number makes the estimate no number.
+        $items = new model_item_param_list();
+        foreach (array_keys($responses) as $id) {
+            $item = new model_item_param($id, 'raschbirnbaum');
+            $item->set_parameters(['difficulty' => NAN, 'discrimination' => 1.3]);
+            $items->add($item);
+        }
+        $task = new class ($items) extends updatepersonability {
+            /** @var model_item_param_list The items. */
+            private model_item_param_list $items;
+
+            /**
+             * Constructor.
+             *
+             * @param model_item_param_list $items
+             */
+            public function __construct(model_item_param_list $items) {
+                $this->items = $items;
+            }
+
+            /**
+             * The items of every scale.
+             *
+             * @param int $catscaleid
+             * @return model_item_param_list
+             */
+            protected function get_item_param_list($catscaleid): model_item_param_list {
+                return $this->items;
+            }
+
+            /**
+             * The range of every scale.
+             *
+             * @param int $catscaleid
+             * @return float
+             */
+            protected function get_min_ability_for_scale(int $catscaleid): float {
+                return -5.0;
+            }
+
+            /**
+             * The range of every scale.
+             *
+             * @param int $catscaleid
+             * @return float
+             */
+            protected function get_max_ability_for_scale(int $catscaleid): float {
+                return 5.0;
+            }
+
+            /**
+             * No trusted-region factor.
+             *
+             * @return bool
+             */
+            protected function use_tr_factor(): bool {
+                return false;
+            }
+        };
+        $task->arrayresponses = $responses;
+        $progress = (new \ReflectionClass(progress::class))->newInstanceWithoutConstructor();
+        $played = new \ReflectionProperty(progress::class, 'playedquestionsbyscale');
+        $played->setAccessible(true);
+        $played->setValue($progress, []);
+        foreach (['progress' => $progress, 'parentability' => 0.0, 'parentse' => 1.0] as $name => $value) {
+            $property = new \ReflectionProperty(updatepersonability::class, $name);
+            $property->setAccessible(true);
+            $property->setValue($task, $value);
+        }
+        $update = new \ReflectionMethod(updatepersonability::class, 'updateability');
+        $update->setAccessible(true);
+
+        foreach ([[0.4, 0.4, 'previous'], [null, 0, 'zero'], [NAN, 0, 'zero']] as [$previous, $expected, $kept]) {
+            numeric_notice::reset();
+            $context = ['person_ability' => $previous === null ? [] : [7 => $previous]];
+            [$result, $reasons, $events] = $this->reported(fn() => $update->invoke($task, $context, 7));
+            $this->assertSame($expected, $result['person_ability'][7], var_export($previous, true));
+            $this->assertSame('abilityisnan', $result['skip_reason']);
+            $this->assertSame([numeric_fallback_applied::ABILITY_NOT_FINITE], $reasons);
+            $this->assertSame($kept, $events[0]->other['kept']);
+            $this->assertSame(7, $events[0]->other['catscaleid']);
+        }
+        $this->assertDebuggingNotCalled();
+    }
+
+    /**
+     * The density helpers use the same lower bound for the spread: finite for a spread of zero.
+     */
+    public function test_density_helpers_use_the_same_lower_bound(): void {
+        foreach (['gaussian_density', 'gaussian_density_derivative1', 'gaussian_density_derivative2'] as $function) {
+            foreach ([0.0, -1.0, NAN] as $sd) {
+                $value = mathcat::$function(0.0005, 0.0, $sd);
+                $this->assertTrue(is_finite($value), "$function, sd " . var_export($sd, true));
+                $this->assertSame(mathcat::$function(0.0005, 0.0, self::minimum()), $value);
+            }
+        }
+        $this->assertEqualsWithDelta(1 / sqrt(2 * M_PI), mathcat::gaussian_density(0.0, 0.0, 1.0), 1e-15);
     }
 
     /**
@@ -171,8 +334,11 @@ final class trusted_region_sd_test extends advanced_testcase {
         $this->resetAfterTest();
         [$responses, $items] = $this->sequence(1.0);
 
-        $ability = catcalc::estimate_person_ability($responses, $items, 0.0, 0.2, 0.8, -10.0, 10.0, false);
+        [$ability, $reasons] = $this->reported(
+            fn() => catcalc::estimate_person_ability($responses, $items, 0.0, 0.2, 0.8, -10.0, 10.0, false)
+        );
 
+        $this->assertSame([], $reasons);
         $this->assertDebuggingNotCalled();
         $this->assertTrue(is_finite($ability));
         $this->assertGreaterThan(0.2, $ability, 'All correct lies above the mean.');
@@ -221,16 +387,21 @@ final class trusted_region_sd_test extends advanced_testcase {
         $this->resetAfterTest();
 
         foreach ([1, 2, 49] as $n) {
-            $this->assertSame(1.0, $this->past_spread(array_fill(0, $n, 0.2)), "N $n");
+            [$sd, $reasons] = $this->reported(fn() => $this->past_spread(array_fill(0, $n, 0.2)));
+            $this->assertSame(1.0, $sd, "N $n");
+            $this->assertSame([], $reasons, "N $n");
         }
-        $this->assertDebuggingNotCalled();
 
         foreach ([50, 51, 500] as $n) {
-            $sd = $this->past_spread(array_fill(0, $n, 0.2));
+            [$sd, $reasons, $events] = $this->reported(fn() => $this->past_spread(array_fill(0, $n, 0.2)));
             $this->assertEqualsWithDelta(0.0, $sd, 1e-12, "N $n");
             $this->assertSame(self::minimum(), model_raschmodel::sanitize_trusted_region_sd($sd), "N $n: raised.");
-            $this->assertDebuggingCalled(null, DEBUG_DEVELOPER);
+            $this->assertSame([numeric_fallback_applied::NO_SPREAD], $reasons, "N $n");
+            $this->assertSame($n, $events[0]->other['n']);
+            $this->assertSame(7, $events[0]->other['catscaleid']);
+            $this->assertArrayNotHasKey('userid', $events[0]->other, 'Figures only.');
         }
+        $this->assertDebuggingNotCalled();
     }
 
     /**

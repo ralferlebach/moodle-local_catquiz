@@ -100,5 +100,8 @@ Feature: An attempt ends for a reason the participant is told, and the result fo
     And I click on "Submit answer" "button"
     And I wait until the page is ready
     Then I should see "The time available for this test has run out" in the "Your test has ended" "dialogue"
+    ## The test's limit - not the time since the start, which is ten minutes here (mod_adaptivequiz #20).
+    And I should see "The time limit was 5 mins." in the "Your test has ended" "dialogue"
     And I click on "OK" "button" in the "Your test has ended" "dialogue"
     And "Submit answer" "button" should not exist
+    And "[data-region='adaptivequiz-attempt-feedback']" "css_element" should be visible
