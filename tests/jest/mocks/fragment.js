@@ -1,1 +1,1 @@
-export default {processCollectedJavascript: jest.fn(js => js)};
+export default {processCollectedJavascript: jest.fn(js => js), loadFragment: jest.fn()};

@@ -753,55 +753,30 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
         global $DB;
         // If we don't know the catscaleid we get it via the catscalename.
         if (empty($newrecord['catscaleid']) && !empty($newrecord['catscalename'])) {
-            $sql = "SELECT *
-                    FROM {local_catquiz_catscales}
-                    WHERE name = :name";
-            // Check if catscale with this name exisits.
-            // Check if parentscales are given in newrecord and if they match with the path of the found scale.
-            $match = null;
-            $catscales = $DB->get_records_sql($sql, ['name' => $newrecord['catscalename']]);
-            if (array_key_exists('parentscalenames', $newrecord)) {
-                $ancestorsnewrecord = array_reverse(explode('|', $newrecord['parentscalenames']));
-                // Check if any of the matching scales also has a matching list of ancestors.
-                foreach ($catscales as $candidatescale) {
-                    $ancestorsfoundscale = catscale::get_ancestors($candidatescale->id, 2);
-                    if ($ancestorsfoundscale == $ancestorsnewrecord) {
-                        $match = $candidatescale;
-                        break;
-                    }
-                }
-            }
-            if (!empty($newrecord['parentscalenames'])) {
-                if ($match) {
-                    // Same path, so we match.
-                    $catscaleid = $match->id;
-                    $newrecord['catscaleid'] = $catscaleid;
-
-                    if (empty($newrecord['catscaleid'])) {
-                        throw new moodle_exception('nocatscaleid', 'local_catquiz');
-                    }
-                    if (
-                        catscale::is_assigned_to_parent_scale($catscaleid, $newrecord['componentid'])
-                        || catscale::is_assigned_to_subscale($catscaleid, $newrecord['componentid'])
-                    ) {
-                        $infodata = new stdClass();
-                        $infodata->newscalename = catscale::get_link_to_catscale($newrecord['catscaleid']);
-                        $infodata->componentid = $newrecord['componentid'];
-                        $newrecord['error'] = get_string('itemassignedtoparentorsubscale', 'local_catquiz', $infodata);
-                        return $newrecord;
-                    }
-                } else {
-                    // If at this point, the scale is still empty, we need to create and use it.
-                    self::create_scales_for_new_record($newrecord);
-                }
-            } else if ($newrecord['parentscalenames'] == "0") {
-                // To enable import to parent scales, set 'parentscalenames' to "0".
-                self::create_scales_for_new_record($newrecord, false);
-            } else if (!isset($newrecord['parentscalenames']) || $newrecord['parentscalenames'] === "") {
+            // Issue #76: the path decides, resolved from the root - never a name alone. "0" names a root scale.
+            $parentnames = (string) ($newrecord['parentscalenames'] ?? '');
+            if ($parentnames === '') {
                 $newrecord['error'] = get_string('noparentsgiven', 'local_catquiz', $newrecord);
                 return $newrecord;
-            } else {
-                self::create_scales_for_new_record($newrecord);
+            }
+            $path = $parentnames === '0' ? [] : explode('|', $parentnames);
+            $path[] = $newrecord['catscalename'];
+            $existed = false;
+            $catscaleid = self::resolve_scale_path($path, $newrecord, $existed);
+            if (!$catscaleid) {
+                return $newrecord;
+            }
+            $newrecord['catscaleid'] = $catscaleid;
+            if (
+                $existed
+                && (catscale::is_assigned_to_parent_scale($catscaleid, $newrecord['componentid'])
+                    || catscale::is_assigned_to_subscale($catscaleid, $newrecord['componentid']))
+            ) {
+                $infodata = new stdClass();
+                $infodata->newscalename = catscale::get_link_to_catscale($newrecord['catscaleid']);
+                $infodata->componentid = $newrecord['componentid'];
+                $newrecord['error'] = get_string('itemassignedtoparentorsubscale', 'local_catquiz', $infodata);
+                return $newrecord;
             }
         } else {
             self::create_scales_for_new_record($newrecord);
@@ -974,6 +949,63 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
             }
         }
     }
+    /**
+     * The scale at the end of a path of scale names, created where the path does not exist yet (issue #76).
+     *
+     * The path is resolved from the root: the first name among the root scales, every further name among the
+     * children of the scale before. A name alone decides nothing - "X" below "A" and "X" below "B" are two
+     * scales. Two scales of the same name below the same parent make the path ambiguous: the row gets an
+     * error and nothing is created.
+     *
+     * @param string[] $path Names from the root to the scale.
+     * @param array $newrecord The import row; gets 'error' when the path is ambiguous. Its minability,
+     *                         maxability and contextid apply to a root scale that is created.
+     * @param bool $existed Set to whether the scale existed before.
+     * @return int|null The id of the scale; null on error.
+     */
+    private static function resolve_scale_path(array $path, array &$newrecord, bool &$existed): ?int {
+        global $DB;
+        $path = array_values(array_filter(array_map('trim', $path), fn($name) => $name !== ''));
+        if (!$path) {
+            $newrecord['error'] = get_string('noparentsgiven', 'local_catquiz', $newrecord);
+            return null;
+        }
+        $parentid = 0;
+        $existed = true;
+        foreach ($path as $name) {
+            if ($existed) {
+                $found = $DB->get_records('local_catquiz_catscales', ['name' => $name, 'parentid' => $parentid], 'id', 'id');
+                if (count($found) > 1) {
+                    $newrecord['error'] = get_string('ambiguousscalepath', 'local_catquiz', implode(' | ', $path));
+                    return null;
+                }
+                if ($found) {
+                    $parentid = (int) reset($found)->id;
+                    continue;
+                }
+                $existed = false;
+            }
+            $data = [
+                'name' => $name,
+                'parentid' => $parentid,
+                'description' => '',
+                'timecreated' => time(),
+                'timemodified' => time(),
+            ];
+            if ($parentid === 0) {
+                if (isset($newrecord['minability']) && (float) $newrecord['minability'] <= 0) {
+                    $data['minscalevalue'] = $newrecord['minability'];
+                }
+                if (isset($newrecord['maxability']) && (float) $newrecord['maxability'] >= 0) {
+                    $data['maxscalevalue'] = $newrecord['maxability'];
+                }
+                $data['contextid'] = !empty($newrecord['contextid']) ? $newrecord['contextid'] : null;
+            }
+            $parentid = dataapi::create_catscale(new catscale_structure($data));
+        }
+        return $parentid;
+    }
+
     /**
      * This function checks if the context-param is empty.
      * If it's empty and a scale is given, a new context is created.

@@ -151,7 +151,7 @@ final class strategy_semantics_test extends advanced_testcase {
         $data = json_decode(file_get_contents(__DIR__ . '/../fixtures/testenvironment.json'));
         $data->catquiz_catscales = $this->rootid;
         $data->catscaleid = $this->rootid;
-        foreach ([$this->rootid, ...catscale::get_subscale_ids($this->rootid)] as $scaleid) {
+        foreach ($settings['scales'] ?? [$this->rootid, ...catscale::get_subscale_ids($this->rootid)] as $scaleid) {
             $data->{'catquiz_subscalecheckbox_' . $scaleid} = true;
         }
         $data->componentid = '1';
@@ -269,6 +269,29 @@ final class strategy_semantics_test extends advanced_testcase {
     }
 
     /**
+     * FASTEST over several subscales, end to end (issue #135, DoD 11): the attempt draws from more than one
+     * subscale, a subscale that reached the per-scale maximum keeps its items in the pool and gets more, and
+     * only the global maximum ends the test.
+     */
+    public function test_fastest_with_several_subscales(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, [
+            'minquestions' => 10, 'maxquestions' => 25, 'semin' => 0.0001, 'maxperscale' => 2, 'minperscale' => 1,
+        ]);
+
+        [$ids, $status, $scales] = $this->play();
+
+        $this->assertCount(25, $ids, 'Neither a subscale nor its maximum ended the test early.');
+        $this->assertSame(status::ERROR_REACHED_MAXIMUM_QUESTIONS, $status);
+        $this->assertSame(count($ids), count(array_unique($ids)), 'A question was asked twice.');
+        $perscale = array_count_values($scales);
+        $subscales = array_filter(array_keys($perscale), fn($scaleid) => $scaleid !== $this->rootid);
+        $this->assertGreaterThanOrEqual(2, count($subscales), 'Items from several subscales.');
+        $this->assertGreaterThan(2, max($perscale), 'The per-scale maximum of 2 did not cut a subscale from the pool.');
+        $this->assertGreaterThanOrEqual(2, $DB->count_records('local_catquiz_catscales', ['parentid' => $this->rootid]));
+    }
+
+    /**
      * CLASSIC is a fixed form: neither a per-scale maximum nor a precision shortens it (issue #135).
      *
      * Fixed order by item id; with a maximum of 3 per scale and a lax target error the form is still
@@ -294,6 +317,118 @@ final class strategy_semantics_test extends advanced_testcase {
             20
         )));
         $this->assertSame($form, $ids, 'The fixed form was changed.');
+    }
+
+    /**
+     * CLASSIC in the three level hierarchy plays at least its minimum - a second question that differs from
+     * the first, no early end while items are left (issue #64).
+     */
+    public function test_classic_reaches_its_minimum_in_the_hierarchy(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, [
+            'minquestions' => 8, 'maxquestions' => 15, 'semin' => 0.0001, 'maxperscale' => 0,
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertNotEquals($ids[0], $ids[1] ?? null, 'The second question equals the first.');
+        $this->assertGreaterThanOrEqual(8, count($ids), 'Ended before the minimum with items left: ' . $status);
+        $this->assertSame(count($ids), count(array_unique($ids)), 'A question was asked twice.');
+        $this->assertSame(status::ERROR_REACHED_MAXIMUM_QUESTIONS, $status);
+        $attempted = (int) $DB->get_field('adaptivequiz_attempt', 'questionsattempted', ['instance' => $this->adaptivequiz->id]);
+        $this->assertGreaterThanOrEqual(8, $attempted);
+    }
+
+    /**
+     * A pool that runs out before the minimum ends with its own status, and that status is stored with the
+     * CAT attempt (issue #64): not a general error, not "undefined".
+     */
+    public function test_running_out_before_the_minimum_is_stored(): void {
+        global $DB;
+        $leaf = (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => 'SimA01']);
+        $domain = (int) $DB->get_field('local_catquiz_catscales', 'parentid', ['id' => $leaf]);
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, [
+            'minquestions' => 40, 'maxquestions' => 60, 'semin' => 0.0001, 'scales' => [$this->rootid, $domain, $leaf],
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertLessThan(40, count($ids));
+        $this->assertSame(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM, $status);
+        $hostattempt = (int) $DB->get_field('adaptivequiz_attempt', 'id', ['instance' => $this->adaptivequiz->id]);
+        $stored = (int) $DB->get_field('local_catquiz_attempts', 'status', ['attemptid' => $hostattempt]);
+        $this->assertSame(status::to_int(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM), $stored);
+    }
+
+    /**
+     * A pool that a filter empties after the check for remaining questions - here the lowest-skill-gap
+     * selection, with every scale closed by its maximum of one question - ends like an empty pool: before
+     * the minimum with its own status, stored with the CAT attempt (issue #64). It used to end as a
+     * general error, stored as "undefined".
+     */
+    public function test_a_pool_emptied_late_ends_before_the_minimum(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, [
+            'minquestions' => 40, 'maxquestions' => 60, 'semin' => 0.0001, 'maxperscale' => 1,
+        ]);
+
+        [$ids, $status] = $this->play();
+
+        $this->assertLessThan(40, count($ids));
+        $this->assertSame(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM, $status);
+        $hostattempt = (int) $DB->get_field('adaptivequiz_attempt', 'id', ['instance' => $this->adaptivequiz->id]);
+        $stored = (int) $DB->get_field('local_catquiz_attempts', 'status', ['attemptid' => $hostattempt]);
+        $this->assertSame(status::to_int(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM), $stored);
+    }
+
+    /**
+     * Fifty earlier participants with the same ability give the prior a spread of zero (issue #106): the
+     * attempt still goes on - a second question, different from the first, up to the minimum - every
+     * ability stays a finite number, and the fallback is an event, not a developer notice.
+     */
+    public function test_identical_past_abilities_do_not_stop_the_selection(): void {
+        global $DB, $USER;
+        // The CAT context the test runs in: the one of its scale.
+        $contextid = (int) catscale::get_context_id($this->rootid);
+        $scales = [$this->rootid, ...catscale::get_subscale_ids($this->rootid)];
+        for ($i = 0; $i < 50; $i++) {
+            $userid = (int) $this->getDataGenerator()->create_user()->id;
+            foreach ($scales as $scaleid) {
+                $DB->insert_record('local_catquiz_personparams', (object) [
+                    'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $contextid, 'ability' => 0.2,
+                    'standarderror' => 0.5, 'isvalid' => 1, 'timecreated' => time(), 'timemodified' => time(),
+                ]);
+            }
+        }
+        foreach ([LOCAL_CATQUIZ_STRATEGY_FASTEST, LOCAL_CATQUIZ_STRATEGY_CLASSIC] as $strategy) {
+            \local_catquiz\local\monitoring\numeric_notice::reset();
+            $this->setUser($this->getDataGenerator()->create_user());
+            $DB->delete_records('adaptivequiz_attempt', ['instance' => $this->adaptivequiz->id]);
+            $this->settings($strategy, ['minquestions' => 6, 'maxquestions' => 8, 'semin' => 0.0001]);
+
+            $sink = $this->redirectEvents();
+            [$ids, $status] = $this->play();
+            $reasons = array_map(
+                fn($e) => $e->other['reason'],
+                array_filter($sink->get_events(), fn($e) => $e instanceof \local_catquiz\event\numeric_fallback_applied)
+            );
+            $sink->close();
+
+            $this->assertGreaterThanOrEqual(6, count($ids), "Strategy $strategy ended early: $status");
+            $this->assertNotEquals($ids[0], $ids[1]);
+            $this->assertSame(count($ids), count(array_unique($ids)));
+            $this->assertSame(status::ERROR_REACHED_MAXIMUM_QUESTIONS, $status, "Strategy $strategy");
+            $this->assertContains(\local_catquiz\event\numeric_fallback_applied::NO_SPREAD, $reasons, 'Reported.');
+            $this->assertNotContains(\local_catquiz\event\numeric_fallback_applied::ABILITY_NOT_FINITE, $reasons);
+            $own = $DB->get_fieldset_select('local_catquiz_personparams', 'ability', 'userid = ?', [$USER->id]);
+            $this->assertNotEmpty($own);
+            foreach ($own as $ability) {
+                $this->assertTrue(is_numeric($ability) && is_finite((float) $ability), "Strategy $strategy: $ability");
+            }
+            // Its result would give the next strategy a past ability of another value.
+            $DB->delete_records('local_catquiz_personparams', ['userid' => $USER->id]);
+        }
+        $this->assertDebuggingNotCalled();
     }
 
     /**

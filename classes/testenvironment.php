@@ -324,7 +324,7 @@ class testenvironment {
             }
             if (preg_match('/^feedbackeditor_scaleid_(\d+)_(\d+)$/', $key, $matches)) {
                 // If the form is reloaded from a template, set the text from the json.
-                if (!$cm && is_string($value) && is_array($formdefaultvalues[$key])) {
+                if (!$cm && is_string($value) && is_array($formdefaultvalues[$key] ?? null)) {
                     $formdefaultvalues[$key]['text'] = $value;
                     continue;
                 }
@@ -333,32 +333,15 @@ class testenvironment {
                     $jsonobject[$key] = $value['text'];
                 }
 
-                $scaleid = intval($matches[1]);
-                $rangeid = intval($matches[2]);
-                $filearea = sprintf('feedback_files_%d_%d', $scaleid, $rangeid);
-                $jsonobject[$key . 'format'] = 1;
-                $field = sprintf('feedbackeditor_scaleid_%d_%d', $scaleid, $rangeid);
+                /* Issue #51: the files are copied into a draft area when the editor is shown - for the one
+                   scale being edited (feedbackclass::editor_with_draft()). Copied here for every editor,
+                   a large scale tree made hundreds of draft areas on every load of the settings. Item id
+                   0 marks a value whose files are still where they were saved. */
                 if ($options) {
-                    $data = (object) file_prepare_standard_editor(
-                        (object) $jsonobject,
-                        $field,
-                        $options,
-                        $context,
-                        'local_catquiz',
-                        $filearea,
-                        intval($this->componentid)
-                    );
-                    $formdefaultvalues[$key] = $data->$key;
-                    $formdefaultvalues[$key . '_editor'] = $data->{$key . '_editor'};
-                    $formdefaultvalues[$key . 'format'] = $data->{$key . 'format'};
-                    $draftitemid = file_get_submitted_draft_itemid($field);
-                    file_prepare_draft_area(
-                        $draftitemid,
-                        $context->id,
-                        'local_catquiz',
-                        $filearea,
-                        intval($this->componentid)
-                    );
+                    $text = is_string($jsonobject[$key]) ? $jsonobject[$key] : '';
+                    $formdefaultvalues[$key] = $text;
+                    $formdefaultvalues[$key . '_editor'] = ['text' => $text, 'format' => FORMAT_HTML, 'itemid' => 0];
+                    $formdefaultvalues[$key . 'format'] = FORMAT_HTML;
                     continue;
                 }
             }
@@ -634,6 +617,13 @@ class testenvironment {
                 continue;
             }
             $activescales[] = intval($matches[1]);
+        }
+        // Issue #52: a stored setting may name a scale that has been deleted since; it is not active.
+        if ($activescales) {
+            [$existsql, $existparams] = $DB->get_in_or_equal($activescales, SQL_PARAMS_NAMED, 'existscale');
+            $existing = $DB->get_fieldset_select('local_catquiz_catscales', 'id', "id $existsql", $existparams);
+            $activescales = array_map('intval', $existing);
+            sort($activescales);
         }
 
         [$insql, $inparams] = $DB->get_in_or_equal(

@@ -85,8 +85,10 @@ function local_catquiz_rekey_progress_attempts(): array {
 
     // Work out the internal id for every row: the pair (component, attemptid) is what the runtime
     // used, and local_catquiz_attempts holds exactly that pair next to its own id.
-    $rows = $DB->get_records('local_catquiz_progress', null, 'id ASC', 'id, attemptid, component');
+    $rows = $DB->get_records('local_catquiz_progress', null, 'id ASC', 'id, attemptid, component, userid');
     $catids = [];
+    // Issue #95: a CAT attempt of another person under the same pair is a conflict, not a match.
+    $mismatchedrows = [];
     foreach ($rows as $row) {
         /* local_catquiz_attempts stores the component in two spellings - 'adaptivequiz' from the
            result page, 'mod_adaptivequiz' elsewhere - while progress always says 'mod_adaptivequiz'.
@@ -98,11 +100,16 @@ function local_catquiz_rekey_progress_attempts(): array {
             ? [$component, substr($component, strlen('mod_'))]
             : [$component, 'mod_' . $component];
         [$insql, $inparams] = $DB->get_in_or_equal($names, SQL_PARAMS_NAMED, 'comp');
-        $catid = $DB->get_field_sql(
-            "SELECT MAX(id) FROM {local_catquiz_attempts} WHERE attemptid = :attemptid AND component $insql",
+        $catattempt = $DB->get_record_sql(
+            "SELECT id, userid FROM {local_catquiz_attempts}
+              WHERE id = (SELECT MAX(id) FROM {local_catquiz_attempts} WHERE attemptid = :attemptid AND component $insql)",
             ['attemptid' => (int) $row->attemptid] + $inparams
         );
-        $catids[(int) $row->id] = $catid ? (int) $catid : null;
+        if ($catattempt && (int) $catattempt->userid !== (int) $row->userid) {
+            $mismatchedrows[(int) $row->id] = true;
+            $catattempt = false;
+        }
+        $catids[(int) $row->id] = $catattempt ? (int) $catattempt->id : null;
     }
 
     // Duplicates: two rows that end up on the same CAT attempt. The newest row wins - a second
@@ -127,8 +134,15 @@ function local_catquiz_rekey_progress_attempts(): array {
     $rekeyed = 0;
     $orphans = 0;
     $started = 0;
+    $mismatched = 0;
     foreach ($catids as $rowid => $catid) {
         if (in_array($rowid, $duplicates, true)) {
+            continue;
+        }
+        if ($catid === null && isset($mismatchedrows[$rowid])) {
+            // Not this person's CAT attempt: left unassigned, nothing deleted, counted for the log.
+            $DB->set_field('local_catquiz_progress', 'attemptid', null, ['id' => $rowid]);
+            $mismatched++;
             continue;
         }
         if ($catid === null) {
@@ -141,6 +155,13 @@ function local_catquiz_rekey_progress_attempts(): array {
             $attemptexists = $row->component === 'mod_adaptivequiz'
                 && $dbman->table_exists(new xmldb_table('adaptivequiz_attempt'))
                 && $DB->record_exists('adaptivequiz_attempt', ['id' => (int) $row->attemptid]);
+            // Issue #95: the attempt must be the same person's; otherwise the row is a conflict.
+            $sameperson = ['id' => (int) $row->attemptid, 'userid' => (int) $row->userid];
+            if ($attemptexists && !$DB->record_exists('adaptivequiz_attempt', $sameperson)) {
+                $DB->set_field('local_catquiz_progress', 'attemptid', null, ['id' => $rowid]);
+                $mismatched++;
+                continue;
+            }
             // The number may be taken by a CAT attempt of a truly different component (issue #5
             // makes attemptid unique on its own); then no second one can be filed.
             $attemptexists = $attemptexists
@@ -173,7 +194,13 @@ function local_catquiz_rekey_progress_attempts(): array {
         new xmldb_key('attemptid', XMLDB_KEY_FOREIGN_UNIQUE, ['attemptid'], 'local_catquiz_attempts', ['id'])
     );
 
-    return ['rekeyed' => $rekeyed, 'started' => $started, 'orphans' => $orphans, 'duplicates' => count($duplicates)];
+    return [
+        'rekeyed' => $rekeyed,
+        'started' => $started,
+        'orphans' => $orphans,
+        'duplicates' => count($duplicates),
+        'mismatched' => $mismatched,
+    ];
 }
 
 /**

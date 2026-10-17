@@ -231,6 +231,12 @@ jobs:
           key: npm-${{ runner.os }}-${{ github.sha }}
           restore-keys: npm-${{ runner.os }}-
 
+      - name: AMD build belongs to its sources
+        if: ${{ always() }}
+        # Issue #31: a hard check. The source embedded in each source map has to be today's source -
+        # independent of how the runner's toolchain transpiles, which is why the rebuild below can only warn.
+        run: python3 plugin/.github/ci/check_amd_build.py plugin
+
       - name: Verify committed AMD build
         if: ${{ always() }}
         shell: bash

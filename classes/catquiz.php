@@ -320,6 +320,34 @@ class catquiz {
     }
 
     /**
+     * When a person saw each question, and how often - anywhere on the site (issue #146).
+     *
+     * The same numbers the pool carried as userattempts and userlastattempttime, from the same steps:
+     * step 0 is written when a question is presented, so this counts what the person saw, answered or not.
+     *
+     * @param int $userid
+     * @return array question id => [times seen, last time]
+     */
+    public static function get_user_question_stats(int $userid): array {
+        global $DB;
+        if ($userid <= 0) {
+            return [];
+        }
+        $sql = "SELECT qa.questionid + 0 AS questionid, COUNT(qa.id) AS numberattempts, MAX(qas.timecreated) AS lastattempt
+                  FROM {question_attempt_steps} qas
+                  JOIN {question_attempts} qa ON qa.id = qas.questionattemptid
+                 WHERE qas.userid = :userid AND qas.sequencenumber = 0
+              GROUP BY qa.questionid + 0";
+        $stats = [];
+        $rows = $DB->get_recordset_sql($sql, ['userid' => $userid]);
+        foreach ($rows as $row) {
+            $stats[(int) $row->questionid] = [(int) $row->numberattempts, (int) $row->lastattempt];
+        }
+        $rows->close();
+        return $stats;
+    }
+
+    /**
      * Returns the sql to get all the questions wanted.
      *
      * @param array $catscaleids
@@ -329,6 +357,8 @@ class catquiz {
      * @param string|null $orderby If given, order by the given field in ascending order
      * @param int|null $questionid If given, restrict the query to this single question
      * @param bool $leanselect Omit the columns only the manager interface displays
+     * @param bool $onlyavailable Only questions a test may use: a ready version in the question bank and an
+     *                            item that is active in its scale (issue #82). The manager lists all.
      *
      * @return array
      *
@@ -340,7 +370,8 @@ class catquiz {
         int $userid = 0,
         ?string $orderby = null,
         ?int $questionid = null,
-        bool $leanselect = false
+        bool $leanselect = false,
+        bool $onlyavailable = false
     ) {
 
         global $DB;
@@ -375,6 +406,18 @@ class catquiz {
         if (!empty($questionid)) {
             $questionfilter = ' AND q.id = :detailquestionid ';
             $params['detailquestionid'] = $questionid;
+        }
+
+        // Issue #82: two levels hide a question. The question bank hides a version (or keeps it a draft) for
+        // every use; the CAT manager deactivates the item in one scale. Global wins, the scale narrows further.
+        $itemfilter = '';
+        $versionfilter = '';
+        if ($onlyavailable) {
+            require_once(__DIR__ . '/../lib.php');
+            $itemfilter = ' AND lci.status <> :inactiveitemstatus ';
+            $params['inactiveitemstatus'] = LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE;
+            $versionfilter = ' AND qv.status = :readyversionstatus ';
+            $params['readyversionstatus'] = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
         }
 
         $insql = '';
@@ -435,6 +478,10 @@ class catquiz {
 
         $from = <<<SQL
         ( SELECT
+            -- Issue #104: the first column keys the rows of get_records_sql() - in the manager tables,
+            -- which select '*'. One row per item, that is per question and scale: a question in two
+            -- sibling scales has two rows, and keyed by the question one of them vanished at random.
+            lci.id as itemid,
             -- Information about the question
             q.id,
             lci.componentid,
@@ -447,7 +494,6 @@ class catquiz {
             lci.catscaleid catscaleid,
             lci.status testitemstatus,
             lci.componentname component,
-            lci.id as itemid,
             lccs.name as catscalename,
             lccs.id as lccscatscaleid,
             lcip.model as model,
@@ -469,7 +515,7 @@ class catquiz {
           FROM {local_catquiz_catscales} lccs
           -- Get all corresponding items of those scales, skip if not existent
           -- (INNER JOIN)
-            JOIN {local_catquiz_items} lci ON lci.catscaleid=lccs.id
+            JOIN {local_catquiz_items} lci ON lci.catscaleid=lccs.id $itemfilter
 
           -- Get the active item parameter, if there is one.
           --
@@ -484,7 +530,7 @@ class catquiz {
 
           -- Get all information about the question from the questionbank itself
             JOIN {question} q ON q.id=lci.componentid $questionfilter
-            JOIN {question_versions} qv ON qv.questionid=q.id
+            JOIN {question_versions} qv ON qv.questionid=q.id $versionfilter
             JOIN {question_bank_entries} qbe ON qbe.id=qv.questionbankentryid
             JOIN {question_categories} qc ON qc.id=qbe.questioncategoryid
 
@@ -832,11 +878,23 @@ class catquiz {
         if ($joinability) {
             $selectability = ", lcp.ability ability";
             $abilityparams = ['scaleability' => $joinability, 'scalecontext' => $contextid];
+            /* Issue #104: personparams keeps the history of every estimate. Joined as it is, each step came
+               once per history row - all with the same key, so one arbitrary row survived, an invalid one
+               too. Joined is the newest valid row per person, as in get_person_abilities(). */
             $joinabilitysql = <<<SQL
                 JOIN {local_catquiz_personparams} lcp
                     ON lcp.userid = qas.userid
                     AND lcp.catscaleid = :scaleability
                     AND lcp.contextid = :scalecontext
+                    AND lcp.isvalid = 1
+                    AND lcp.id = (
+                        SELECT MAX(lcp2.id)
+                          FROM {local_catquiz_personparams} lcp2
+                         WHERE lcp2.userid = lcp.userid
+                           AND lcp2.catscaleid = lcp.catscaleid
+                           AND lcp2.contextid = lcp.contextid
+                           AND lcp2.isvalid = 1
+                    )
             SQL;
         }
 
@@ -1193,8 +1251,15 @@ class catquiz {
      *
      */
     public static function return_sql_for_quizattempts() {
+        global $DB;
         $params = [];
         $filter = '';
+        // Issue #104: a test row of the attempt's instance and component - the component is stored in
+        // two spellings. local_catquiz_tests is not unique on (componentid, component), and joined on
+        // the instance id alone every row of another component, or a second row, repeated the attempt;
+        // the table keyed by the attempt showed one of the names at random. Of several rows, the newest.
+        $prefixedattempt = $DB->sql_concat("'mod_'", 'lca.component');
+        $prefixedtest = $DB->sql_concat("'mod_'", 'lct2.component');
 
         $select = "
             *
@@ -1225,7 +1290,14 @@ class catquiz {
                 JOIN {local_catquiz_catscales} lcc ON lca.scaleid = lcc.id
                 JOIN {local_catquiz_catcontext} lccc ON lca.contextid = lccc.id
                 JOIN {course} c ON lca.courseid = c.id
-                JOIN {local_catquiz_tests} lct ON lca.instanceid = lct.componentid
+                JOIN {local_catquiz_tests} lct ON lct.id = (
+                    SELECT MAX(lct2.id)
+                      FROM {local_catquiz_tests} lct2
+                     WHERE lct2.componentid = lca.instanceid
+                       AND (lct2.component = lca.component
+                            OR lct2.component = $prefixedattempt
+                            OR $prefixedtest = lca.component)
+                )
             ) as s1
         ";
 
@@ -1262,7 +1334,7 @@ class catquiz {
             $userid
         );
 
-        $recordsarray = $DB->get_records_sql($sqlarray[0], $sqlarray[1]);
+        $recordsarray = $DB->get_records_sql($sqlarray[0], $sqlarray[1], 0, $sqlarray[2]);
 
         return $recordsarray;
     }
@@ -1274,7 +1346,7 @@ class catquiz {
      * @param int $courseid
      * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $userid
-     * @return array
+     * @return array [sql, params, the number of rows, 0 for all]
      */
     private static function return_sql_for_attemptid_contextid_json(
         int $numberofrecords = 1,
@@ -1284,8 +1356,10 @@ class catquiz {
         int $userid = -1
     ): array {
 
+        // Issue #104: keyed by the row's own id. attemptid is unique, but may be NULL - and rows with
+        // NULL fell onto one key.
         $sql = "SELECT
-        attemptid, contextid, userid, endtime, timemodified, json, debug_info,
+        id, attemptid, contextid, userid, endtime, timemodified, json, debug_info,
         -- The strategy is a column of its own. Reading it only from the JSON payload
         -- fails for attempts whose payload predates that field, and the feedback then
         -- cannot be built at all.
@@ -1322,18 +1396,14 @@ class catquiz {
             $sql .= " WHERE " . implode(' AND ', $wherearray);
         }
 
-        $sql .= " ORDER BY timemodified DESC";
+        // The newest first; with the same time the later row first, so that the limit takes a fixed set.
+        $sql .= " ORDER BY timemodified DESC, id DESC";
 
         // We treat both INF as 0 as infinite value here, because intval(INF) is
-        // converted to 0.
-        if (
-            !is_infinite($numberofrecords)
-            && $numberofrecords !== 0
-        ) {
-            $sql .= " LIMIT " . $numberofrecords;
-        }
+        // converted to 0. The limit goes to the database layer, not as LIMIT into the SQL (issue #104).
+        $limit = (!is_infinite($numberofrecords) && $numberofrecords > 0) ? $numberofrecords : 0;
 
-        return [$sql, $params];
+        return [$sql, $params, $limit];
     }
 
     /**

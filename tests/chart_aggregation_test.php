@@ -325,6 +325,23 @@ final class chart_aggregation_test extends advanced_testcase {
     }
 
     /**
+     * Two people in the same ability range with different numbers of attempts: both classes survive
+     * (issue #104). Range and class are two columns; keyed by the first, one of them used to vanish.
+     *
+     * @return void
+     */
+    public function test_same_range_different_bins_both_survive(): void {
+        $this->resetAfterTest();
+        $inner = 'SELECT 2 AS attempts, CAST(0.5 AS DECIMAL(10,4)) AS ability
+                  UNION ALL SELECT 9, CAST(0.5 AS DECIMAL(10,4))';
+
+        $counts = catquiz::aggregate_person_histogram($inner, [], 'attempts', 3, [['lower' => -3.0, 'upper' => 3.0]]);
+
+        $this->assertSame([1 => [1 => 1, 3 => 1]], $counts);
+        $this->assertDebuggingNotCalled();
+    }
+
+    /**
      * Creates a context and a scale.
      *
      * @return array [int $scaleid, int $contextid]

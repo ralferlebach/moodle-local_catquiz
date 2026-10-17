@@ -143,7 +143,7 @@ class messages {
                 'firstname' => $user->firstname,
                 'lastname' => $user->lastname,
                 'editorname' => $usermodified->firstname . ' ' . $usermodified->lastname,
-                'instancename' => '<a href="' . $CFG->wwwroot . '">' . $CFG->wwwroot . '</a>',
+                'instancename' => \html_writer::link(new \moodle_url('/'), $CFG->wwwroot),
                 'catscalename' => $catscale->name,
                 'linkonscale' => '<a href="' . $urltoscale . '">' . $urltoscale . '</a>',
                 'changedescription' => '',

@@ -2,6 +2,30 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Nacharbeiten aus dem Audit vom 15.10.2026 (2026101701), mit Behat und PHPUnit in beiden Linien:
+  - #146, Laufzeit-Pool getrennt vom Sitzungscache der Versuche: Pool im Anwendungscache `runtimepool`
+    (für alle gleich, invalidiert mit Items, Parametern, Skalen; TTL 10 min), die Statistik der Person
+    als kleine Tabelle in der Sitzung, Delta je ausgegebener Frage statt Rückschreiben des ganzen Pools,
+    Werte je Versuch (`attempt_cache`), kein Purge beim Versuchsstart mehr (altes Sitzungslayout einmal
+    geleert). Zwei offene Versuche einer Sitzung stören sich nicht; Messung mit
+    `cli/measure_session_pool.php`, siehe `doc/runtime-pool-cache.md`.
+  - #51 (mit Adapter #2), Feedback-Einstellungen eine Skala zur Zeit: Felder nur für die bearbeitete Skala,
+    die übrigen in einem versteckten Träger; Wechsel als Fragment ohne Neuladen, ohne JavaScript per Knopf;
+    ungespeicherte Eingaben bleiben beim Wechsel erhalten; Draft-Areas erst beim Anzeigen; Dateien einer
+    nicht geöffneten Skala bleiben beim Speichern erhalten; Fehler einer nicht bearbeiteten Skala an ihrer
+    Zusammenfassung. Siehe `doc/feedback-lazy-editors.md`.
+  - #60, Konsistenz der Einstellungen: `settings_validator` (Budgets, Zeitlimits, Pool, Skalenabdeckung,
+    erreichbare Präzision); Fehler verhindern das Speichern, Warnungen nach dem Speichern; vor der ersten
+    Frage blockieren nur leerer Pool und Skala ohne Item, alles andere wird als Ereignis gemeldet.
+    Siehe `doc/settings-validation.md`.
+  - mod_adaptivequiz #5, Fortsetzen-Dialog: Zeitlimits einheitlich gelesen, Aufräum-Task mit eigenem Limit;
+    Behat für die drei Zustände; bestehende Szenarien auf „Versuch fortsetzen“ umgestellt.
+  - #95, #96, #101: Progress-Cache je CAT-Versuch, Kreuzkollision der ID-Räume, abgelehnter fremder
+    Teststand (PHPUnit und Behat; Nummernverschiebung im Behat-Schritt direkt über die Sequenz).
+  - #104 Resultset-Keying, #106 numerische Ersatzregeln als Ereignis, #64 spät geleerter Pool,
+    #52/#81 Skalen-Invalidierung und -Prüfungen, #79 Eventlog, #76 Skalenpfad im CSV-Import,
+    #30/#31/#32 Markup, IDs, CSS, AMD-Build-Prüfung in der CI.
+
 - Gültigkeit, Maximum überschritten (2026100922; adaptivequizcatmodel_catquiz #8): Ein Versuch mit mehr
   gestellten Fragen als dem Maximum ist ungültig (`max_questions_exceeded`). Gezählt werden die
   Fragen-Slots der Nutzung, verglichen mit dem CAT-Maximum aus dem Fortschritt, sonst mit

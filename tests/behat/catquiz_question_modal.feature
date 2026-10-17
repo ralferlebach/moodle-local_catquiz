@@ -126,6 +126,16 @@ Feature: The questions of a finished attempt open in a modal on every page that 
     And I click on "Show question" "button" in the "Resource question two" "table_row"
     Then I should see "Text of resource question two." in the "Resource question two" "dialogue"
     And the image "Figure of question two" in the question dialogue has loaded
+    And I click on "Close" "button" in the "Resource question two" "dialogue"
+    ## The shortcode follows the rule of the result page: the own finished attempt, also with the
+    ## activity hidden (mod_adaptivequiz issues #16, #18).
+    And the activity "adaptivecatquiz1" is hidden from participants
+    And I am on the "page1" "page activity" page
+    And I click on "Quiz progress summary" "link" in the "#region-main" "css_element"
+    And I wait until ".catquiz-graphicalsummary-table" "css_element" exists
+    And I click on "Show question" "button" in the "Resource question one" "table_row"
+    And I should see "Text of resource question one." in the "Resource question one" "dialogue"
+    And the image "Figure of question one" in the question dialogue has loaded
     And I log out
     ## The teacher, on the review page of the attempt.
     When I log in as "teacher"

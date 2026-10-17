@@ -168,6 +168,12 @@ jobs:
           key: npm-${{ runner.os }}-${{ github.sha }}
           restore-keys: npm-${{ runner.os }}-
 
+      - name: AMD build belongs to its sources
+        if: ${{ always() }}
+        # Issue #31: a hard check. The source embedded in each source map has to be today's source -
+        # independent of how the runner's toolchain transpiles, which is why the rebuild below can only warn.
+        run: python3 plugin/.github/ci/check_amd_build.py plugin
+
       - name: Verify committed AMD build
         if: ${{ always() }}
         shell: bash
@@ -286,7 +292,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: error-summary-main-${{ matrix.php }}-${{ matrix.database }}
+          name: error-summary-main-${{ matrix.moodle-branch }}-${{ matrix.php }}-${{ matrix.database }}
           path: ci-logs
           retention-days: 7
           if-no-files-found: ignore
@@ -295,7 +301,7 @@ jobs:
         if: ${{ failure() && steps.behat.outcome == 'failure' }}
         uses: actions/upload-artifact@v7
         with:
-          name: behat-screenshots-main-${{ matrix.php }}-${{ matrix.database }}
+          name: behat-screenshots-main-${{ matrix.moodle-branch }}-${{ matrix.php }}-${{ matrix.database }}
           path: ${{ github.workspace }}/moodledata/behat_dump
           retention-days: 7
           if-no-files-found: warn

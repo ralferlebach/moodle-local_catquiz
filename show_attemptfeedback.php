@@ -27,7 +27,7 @@ use local_catquiz\local\access\context_resolver;
 use local_catquiz\local\access\feedback_access;
 use local_catquiz\output\attemptfeedback;
 
-require_once('../../config.php');
+require_once(__DIR__ . '/../../config.php');
 
 global $USER, $OUTPUT, $COURSE;
 

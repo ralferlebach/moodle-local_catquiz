@@ -159,7 +159,7 @@ final class progress_integrity_test extends advanced_testcase {
      */
     public function test_a_foreign_cache_entry_is_not_used(): void {
         $this->resetAfterTest();
-        [$owner] = $this->saved_progress();
+        [$owner, $row] = $this->saved_progress();
         $stranger = $this->getDataGenerator()->create_user();
 
         // Plant a progress of someone else under the owner's cache key.
@@ -169,11 +169,52 @@ final class progress_integrity_test extends advanced_testcase {
         $userid->setValue($foreign, (int) $stranger->id);
         $key = new \ReflectionMethod(progress::class, 'get_cache_key');
         $key->setAccessible(true);
-        \cache::make('local_catquiz', 'adaptivequizattempt')->set($key->invoke(null, self::ATTEMPT), $foreign);
+        $cachekey = $key->invoke(null, (int) $row->attemptid, self::ATTEMPT, 'mod_adaptivequiz');
+        \cache::make('local_catquiz', 'adaptivequizattempt')->set($cachekey, $foreign);
 
         $progress = progress::load(self::ATTEMPT, 'mod_adaptivequiz', 9, (object) []);
 
         $this->assertEquals($owner->id, $progress->get_userid(), 'The foreign cache entry was used.');
+    }
+
+    /**
+     * Two components with the same attempt id keep their own cache entries (issue #95): the progress of
+     * the CAT attempt under the key of the CAT attempt, the other one - without a CAT attempt, the number
+     * is taken - under the key of its component. Neither pushes the other out.
+     */
+    public function test_the_same_attempt_id_of_two_components_shares_no_cache_entry(): void {
+        $this->resetAfterTest();
+        [, $row] = $this->saved_progress();
+        $cache = \cache::make('local_catquiz', 'adaptivequizattempt');
+        $key = new \ReflectionMethod(progress::class, 'get_cache_key');
+        $key->setAccessible(true);
+
+        $own = progress::load(self::ATTEMPT, 'mod_adaptivequiz', 9, (object) []);
+        $own->save();
+        $other = progress::load(self::ATTEMPT, 'mod_other', 9, (object) []);
+        $this->assertDebuggingCalled();
+        $this->assertNull($other->get_catattemptid());
+        $other->save();
+
+        $ownkey = $key->invoke(null, (int) $row->attemptid, self::ATTEMPT, 'mod_adaptivequiz');
+        $otherkey = $key->invoke(null, null, self::ATTEMPT, 'mod_other');
+        $this->assertNotSame($ownkey, $otherkey);
+        $this->assertSame('mod_adaptivequiz', $cache->get($ownkey)->get_component());
+        $this->assertSame('mod_other', $cache->get($otherkey)->get_component());
+
+        // A progress cached before its CAT attempt was filed moves to the key of the CAT attempt.
+        $cache->delete($ownkey);
+        $cache->set($key->invoke(null, null, self::ATTEMPT, 'mod_adaptivequiz'), $own);
+        progress::load(self::ATTEMPT, 'mod_adaptivequiz', 9, (object) []);
+        $this->assertFalse($cache->get($key->invoke(null, null, self::ATTEMPT, 'mod_adaptivequiz')));
+        $this->assertSame((int) $row->attemptid, $cache->get($ownkey)->get_catattemptid());
+
+        // Deleted, the progress is gone under both keys.
+        $cache->set($key->invoke(null, null, self::ATTEMPT, 'mod_adaptivequiz'), $own);
+        progress::delete(self::ATTEMPT, 'mod_adaptivequiz');
+        $this->assertFalse($cache->get($ownkey));
+        $this->assertFalse($cache->get($key->invoke(null, null, self::ATTEMPT, 'mod_adaptivequiz')));
+        $this->assertSame('mod_other', $cache->get($otherkey)->get_component(), 'The other component keeps its entry.');
     }
 
     /**

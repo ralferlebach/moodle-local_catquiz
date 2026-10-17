@@ -25,7 +25,7 @@
 
 use local_catquiz\teststrategy\feedbackgenerator\debuginfo;
 
-require_once('../../config.php');
+require_once(__DIR__ . '/../../config.php');
 
 $attemptid = required_param('attemptid', PARAM_INT);
 

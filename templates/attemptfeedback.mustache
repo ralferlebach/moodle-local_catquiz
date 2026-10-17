@@ -56,7 +56,7 @@
   {{#studentfeedback}}
       {{#frontpage}}
           <h5 id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-frontpage-heading"> {{{heading}}} </h5>
-          <i id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-frontpage-comment"> {{{comment}}} </i>
+          <div class="font-italic" id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-frontpage-comment"> {{{comment}}} </div>
           <div id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-frontpage-content"> {{{content}}} </div>
       {{/frontpage}}
   {{/studentfeedback}}
@@ -95,10 +95,9 @@
               </a>
           </li>
   {{/teacherfeedback}}
-  {{#studentfeedback.0}}
+  {{! Issue #32: closed and opened whether or not there is student feedback - a teacher-only feedback left the list open. }}
       </ul>
       <div class="tab-content" id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-panes" style="margin:20px">
-  {{/studentfeedback.0}}
 
   {{#studentfeedback}}
       {{#othertabs}}
@@ -111,7 +110,7 @@
                        data-generatorname="{{generatorname}}" data-audience="student"></div>
                   {{/lazy}}
                   {{^lazy}}
-                  <i> {{{comment}}} </i>
+                  <div class="font-italic"> {{{comment}}} </div>
                   <div> {{{content}}} </div>
                   {{/lazy}}
               </div>
@@ -127,15 +126,13 @@
                        data-generatorname="{{generatorname}}" data-audience="teacher"></div>
                   {{/lazy}}
                   {{^lazy}}
-                  <i> {{{comment}}} </i>
+                  <div class="font-italic"> {{{comment}}} </div>
                   <div> {{{content}}} </div>
                   {{/lazy}}
               </div>
           </div>
   {{/teacherfeedback}}
-  {{#studentfeedback.0}}
       </div>
-  {{/studentfeedback.0}}
 </div>
 {{/feedback}}
 </div>

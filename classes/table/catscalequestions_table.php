@@ -97,7 +97,7 @@ class catscalequestions_table extends wunderbyte_table {
     public function col_action($values) {
         global $OUTPUT;
 
-        $url = new moodle_url('manage_catscales.php', [
+        $url = new moodle_url('/local/catquiz/manage_catscales.php', [
             'id' => $values->id,
             'contextid' => $this->contextid,
             'scaleid' => $values->catscaleid ?? 0,
@@ -173,7 +173,7 @@ class catscalequestions_table extends wunderbyte_table {
 
         global $OUTPUT;
 
-        $url = new moodle_url('manage_catscales.php', [
+        $url = new moodle_url('/local/catquiz/manage_catscales.php', [
             'id' => $values->id,
             'contextid' => $this->contextid,
             'scaleid' => $values->catscaleid ?? $this->catscaleid,

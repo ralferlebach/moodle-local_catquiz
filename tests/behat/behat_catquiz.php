@@ -96,6 +96,38 @@ class behat_catquiz extends behat_base {
     }
 
     /**
+     * Opens the result page of a user's last attempt in one activity (mod_adaptivequiz #22).
+     *
+     * @Given /^I open the result page of the last attempt of "([^"]*)" in "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $idnumber The activity's ID number.
+     * @return void
+     */
+    public function i_open_the_result_page_of_the_last_attempt_of_in(string $username, string $idnumber): void {
+        global $DB;
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $attempts = $DB->get_records(
+            'adaptivequiz_attempt',
+            ['userid' => $userid, 'instance' => $cm->instance],
+            'id DESC',
+            'id, instance, uniqueid',
+            0,
+            1
+        );
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException("No attempt of $username in $idnumber", $this->getSession());
+        }
+        $attempt = reset($attempts);
+        $url = new moodle_url('/mod/adaptivequiz/attemptfinished.php', [
+            'cmid' => $cm->id, 'id' => $attempt->instance, 'uattid' => $attempt->uniqueid,
+        ]);
+        $this->execute('behat_general::i_visit', [$url->out_as_local_url(false)]);
+    }
+
+    /**
      * Makes an activity unavailable to participants: a date restriction that ended an hour ago (issue #121).
      *
      * @Given /^the activity "([^"]*)" is no longer available to participants$/
@@ -112,6 +144,42 @@ class behat_catquiz extends behat_base {
         ]);
         $DB->set_field('course_modules', 'availability', json_encode($availability), ['id' => $cm->id]);
         rebuild_course_cache($cm->course, true);
+    }
+
+    /**
+     * Offers the CAT settings of an activity as a template of the given name (issue #123).
+     *
+     * A template is a test environment without an activity (componentid 0) that is active.
+     *
+     * @Given /^the CAT settings of "([^"]*)" are offered as the template "([^"]*)"$/
+     *
+     * @param string $idnumber ID number of the activity.
+     * @param string $name Name of the template.
+     * @return void
+     */
+    public function the_cat_settings_are_offered_as_the_template(string $idnumber, string $name): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['component' => 'mod_adaptivequiz', 'componentid' => $cm->instance],
+            '*',
+            MUST_EXIST
+        );
+        $json = json_decode($test->json);
+        $json->componentid = 0;
+        $json->name = $name;
+        unset($test->id);
+        $test->componentid = 0;
+        $test->name = $name;
+        $test->status = LOCAL_CATQUIZ_STATUS_TEST_ACTIVE;
+        $test->json = json_encode($json);
+        $test->timecreated = time();
+        $test->timemodified = time();
+        $DB->insert_record('local_catquiz_tests', $test);
+        \cache_helper::purge_all();
     }
 
     /**
@@ -307,6 +375,95 @@ class behat_catquiz extends behat_base {
     }
 
     /**
+     * Limits the time for one question in the stored CAT settings of a test (mod_adaptivequiz #5).
+     *
+     * @Given /^the CAT settings of "([^"]*)" limit a question to (\d+) minutes$/
+     *
+     * @param string $idnumber
+     * @param int $minutes
+     * @return void
+     */
+    public function the_cat_settings_limit_a_question(string $idnumber, int $minutes): void {
+        global $DB;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            '*',
+            MUST_EXIST
+        );
+        $json = json_decode($test->json);
+        $json->catquiz_includetimelimit = 1;
+        $json->catquiz_timelimitgroup = (object) [
+            'catquiz_maxtimeperattempt' => 0,
+            'catquiz_timeselect_attempt' => 'min',
+            'catquiz_maxtimeperitem' => $minutes,
+            'catquiz_timeselect_item' => 'min',
+        ];
+        $DB->set_field('local_catquiz_tests', 'json', json_encode($json), ['id' => $test->id]);
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * Moves the start of a user's open attempt of the activity into the past (mod_adaptivequiz #5).
+     *
+     * The activity judges the time of the attempt by its own start; the CAT progress is moved with it.
+     *
+     * @Given /^the open attempt of "([^"]*)" started (\d+) minutes ago$/
+     *
+     * @param string $username
+     * @param int $minutes
+     * @return void
+     */
+    public function the_open_attempt_started_minutes_ago(string $username, int $minutes): void {
+        global $DB;
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $open = ['userid' => $userid, 'attemptstate' => 'inprogress'];
+        $attempts = $DB->get_records('adaptivequiz_attempt', $open, 'id DESC', '*', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException('No open attempt of ' . $username, $this->getSession());
+        }
+        $attempt = reset($attempts);
+        $started = (int) $attempt->timecreated - $minutes * MINSECS;
+        $DB->set_field('adaptivequiz_attempt', 'timecreated', $started, ['id' => $attempt->id]);
+        if ($DB->record_exists('local_catquiz_progress', ['userid' => $userid])) {
+            $this->the_running_cat_attempt_started_minutes_ago($username, $minutes);
+        }
+    }
+
+    /**
+     * Moves the moment the question on a user's screen was shown into the past (mod_adaptivequiz #5).
+     *
+     * @Given /^the question on the screen of "([^"]*)" was shown (\d+) minutes ago$/
+     *
+     * @param string $username
+     * @param int $minutes
+     * @return void
+     */
+    public function the_question_on_the_screen_was_shown_minutes_ago(string $username, int $minutes): void {
+        global $DB;
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $open = ['userid' => $userid, 'attemptstate' => 'inprogress'];
+        $attempts = $DB->get_records('adaptivequiz_attempt', $open, 'id DESC', '*', 0, 1);
+        $attempt = reset($attempts);
+        if (!$attempt || empty($attempt->uniqueid)) {
+            throw new \Behat\Mink\Exception\ExpectationException('No question on the screen of ' . $username, $this->getSession());
+        }
+        $slot = (int) $DB->get_field_sql(
+            'SELECT MAX(slot) FROM {question_attempts} WHERE questionusageid = ?',
+            [$attempt->uniqueid]
+        );
+        $DB->execute(
+            "UPDATE {question_attempt_steps}
+                SET timecreated = timecreated - :shift
+              WHERE questionattemptid IN (SELECT id FROM {question_attempts} WHERE questionusageid = :usage AND slot = :slot)",
+            ['shift' => $minutes * MINSECS, 'usage' => $attempt->uniqueid, 'slot' => $slot]
+        );
+        \cache_helper::purge_by_event('changesinadaptivequizattempt');
+    }
+
+    /**
      * Moves the start of a user's running CAT attempt into the past (issue #141, stop reasons).
      *
      * Saves waiting for a time limit in real time. The progress is read again from the database on the
@@ -361,6 +518,71 @@ class behat_catquiz extends behat_base {
     }
 
     /**
+     * A large scale tree: more subscales below a scale (issue #51).
+     *
+     * @Given /^the CAT scale "([^"]*)" has (\d+) more subscales$/
+     *
+     * @param string $scalename
+     * @param int $number
+     * @return void
+     */
+    public function the_cat_scale_has_more_subscales(string $scalename, int $number): void {
+        global $DB;
+
+        $parent = $DB->get_record('local_catquiz_catscales', ['name' => $scalename], '*', MUST_EXIST);
+        for ($i = 1; $i <= $number; $i++) {
+            \local_catquiz\data\dataapi::create_catscale(new \local_catquiz\data\catscale_structure([
+                'name' => $scalename . ' extra ' . $i, 'parentid' => $parent->id, 'contextid' => $parent->contextid,
+                'minscalevalue' => $parent->minscalevalue, 'maxscalevalue' => $parent->maxscalevalue,
+                'timecreated' => time(), 'timemodified' => time(),
+            ]));
+        }
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * The number of feedback editors in the settings form - of the one scale being edited (issue #51).
+     *
+     * @Then /^the settings form has (\d+) feedback editors$/
+     *
+     * @param int $number
+     * @return void
+     */
+    public function the_settings_form_has_feedback_editors(int $number): void {
+        $editors = $this->getSession()->getPage()->findAll(
+            'xpath',
+            "//textarea[starts-with(@name, 'feedbackeditor_scaleid_')]"
+        );
+        if (count($editors) !== $number) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                sprintf('%d feedback editors in the form, %d expected.', count($editors), $number),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * The number of scales whose feedback is carried along without fields (issue #51).
+     *
+     * @Then /^the settings form carries the feedback of at least (\d+) more scales$/
+     *
+     * @param int $number
+     * @return void
+     */
+    public function the_settings_form_carries_feedback_of(int $number): void {
+        $carriers = $this->getSession()->getPage()->findAll(
+            'xpath',
+            "//input[@type='hidden' and starts-with(@name, 'catquiz_feedbackcarrier_') and not(@disabled)]"
+        );
+        if (count($carriers) < $number) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                sprintf('The feedback of %d scales is carried along, at least %d expected.', count($carriers), $number),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
      * Checks that the keyboard focus is inside the open dialogue (issue #139).
      *
      * Moodle decides which element of a dialogue takes the focus; what matters is that it is in the
@@ -411,6 +633,234 @@ class behat_catquiz extends behat_base {
         $slot = $quba->add_question(\question_bank::load_question($first->id));
         $quba->start_question($slot);
         \question_engine::save_questions_usage_by_activity($quba);
+    }
+
+    /**
+     * Hands the saved progress of a person's running CAT attempt to someone else (issue #96).
+     *
+     * The state that #96 refuses: a progress row whose person is not the person of its CAT attempt. The
+     * session cache is emptied as well, or the own entry would be used and the row never checked.
+     *
+     * @Given /^the saved progress of the running CAT attempt of "([^"]*)" belongs to "([^"]*)"$/
+     *
+     * @param string $owner
+     * @param string $other
+     * @return void
+     */
+    public function the_saved_progress_belongs_to(string $owner, string $other): void {
+        global $DB;
+        $catattempt = $this->last_cat_attempt_of($owner);
+        $otherid = $DB->get_field('user', 'id', ['username' => $other], MUST_EXIST);
+        $progress = $DB->get_record('local_catquiz_progress', ['attemptid' => $catattempt->id]);
+        if (!$progress) {
+            throw new \Behat\Mink\Exception\ExpectationException('No saved progress of ' . $owner, $this->getSession());
+        }
+        $DB->set_field('local_catquiz_progress', 'userid', $otherid, ['id' => $progress->id]);
+        \cache_helper::purge_by_event('changesinadaptivequizattempt');
+    }
+
+    /**
+     * The saved progress of a person's CAT attempt still names the given person, and there is one.
+     *
+     * @Then /^the saved progress of the CAT attempt of "([^"]*)" still belongs to "([^"]*)"$/
+     *
+     * @param string $owner
+     * @param string $expected
+     * @return void
+     */
+    public function the_saved_progress_still_belongs_to(string $owner, string $expected): void {
+        global $DB;
+        $catattempt = $this->last_cat_attempt_of($owner);
+        $expectedid = (int) $DB->get_field('user', 'id', ['username' => $expected], MUST_EXIST);
+        $rows = $DB->get_records('local_catquiz_progress', ['attemptid' => $catattempt->id]);
+        if (count($rows) !== 1 || (int) reset($rows)->userid !== $expectedid) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                sprintf(
+                    'Progress of the CAT attempt %d: %d rows, user %s.',
+                    $catattempt->id,
+                    count($rows),
+                    $rows ? reset($rows)->userid : '-'
+                ),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * A refused progress was logged with its reason (issue #96).
+     *
+     * @Then /^a progress integrity failure "([^"]*)" was logged$/
+     *
+     * @param string $reason
+     * @return void
+     */
+    public function a_progress_integrity_failure_was_logged(string $reason): void {
+        global $DB;
+        $events = $DB->get_records('logstore_standard_log', ['eventname' => '\\local_catquiz\\event\\progress_integrity_failed']);
+        foreach ($events as $event) {
+            $other = json_decode((string) $event->other, true);
+            if (($other['reason'] ?? null) === $reason) {
+                return;
+            }
+        }
+        throw new \Behat\Mink\Exception\ExpectationException(
+            sprintf('No progress integrity failure "%s" logged (%d others).', $reason, count($events)),
+            $this->getSession()
+        );
+    }
+
+    /**
+     * Sets the numbering of CAT attempts exactly N ahead of the activity's (issues #95, #101).
+     *
+     * Afterwards the next CAT attempt gets the id the next activity attempt gets, plus N. Rows are inserted
+     * and deleted again, which moves the sequence on every database and leaves nothing that statistics
+     * could count. Whichever numbering is behind is moved.
+     *
+     * @Given /^the CAT attempt numbering is (\d+) ahead of the activity attempts$/
+     *
+     * @param int $n
+     * @return void
+     */
+    public function the_cat_attempt_numbering_is_ahead(int $n): void {
+        $catnext = $this->next_id('local_catquiz_attempts');
+        $activitynext = $this->next_id('adaptivequiz_attempt');
+        if ($catnext - $activitynext < $n) {
+            $this->advance_to('local_catquiz_attempts', $activitynext + $n);
+        } else if ($catnext - $activitynext > $n) {
+            $this->advance_to('adaptivequiz_attempt', $catnext - $n);
+        }
+    }
+
+    /**
+     * The next activity attempt gets the id the CAT attempt of a person already has (issue #101).
+     *
+     * The case where mixing up the two id spaces does harm: the attempt id of person B is the CAT id of
+     * person A.
+     *
+     * @Given /^the next activity attempt id equals the CAT attempt id of "([^"]*)"$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function the_next_activity_attempt_id_equals_the_cat_attempt_id_of(string $username): void {
+        $target = (int) $this->last_cat_attempt_of($username)->id;
+        $next = $this->next_id('adaptivequiz_attempt');
+        if ($next > $target) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                sprintf('The activity attempts are already at %d, beyond %d; move the CAT numbering ahead first.', $next, $target),
+                $this->getSession()
+            );
+        }
+        $this->advance_to('adaptivequiz_attempt', $target);
+    }
+
+    /**
+     * The last CAT attempt of a person is filed under that person's own activity attempt, and the two ids
+     * differ (issues #95, #101).
+     *
+     * @Then /^the CAT attempt of "([^"]*)" is filed under its own activity attempt with a different id$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function the_cat_attempt_is_filed_under_its_own_activity_attempt(string $username): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, userid', 0, 1);
+        $attempt = reset($attempts);
+        $catattempt = $this->last_cat_attempt_of($username);
+        $progress = $DB->get_records('local_catquiz_progress', ['attemptid' => $catattempt->id]);
+        $problems = [];
+        if (!$attempt || (int) $catattempt->attemptid !== (int) $attempt->id) {
+            $problems[] = 'the CAT attempt names another activity attempt';
+        }
+        if ((int) $catattempt->userid !== $userid) {
+            $problems[] = 'the CAT attempt belongs to someone else';
+        }
+        if ($attempt && (int) $catattempt->id === (int) $attempt->id) {
+            $problems[] = 'both ids are the same, nothing was tested';
+        }
+        if (count($progress) > 1 || ($progress && (int) reset($progress)->userid !== $userid)) {
+            $problems[] = 'the progress is not the person\'s one';
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException(implode('; ', $problems), $this->getSession());
+        }
+    }
+
+    /**
+     * The last CAT attempt of a person.
+     *
+     * @param string $username
+     * @return \stdClass
+     */
+    private function last_cat_attempt_of(string $username): \stdClass {
+        global $DB;
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $rows = $DB->get_records('local_catquiz_attempts', ['userid' => $userid], 'id DESC', '*', 0, 1);
+        if (!$rows) {
+            throw new \Behat\Mink\Exception\ExpectationException('No CAT attempt of ' . $username, $this->getSession());
+        }
+        return reset($rows);
+    }
+
+    /**
+     * A row for moving the numbering of a table, deleted right away.
+     *
+     * @param string $table local_catquiz_attempts or adaptivequiz_attempt
+     * @return int Its id.
+     */
+    private function insert_and_delete(string $table): int {
+        global $DB;
+        $id = (int) $DB->insert_record($table, (object) $this->numbering_row($table));
+        $DB->delete_records($table, ['id' => $id]);
+        return $id;
+    }
+
+    /**
+     * The id the next row of a table gets.
+     *
+     * @param string $table
+     * @return int
+     */
+    private function next_id(string $table): int {
+        return $this->insert_and_delete($table) + 1;
+    }
+
+    /**
+     * Moves the numbering of a table on: its next row gets the id given.
+     *
+     * @param string $table
+     * @param int $next
+     */
+    private function advance_to(string $table, int $next): void {
+        global $DB;
+        // In one go: the sequences of a test site start far apart, and a row inserted per step took
+        // hundreds of thousands of them. A row with the id before the target makes the sequence
+        // continue after it; it is deleted again.
+        $before = $next - 1;
+        $row = $this->numbering_row($table);
+        $DB->execute(
+            'INSERT INTO {' . $table . '} (id, ' . implode(', ', array_keys($row)) . ') VALUES (?'
+                . str_repeat(', ?', count($row)) . ')',
+            array_merge([$before], array_values($row))
+        );
+        $DB->get_manager()->reset_sequence(new \xmldb_table($table));
+        $DB->delete_records($table, ['id' => $before]);
+    }
+
+    /**
+     * A row that can be put into a table to move its numbering.
+     *
+     * @param string $table
+     * @return array
+     */
+    private function numbering_row(string $table): array {
+        $row = $table === 'local_catquiz_attempts'
+            ? ['userid' => 0, 'attemptid' => -1, 'component' => 'behat_numbering', 'status' => 1, 'json' => '{}']
+            : ['instance' => 0, 'userid' => 0, 'uniqueid' => 0, 'attemptstate' => 'complete', 'attemptstopcriteria' => '',
+                'questionsattempted' => 0, 'difficultysum' => 0, 'standarderror' => 0, 'measure' => 0];
+        return $row + ['timecreated' => 0, 'timemodified' => 0];
     }
 
     /**

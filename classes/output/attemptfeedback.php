@@ -16,6 +16,7 @@
 
 namespace local_catquiz\output;
 
+use local_catquiz\local\attempt_cache;
 use cache;
 use cache_helper;
 use coding_exception;
@@ -308,7 +309,18 @@ class attemptfeedback implements renderable, templatable {
      */
     private function create_initial_data(): array {
         global $USER;
-        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
+        // Issue #146: the values of this attempt, under its own keys; the session-wide ones only for an
+        // attempt that was running during the upgrade.
+        $attemptid = (int) $this->attemptid;
+        $error = attempt_cache::get('catquizerror', $attemptid);
+        if (
+            $error !== false
+            && attempt_cache::cache()->get(attempt_cache::key('catquizerror', $attemptid)) === false
+            && (int) attempt_cache::cache()->get('catquizerrorattempt') !== $attemptid
+        ) {
+            // The session-wide error of another attempt.
+            $error = false;
+        }
         return [
             'attemptid' => $this->attemptid,
             'contextid' => $this->contextid,
@@ -316,12 +328,12 @@ class attemptfeedback implements renderable, templatable {
             'component' => 'mod_adaptivequiz',
             'userid' => $USER->id,
             'teststrategy' => $this->teststrategy,
-            'starttime' => $cache->get('starttime'),
-            'endtime' => $cache->get('endtime'),
-            'total_number_of_testitems' => $cache->get('totalnumberoftestitems'),
+            'starttime' => attempt_cache::get('starttime', $attemptid),
+            'endtime' => attempt_cache::get('endtime', $attemptid),
+            'total_number_of_testitems' => attempt_cache::get('totalnumberoftestitems', $attemptid),
             'number_of_testitems_used' => null,
-            'ability_before_attempt' => $cache->get('abilitybeforeattempt'),
-            'catquizerror' => $cache->get('catquizerror'),
+            'ability_before_attempt' => attempt_cache::get('abilitybeforeattempt', $attemptid),
+            'catquizerror' => $error,
             'studentfeedback' => [],
             'teacherfeedback' => [],
             'personabilities' => null,

@@ -40,6 +40,9 @@ class quizattemptsdisplay {
      */
     public function render_table() {
         $table = new quizattempts_table('quizattemptstable');
+        // Loading and downloading the rows through the table's web services asks the same as the CAT manager.
+        $table->context = \context_system::instance();
+        $table->requirecapability = 'local/catquiz:manage_catscales';
 
         [$select, $from, $where, $filter, $params] = catquiz::return_sql_for_quizattempts();
         $table->set_filter_sql($select, $from, $where, $filter, $params);

@@ -35,6 +35,7 @@ use local_catquiz\event\testiteminscale_added;
 use local_catquiz\event\testiteminscale_updated;
 use local_catquiz\local\result;
 use local_catquiz\local\status;
+use local_catquiz\local\attempt_cache;
 use context_system;
 use Exception;
 use local_catquiz\data\dataapi;
@@ -60,6 +61,9 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catscale {
+    /** @var string Session key of the generation of the question statistics of a person (issue #146). */
+    private const STATS_GENERATION_KEY = 'userquestionstatsgeneration';
+
     /**
      *
      * @var stdClass $catscale.
@@ -448,21 +452,72 @@ class catscale {
             return [];
         }
 
-        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $selectedscaleshash = hash('crc32', implode('_', $selectedsubscales));
-        $cachekey = sprintf('testitems_%s_%s_%s_%s', $contextid, $includesubscales, $this->catscale->id, $selectedscaleshash);
+        /* Issue #146: the pool is the same for everybody - items, parameters, usage in the CAT context - and
+           is kept in an application cache of its own, invalidated by the events of items, parameters and
+           scales. What depends on the person - when they last saw a question, how often - is added from a
+           small table per person in the session ({@see self::user_question_stats()}). Before, the hydrated
+           pool sat in the session cache, was written back whole for every question, and every attempt
+           start purged it - with the progress and feedback of any other open attempt of the session. */
+        $poolkey = self::pool_key($contextid, $includesubscales, (int) $this->catscale->id, $selectedsubscales);
+        $poolcache = cache::make('local_catquiz', 'runtimepool');
         // Issue #136: whether the pool came from the cache, and what a miss costs.
         timeline::start('pool:cache_lookup');
-        $testitems = $cache->get($cachekey);
+        $testitems = $poolcache->get($poolkey);
         timeline::stop('pool:cache_lookup', [
-            'pool_cache' => $testitems ? 'hit' : 'miss',
-            'pool_items' => $testitems ? count($testitems) : 0,
+            'pool_cache' => $testitems !== false ? 'hit' : 'miss',
+            'pool_items' => $testitems !== false ? count($testitems) : 0,
         ]);
-        if ($testitems) {
-            return $testitems;
+
+        if ($testitems === false) {
+            $testitems = $this->load_pool($contextid, $includesubscales, $orderby, $selectedsubscales);
+            timeline::span('pool:cache_write', fn() => $poolcache->set($poolkey, $testitems), ['pool_items' => count($testitems)]);
         }
 
-        global $DB, $USER;
+        global $USER;
+        $stats = self::user_question_stats((int) $USER->id);
+        foreach ($testitems as $id => $item) {
+            $seen = $stats[$id] ?? null;
+            $item->userid = $seen ? (int) $USER->id : null;
+            $item->userattempts = $seen ? $seen[0] : null;
+            $item->userlastattempttime = $seen ? $seen[1] : null;
+        }
+        return $testitems;
+    }
+
+    /**
+     * The key of a runtime pool (issue #146): CAT context, scale, whether with subscales, which subscales.
+     *
+     * Nothing of a person or a session is part of the pool - it is the same for everybody who plays it.
+     *
+     * @param int $contextid
+     * @param bool $includesubscales
+     * @param int $catscaleid
+     * @param array $selectedsubscales
+     * @return string
+     */
+    public static function pool_key(int $contextid, bool $includesubscales, int $catscaleid, array $selectedsubscales): string {
+        $selected = array_map('intval', $selectedsubscales);
+        sort($selected);
+        return sprintf(
+            'pool_%d_%d_%d_%s',
+            $contextid,
+            $includesubscales ? 1 : 0,
+            $catscaleid,
+            $selected ? hash('crc32b', implode('_', $selected)) : 'all'
+        );
+    }
+
+    /**
+     * Reads a runtime pool from the database, without the statistics of a person.
+     *
+     * @param int $contextid
+     * @param bool $includesubscales
+     * @param string|null $orderby
+     * @param array $selectedsubscales
+     * @return array Rows keyed by question id.
+     */
+    private function load_pool(int $contextid, bool $includesubscales, ?string $orderby, array $selectedsubscales): array {
+        global $DB;
         $scaleids = [$this->catscale->id];
         if ($includesubscales) {
             // Subscales ids for checked subscale boxes.
@@ -475,34 +530,105 @@ class catscale {
         // and scale names; the selection does not - it works on ids, scale ids and
         // item parameters. Leaving them out of this path takes 36 % off a payload
         // that measured 206 MB at 250.000 items.
+        // Issue #146: without a person (user id 0) - their statistics are added per request.
         [$select, $from, $where, , $params] = catquiz::return_sql_for_catscalequestions(
             $scaleids,
             $contextid,
             [],
-            $USER->id,
+            0,
             $orderby,
             null,
+            true,
+            // Issue #82: hidden and draft questions and items deactivated in their scale are not played.
             true
         );
 
         $sql = "SELECT $select FROM $from WHERE $where";
 
-        // Query and building the rows in one span: get_records_sql() does both, and switching to a
-        // recordset only to time them apart would change how the driver fetches.
-        $testitems = timeline::span(
+        // Issue #104: one entry per question, by a fixed rule. A question can be in two sibling scales;
+        // the query then has a row per scale, both with the question id first, and get_records_sql()
+        // kept one of them at random (and reported the duplicate). The selection plays a question once,
+        // so it gets one row - the one of the scale the question was assigned to first, the lowest item id.
+        return timeline::span(
             'pool:query',
-            fn() => $DB->get_records_sql($sql, $params) ?? [],
+            fn() => self::one_row_per_question($DB->get_recordset_sql($sql, $params)),
             ['pool_scales' => count($scaleids)]
         );
-        timeline::span('pool:cache_write', fn() => $cache->set($cachekey, $testitems), ['pool_items' => count($testitems)]);
-        return $testitems;
     }
 
     /**
-     * Update testitem.
+     * When a person last saw each question, and how often (issue #146).
+     *
+     * Kept in the session per person, in one small table for all pools: question id => [times seen, last
+     * time]. Read from the database once per generation - a new attempt starts a new one - and kept up to
+     * date with every question handed out ({@see self::update_testitem()}).
+     *
+     * @param int $userid
+     * @return array
+     */
+    public static function user_question_stats(int $userid): array {
+        $cache = attempt_cache::cache();
+        $key = self::user_stats_key($userid);
+        $stats = $cache->get($key);
+        if ($stats === false) {
+            $stats = timeline::span('pool:user_stats', fn() => catquiz::get_user_question_stats($userid));
+            $cache->set($key, $stats);
+        }
+        return $stats;
+    }
+
+    /**
+     * The session key of the question statistics of a person, in the current generation.
+     *
+     * @param int $userid
+     * @return string
+     */
+    private static function user_stats_key(int $userid): string {
+        return sprintf('userquestionstats_%d_%d', $userid, (int) attempt_cache::cache()->get(self::STATS_GENERATION_KEY));
+    }
+
+    /**
+     * A new generation of the question statistics of a person: read anew from the database at their next use.
+     *
+     * At the start of an attempt - what other attempts showed since, also on other devices, is taken in.
+     * The other open attempts of the session lose nothing: their state is not in these statistics.
+     *
+     * @param int $userid
+     */
+    public static function renew_user_question_stats(int $userid): void {
+        $cache = attempt_cache::cache();
+        $cache->delete(self::user_stats_key($userid));
+        $cache->set(self::STATS_GENERATION_KEY, (int) $cache->get(self::STATS_GENERATION_KEY) + 1);
+    }
+
+    /**
+     * The rows of the runtime pool, one per question: of several, the one with the lowest item id.
+     *
+     * The order of the rows is kept - the position of a question is that of its first row.
+     *
+     * @param \moodle_recordset $rows Rows with the question id first and the item id as itemid.
+     * @return array Rows keyed by question id.
+     */
+    public static function one_row_per_question(\moodle_recordset $rows): array {
+        $items = [];
+        foreach ($rows as $row) {
+            $id = $row->id;
+            if (!isset($items[$id]) || (int) $row->itemid < (int) $items[$id]->itemid) {
+                $items[$id] = $row;
+            }
+        }
+        $rows->close();
+        return $items;
+    }
+
+    /**
+     * Records that a question was handed out to a person: in their question statistics (issue #146).
+     *
+     * The pool itself is the same for everybody and is not changed. The parameters of the pool are no
+     * longer needed and kept for the callers.
      *
      * @param int $contextid
-     * @param mixed $question
+     * @param mixed $question The question, with the time it was handed out as userlastattempttime.
      * @param mixed $catscaleid
      * @param bool $includesubscales
      * @param array $selectedsubscales
@@ -517,20 +643,17 @@ class catscale {
         $includesubscales = false,
         array $selectedsubscales = []
     ) {
-        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $selectedscaleshash = hash('crc32', implode('_', $selectedsubscales));
-        $cachekey = sprintf('testitems_%s_%s_%s_%s', $contextid, $includesubscales, $catscaleid, $selectedscaleshash);
-        // This should never happen...
-        if (!$testitems = $cache->get($cachekey)) {
-            throw new moodle_exception(
-                sprintf(
-                    "Can not update question in questions cache: cache with key %s is empty",
-                    $cachekey
-                )
-            );
-        }
-        $testitems[$question->id] = $question;
-        $cache->set($cachekey, $testitems);
+        global $USER;
+        /* Issue #146: only what changes - the person has seen the question now. Before, the whole hydrated
+           pool was read and written back to the session for every question handed out. */
+        $userid = (int) ($question->userid ?? 0) ?: (int) $USER->id;
+        $stats = self::user_question_stats($userid);
+        $seen = $stats[(int) $question->id] ?? [0, 0];
+        $stats[(int) $question->id] = [
+            (int) $seen[0] + 1,
+            (int) ($question->userlastattempttime ?? time()),
+        ];
+        attempt_cache::cache()->set(self::user_stats_key($userid), $stats);
     }
 
     /**
@@ -700,7 +823,8 @@ class catscale {
         $url->param('contextid', $context);
         $url->param('scaleid', $catscaleid);
         $url->param('component', $component);
-        $url->set_anchor("questions");
+        // Issue #32: the tab is a request parameter since #29; the anchor landed on the default tab.
+        $url->param('tab', 'questions');
 
         $linktoscale = html_writer::link($url, $linktext);
 

@@ -224,6 +224,16 @@ class modal_manage_catscale extends dynamic_form {
             $errors['catquiz_minscalevalue'] = get_string('errorminscalevalue', 'local_catquiz');
         }
 
+        // Issue #52: not below itself or one of its own subscales.
+        $id = (int) ($data['id'] ?? 0);
+        $parentid = (int) ($data['parentid'] ?? 0);
+        if ($id > 0 && $parentid > 0) {
+            $descendants = array_map('intval', \local_catquiz\catscale::get_subscale_ids($id));
+            if ($parentid === $id || in_array($parentid, $descendants, true)) {
+                $errors['parentid'] = get_string('cannotmovescaleintoitself', 'local_catquiz');
+            }
+        }
+
         return $errors;
     }
 

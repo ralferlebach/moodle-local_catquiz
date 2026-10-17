@@ -46,6 +46,9 @@ final class timeline {
     /** @var string Trace of a request that administers a following item. */
     public const KIND_NEXT_ITEM = 'next_item';
 
+    /** @var string Trace of a reload: the pending item is shown again, nothing is selected (adapter #6). */
+    public const KIND_RELOAD = 'reload';
+
     /** @var string Table the traces are written to. */
     public const TABLE = 'local_catquiz_trace';
 
@@ -106,13 +109,15 @@ final class timeline {
      *
      * @param int $adaptiveattemptid adaptivequiz_attempt.id
      * @param int $questionsattempted Items already answered before this request.
+     * @param string|null $kind KIND_RELOAD for a request that shows the pending item again; otherwise
+     *      first or next item, from the number answered.
      */
-    public static function attempt(int $adaptiveattemptid, int $questionsattempted): void {
+    public static function attempt(int $adaptiveattemptid, int $questionsattempted, ?string $kind = null): void {
         if (!self::enabled()) {
             return;
         }
         self::$adaptiveattemptid = $adaptiveattemptid;
-        self::$kind = $questionsattempted > 0 ? self::KIND_NEXT_ITEM : self::KIND_FIRST_ITEM;
+        self::$kind = $kind ?? ($questionsattempted > 0 ? self::KIND_NEXT_ITEM : self::KIND_FIRST_ITEM);
         self::$questionnumber = $questionsattempted + 1;
         if (!self::$registered && !(defined('PHPUNIT_TEST') && PHPUNIT_TEST)) {
             \core_shutdown_manager::register_function([self::class, 'flush']);
