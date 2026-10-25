@@ -44,6 +44,13 @@ use advanced_testcase;
  */
 final class capability_declaration_test extends advanced_testcase {
     /**
+     * A capability check in the source of an endpoint: require_capability()/has_capability(), or the access
+     * rule of the feedback that wraps them (feedback_access: local/catquiz:canmanage on the site, or
+     * local/catquiz:view_users_feedback in the context), which the lazy statistics endpoint uses.
+     */
+    private const CAPABILITY_CHECK = '/(require_capability|has_capability|feedback_access::can_view_(other_users|user))\s*\(/';
+
+    /**
      * Returns the capabilities the plugin code checks.
      *
      * @return string[]
@@ -154,7 +161,7 @@ final class capability_declaration_test extends advanced_testcase {
             if (!preg_match('/function execute\s*\(/', $source)) {
                 continue;
             }
-            if (!preg_match('/(require_capability|has_capability)\s*\(/', $source)) {
+            if (!preg_match(self::CAPABILITY_CHECK, $source)) {
                 $unguarded[] = basename($file);
             }
         }
@@ -288,7 +295,7 @@ final class capability_declaration_test extends advanced_testcase {
             if (!str_contains($source, 'validate_context')) {
                 $missing[] = $name . ' (no validate_context)';
             }
-            if (!preg_match('/(require|has)_capability/', $source)) {
+            if (!preg_match(self::CAPABILITY_CHECK, $source)) {
                 $missing[] = $name . ' (no capability check)';
             }
         }

@@ -31,8 +31,9 @@ use stdClass;
  * productively (pilotquestions_loader::ispilot), the per-scale maximum only for strategies whose selection
  * it limits, and the fisher information of the selection. A maximum of 0 is no limit.
  *
- * Findings are hard errors (no attempt can meet the settings: saving is refused), warnings (valid, but a
- * criterion can never act) and diagnostics (depends on the answers; for information only).
+ * Findings are hard errors (no attempt can meet the settings: saving is refused, and an attempt does not
+ * start), warnings (valid, but a criterion can never act) and diagnostics (depends on the answers; for
+ * information only).
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -48,8 +49,6 @@ final class settings_validator {
     /** @var string Depends on the answers; reported, not judged. */
     public const DIAGNOSTIC = 'diagnostic';
 
-    /** @var string[] Hard errors that also keep an attempt from starting: there is nothing to play. */
-    public const BLOCKING_AT_START = ['nousableitems', 'scalewithoutitems'];
 
     /** @var float[] Abilities the best case of an item's information is looked for at. */
     private const ABILITY_GRID = [-6.0, -5.0, -4.0, -3.0, -2.5, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0,
@@ -90,7 +89,7 @@ final class settings_validator {
         $coverage = $strategy ? $strategy->requires_scale_coverage() : false;
 
         $selected = self::selected_subscales($settings);
-        $items = self::productive_items($rootid, $selected);
+        [$items, $pilotsonly] = self::productive_items($rootid, $selected);
         $perscale = [];
         foreach ($items as $item) {
             $perscale[(int) $item->catscaleid] = ($perscale[(int) $item->catscaleid] ?? 0) + 1;
@@ -101,6 +100,11 @@ final class settings_validator {
                 'scale' => self::scale_name($rootid),
             ]);
             return $findings;
+        }
+        if ($pilotsonly) {
+            $findings[] = self::finding(self::WARNING, 'onlypilotitems', 'catquiz_catscales', [
+                'scale' => self::scale_name($rootid), 'items' => count($items),
+            ]);
         }
 
         // The largest number of productive questions a person can get - as the runtime counts.
@@ -127,25 +131,75 @@ final class settings_validator {
             ]);
         }
 
-        // A scale the selection has to cover needs candidates of its own subtree.
+        // A scale the selection has to cover needs candidates of its own subtree - and, with a minimum per scale,
+        // that many: its results are measured on them. The runtime counts a question for the scale of its item
+        // and every ancestor (progress::add_playedquestion()), one item per question, as in $perscale.
         if ($coverage) {
-            foreach (array_unique(array_merge([$rootid], $selected)) as $scaleid) {
-                $subtree = array_merge([$scaleid], catscale::get_subscale_ids($scaleid));
+            $required = array_values(array_unique(array_merge([$rootid], $selected)));
+            $demand = [];
+            foreach ($required as $scaleid) {
+                $descendants = catscale::get_subscale_ids($scaleid);
+                $subtree = array_merge([$scaleid], $descendants);
                 $candidates = array_sum(array_intersect_key($perscale, array_flip($subtree)));
                 if ($candidates === 0) {
                     $findings[] = self::finding(self::ERROR, 'scalewithoutitems', 'catquiz_catscales', [
                         'scale' => self::scale_name($scaleid),
                     ]);
-                } else if ($minperscale > 0 && ($perscale[$scaleid] ?? 0) > 0 && $perscale[$scaleid] < $minperscale) {
-                    $findings[] = self::finding(self::WARNING, 'scalebelowminimum', 'maxquestionsscalegroup', [
-                        'scale' => self::scale_name($scaleid), 'items' => $perscale[$scaleid], 'min' => $minperscale,
+                    continue;
+                }
+                if ($minperscale > 0 && $candidates < $minperscale) {
+                    $findings[] = self::finding(self::ERROR, 'scalebelowminimum', 'maxquestionsscalegroup', [
+                        'scale' => self::scale_name($scaleid), 'items' => $candidates, 'min' => $minperscale,
                     ]);
                 }
+                // The scales at the bottom of what has to be covered: their questions count for those above.
+                if (!array_intersect(array_map('intval', $descendants), $required)) {
+                    $demand[$scaleid] = min($minperscale, $candidates);
+                }
             }
+            // ALLSUBS: every covered scale needs its minimum within the maximum of the test (issue #60, example 2).
+            $needed = array_sum($demand);
+            if ($minperscale > 0 && $max > 0 && $needed > $max) {
+                $findings[] = self::finding(self::ERROR, 'coveragebudget', 'maxquestionsgroup', [
+                    'needed' => $needed, 'max' => $max, 'scales' => count($demand), 'min' => $minperscale,
+                ]);
+            }
+        }
+
+        // Pilot items take places of the usage: the number of questions to expect for the productive minimum.
+        $pilotratio = !empty($settings->catquiz_includepilotquestions) ? (float) ($settings->catquiz_pilotratio ?? 0) : 0.0;
+        if ($pilotratio > 0 && $pilotratio < 100 && $min > 0 && !$pilotsonly) {
+            $findings[] = self::finding(self::DIAGNOSTIC, 'pilotexpectation', 'catquiz_pilotratio', [
+                'expected' => (int) ceil($min / (1 - $pilotratio / 100)), 'min' => $min, 'ratio' => format_float($pilotratio, 0),
+            ]);
         }
 
         $findings = array_merge($findings, self::precision_findings($settings, $items, $effective));
         return $findings;
+    }
+
+    /**
+     * The hard errors that depend on the settings alone - not on the item pool, which may be filled after the
+     * test is configured: what every save path refuses (issue #60, programmatic save paths).
+     *
+     * @param stdClass $settings
+     * @return array[] Error findings.
+     */
+    public static function structural_errors(stdClass $settings): array {
+        $min = (int) ($settings->maxquestionsgroup->catquiz_minquestions ?? 0);
+        $max = (int) ($settings->maxquestionsgroup->catquiz_maxquestions ?? 0);
+        $minperscale = (int) ($settings->maxquestionsscalegroup->catquiz_minquestionspersubscale ?? 0);
+        $maxperscale = (int) ($settings->maxquestionsscalegroup->catquiz_maxquestionspersubscale ?? 0);
+        $findings = [];
+        if ($max > 0 && $min > $max) {
+            $findings[] = self::finding(self::ERROR, 'minabovemax', 'maxquestionsgroup', ['min' => $min, 'max' => $max]);
+        }
+        if ($maxperscale > 0 && $minperscale > $maxperscale) {
+            $findings[] = self::finding(self::ERROR, 'minperscaleabovemax', 'maxquestionsscalegroup', [
+                'min' => $minperscale, 'max' => $maxperscale,
+            ]);
+        }
+        return array_merge($findings, self::errors(self::time_findings($settings)));
     }
 
     /**
@@ -238,11 +292,18 @@ final class settings_validator {
     }
 
     /**
-     * The productive items of the runtime pool: what the selection plays, pilots and unusable items left out.
+     * The productive items of the runtime pool: what the selection plays productively, pilots and unusable
+     * items left out. Pilots never count as productive capacity while there is a productive item.
+     *
+     * A pool of pilots only - an item bank before its calibration - is decided explicitly (issue #60): the
+     * runtime plays it (maybe_return_pilot narrows to productive items only when some are left), and
+     * refusing it would leave a new item bank without any way to collect the answers its calibration needs.
+     * Its items are then the capacity, and the finding "onlypilotitems" says that the test measures nothing
+     * yet. Nothing is reinterpreted silently.
      *
      * @param int $rootid
      * @param int[] $selected
-     * @return stdClass[]
+     * @return array [stdClass[] items, bool whether they are pilots only]
      */
     private static function productive_items(int $rootid, array $selected): array {
         $contextid = catscale::get_context_id($rootid);
@@ -255,8 +316,10 @@ final class settings_validator {
             $calculated,
             fn($item) => !$loader->ispilot(clone $item, LOCAL_CATQUIZ_THRESHOLD_DEFAULT)
         );
-        // As maybe_return_pilot: without pilots the pool is narrowed to productive items only when some are left.
-        return $productive ?: $calculated;
+        if ($productive || !$calculated) {
+            return [$productive, false];
+        }
+        return [$calculated, true];
     }
 
     /**

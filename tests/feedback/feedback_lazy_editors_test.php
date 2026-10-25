@@ -432,4 +432,71 @@ final class feedback_lazy_editors_test extends advanced_testcase {
         $this->assertTrue($call($args)['error']);
         $_POST = [];
     }
+
+    /**
+     * Adapter issue #2: a wrong session key is refused like a missing one; a teacher of another course gets
+     * nothing of this course's activity, also when the course named is his own; a prohibition at the activity
+     * wins over the right in the course; a scale that is not a root is no root of a tree.
+     */
+    public function test_the_fragment_refuses_the_wrong_caller(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [$root, $sub] = $this->tree(1);
+        [$course, $adaptivequiz, $cm] = $this->activity();
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        $othercourse = $this->getDataGenerator()->create_course();
+        $otherteacher = $this->getDataGenerator()->create_and_enrol($othercourse, 'editingteacher');
+        $call = function (array $args, int $courseid) {
+            global $PAGE, $OUTPUT;
+            $PAGE = new \moodle_page();
+            $OUTPUT = new \bootstrap_renderer();
+            return external_api::call_external_function('core_get_fragment', [
+                'component' => 'local_catquiz', 'callback' => 'feedbackpanel',
+                'contextid' => context_course::instance($courseid)->id,
+                'args' => array_map(fn($k) => ['name' => $k, 'value' => (string) $args[$k]], array_keys($args)),
+            ]);
+        };
+        $args = ['scaleid' => $sub, 'rootscaleid' => $root, 'nranges' => 2, 'cmid' => $cm->id,
+            'instanceid' => $adaptivequiz->id, 'values' => '{}'];
+        try {
+            $this->setUser($teacher);
+            $_POST['sesskey'] = 'not-the-key';
+            $result = $call($args, $course->id);
+            $this->assertTrue($result['error']);
+            $this->assertSame('invalidsesskey', $result['exception']->errorcode);
+
+            // The teacher of another course, asking in his own course for this activity.
+            $this->setUser($otherteacher);
+            $_POST['sesskey'] = sesskey();
+            $result = $call($args, $othercourse->id);
+            $this->assertTrue($result['error']);
+            $this->assertSame('nopermissions', $result['exception']->errorcode);
+
+            // A prohibition at the activity wins over the right in the course.
+            $roleid = (int) $DB->get_field('role', 'id', ['shortname' => 'editingteacher']);
+            assign_capability(
+                'moodle/course:manageactivities',
+                CAP_PROHIBIT,
+                $roleid,
+                \context_module::instance($cm->id)->id,
+                true
+            );
+            $this->setUser($teacher);
+            $_POST['sesskey'] = sesskey();
+            $result = $call($args, $course->id);
+            $this->assertTrue($result['error']);
+            $this->assertSame('nopermissions', $result['exception']->errorcode);
+            unassign_capability('moodle/course:manageactivities', $roleid, \context_module::instance($cm->id)->id);
+
+            // A subscale named as the root: no tree, the notice.
+            $result = $call(['rootscaleid' => $sub] + $args, $course->id);
+            $this->assertFalse($result['error']);
+            $this->assertStringContainsString(
+                get_string('feedbackpanelscalegone', 'local_catquiz'),
+                $result['data']['html']
+            );
+        } finally {
+            $_POST = [];
+        }
+    }
 }

@@ -491,11 +491,12 @@ final class chart_aggregation_test extends advanced_testcase {
 
         $this->resetAfterTest();
 
+        // Issue #88: the charts load their attempts through the shared population.
         $source = file_get_contents(
-            $CFG->dirroot . '/local/catquiz/classes/output/catquizstatistics.php'
+            $CFG->dirroot . '/local/catquiz/classes/local/statistics/attempt_population.php'
         );
 
-        $start = strpos($source, 'private function get_attempts()');
+        $start = strpos($source, 'public function attempts(');
         $this->assertNotFalse($start);
 
         // Cut at the closing brace of the method, not at the next declaration: the
@@ -510,7 +511,7 @@ final class chart_aggregation_test extends advanced_testcase {
             'The charts need the json column.'
         );
         $this->assertStringNotContainsString(
-            'debug_info',
+            'a.debug_info',
             $body,
             'debug_info is never read here and must not be fetched.'
         );

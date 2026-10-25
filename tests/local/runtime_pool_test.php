@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/local/catquiz/lib.php');
+require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/concurrent_processes.php');
 
 /**
  * The runtime item pool apart from the state of the attempts (issue #146).
@@ -46,8 +47,11 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @covers \local_catquiz\catscale::pool_key
  * @covers \local_catquiz\catscale::user_question_stats
  * @covers \local_catquiz\catquiz_handler::prepare_attempt_caches
+ * @covers \local_catquiz_observer::question_bank_changed
  */
 final class runtime_pool_test extends advanced_testcase {
+    use \local_catquiz_concurrent_processes;
+
     /** @var int A CAT context that covers now. */
     private int $contextid;
 
@@ -279,6 +283,89 @@ final class runtime_pool_test extends advanced_testcase {
     }
 
     /**
+     * The question bank changes the pool too (issue #146): a CAT item hidden there is gone from the next pool at
+     * once - not after the lifetime of the cache - and so is a new version's effect; a question of the site that
+     * is no CAT item leaves the cached pool alone.
+     */
+    public function test_question_bank_changes_invalidate_the_pool(): void {
+        global $DB;
+        $key = catscale::pool_key($this->contextid, false, $this->scaleid, []);
+        $poolcache = cache::make('local_catquiz', 'runtimepool');
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+
+        $this->assertArrayHasKey((int) $this->questions[0]->id, $this->pool());
+        $DB->set_field(
+            'question_versions',
+            'status',
+            \core_question\local\bank\question_version_status::QUESTION_STATUS_HIDDEN,
+            ['questionid' => $this->questions[0]->id]
+        );
+        \core\event\question_updated::create_from_question_instance($this->questions[0], \context_system::instance())->trigger();
+        $this->assertArrayNotHasKey((int) $this->questions[0]->id, $this->pool(), 'Hidden in the question bank.');
+
+        // A new version of an item's question: the event names the new question, the item the old one.
+        $this->pool();
+        $this->assertNotFalse($poolcache->get($key));
+        $newversion = $generator->update_question($this->questions[1]);
+        \core\event\question_created::create_from_question_instance($newversion, \context_system::instance())->trigger();
+        $this->assertFalse($poolcache->get($key), 'A new version of a CAT item.');
+
+        // Any other question: the pool stays.
+        $this->pool();
+        $other = $generator->create_question('truefalse', null, ['category' => $generator->create_question_category()->id]);
+        \core\event\question_updated::create_from_question_instance($other, \context_system::instance())->trigger();
+        $this->assertNotFalse($poolcache->get($key), 'Not a CAT item.');
+    }
+
+    /**
+     * Persons whose attempts really run at the same time (issue #146): processes of their own start on a cold
+     * pool at the same instant, each person is shown a question of their own, starts an attempt and reads the
+     * pool. Everybody gets the same pool, sees only their own statistics, and nothing of a person is in the
+     * shared pool.
+     */
+    public function test_concurrent_attempts_of_several_persons(): void {
+        $this->require_concurrent_processes();
+        // The processes have connections of their own: they see only what is committed, and what they write
+        // is not undone by a rollback. So no test transaction - the slow reset afterwards takes it all away.
+        $this->preventResetByRollback();
+        $users = [];
+        foreach ($this->questions as $question) {
+            $users[] = $this->getDataGenerator()->create_user();
+        }
+        $poolcache = cache::make('local_catquiz', 'runtimepool');
+        $poolcache->purge();
+        $questions = $this->questions;
+
+        $answers = $this->at_the_same_time(count($users), function (int $i) use ($users, $questions) {
+            $this->setUser($users[$i]);
+            $this->show($questions[$i]);
+            catquiz_handler::prepare_attempt_caches(800 + $i);
+            $seen = [];
+            foreach ($this->pool() as $id => $row) {
+                $seen[$id] = (int) $row->userattempts;
+            }
+            ksort($seen);
+            return $seen;
+        });
+
+        $ids = array_map(fn($q) => (int) $q->id, $this->questions);
+        sort($ids);
+        foreach ($answers as $i => $answer) {
+            $this->assertArrayNotHasKey('error', $answer, $answer['error'] ?? '');
+            $expected = array_fill_keys($ids, 0);
+            $expected[(int) $this->questions[$i]->id] = 1;
+            $this->assertSame($expected, $answer['ok'], "Person $i sees the same pool, and only their own question as seen.");
+        }
+        $cached = $poolcache->get(catscale::pool_key($this->contextid, false, $this->scaleid, []));
+        if ($cached !== false) {
+            foreach ($cached as $row) {
+                $this->assertEmpty($row->userattempts ?? null, 'Nothing of a person in the shared pool.');
+                $this->assertEmpty($row->userlastattempttime ?? null, 'Nothing of a person in the shared pool.');
+            }
+        }
+    }
+
+    /**
      * Cold and warm: the same pool.
      */
     public function test_cold_and_warm_pools_are_the_same(): void {
@@ -288,5 +375,83 @@ final class runtime_pool_test extends advanced_testcase {
         cache::make('local_catquiz', 'runtimepool')->purge();
         attempt_cache::cache()->purge();
         $this->assertEquals($warm, $this->pool());
+    }
+
+    /**
+     * After every kind of change made the way the plugin makes it, the pool an attempt reads - cached again
+     * right after the change - is the pool a cold read gives (issue #146, decision in runtime-pool-cache.md):
+     * parameters, the status of an item, the scale, the context of the scale, the question bank.
+     */
+    public function test_after_each_change_the_cached_pool_is_a_cold_read(): void {
+        global $DB;
+        foreach ($this->questions as $i => $question) {
+            $item = $DB->get_record('local_catquiz_items', ['componentid' => $question->id], '*', MUST_EXIST);
+            $paramid = $DB->insert_record('local_catquiz_itemparams', (object) [
+                'itemid' => $item->id, 'componentid' => $question->id, 'componentname' => 'question',
+                'contextid' => $this->contextid, 'model' => 'raschbirnbaum', 'difficulty' => $i - 1.0,
+                'discrimination' => 1.0, 'guessing' => 0, 'json' => '{}', 'status' => LOCAL_CATQUIZ_STATUS_CALCULATED,
+                'usable' => 1, 'timecreated' => time(), 'timemodified' => time(),
+            ]);
+            $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $item->id]);
+        }
+        cache::make('local_catquiz', 'runtimepool')->purge();
+        $cold = function (): array {
+            cache::make('local_catquiz', 'runtimepool')->purge();
+            attempt_cache::cache()->purge();
+            return $this->pool();
+        };
+        $check = function (string $change, callable $make) use ($cold): void {
+            $this->pool();
+            $make();
+            $cached = $this->pool();
+            $this->assertEquals($cold(), $cached, "After: $change.");
+            $this->assertEquals($cached, $this->pool(), "Warm again after: $change.");
+        };
+
+        $check('a parameter estimated anew', function (): void {
+            $list = \local_catquiz\local\model\model_item_param_list::load_from_db(
+                $this->contextid,
+                'raschbirnbaum',
+                [$this->scaleid]
+            );
+            $param = $list[(int) $this->questions[0]->id];
+            $param->set_parameters(['difficulty' => 2.5, 'discrimination' => 1.0]);
+            $list->save_to_db($this->contextid, [$this->scaleid]);
+        });
+        $this->assertEquals(2.5, (float) $this->pool()[(int) $this->questions[0]->id]->difficulty);
+
+        $check('an item switched off', fn() => catscale::add_or_update_testitem_to_scale(
+            $this->scaleid,
+            (int) $this->questions[1]->id,
+            LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE
+        ));
+        $this->assertArrayNotHasKey((int) $this->questions[1]->id, $this->pool());
+
+        $check('the scale changed', fn() => \local_catquiz\data\dataapi::update_catscale((object) [
+            'id' => $this->scaleid, 'name' => 'Renamed pool scale', 'parentid' => 0,
+        ]));
+
+        $check('the scale moved to a new context', function (): void {
+            $new = (int) $GLOBALS['DB']->insert_record('local_catquiz_catcontext', (object) [
+                'name' => 'New pool context', 'description' => '', 'descriptionformat' => FORMAT_HTML,
+                'starttimestamp' => time() - 1000, 'endtimestamp' => time() + 10000,
+                'timecreated' => time(), 'timemodified' => time(), 'usermodified' => 0,
+            ]);
+            \local_catquiz\data\dataapi::update_catscale((object) ['id' => $this->scaleid, 'parentid' => 0, 'contextid' => $new]);
+            $this->contextid = $new;
+        });
+        $this->assertArrayHasKey((int) $this->questions[0]->id, $this->pool(), 'The items moved with the scale.');
+
+        $check('a question hidden in the question bank', function (): void {
+            $GLOBALS['DB']->set_field(
+                'question_versions',
+                'status',
+                \core_question\local\bank\question_version_status::QUESTION_STATUS_HIDDEN,
+                ['questionid' => $this->questions[2]->id]
+            );
+            \core\event\question_updated::create_from_question_instance($this->questions[2], \context_system::instance())
+                ->trigger();
+        });
+        $this->assertArrayNotHasKey((int) $this->questions[2]->id, $this->pool());
     }
 }

@@ -92,7 +92,14 @@ final class upgrade_range_snapshot_test extends advanced_testcase {
         $this->assertNull($row->rangelower, 'The range of an older result is not taken from today\'s scale here.');
         $this->assertNull($row->rangeupper);
         $this->assertSame(0, (int) $row->rangebackfilled);
-        $this->assertSame('2026100916', (string) get_config('local_catquiz', 'version'));
+        // The upgrade runs to its last savepoint - read from upgrade.php, not pinned: every new step moved it.
+        global $CFG;
+        preg_match_all(
+            "/upgrade_plugin_savepoint\\(true, (\\d+), 'local', 'catquiz'\\)/",
+            file_get_contents($CFG->dirroot . '/local/catquiz/db/upgrade.php'),
+            $savepoints
+        );
+        $this->assertSame((string) max(array_map('intval', $savepoints[1])), (string) get_config('local_catquiz', 'version'));
 
         // Run again on a site where the columns exist: nothing breaks.
         set_config('version', 2026100912, 'local_catquiz');

@@ -219,6 +219,9 @@ class testenvironment {
     public function save_or_update($templatename = '') {
         global $DB;
 
+        // Every save path refuses what no attempt could meet, whatever the pool (issue #60).
+        self::assert_consistent($this->json ?? '');
+
         // If we find the exact record, it might still be the case that we want to save a copy of a template.
         if ($record = $this->get_record($this->id, $this->componentid, $this->component)) {
             if (empty($templatename) || ($record->name == $templatename)) {
@@ -252,6 +255,188 @@ class testenvironment {
     }
 
     /**
+     * Whether a test environment is a template: one without an instance of its component (issue #89).
+     *
+     * @param int $id
+     * @return bool
+     */
+    public static function is_template(int $id): bool {
+        global $DB;
+        return $id > 0 && $DB->record_exists_select('local_catquiz_tests', 'id = :id AND componentid = 0', ['id' => $id]);
+    }
+
+    /**
+     * Whether a name is taken by another template (issue #89).
+     *
+     * The rule: names of templates are unique, compared trimmed and without regard to case. An empty name is
+     * always taken - a template needs one.
+     *
+     * @param string $name
+     * @param int $exceptid The template being renamed, which may keep its own name.
+     * @return bool
+     */
+    public static function template_name_taken(string $name, int $exceptid = 0): bool {
+        global $DB;
+        $wanted = \core_text::strtolower(trim($name));
+        if ($wanted === '') {
+            return true;
+        }
+        $records = $DB->get_records_select(
+            'local_catquiz_tests',
+            'componentid = 0 AND id <> :id',
+            ['id' => $exceptid],
+            '',
+            'id, name'
+        );
+        foreach ($records as $record) {
+            if (\core_text::strtolower(trim((string) $record->name)) === $wanted) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Refuses settings with a hard error that does not depend on the item pool (issue #60).
+     *
+     * The form checks everything, the pool included; a template, an import or a webservice saves before the
+     * pool may be filled, and the start of an attempt checks the pool for every path (catquiz_handler::preflight).
+     * What depends on the settings alone - minimum above maximum, a time limit without a time - is refused here.
+     *
+     * @param string $json The settings as stored.
+     * @throws moodle_exception settingsinconsistent, with every reason.
+     */
+    public static function assert_consistent(string $json): void {
+        $settings = json_decode($json);
+        if (!$settings instanceof stdClass) {
+            return;
+        }
+        $errors = \local_catquiz\local\validation\settings_validator::structural_errors($settings);
+        if ($errors) {
+            throw new moodle_exception('settingsinconsistent', 'local_catquiz', '', implode(' ', array_column($errors, 'message')));
+        }
+    }
+
+    /**
+     * Overwrites exactly the given template with these settings (issue #89: "Vorlage aktualisieren").
+     *
+     * The template keeps its id, its status and its creation time; the name is changed only when one is given.
+     * Before, a template was updated or copied depending on whether the typed name matched its old one.
+     *
+     * @param int $templateid
+     * @param stdClass $settings The settings as the activity stores them.
+     * @param int $catscaleid
+     * @param string $name A new name, or '' to keep the old one.
+     * @return int The id of the template.
+     * @throws moodle_exception When the id is no template or the name is taken.
+     */
+    public static function update_template(int $templateid, stdClass $settings, int $catscaleid, string $name = ''): int {
+        if (!self::is_template($templateid)) {
+            throw new moodle_exception('templatenotfound', 'local_catquiz');
+        }
+        $name = trim($name);
+        if ($name !== '' && self::template_name_taken($name, $templateid)) {
+            throw new moodle_exception('templatenametaken', 'local_catquiz', '', $name);
+        }
+        $data = (object) [
+            'id' => $templateid,
+            'json' => json_encode($settings),
+            'catscaleid' => $catscaleid,
+        ];
+        if ($name !== '') {
+            $data->name = $name;
+        }
+        $test = new self($data);
+        $test->save_or_update();
+        cache_helper::purge_by_event('changesintestenvironments');
+        return $templateid;
+    }
+
+    /**
+     * Saves these settings as a new template (issue #89: "Als neue Vorlage speichern").
+     *
+     * The source - the activity, or the template it was loaded from - is not changed. The copy gets its own id,
+     * no instance, no course, no parent, the status "active" and its own creation time.
+     *
+     * @param stdClass $settings
+     * @param int $catscaleid
+     * @param string $name
+     * @param string $component
+     * @return int The id of the new template.
+     * @throws moodle_exception When the name is empty or taken.
+     */
+    public static function create_template(
+        stdClass $settings,
+        int $catscaleid,
+        string $name,
+        string $component = 'mod_adaptivequiz'
+    ): int {
+        global $DB;
+        $name = trim($name);
+        if (self::template_name_taken($name)) {
+            throw new moodle_exception('templatenametaken', 'local_catquiz', '', $name);
+        }
+        self::assert_consistent(json_encode($settings));
+        $now = time();
+        $id = (int) $DB->insert_record('local_catquiz_tests', (object) [
+            'parentid' => 0,
+            'componentid' => 0,
+            'component' => $component,
+            'catscaleid' => $catscaleid,
+            'contextid' => $catscaleid
+                ? $DB->get_field('local_catquiz_catscales', 'contextid', ['id' => $catscaleid])
+                : null,
+            'courseid' => 0,
+            'name' => $name,
+            'description' => '',
+            'descriptionformat' => FORMAT_HTML,
+            'json' => json_encode($settings),
+            'status' => LOCAL_CATQUIZ_STATUS_TEST_ACTIVE,
+            'timecreated' => $now,
+            'timemodified' => $now,
+        ]);
+        cache_helper::purge_by_event('changesintestenvironments');
+        return $id;
+    }
+
+    /**
+     * Copies the files of the written feedback from one place to another (issue #89).
+     *
+     * The feedback editors of an activity keep their files in the activity's context, item id = instance; a
+     * template keeps them in the system context, item id = template id - where the form takes them from when
+     * the template is loaded. Saving a template from an activity copies them over, replacing what the
+     * template had; the source keeps its files.
+     *
+     * @param int $fromcontextid
+     * @param int $fromitemid
+     * @param int $tocontextid
+     * @param int $toitemid
+     * @return int The number of files copied.
+     */
+    public static function copy_feedback_files(int $fromcontextid, int $fromitemid, int $tocontextid, int $toitemid): int {
+        global $DB;
+        $fs = get_file_storage();
+        $areasof = fn(int $contextid, int $itemid) => $DB->get_fieldset_sql(
+            "SELECT DISTINCT filearea
+               FROM {files}
+              WHERE contextid = :contextid AND component = 'local_catquiz' AND itemid = :itemid
+                AND " . $DB->sql_like('filearea', ':area'),
+            ['contextid' => $contextid, 'itemid' => $itemid, 'area' => 'feedback_files_%']
+        );
+        foreach ($areasof($tocontextid, $toitemid) as $area) {
+            $fs->delete_area_files($tocontextid, 'local_catquiz', $area, $toitemid);
+        }
+        $copied = 0;
+        foreach ($areasof($fromcontextid, $fromitemid) as $area) {
+            foreach ($fs->get_area_files($fromcontextid, 'local_catquiz', $area, $fromitemid, 'id', false) as $file) {
+                $fs->create_file_from_storedfile(['contextid' => $tocontextid, 'itemid' => $toitemid], $file);
+                $copied++;
+            }
+        }
+        return $copied;
+    }
+
+    /**
      * This function will recreate the saved array in order to
      *
      * @param array $formdefaultvalues
@@ -262,6 +447,11 @@ class testenvironment {
 
         if (!$jsonobject = json_decode($this->json, null, 512, JSON_OBJECT_AS_ARRAY)) {
             return;
+        }
+        // The form shows the outer limits of the feedback ranges as the global scale has them now (issue #86).
+        $aligned = (object) $jsonobject;
+        if (\local_catquiz\local\feedback_limits::align($aligned)) {
+            $jsonobject = (array) $aligned;
         }
 
         $options = [];
@@ -387,9 +577,8 @@ class testenvironment {
         $record->description = $this->description ?? $record->description;
         $record->descriptionformat = $this->descriptionformat ?? $record->descriptionformat;
         $record->json = $this->json ?? $record->json;
-        $record->visibile = $this->visible ?? $record->visible;
-        $record->availability = $this->availability ?? $record->availability;
-        $record->lang = $this->lang ?? $record->lang;
+        // Issue #89: visible, availability and lang are no columns of local_catquiz_tests ("visibile" was
+        // written here, a typo that changed nothing). They are not written.
         $record->status = $this->status ?? $record->status;
         $record->parentid = $this->parentid ?? $record->parentid ?? 0;
         $record->courseid = $this->courseid ?? $record->courseid;
@@ -480,6 +669,8 @@ class testenvironment {
                 ]
             );
         }
+        // The outer limits of the feedback ranges are those of the global scale now (issue #86).
+        \local_catquiz\local\feedback_limits::align($settings);
 
         return $settings;
     }

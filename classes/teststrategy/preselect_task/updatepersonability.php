@@ -36,7 +36,6 @@ use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_raschmodel;
 use local_catquiz\local\model\model_responses;
 use local_catquiz\local\result;
-use local_catquiz\local\status;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\progress;
 use moodle_exception;
@@ -200,20 +199,16 @@ class updatepersonability extends preselect_task {
         $this->scalestoupdate = array_reverse(
             [$catscaleid, ...catscale::get_ancestors($catscaleid)]
         );
-        try {
-            $index = 0;
-            foreach ($this->scalestoupdate as $scale) {
-                $isancestor = $scale != $catscaleid;
-                $parentscale = $index == 0 ? null : $this->scalestoupdate[$index - 1];
-                $index++;
-                $context = $this->updateability($context, $scale, $isancestor, $parentscale);
-            }
-        } catch (\Exception $e) {
-            if ($e->getMessage() === status::ABORT_PERSONABILITY_NOT_CHANGED) {
-                return result::err(status::ABORT_PERSONABILITY_NOT_CHANGED);
-            } else {
-                throw $e;
-            }
+        // Issue #64: an unchanged ability does not end the test. The handler that turned an exception
+        // with the message ABORT_PERSONABILITY_NOT_CHANGED into that status was removed: nothing throws it,
+        // and a stable estimate is a matter of the precision checks (filterbystandarderror). The status
+        // itself stays defined for attempts stored with it and for the adapter's mapping.
+        $index = 0;
+        foreach ($this->scalestoupdate as $scale) {
+            $isancestor = $scale != $catscaleid;
+            $parentscale = $index == 0 ? null : $this->scalestoupdate[$index - 1];
+            $index++;
+            $context = $this->updateability($context, $scale, $isancestor, $parentscale);
         }
 
         return result::ok($context);

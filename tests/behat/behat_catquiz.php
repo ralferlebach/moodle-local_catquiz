@@ -171,6 +171,34 @@ class behat_catquiz extends behat_base {
         $json = json_decode($test->json);
         $json->componentid = 0;
         $json->name = $name;
+        // A template is saved by the form, and the form sends the limits of every feedback range. The generator
+        // of test settings writes the number of ranges but limits only for the scale ids of its fixture: without
+        // limits of its own, the form filled the ranges of the activity in and only the added ones from the
+        // template - a gap the form refuses. The limits the form computes, where none are stored.
+        $options = (int) ($json->numberoffeedbackoptionsselect ?? 0);
+        $rootid = (int) ($json->catquiz_catscales ?? 0);
+        if ($options > 0 && $rootid > 0) {
+            $range = (new \local_catquiz\catscale($rootid))->get_ability_range($rootid);
+            foreach (get_object_vars($json) as $key => $value) {
+                if (!preg_match('/^catquiz_subscalecheckbox_(\d+)$/', $key, $matches) || empty($value)) {
+                    continue;
+                }
+                for ($i = 1; $i <= $options; $i++) {
+                    foreach (['lower' => true, 'upper' => false] as $side => $lower) {
+                        $limitkey = "feedback_scaleid_limit_{$side}_{$matches[1]}_{$i}";
+                        if (!isset($json->$limitkey)) {
+                            $json->$limitkey = \local_catquiz\feedback\feedbackclass::return_limits_for_scale(
+                                $options,
+                                $i,
+                                $lower,
+                                (float) $range['minscalevalue'],
+                                (float) $range['maxscalevalue']
+                            );
+                        }
+                    }
+                }
+            }
+        }
         unset($test->id);
         $test->componentid = 0;
         $test->name = $name;
@@ -220,6 +248,60 @@ class behat_catquiz extends behat_base {
             throw new \Behat\Mink\Exception\ExpectationException('No attempt of ' . $username, $this->getSession());
         }
         \question_engine::delete_questions_usage_by_activity((int) reset($attempts)->uniqueid);
+    }
+
+    /**
+     * Stores the quiz history of the last CAT attempt of a person in the older format (issue #152).
+     *
+     * Before personability_after existed, a row carried the ability as personability, and no pilot flag.
+     *
+     * @Given /^the quiz history of the last CAT attempt of "([^"]*)" is stored in the older format$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function the_quiz_history_is_stored_in_the_older_format(string $username): void {
+        global $DB;
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $records = $DB->get_records('local_catquiz_attempts', ['userid' => $userid], 'id DESC', 'id, json', 0, 1);
+        $record = reset($records);
+        $data = $record ? json_decode((string) $record->json, true) : null;
+        if (empty($data['graphicalsummary_data'])) {
+            throw new \Behat\Mink\Exception\ExpectationException('No quiz history of ' . $username, $this->getSession());
+        }
+        foreach ($data['graphicalsummary_data'] as &$row) {
+            $row['personability'] = $row['personability_after'] ?? null;
+            unset($row['personability_after'], $row['pilot']);
+        }
+        unset($row);
+        $DB->set_field('local_catquiz_attempts', 'json', json_encode($data), ['id' => $record->id]);
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * Gives the parameters of the questions a model that is not installed (issue #153).
+     *
+     * As after uninstalling the subplugin of their model, or importing parameters of a model this site does not have.
+     *
+     * @Given /^the parameters of the questions "([^"]*)" belong to a model that is not installed$/
+     *
+     * @param string $idnumbers Question id numbers, comma-separated.
+     * @return void
+     */
+    public function the_parameters_belong_to_a_model_not_installed(string $idnumbers): void {
+        global $DB;
+        foreach (array_map('trim', explode(',', $idnumbers)) as $idnumber) {
+            $questionid = $DB->get_field_sql(
+                "SELECT qv.questionid
+                   FROM {question_bank_entries} qbe
+                   JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
+                  WHERE qbe.idnumber = :idnumber",
+                ['idnumber' => $idnumber],
+                MUST_EXIST
+            );
+            $DB->set_field('local_catquiz_itemparams', 'model', 'notinstalled', ['componentid' => $questionid]);
+        }
+        \cache_helper::purge_all();
     }
 
     /**
@@ -303,7 +385,8 @@ class behat_catquiz extends behat_base {
      * @Given /^the following CAT results of "([^"]*)" exist:$/
      *
      * @param string $idnumber
-     * @param \Behat\Gherkin\Node\TableNode $table Columns: user, days ago, ability, valid.
+     * @param \Behat\Gherkin\Node\TableNode $table Columns: user, days ago or end (UTC, Y-m-d H:i - issue #151), ability,
+     *     valid.
      * @return void
      */
     public function the_following_cat_results_exist(string $idnumber, \Behat\Gherkin\Node\TableNode $table): void {
@@ -323,7 +406,9 @@ class behat_catquiz extends behat_base {
         $contextid = (int) \local_catquiz\catscale::get_context_id($rootid);
         foreach ($table->getHash() as $row) {
             $userid = (int) $DB->get_field('user', 'id', ['username' => $row['user']], MUST_EXIST);
-            $end = time() - (int) $row['days ago'] * DAYSECS;
+            $end = isset($row['end'])
+                ? (new \DateTimeImmutable($row['end'], new \DateTimeZone('UTC')))->getTimestamp()
+                : time() - (int) $row['days ago'] * DAYSECS;
             $ability = (float) $row['ability'];
             $id = $DB->insert_record('local_catquiz_attempts', (object) [
                 'userid' => $userid, 'scaleid' => $rootid, 'contextid' => $contextid, 'courseid' => $cm->course,
@@ -489,6 +574,101 @@ class behat_catquiz extends behat_base {
         $DB->set_field('local_catquiz_progress', 'json', json_encode($json), ['id' => $row->id]);
         // The progress lives in the session cache as well; the invalidation event empties it.
         \cache_helper::purge_by_event('changesinadaptivequizattempt');
+    }
+
+    /**
+     * Deactivates the CAT items of every question a user's last attempt has not shown yet (issues #141, #60).
+     *
+     * The pool runs out during the attempt - what settings checked before the start cannot foresee. The
+     * runtime pool is invalidated by the event a change of the items fires.
+     *
+     * @Given /^the CAT items of the questions "([^"]*)" has not seen yet are deactivated$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function the_cat_items_not_seen_yet_are_deactivated(string $username): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, uniqueid', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException('No attempt of ' . $username, $this->getSession());
+        }
+        $seen = $DB->get_fieldset_select('question_attempts', 'questionid', 'questionusageid = ?', [reset($attempts)->uniqueid]);
+        [$notin, $params] = $DB->get_in_or_equal($seen ?: [0], SQL_PARAMS_QM, 'param', false);
+        $DB->set_field_select(
+            'local_catquiz_items',
+            'status',
+            LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE,
+            "componentname = 'question' AND componentid $notin",
+            $params
+        );
+        \cache_helper::purge_by_event('changesintestitems');
+    }
+
+    /**
+     * Checks the questions of a user's last attempt against the subscales of a scale (issue #135).
+     *
+     * Each question counts for the direct subscale of the scale its item lies under; the attempt must have asked
+     * the number of questions, each once, and drawn them from at least the number of subscales.
+     *
+     * @Then /^the last CAT attempt of "([^"]*)" asked (\d+) different questions from at least (\d+) subscales of "([^"]*)"$/
+     *
+     * @param string $username
+     * @param int $questions
+     * @param int $subscales
+     * @param string $scalename
+     * @return void
+     */
+    public function the_last_cat_attempt_asked_questions_from_subscales(
+        string $username,
+        int $questions,
+        int $subscales,
+        string $scalename
+    ): void {
+        global $DB;
+
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, uniqueid', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException('No attempt of ' . $username, $this->getSession());
+        }
+        $asked = $DB->get_fieldset_select('question_attempts', 'questionid', 'questionusageid = ?', [reset($attempts)->uniqueid]);
+        $rootid = (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => $scalename, 'parentid' => 0], MUST_EXIST);
+        $parents = $DB->get_records_menu('local_catquiz_catscales', null, '', 'id, parentid');
+        $top = [];
+        foreach ($asked as $questionid) {
+            $scaleids = $DB->get_fieldset_select(
+                'local_catquiz_items',
+                'catscaleid',
+                "componentname = 'question' AND componentid = ?",
+                [$questionid]
+            );
+            foreach ($scaleids as $scaleid) {
+                $scaleid = (int) $scaleid;
+                while ($scaleid && (int) ($parents[$scaleid] ?? 0) !== $rootid) {
+                    $scaleid = (int) ($parents[$scaleid] ?? 0);
+                }
+                if ($scaleid) {
+                    $top[$scaleid] = true;
+                }
+            }
+        }
+        $problems = [];
+        if (count($asked) !== $questions) {
+            $problems[] = count($asked) . " questions asked, not $questions";
+        }
+        if (count(array_unique($asked)) !== count($asked)) {
+            $problems[] = 'a question was asked twice';
+        }
+        if (count($top) < $subscales) {
+            $problems[] = 'questions of ' . count($top) . " subscales, not at least $subscales";
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException(implode('; ', $problems), $this->getSession());
+        }
     }
 
     /**
@@ -1077,5 +1257,451 @@ JS;
                 . $this->get_native_autocomplete_debug($containerxpath),
             $this->getSession()
         );
+    }
+
+    /**
+     * The question id of a question bank entry, by its idnumber: the version a CAT item refers to (issue #82).
+     *
+     * @param string $idnumber
+     * @return int
+     */
+    private function catquiz_item_question_id(string $idnumber): int {
+        global $DB;
+        $ids = $DB->get_fieldset_sql(
+            "SELECT qv.questionid
+               FROM {question_bank_entries} qbe
+               JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
+               JOIN {local_catquiz_items} lci ON lci.componentid = qv.questionid AND lci.componentname = 'question'
+              WHERE qbe.idnumber = :idnumber
+           ORDER BY qv.version DESC",
+            ['idnumber' => $idnumber]
+        );
+        if (!$ids) {
+            throw new \Behat\Mink\Exception\ExpectationException('No CAT item for the question ' . $idnumber, $this->getSession());
+        }
+        return (int) reset($ids);
+    }
+
+    /**
+     * The id of a CAT scale, by its name.
+     *
+     * @param string $scalename
+     * @return int
+     */
+    private function catquiz_scale_id(string $scalename): int {
+        global $DB;
+        return (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => $scalename], MUST_EXIST);
+    }
+
+    /**
+     * Hides a question in the question bank, the way the bank does it for a question in use (issue #82).
+     *
+     * Deleting a question that is in use only sets the status of its versions to hidden -
+     * question_delete_question() - and triggers no event. That is what this step does, for every version of
+     * the entry, whether or not something uses it yet.
+     *
+     * @Given /^the question "([^"]*)" is hidden in the question bank$/
+     *
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_question_is_hidden_in_the_question_bank(string $idnumber): void {
+        global $DB;
+        $entryid = $DB->get_field('question_bank_entries', 'id', ['idnumber' => $idnumber], MUST_EXIST);
+        $DB->set_field(
+            'question_versions',
+            'status',
+            \core_question\local\bank\question_version_status::QUESTION_STATUS_HIDDEN,
+            ['questionbankentryid' => $entryid]
+        );
+    }
+
+    /**
+     * Assigns a question that is already a CAT item to a further scale, active there (issue #82).
+     *
+     * @Given /^the question "([^"]*)" is also an item of the CAT scale "([^"]*)"$/
+     *
+     * @param string $idnumber
+     * @param string $scalename
+     * @return void
+     */
+    public function the_question_is_also_an_item_of_the_cat_scale(string $idnumber, string $scalename): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+        $result = \local_catquiz\catscale::add_or_update_testitem_to_scale(
+            $this->catquiz_scale_id($scalename),
+            $this->catquiz_item_question_id($idnumber),
+            LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE
+        );
+        if (!$result->isOk()) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'Not assigned to ' . $scalename . ': ' . $result->get_status(),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Deactivates a CAT item in one scale, as the eye icon of the CAT manager does (issue #82).
+     *
+     * @Given /^the question "([^"]*)" is deactivated in the CAT scale "([^"]*)"$/
+     *
+     * @param string $idnumber
+     * @param string $scalename
+     * @return void
+     */
+    public function the_question_is_deactivated_in_the_cat_scale(string $idnumber, string $scalename): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+        \local_catquiz\catscale::add_or_update_testitem_to_scale(
+            $this->catquiz_scale_id($scalename),
+            $this->catquiz_item_question_id($idnumber),
+            LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE
+        );
+    }
+
+    /**
+     * Opens the questions of one CAT scale - without its subscales - in the CAT manager (issue #82).
+     *
+     * @Given /^I open the questions of the CAT scale "([^"]*)" in the CAT manager$/
+     *
+     * @param string $scalename
+     * @return void
+     */
+    public function i_open_the_questions_of_the_cat_scale_in_the_cat_manager(string $scalename): void {
+        $scaleid = $this->catquiz_scale_id($scalename);
+        $url = new moodle_url('/local/catquiz/manage_catscales.php', [
+            'tab' => 'questions',
+            'scaleid' => $scaleid,
+            'contextid' => \local_catquiz\catscale::get_context_id($scaleid),
+            'usesubs' => 0,
+        ]);
+        $this->execute('behat_general::i_visit', [$url->out_as_local_url(false)]);
+    }
+
+    /**
+     * Opens the detail card of a CAT item in the CAT manager (issue #82).
+     *
+     * @Given /^I open the CAT item "([^"]*)" of the CAT scale "([^"]*)" in the CAT manager$/
+     *
+     * @param string $idnumber
+     * @param string $scalename
+     * @return void
+     */
+    public function i_open_the_cat_item_of_the_cat_scale_in_the_cat_manager(string $idnumber, string $scalename): void {
+        $scaleid = $this->catquiz_scale_id($scalename);
+        $url = new moodle_url('/local/catquiz/manage_catscales.php', [
+            'tab' => 'questions',
+            'scaleid' => $scaleid,
+            'contextid' => \local_catquiz\catscale::get_context_id($scaleid),
+            'id' => $this->catquiz_item_question_id($idnumber),
+            'component' => 'question',
+        ]);
+        $this->execute('behat_general::i_visit', [$url->out_as_local_url(false)]);
+    }
+
+    /**
+     * Checks that the last attempt of a user never asked a question (issue #82).
+     *
+     * @Then /^the last CAT attempt of "([^"]*)" did not ask "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_last_cat_attempt_did_not_ask(string $username, string $idnumber): void {
+        global $DB;
+        $userid = $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, uniqueid', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException('No attempt of ' . $username, $this->getSession());
+        }
+        $attempt = reset($attempts);
+        $asked = $DB->get_fieldset_sql(
+            "SELECT qbe.idnumber
+               FROM {question_attempts} qa
+               JOIN {question_versions} qv ON qv.questionid = qa.questionid
+               JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+              WHERE qa.questionusageid = :usage",
+            ['usage' => $attempt->uniqueid]
+        );
+        if (!$asked) {
+            throw new \Behat\Mink\Exception\ExpectationException('The last attempt asked nothing.', $this->getSession());
+        }
+        if (in_array($idnumber, $asked, true)) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'The last attempt asked ' . $idnumber . ': ' . implode(', ', $asked),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks the runtime pool of one CAT scale - as a test of that scale reads it - for a question (issue #82).
+     *
+     * @Then /^the CAT pool of "([^"]*)" (contains|does not contain) the question "([^"]*)"$/
+     *
+     * @param string $scalename
+     * @param string $which
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_cat_pool_contains_the_question(string $scalename, string $which, string $idnumber): void {
+        $scaleid = $this->catquiz_scale_id($scalename);
+        $pool = (new \local_catquiz\catscale($scaleid))->get_testitems(\local_catquiz\catscale::get_context_id($scaleid));
+        $contains = array_key_exists($this->catquiz_item_question_id($idnumber), $pool);
+        if ($contains !== ($which === 'contains')) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'The pool of ' . $scalename . ($contains ? ' contains ' : ' does not contain ') . $idnumber,
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks that a root scale points to a context of its own that exists (issue #81).
+     *
+     * @Then /^the CAT scale "([^"]*)" has a context of its own$/
+     *
+     * @param string $scalename
+     * @return void
+     */
+    public function the_cat_scale_has_a_context_of_its_own(string $scalename): void {
+        global $DB;
+        $contextid = (int) $DB->get_field('local_catquiz_catscales', 'contextid', ['name' => $scalename], MUST_EXIST);
+        if ($contextid <= 0 || !$DB->record_exists('local_catquiz_catcontext', ['id' => $contextid])) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'The scale ' . $scalename . ' points to context ' . $contextid,
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks that a subscale stores no context and resolves to the one of its root (issue #81).
+     *
+     * @Then /^the CAT scale "([^"]*)" has no context of its own and uses the one of "([^"]*)"$/
+     *
+     * @param string $scalename
+     * @param string $rootname
+     * @return void
+     */
+    public function the_cat_scale_uses_the_context_of(string $scalename, string $rootname): void {
+        global $DB;
+        $scale = $DB->get_record('local_catquiz_catscales', ['name' => $scalename], '*', MUST_EXIST);
+        $rootcontext = (int) $DB->get_field('local_catquiz_catscales', 'contextid', ['name' => $rootname], MUST_EXIST);
+        \cache_helper::purge_by_event('changesincatscales');
+        if ($scale->contextid !== null || \local_catquiz\catscale::get_context_id((int) $scale->id) !== $rootcontext) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'The scale ' . $scalename . ' stores context ' . var_export($scale->contextid, true),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks that no id is used twice on the page (issue #30).
+     *
+     * Tabs, collapses and dialogues find their target by id. Two instances with the same ids - the same
+     * shortcode twice, a shortcode next to the result page - make a click in one open the panel of the
+     * other, or none at all. The duplicates are named in the failure.
+     *
+     * @Then /^the page has no duplicate ids$/
+     *
+     * @return void
+     */
+    public function the_page_has_no_duplicate_ids(): void {
+        $this->spin(function () {
+            $duplicates = $this->getSession()->evaluateScript(
+                "return (function() {" .
+                "  var seen = {}, twice = [];" .
+                "  document.querySelectorAll('[id]').forEach(function(el) {" .
+                "    if (!el.id) { return; }" .
+                "    if (seen[el.id] === 1) { twice.push(el.id); }" .
+                "    seen[el.id] = (seen[el.id] || 0) + 1;" .
+                "  });" .
+                "  return twice;" .
+                "})();"
+            );
+            if (!empty($duplicates)) {
+                throw new \Behat\Mink\Exception\ExpectationException(
+                    'Ids used more than once on the page: ' . implode(', ', $duplicates),
+                    $this->getSession()
+                );
+            }
+            return true;
+        });
+    }
+
+    /**
+     * The templates of CAT settings - test environments of no activity - with a name, or all of them (issue #89).
+     *
+     * @param string|null $name
+     * @return \stdClass[]
+     */
+    private function cat_templates(?string $name = null): array {
+        global $DB;
+        $conditions = ['componentid' => 0];
+        if ($name !== null) {
+            $conditions['name'] = $name;
+        }
+        return $DB->get_records('local_catquiz_tests', $conditions, 'id');
+    }
+
+    /**
+     * Checks how many templates of CAT settings exist, with a name or at all (issue #89).
+     *
+     * @Then /^there (?:is|are) (\d+) CAT templates?(?: named "([^"]*)")?$/
+     *
+     * @param int $count
+     * @param string $name
+     * @return void
+     */
+    public function there_are_cat_templates(int $count, string $name = ''): void {
+        $found = count($this->cat_templates($name === '' ? null : $name));
+        if ($found !== $count) {
+            $named = $name ? " named \"$name\"" : '';
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Expected $count CAT templates$named, found $found.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks a stored value of a template of CAT settings; nested keys with a dot (issue #89).
+     *
+     * @Then /^the CAT template "([^"]*)" stores "([^"]*)" as "([^"]*)"$/
+     *
+     * @param string $name
+     * @param string $key E.g. maxquestionsgroup.catquiz_maxquestions
+     * @param string $expected
+     * @return void
+     */
+    public function the_cat_template_stores(string $name, string $key, string $expected): void {
+        $templates = $this->cat_templates($name);
+        if (count($templates) !== 1) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Expected one CAT template named \"$name\", found " . count($templates) . '.',
+                $this->getSession()
+            );
+        }
+        $value = json_decode(reset($templates)->json, true);
+        foreach (explode('.', $key) as $part) {
+            $value = is_array($value) && array_key_exists($part, $value) ? $value[$part] : null;
+        }
+        if ((string) $value !== $expected) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Template \"$name\": $key is \"" . (string) $value . "\", not \"$expected\".",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks that the CAT settings of an activity name the template they are based on (issue #89).
+     *
+     * @Then /^the CAT settings of "([^"]*)" are based on the template "([^"]*)"$/
+     *
+     * @param string $idnumber
+     * @param string $name
+     * @return void
+     */
+    public function the_cat_settings_are_based_on_the_template(string $idnumber, string $name): void {
+        global $DB;
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $parentid = (int) $DB->get_field('local_catquiz_tests', 'parentid', [
+            'component' => 'mod_adaptivequiz', 'componentid' => $cm->instance,
+        ], MUST_EXIST);
+        $templates = $this->cat_templates($name);
+        $template = reset($templates);
+        if (!$template || (int) $template->id !== $parentid) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "The CAT settings of $idnumber are based on template $parentid, not on \"$name\".",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks lines of the visible text of the main region, exactly and in the given order (issue #77).
+     *
+     * The written feedback is one block with a line per scale; "should appear before" compares elements and
+     * finds the same block for every line. Each line has to be found as a whole line, after the one before.
+     *
+     * @Then /^the following lines appear in this order in the main region:$/
+     *
+     * @param \Behat\Gherkin\Node\TableNode $table One line per row, first column.
+     * @return void
+     */
+    public function the_following_lines_appear_in_this_order(\Behat\Gherkin\Node\TableNode $table): void {
+        $text = (string) $this->evaluate_script(
+            "return (document.querySelector('#region-main') || document.body).innerText;"
+        );
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $text)), 'strlen'));
+        $from = 0;
+        foreach ($table->getRows() as $row) {
+            $wanted = trim($row[0]);
+            $found = null;
+            for ($i = $from; $i < count($lines); $i++) {
+                if ($lines[$i] === $wanted) {
+                    $found = $i;
+                    break;
+                }
+            }
+            if ($found === null) {
+                $where = in_array($wanted, $lines, true) ? 'only before the line before it' : 'not as a line';
+                throw new \Behat\Mink\Exception\ExpectationException("\"$wanted\" is $where.", $this->getSession());
+            }
+            $from = $found + 1;
+        }
+    }
+
+    /**
+     * The items of a CAT scale and its subscales lose their parameters, as after a new calibration context or
+     * before the first calibration: the results stay, the test information has nothing to sum (issue #150).
+     *
+     * @Given /^the items of the CAT scale "([^"]*)" have no parameters$/
+     *
+     * @param string $scalename
+     * @return void
+     */
+    public function the_items_of_the_cat_scale_have_no_parameters(string $scalename): void {
+        global $DB;
+        $rootid = $this->catquiz_scale_id($scalename);
+        $scaleids = [$rootid, ...\local_catquiz\catscale::get_subscale_ids($rootid)];
+        [$insql, $params] = $DB->get_in_or_equal($scaleids);
+        $itemids = $DB->get_fieldset_select('local_catquiz_items', 'id', "catscaleid $insql", $params);
+        if (!$itemids) {
+            throw new \Behat\Mink\Exception\ExpectationException("No items in $scalename.", $this->getSession());
+        }
+        [$initem, $itemparams] = $DB->get_in_or_equal($itemids);
+        $DB->execute("UPDATE {local_catquiz_items} SET activeparamid = NULL WHERE id $initem", $itemparams);
+        $DB->delete_records_select('local_catquiz_itemparams', "itemid $initem", $itemparams);
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * A CAT scale moves to a new CAT context, as a new calibration starts it: through the scale update of the CAT
+     * manager, which takes the items and parameters along (issue #148). The results stay in the old context.
+     *
+     * @Given /^the CAT scale "([^"]*)" is switched to a new CAT context$/
+     *
+     * @param string $scalename
+     * @return void
+     */
+    public function the_cat_scale_is_switched_to_a_new_cat_context(string $scalename): void {
+        global $DB;
+        $scaleid = $this->catquiz_scale_id($scalename);
+        $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
+            'name' => 'Recalibration of ' . $scalename, 'description' => '', 'descriptionformat' => FORMAT_HTML,
+            'starttimestamp' => time() - 60, 'endtimestamp' => time() + YEARSECS, 'timecreated' => time(),
+            'timemodified' => time(), 'usermodified' => 0,
+        ]);
+        \local_catquiz\data\dataapi::update_catscale((object) ['id' => $scaleid, 'contextid' => $contextid]);
+        if ((int) \local_catquiz\catscale::get_context_id($scaleid) !== $contextid) {
+            throw new \Behat\Mink\Exception\ExpectationException("$scalename did not move.", $this->getSession());
+        }
+        \cache_helper::purge_all();
     }
 }

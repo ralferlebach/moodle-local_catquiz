@@ -293,3 +293,34 @@ function local_catquiz_merge_attemptscale_into_personparams(): array {
 
     return ['legacy' => $legacy, 'carried' => $carried];
 }
+
+/**
+ * Gives every item parameter without an item the item of its question (upgrade step 2024080200).
+ *
+ * Before 2024080200 a parameter belonged to a question, not to an item. The step that introduced the
+ * itemid read the pairs with get_records_sql(), keyed by the parameter: a question in several scales
+ * delivered one row per item, all under the same key, and whichever the database returned last won
+ * (issue #104, K6). Now the rule is named: the question's lowest item - the same item the parameter
+ * list reads for a question (H2). Step 2024081300 then moves parameters to the items of their context.
+ *
+ * Only rows still without an item (itemid 0) are touched, so the function can run again.
+ *
+ * @return int Number of parameters that got an item.
+ */
+function local_catquiz_upgrade_assign_itemparam_items(): int {
+    global $DB;
+
+    $sql = "SELECT lcip.id AS itemparamid, MIN(lci.id) AS itemid
+              FROM {local_catquiz_itemparams} lcip
+              JOIN {local_catquiz_items} lci ON lci.componentid = lcip.componentid
+                   AND lci.componentname = lcip.componentname
+             WHERE lcip.itemid = 0
+          GROUP BY lcip.id";
+    $updated = 0;
+    // One row per parameter (GROUP BY), so the key is unique.
+    foreach ($DB->get_records_sql($sql) as $row) {
+        $DB->set_field('local_catquiz_itemparams', 'itemid', (int) $row->itemid, ['id' => (int) $row->itemparamid]);
+        $updated++;
+    }
+    return $updated;
+}

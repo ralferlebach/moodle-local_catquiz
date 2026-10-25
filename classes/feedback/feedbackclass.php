@@ -177,8 +177,9 @@ class feedbackclass {
 
         // Generate the options for the colors. Same values are applied to all subscales and subfeedbacks.
         $coloroptions = self::get_array_of_colors($nfeedbpersubscale);
-        // We need this to close the collapsable header elements.
-        $html2 = $OUTPUT->render_from_template('local_catquiz/feedback/feedbackform_collapsible_close', []);
+        // We need this to close the collapsable header elements. Issue #32: the closing part of the one
+        // collapsible template - opening and closing are no longer two fragments the template lint cannot check.
+        $html2 = $OUTPUT->render_from_template('local_catquiz/feedback/feedbackform_collapsible', ['close' => true]);
         $courses = self::course_choices();
         $parentscale = reset($scales);
         $lowestability = $highestability = 0.0;
@@ -377,7 +378,10 @@ class feedbackclass {
             // Closing the elements.
             self::add_closing_html($numberofclosinghtmls, $scale->id, $mform, $elements, $html2);
 
-            $html1 = $OUTPUT->render_from_template('local_catquiz/feedback/feedbackform_collapsible_open', $headerdata);
+            $html1 = $OUTPUT->render_from_template(
+                'local_catquiz/feedback/feedbackform_collapsible',
+                ['open' => true] + $headerdata
+            );
 
             $element = $mform->createElement('html', $html1);
             $element->setName('header_accordion_start_scale_' . $scale->id);
@@ -1360,8 +1364,11 @@ class feedbackclass {
             $filecontext = ['cmid' => $cmid, 'instanceid' => (int) $cm->instance, 'contextid' => $cmcontext->id];
         }
 
-        $scales = dataapi::get_catscale_and_children($rootscaleid, true);
-        if (!$rootscaleid || !isset($scales[$scaleid])) {
+        // Adapter issue #2: the tree of a root scale only - the root scales the activity form offers to choose.
+        global $DB;
+        $isroot = $rootscaleid && $DB->record_exists('local_catquiz_catscales', ['id' => $rootscaleid, 'parentid' => 0]);
+        $scales = $isroot ? dataapi::get_catscale_and_children($rootscaleid, true) : [];
+        if (!$isroot || !isset($scales[$scaleid])) {
             return $OUTPUT->notification(get_string('feedbackpanelscalegone', 'local_catquiz'), 'warning', false);
         }
         $scale = $scales[$scaleid];

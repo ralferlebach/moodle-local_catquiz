@@ -360,21 +360,24 @@ class graphicalsummary extends feedbackgenerator {
         $chart = new \core\chart_line();
         $chart->set_smooth(true); // Calling set_smooth() passing true as parameter, will display smooth lines.
 
-        $hasnewabilities = array_key_exists('personability_after', $data[0]);
-        if ($hasnewabilities) {
-            $abilitiesafter = array_map(fn($round) => $round['personability_after'] ?? null, $data);
-            $abilitiesafterchart = new \core\chart_series(
-                get_string('abilityinglobalscale', 'local_catquiz'),
-                $abilitiesafter
-            );
-            $chart->add_series($abilitiesafterchart);
-        } else {
-            $abilities = array_map(fn($round) => $round['personability'] ?? null, $data);
-            $abilitieschart = new \core\chart_series(
-                get_string('abilityintestedscale', 'local_catquiz'),
-                $abilities
-            );
-            $chart->add_series($abilitieschart);
+        /* Issue #152: rows stored since personability_after existed carry the ability in the global scale, older rows
+           the ability in the tested scale as personability. They are different values: each has its own series, and a
+           row without it is a gap - nothing is carried over from the other. Before, the format of the first row
+           decided for all, and the branch of the older format ended in a TypeError. */
+        $abilitiesafter = array_map(fn($round) => $round['personability_after'] ?? null, $data);
+        $abilities = array_map(
+            fn($round) => array_key_exists('personability_after', $round) ? null : ($round['personability'] ?? null),
+            $data
+        );
+        $hasvalue = fn(array $values): bool => (bool) array_filter($values, fn($value) => $value !== null);
+        $series = 0;
+        if ($hasvalue($abilitiesafter)) {
+            $chart->add_series(new \core\chart_series(get_string('abilityinglobalscale', 'local_catquiz'), $abilitiesafter));
+            $series++;
+        }
+        if ($hasvalue($abilities)) {
+            $chart->add_series(new \core\chart_series(get_string('abilityintestedscale', 'local_catquiz'), $abilities));
+            $series++;
         }
 
         $globalscaleid = $this->get_progress()->get_quiz_settings()->catquiz_catscales;
@@ -389,9 +392,15 @@ class graphicalsummary extends feedbackgenerator {
                 $primaryvalues
             );
             $chart->add_series($primarychart);
+            $series++;
+        }
+        if (!$series) {
+            // No ability in any row: no chart, the table says what was asked.
+            return '';
         }
 
-        $chart->set_labels(range(1, count($abilitiesafter)));
+        // One label per row (issue #152: the labels counted $abilitiesafter, which the older format never set).
+        $chart->set_labels(range(1, count($data)));
 
         return html_writer::tag('div', $OUTPUT->render_chart($chart, false), ['dir' => 'ltr']);
     }
@@ -565,6 +574,8 @@ class graphicalsummary extends feedbackgenerator {
             $numbercell = new html_table_cell($ispilot
                 ? html_writer::tag('span', get_string('feedback_table_pilot', 'local_catquiz'), ['class' => 'sr-only'])
                 : (string) ++$number);
+            // Rows of the older format carry the ability as personability (issue #152).
+            $ability = $values['personability_after'] ?? $values['personability'] ?? null;
             $newrow = [
                 $numbercell,
             ];
@@ -574,7 +585,7 @@ class graphicalsummary extends feedbackgenerator {
             $newrow = array_merge($newrow, [
                 $questioncell,
                 $values['questionscale_name'],
-                $ispilot ? '' : sprintf('%.2f', $values['personability_after']),
+                $ispilot || $ability === null ? '' : sprintf('%.2f', $ability),
             ]);
 
             if ($viewquestion) {

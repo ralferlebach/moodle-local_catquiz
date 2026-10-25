@@ -131,7 +131,15 @@ final class feedback_file_access_test extends advanced_testcase {
         $this->setUser($stranger);
         $PAGE = new \moodle_page();
         $this->assert_refused(
-            fn() => local_catquiz_pluginfile($course, $cm, $context, 'feedback_files_1_1', [5, 'figure.png'], false, ['dontdie' => true]),
+            fn() => local_catquiz_pluginfile(
+                $course,
+                $cm,
+                $context,
+                'feedback_files_1_1',
+                [5, 'figure.png'],
+                false,
+                ['dontdie' => true]
+            ),
             'pluginfile for a user outside the course'
         );
     }

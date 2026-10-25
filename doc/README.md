@@ -118,3 +118,12 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).
+- `feedback-limits.md` – Äußere Grenzen der Feedbackbereiche folgen der Globalskala (#86).
+- `settings-validation.md` – Settings-Validator: Codes, Budget der Abdeckung, Speicherwege (#60).
+- `progress-read-contract.md` – Lesevertrag des Fortschritts, Ergebnisseite ohne Fortschritt (#149).
+- `runtime-pool-cache.md` – Geteilter Laufzeit-Pool: Invalidierung (#146), Reihenfolge und Wirkungsanalyse (#147).
+- `p0-nachweise-2026-10-18.md` – Nachweise zum Nacharbeitsauftrag 18.10. und Kontroll-Re-Audit 19.10.: Zahn-Tests, volle Suiten (PG/MariaDB, 4.5/5.1), Behat, Langlauf, offene Punkte.
+- `issue-150-ability-histogram.md` – Fähigkeitsprofil ohne Testinformation: Ursache, Änderung, Stand je AK/DoD, Prüfhilfe für die Live-Instanz (#150).
+- `issue-150-chart-inventory.md` – Inventur aller Plugin-Diagramme auf leere oder ungleich lange Serien, Befunde und Issue-Vorschläge außerhalb #150.
+- `issue-150-nachweise.md` – Nachweise zum Re-Audit vom 23.10.2026: Prüfstand mit Commits und Versionen, PHPUnit 4.5/5.1/5.2/5.3 × PostgreSQL/MariaDB, Jest, AMD, Behat, Zahn-Tests, Livecheck-Snippet; Rohdaten in `evidence/issue-150/` (#150).
+- `folge-issues-150.md` – Folge-Issues zu #150: #151 Zeitbereiche über Zeitzonen und Sommerzeit, #152 Verlauf alter Feedbackdaten und Fehlerisolierung der Feedbackbereiche, #153 Items nicht installierter Modelle, #154 Jest Bootstrap 5, #155 CI-Skript entfernt; Abgleich mit AK/DoD, Rot vor dem Fix, Läufe; Rohdaten in `evidence/folge-issues-150/`.

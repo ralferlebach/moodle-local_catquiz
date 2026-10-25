@@ -118,6 +118,13 @@ abstract class strategy {
     private array $stagecounts = [];
 
     /**
+     * The status with which the selection ends the test, null while it goes on (issue #64).
+     *
+     * @var string|null
+     */
+    private ?string $endstatus = null;
+
+    /**
      * Milliseconds per stage, for the profiling issues #26 and #27 ask for.
      * @var array
      */
@@ -257,6 +264,8 @@ abstract class strategy {
      */
     public function return_next_testitem(array $context): result {
         $this->context = $context;
+        // Issue #64: the instance may serve several selections in one request; an end belongs to one.
+        $this->endstatus = null;
         $maxtime = $context['progress']->get_starttime() + $context['max_attempttime_in_sec'];
         if (time() > $maxtime) {
             // The 'endtime' holds the last timepoint that is relevant for the
@@ -270,7 +279,7 @@ abstract class strategy {
             // Issue #146: also under the attempt's own keys - another attempt of the session does not overwrite them.
             attempt_cache::set('endtime', (int) ($context['attemptid'] ?? 0), $maxtime);
             attempt_cache::set('catquizerror', (int) ($context['attemptid'] ?? 0), status::EXCEEDED_MAX_ATTEMPT_TIME);
-            $this->persist_stage_counts();
+            $this->persist_stage_counts(status::EXCEEDED_MAX_ATTEMPT_TIME);
 
             return result::err(status::EXCEEDED_MAX_ATTEMPT_TIME);
         }
@@ -278,7 +287,7 @@ abstract class strategy {
         try {
             $this->check_item_params();
         } catch (Exception $e) {
-            $this->persist_stage_counts();
+            $this->persist_stage_counts(status::ERROR_GENERAL);
 
             return result::err(status::ERROR_GENERAL, $e->getMessage());
         }
@@ -322,7 +331,7 @@ abstract class strategy {
         // If the result contains a single object, this is the question to be returned.
         // Othewise, it contains the updated $context array with the ability and standarderror set in such a way, that the
         // teststrategy will return the correct question (e.g. the question corresponding to mean ability of all students).
-        if (is_object($val)) {
+        if (is_object($val) && $this->is_deliverable($val)) {
             // The first question counts as administered like any other (issue #126). Returning it
             // without registering it left it out of the played questions, so it was never
             // excluded and could be drawn again later in the same attempt.
@@ -357,7 +366,7 @@ abstract class strategy {
                 ->expect();
             $this->record_stage('fisherinformation');
         } catch (Exception $e) {
-            $this->persist_stage_counts();
+            $this->persist_stage_counts($this->result ? null : status::ERROR_GENERAL);
 
             return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
         }
@@ -365,7 +374,7 @@ abstract class strategy {
         $res = $this->traced('maybereturnpilot', fn() => $this->maybereturnpilot());
         $val = $res->unwrap();
         // If the value is an object, it is the pilot question that should be returned.
-        if (is_object($val)) {
+        if (is_object($val) && $this->is_deliverable($val)) {
             // Registered like any other administered question (issue #126): unregistered, a pilot
             // item was never excluded and could be drawn again, and its answer - missing from the
             // played questions - was counted as a productive item.
@@ -376,14 +385,22 @@ abstract class strategy {
         }
 
         try {
+            // Issue #64: the stages after the pilot check are counted as well - a filter here that empties the
+            // pool used to leave no trace.
             $selectedquestion = $this->traced('remove_uncalculated', fn() => $this->remove_uncalculated())
+                ->and_then(fn () => $this->record_stage('remove_uncalculated'))
                 ->and_then(fn() => $this->traced('mayberemovescale', fn() => $this->mayberemovescale()))
+                ->and_then(fn () => $this->record_stage('mayberemovescale'))
                 ->and_then(fn() => $this->traced('last_time_played_penalty', fn() => $this->last_time_played_penalty()))
+                ->and_then(fn () => $this->record_stage('last_time_played_penalty'))
                 ->and_then(fn() => $this->traced('filterbystandarderror', fn() => $this->filterbystandarderror()))
+                ->and_then(fn () => $this->record_stage('filterbystandarderror'))
                 ->or_else(fn($res) => $this->after_error($res))
                 ->expect()
                 ->and_then(fn() => $this->traced('filterbytestinfo', fn() => $this->filterbytestinfo()))
+                ->and_then(fn () => $this->record_stage('filterbytestinfo'))
                 ->and_then(fn() => $this->traced('filterbyquestionsperscale', fn() => $this->filterbyquestionsperscale()))
+                ->and_then(fn () => $this->record_stage('filterbyquestionsperscale'))
                 ->and_then(fn() => $this->traced('select_question', fn() => $this->select_question()))
                 ->and_then(
                     function ($res) {
@@ -400,9 +417,17 @@ abstract class strategy {
                 ->expect()
                 ->unwrap();
         } catch (Exception $e) {
-            $this->persist_stage_counts();
+            $this->persist_stage_counts($this->result ? null : status::ERROR_GENERAL);
 
             return $this->result ?? result::err(status::ERROR_GENERAL, $e->getMessage());
+        }
+
+        // Issue #82: the question bank may have hidden the question since the pool was cached.
+        // Every round drops all unavailable candidates at once, so a second round is the exception; the bound
+        // only guards against a selector that does not take its candidates from the context.
+        for ($round = 0; is_object($selectedquestion) && !$this->is_deliverable($selectedquestion); $round++) {
+            $reselected = $round < 3 ? $this->select_question() : null;
+            $selectedquestion = $reselected && $reselected->isOk() ? $reselected->unwrap() : null;
         }
 
         if (!$selectedquestion) {
@@ -425,6 +450,31 @@ abstract class strategy {
     }
 
     /**
+     * Whether a question may be handed out now (issue #82); if not, it leaves the candidates and the pool.
+     *
+     * The runtime pool is cached and leaves out what the question bank hides - but the bank can hide a
+     * question without any event (question_delete_question() on a question in use only sets the status), so
+     * a cached pool may still hold it. One query for the question at hand closes that gap. When it is out,
+     * every candidate is checked in one go and the unavailable ones are dropped, and the pool is invalidated,
+     * so the next request reads it anew.
+     *
+     * @param \stdClass $question
+     * @return bool
+     */
+    private function is_deliverable(\stdClass $question): bool {
+        if (!isset($question->id) || !catscale::unavailable_question_ids([(int) $question->id])) {
+            return true;
+        }
+        $candidates = array_keys($this->context['questions'] ?? []);
+        $candidates[] = (int) $question->id;
+        foreach (catscale::unavailable_question_ids($candidates) as $questionid) {
+            unset($this->context['questions'][$questionid]);
+        }
+        \cache_helper::purge_by_event('changesintestitems');
+        return false;
+    }
+
+    /**
      * Executes steps that are always performed after an error
      *
      * @param result $result
@@ -433,6 +483,9 @@ abstract class strategy {
      */
     private function after_error(result $result) {
         $this->progress->save();
+        // Issue #64: the end of the selection travels with the feedback data of the attempt as well.
+        $this->endstatus = (string) $result->get_status();
+        $this->context['selectiondiagnosis'] = $this->diagnosis();
         $this->update_attemptfeedback($this->context);
         $this->cache->set('endtime', time());
         $this->cache->set('catquizerror', $result->get_status());
@@ -446,6 +499,7 @@ abstract class strategy {
         // not run, and a diagnosis that only wrote here stayed empty for exactly the
         // case it was built for.
         $this->result = $result;
+        $this->persist_stage_counts($this->endstatus);
         return $result;
     }
 
@@ -916,15 +970,95 @@ abstract class strategy {
      * simply empty - so writing only in the error path left no trace of the one thing
      * worth knowing.
      *
+     * Issue #64: the session-wide keys are kept for readers of the earlier layout; the diagnosis also goes
+     * under the attempt's own key, so a second attempt of the session does not overwrite it, and - when the
+     * selection ends the test - into the CAT attempt in the database, where it outlives the session. All of
+     * it without store_debug_info.
+     *
+     * @param string|null $endstatus The status that ends the test; null while it goes on.
      * @return void
      */
-    private function persist_stage_counts(): void {
-        if (empty($this->stagecounts) || !isset($this->cache)) {
+    private function persist_stage_counts(?string $endstatus = null): void {
+        if ($endstatus !== null) {
+            $this->endstatus = $endstatus;
+        }
+        if (!isset($this->cache)) {
             return;
         }
+        if (!empty($this->stagecounts)) {
+            $this->cache->set('catquizstagecounts', $this->stagecounts);
+            $this->cache->set('catquizstagetimings', $this->stagetimings);
+        }
+        $adaptiveattemptid = (int) ($this->context['attemptid'] ?? 0);
+        if ($adaptiveattemptid <= 0) {
+            return;
+        }
+        $diagnosis = $this->diagnosis();
+        attempt_cache::set('catquizstagecounts', $adaptiveattemptid, $diagnosis);
+        if ($this->endstatus !== null) {
+            $this->store_diagnosis_with_attempt($adaptiveattemptid, $diagnosis);
+        }
+    }
 
-        $this->cache->set('catquizstagecounts', $this->stagecounts);
-        $this->cache->set('catquizstagetimings', $this->stagetimings);
+    /**
+     * What the selection saw when it ended or handed out a question (issue #64).
+     *
+     * The status, the candidate count after every stage, the limits that apply and the counters they are
+     * compared with, and the abilities before and after the last answer - enough to tell which of the
+     * reported causes ended a test: no item left, the maximum, a filter that emptied the pool, the
+     * estimator.
+     *
+     * @return array
+     */
+    private function diagnosis(): array {
+        $progress = isset($this->progress) ? $this->progress : ($this->context['progress'] ?? null);
+        $finite = fn($values) => array_map(
+            fn($v) => is_numeric($v) && is_finite((float) $v) ? round((float) $v, 4) : null,
+            is_array($values) ? $values : []
+        );
+        return [
+            'status' => $this->endstatus ?? status::OK,
+            'time' => time(),
+            'counts' => $this->stagecounts,
+            'timings' => $this->stagetimings,
+            'minimumquestions' => (int) ($this->context['minimumquestions'] ?? 0),
+            'maximumquestions' => (int) ($this->context['maximumquestions'] ?? 0),
+            'maxperscale' => (int) ($this->context['max_attempts_per_scale'] ?? -1),
+            'answered' => $progress ? (int) $progress->get_num_answered_productive_questions() : null,
+            'played' => $progress ? count($progress->get_playedquestions()) : null,
+            'skipreason' => $this->context['skip_reason'] ?? null,
+            'previousabilities' => $finite($this->context['prev_ability'] ?? []),
+            'abilities' => $finite($this->context['person_ability'] ?? []),
+        ];
+    }
+
+    /**
+     * Keeps the diagnosis with the CAT attempt (issue #64), in its JSON next to the feedback data.
+     *
+     * Written directly, so it is there also when the feedback data are not updated in this request.
+     *
+     * @param int $adaptiveattemptid Id of the attempt of the component (adaptivequiz_attempt.id).
+     * @param array $diagnosis
+     * @return void
+     */
+    private function store_diagnosis_with_attempt(int $adaptiveattemptid, array $diagnosis): void {
+        global $DB;
+        $catattemptid = isset($this->progress) ? $this->progress->get_catattemptid() : null;
+        if (!$catattemptid) {
+            // The number of an attempt of the component is unique only together with the component (issue #5).
+            $component = isset($this->progress) ? (string) $this->progress->get_component() : '';
+            $catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, $component ?: 'mod_adaptivequiz');
+        }
+        $record = $catattemptid ? $DB->get_record('local_catquiz_attempts', ['id' => $catattemptid], 'id, json') : false;
+        if (!$record) {
+            return;
+        }
+        $json = json_decode((string) $record->json, true);
+        if (!is_array($json)) {
+            $json = [];
+        }
+        $json['selectiondiagnosis'] = $diagnosis;
+        $DB->set_field('local_catquiz_attempts', 'json', json_encode($json), ['id' => $record->id]);
     }
 
     /**

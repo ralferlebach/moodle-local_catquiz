@@ -2,6 +2,169 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Folge-Issues zu #150 (2026102401):
+  - #151: Die Schlüssel der Zeiträume liefen in Tagesschritten der Server-Zeitzone und wurden in der Zeitzone der
+    Person beschriftet. Über eine Zeitumstellung fehlte so ein Tag: Seine Versuche landeten in einem Balken hinter
+    den anderen, die Serien passten nicht mehr zu den Labels, und Core zeichnete das Diagramm nicht. Endete der
+    Zeitraum an diesem Tag, lief die Schleife endlos. Jetzt läuft die Schleife über die Kalendertage der Person,
+    mit fester Schrittzahl. Das Diagramm „Versuche je Zeitraum“ hat eine Datentabelle. Tests:
+    `timerange_keys_dst_test` und `attempts_per_timerange_dst_test` (Berlin, UTC, New York, beide Umstellungen),
+    Behat `catquiz_timerange_dst.feature`. Der Behat-Schritt „the following CAT results“ kennt jetzt die Spalte
+    `end`.
+  - #152: Der Verlauf von Versuchen im älteren Format (ohne `personability_after`) endete in einem TypeError und
+    nahm das ganze Feedback mit. Jetzt eine Serie je Datenformat; ein Diagramm gibt es nur, wenn es einen
+    Fähigkeitswert gibt; die Tabelle zeigt den gespeicherten Wert. Ein Feedbackbereich, der nicht gebaut werden
+    kann, zeigt einen Hinweis (`feedbackareanotshown`) statt die Seite zu beenden. Tests:
+    `graphicalsummary_legacy_data_test`, `feedback_area_isolation_test`, Behat in
+    `catquiz_graphicalsummary_modal.feature`.
+  - #153: Ein Item, dessen Parameter ein nicht installiertes Modell nennen, beendete jeden Versuch
+    gleich zu Beginn mit einem Fehler. Jetzt bleibt es aus dem Pool und aus den Parameterlisten
+    (`model_strategy::rows_of_installed_models()`), und der CAT-Manager zeigt „Wird nicht gespielt: Das Modell
+    seiner Parameter ist nicht installiert“. `model_model::get_instance()` ist als nullbar deklariert. Tests:
+    `missing_model_attempt_test` (Auswahl unverändert, Standardfehler bitgenau gleich), Behat in
+    `catquiz_item_visibility.feature`.
+  - #154: nur Linie 1.3 betroffen; hier bleibt der Jest-Fall für Bootstrap-4-Markup (Moodle 4.5).
+  - #155: Das veraltete CI-Skript `.github/ci/patch_adaptivequiz_generator.php` ist entfernt. Kein Workflow ruft es
+    auf, und beide Modul-Branches behandeln den fehlenden Editor selbst. phpcs über die ganze Linie: 0 Fehler.
+    Im eigenen Checkout: `git rm .github/ci/patch_adaptivequiz_generator.php`.
+- #150, Nacharbeiten zum Re-Audit vom 23.10.2026 (2026102400): Der Lernfortschritt im Vergleich (Feedback) zählte Versuche statt
+  gültiger Ergebnisse; ohne gültiges Ergebnis der Globalskala gingen zwei Serien ohne Werte an den Browser – dieselbe
+  Meldung „Invalid values received for series.“ auf einem zweiten Weg. Jetzt wie in der Statistik kein Diagramm,
+  gezeichnet über `local_catquiz/chart` (`learning_progress_chart_test`). Die Testinformation lässt ein Item aus,
+  dessen Modell nicht installiert ist (vorher TypeError, die ganze Seite brach ab) oder dessen Information nicht
+  endlich ist (vorher fiel die ganze Linie weg); ein Fähigkeitswert, der keine Zahl ist (null, Text), zählt für
+  keinen Balken (vorher als 0) (`chart_input_test`). Behat: teilweise kalibrierter Pool, neuer
+  Kalibrierungskontext über den Skalenwechsel (#148), Statistik für Teilnehmende ohne Zugriff. Inventur aller
+  Diagramme: `doc/issue-150-chart-inventory.md`; Nachweise mit SHAs: `doc/issue-150-nachweise.md`.
+- #150 Fähigkeitsprofil leer (2026102300): Die Histogramme im persönlichen Feedback und in `[catquizstatistics]` nahmen
+  ihre Balken-Labels aus der Testinformation, der Summe der Fisher-Information der Items mit Parametern. Ohne
+  solches Item (leerer Pool, nur Pilotfragen, neuer Kalibrierungskontext) bekam die Testinformationsreihe bei
+  Lehrenden 0 Werte: `core/chart_series` wirft dann beim Erzeugen „Invalid values received for series.“ (der
+  Live-Befund), und weil `core/chart_builder` das in einem `require`-Callback tut, blieb der Fehler ungefangen und
+  die Fläche leer. Bei Teilnehmenden hatten die Balken keine Labels und es war nichts zu sehen. Jetzt
+  (`local\statistics\chart_output`): Labels aus den Fähigkeitsschritten; die Testinformation deckt jeden Schritt
+  ab oder fehlt – nicht erfunden –, Lehrende lesen warum; ohne gültiges Ergebnis ein Hinweistext; ein
+  inkonsistentes Diagramm wird nicht ausgeliefert. Template `local_catquiz/chart` mit AMD-Modul
+  `local_catquiz/chart`: erzeugt das Diagramm selbst in `try/catch` und setzt bei einem Diagramm, das nicht
+  zu zeichnen ist, eine Meldung an seine Stelle. Dabei gefunden: Das Feedback-Histogramm rundete auf ein
+  0,25-Raster und verlor jeden Wert in der Nähe einer ganzen Zahl (z. B. 0,1, −4,9, 4,9); es zählt jetzt wie die
+  Statistik (Schritt ± 0,25, unterer Rand der Skala im ersten Balken). Beide Histogramme mit Datentabelle.
+  Toter, doppelter Fisher-Informations-Durchlauf entfernt. Tests: `ability_histogram_test` (leerer Pool, nur
+  Pilotfragen, Teilpool, voller Pool als Gegenprobe, keine Ergebnisse, inkonsistentes Diagramm), Jest
+  `chart.test.js`, Behat `catquiz_ability_histogram.feature` (Feedback für Teilnehmende und Lehrende,
+  Statistik, Lazy an/aus, axe, Fixture mit der Live-Payload); alle rot vor dem Fix. Payload-Analyse und
+  Prüfhilfe für die Live-Instanz in `doc/issue-150-ability-histogram.md`.
+
+- Kontroll-Re-Audit vom 19.10.2026 und CI (gleiche interne Version, noch nicht ausgeliefert):
+  - #149 (P0): Ein lesender Zugriff auf den Fortschritt legt nichts mehr an (`progress_missing_exception` statt
+    TypeError aus `create_new(null)`); die Ergebnisseite sagt, dass kein Ergebnis vorliegt; Leser schreiben keinen
+    Cache. `doc/progress-read-contract.md`.
+  - #147: Der geteilte Pool ist kanonisch gespeichert, die Sortierung gilt bei jeder Rückgabe (`order_pool()`,
+    Gleichstand nach ID, ohne Wert zuletzt) – vorher bestimmte, wer den Cache füllte, die Reihenfolge für alle.
+  - Volle Suite (PG/MariaDB, beide Linien) fand: Statistik-Endpunkt ohne erkannte Capability-Prüfung (Prüfung
+    vorhanden über `feedback_access`, Test erkennt sie jetzt), Versuchsliste nur abgeschlossener Versuche (Test
+    nachgezogen), Lückenhafte Erkennung voll qualifizierter Klassen im Importtest, festgeschriebener Savepoint,
+    ALLSUBS-Fall jetzt durch #60-Budget blockiert, generischer Attempt-ID-Parameter in `strategy.php` (dabei
+    Auflösung über `get_cat_attempt_id()` statt nur über die Host-ID).
+  - Behat (alle catquiz-Features, Chrome headless, Moodle 4.5 und 5.1) fand: Status-Icon der Fragenliste mit
+    `aria-label` ohne Rolle (`role="img"`, axe aria-prohibited-attr); Feedback-Tabs: jeder Tab stand beim Rendern
+    auf `aria-selected="true"`, obwohl keiner offen ist, und die Listeneinträge hatten keine Rolle – eine Tabliste,
+    die Bootstrap noch nicht eingerichtet hat, enthielt damit nicht nur Tabs (axe aria-required-children; zweites
+    Feedback auf einer Seite, Theme Classic). Vier ALLSUBS-Fixtures (Ergebnisseite je Aktivität, schriftliches
+    Feedback, Routing) verlangten 2 Fragen in 7 Skalen bei höchstens 12 – genau die Konfiguration, die
+    `coveragebudget` (#60, Beispiel 2) jetzt vor dem Start ablehnt; sie verlangen jetzt 1 je Skala, die
+    erwarteten Skalen folgen der dann gültigen Messung (Antwortzahlen je Skala im Detail-Tab abgelesen).
+    Weiter: Ein im CAT-Manager einer Skala zugeordnetes Item bekam keinen Kontext – die Seite des Items fand das
+    Item der Skala nicht („activeparamid on false“), ein Kontextwechsel der Skala überging es; jetzt der Kontext
+    der Skala, auch nachträglich bei der nächsten Änderung (`item_scale_context_test`, rot ohne Fix). Die
+    Modellkarten eines Items ohne Parameter lasen undefinierte Variablen. Der Auswahldialog „Testitems
+    hinzufügen“ hatte einen eigenen Download-Knopf und wiederholte damit die feste ID `downloadtype_download`
+    von local_wunderbyte_table; der Download bleibt in der Fragenliste. Testseitig: Reihenfolge der
+    Skalen-Feedbacks über die sichtbaren Zeilen geprüft (ein Block mit `<br>`, „appear before“ fand für jede
+    Zeile denselben Knoten), Vorlagen aus dem Behat-Schritt mit den Grenzwerten, die das Formular sendet.
+    Moodle 4.5: Der Link „Show chart data“ der Core-Diagramme in Feedback und Statistik ist 19px hoch (axe
+    target-size, WCAG 2.5.8) – im Plugin auf 24px Mindesthöhe gesetzt.
+  - (1.3) Test-Metadaten aller Tests auf PHPUnit-Attribute umgestellt (keine Doc-Comment-Metadaten mehr).
+
+- Nacharbeitsauftrag zum Kontrollaudit vom 18.10.2026, P0 (2026101801); Nachweise in `doc/p0-nachweise-2026-10-18.md`:
+  - #104 K5: `cli/explain_hotqueries.php` verliert keine Planzeilen mehr (`local\diagnostics\query_plan`; auf
+    PostgreSQL `get_fieldset_sql`, ein Recordset wäre ein Cursor, den PostgreSQL für EXPLAIN ablehnt).
+  - #104 K6: Upgrade-Schritt 2024080200 ordnet jedem Parameter mit benannter Regel das kleinste Item seiner Frage
+    zu (`local_catquiz_upgrade_assign_itemparam_items()`), wiederholbar; Test mit Dublettenfixture. Inventar
+    nachgeführt: 93 Aufrufe, keine offenen Befunde.
+  - #86: Die äußeren Grenzen der Feedbackbereiche folgen der Globalskala (`local\feedback_limits`): beim Ändern der
+    Skala im JSON aller ihrer Tests, einmal per Upgrade-Schritt 2026101801, beim Lesen (Formular, neuer Versuch); innere
+    Grenzen bleiben, Versuche behalten ihren Einstellungsstand. Vorher bekam eine Fähigkeit innerhalb der
+    erweiterten Skala keinen Bereich. `doc/feedback-limits.md`.
+  - #60: Fehler `coveragebudget` (ALLSUBS: Mindestzahl je Skala nicht in allen abzudeckenden Skalen innerhalb der
+    Höchstzahl), `scalebelowminimum` jetzt Fehler und über den Teilbaum gezählt, Diagnose `pilotexpectation`;
+    programmatische Speicherwege lehnen poolunabhängige Fehler ab (`settingsinconsistent`); Matrix aller
+    Beispiele des Issues (`settings_matrix_test`).
+  - #146: Entscheidung dokumentiert – Invalidierung über Ereignisse statt Poolversionen –, Cold-/Warm-Gleichheit
+    je Änderungsart (Parameter, Item, Skala, Kontext, Fragensammlung).
+  - #89: Behat `catquiz_template_update_copy.feature` (überschreiben, als neue Vorlage, Namenskonflikt) mit Schritten.
+  - CI: Nebenläufigkeitstests (pcntl) scheitern mit `CATQUIZ_REQUIRE_CONCURRENCY=1` statt übersprungen zu werden;
+    im PHPUnit-Job gesetzt.
+
+- Re-Audit Priorität 5 und ZIP-Re-Audit vom 18.10.2026 (2026101800); Details in den genannten doc-Dateien:
+  - #148 (H1): Kontextwechsel einer Skala erhält die Parameter je Item (Frage + Skala) statt je Frage; nur alter
+    und neuer Kontext, eine Transaktion, wiederholbar. Vorher scheiterte er bei einer Frage in zwei Skalen mit
+    gleichem Modell am Unique-Index – nach dem Kopieren der Parameter außerhalb der Transaktion.
+  - #104 (H2/H3): Kalibrierung schreibt die Schätzung einer Frage auf jedes ihrer Items in den kalibrierten Skalen;
+    Lesen deterministisch (kleinstes Item); der Parameter-Editor zeigt und speichert das Item der Skala der Seite.
+  - #89: Vorlagen – zwei Aktionen („gewählte Vorlage überschreiben“, „als neue Vorlage speichern“) mit
+    expliziten IDs, eindeutige Namen, Quelle bleibt unverändert, Aktivität verweist auf ihre Vorlage, Bilder des
+    schriftlichen Feedbacks gehen in die Vorlage mit; der Kopierpfad übergab vorher eine Vorlagen-ID als
+    Aktivitäts-ID.
+  - #31: Mindestversionen je Linie (1.2: Moodle 4.5, `incompatible` 5.0; 1.3: `requires` 5.1), die sieben
+    Modell-Subplugins ziehen mit, Abhängigkeiten auf die mitgelieferten Host-/Adapter-Versionen, README mit
+    Linientabelle, Test `plugin_versions_test`, Workflow `install-matrix.yml` (Negativ- und Upgrade-Matrix).
+  - #85/#88: eine Grundgesamtheit für alle Diagramme (`local\statistics\attempt_population`), Laden bei Bedarf
+    für Statistik-Diagramme und Versuche im Shortcode, Gruppenrechte an den Lazy-Endpunkten, keine
+    Sitzungsschreibzugriffe dort, Messwerkzeug `cli/measure_feedback_page.php`; mehrere Fehler (0,0 als „kein
+    Ergebnis“, offene Versuche als Feedback, Präzedenz in Shortcode-Argumenten u. a.). `doc/statistics-population.md`.
+  - #64/#77/#81/#82: 24-Item-Hierarchie (CLASSIC, Q1→Q2) als PHPUnit und Behat; Reihenfolge des Skalenfeedbacks
+    auch aus gespeicherten Versuchen (Arrays) und locale-bewusst; Kontext einer neuen Skala vor dem Insert,
+    Subskalen ohne Kontext, „neuer Standardkontext“ beim Bearbeiten legt einen an; 2×2-Sichtbarkeitsmatrix ohne
+    Purge, global verborgene Fragen nie im Versuch, Manager zeigt den Status als Text. `doc/prio5-64-77-81-82.md`.
+  - #30/#32: eindeutige IDs der Manager-Vorlagen, tote Vorlagen entfernt, Tabs der Statistik mit ARIA, ein
+    Template statt offenem/schließendem Fragment, Farben über CSS-Variablen mit Fallback, Pfade über `__DIR__`;
+    (1.3) Bootstrap-4-Wächter auf classes/ und amd/src ausgedehnt, axe-Suite `tests/a11y` für Light/Dark/schmal.
+  - Adapter #2: Fragment nur für Bäume einer Root-Skala; Sicherheitsfälle (falscher Sesskey, Lehrkraft eines
+    anderen Kurses, Verbot an der Aktivität). Adapter #6: Timeline mit Speicherwerten, Request-ID, fatalem
+    Abbruch, eigenen Spans für `prepare_attempt_caches` und `fetch_question_id`. `doc/attempt-trace.md`.
+  - Testpflege: der Normalisierer von `feedback_page_meter` kennt die Bootstrap-4-Klasse `font-italic` – der
+    Vergleich „Tab später geladen = Tab mit der Seite gebaut“ scheiterte in 4.5 nur an diesem leeren Wrapper.
+
+- Nacharbeiten aus dem Re-Audit vom 17.10.2026 (2026101702), mit Behat und PHPUnit in beiden Linien:
+  - CI (G1): `.gitignore` ignorierte mit `ci/` auch `.github/ci/` – der AMD-Prüfer fehlte im Import, der
+    CI-Schritt brach mit „can't open file“ ab; jetzt `/ci/`, `/moodle/`. AMD-Build mit der CI-Toolchain
+    neu erzeugt (Drift beseitigt), eine phpcs-Warnung behoben. `make check` prüft zusätzlich den AMD-Build
+    (`make amd`) und lässt phpcs über dieselben Dateien laufen wie die CI (ohne `tests/fixtures`, 86 MB
+    Messdaten, an denen phpcs den Speicher ausschöpfte, und ohne `.github`); lint, amd, phpcs und phpunit
+    grün in beiden Linien.
+  - CI (G3): manuelle Läufe können Host und Adapter auf feste Refs pinnen (`workflow_dispatch`-Eingaben
+    `host_ref`, `adapter_ref`); jeder Lauf schreibt die verwendeten SHAs als Hinweis ins Protokoll.
+  - #60: **Jeder** harte Fehler des Validators verhindert jetzt den Versuchsstart (vorher nur leerer Pool
+    und Skala ohne Item), mit allen Gründen in der Meldung und dem Ereignis `settings_inconsistent`.
+    Pilotfragen zählen nie zur produktiven Kapazität; ein Pool nur aus Pilotfragen (Itembank vor der
+    Kalibrierung) bleibt ausdrücklich startbar, mit der neuen Warnung `onlypilotitems`. Behat
+    `catquiz_stop_reasons.feature`: blockierter Start; „Pool endet vor der Mindestzahl“ jetzt mit einem
+    während des Versuchs schrumpfenden Pool (neuer Schritt). Siehe `doc/settings-validation.md`.
+  - #95/#101, echte Gleichzeitigkeit: neuer Test mit parallelen Prozessen (`pcntl_fork`, eigene
+    Verbindungen) fand zwei Fehler, beide behoben: die erste Progress-Zeile scheiterte bei gleichzeitigen
+    Anfragen am Unique-Index (jetzt übernommen statt Fehlerseite), und ein Progress, den zuerst jemand
+    anderes anlegte, gehörte diesem statt dem Eigentümer des Versuchs. Siehe `doc/id-namespaces.md`.
+  - #146: Änderungen in der Fragensammlung (verborgen/Entwurf, neue Version, verschoben) invalidieren den
+    Laufzeit-Pool sofort, wenn die Frage ein CAT-Item ist; echt gleichzeitige Versuche mehrerer Personen
+    getestet. Siehe `doc/runtime-pool-cache.md`.
+  - #104: vollständige Inventur aller nach der ersten Spalte geschlüsselten DML-Aufrufe (90 plus 10
+    Tabellenquellen, keine neuen DML-Befunde), `doc/dml-resultset-inventory.md`. Offen und neu gefunden:
+    Umschlüsselung in PHP nach Frage-ID (H1 `create_items_in_new_context()`, H2/H3
+    `model_item_param_list`) – Frage in mehreren Skalen; siehe `doc/dml-resultset-keying.md`.
+  - #135: Behat `catquiz_fastest_subscales.feature` – FASTEST über mehrere Subskalen mit echten Fragen,
+    bis zum globalen Maximum, jede Frage einmal.
+
 - Nacharbeiten aus dem Audit vom 15.10.2026 (2026101701), mit Behat und PHPUnit in beiden Linien:
   - #146, Laufzeit-Pool getrennt vom Sitzungscache der Versuche: Pool im Anwendungscache `runtimepool`
     (für alle gleich, invalidiert mit Items, Parametern, Skalen; TTL 10 min), die Statistik der Person

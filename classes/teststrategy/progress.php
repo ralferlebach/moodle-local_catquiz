@@ -331,8 +331,15 @@ class progress implements JsonSerializable {
         }
 
         $instance = self::load_from_cache($catattemptid, $adaptiveattemptid, $component)
-            ?: self::load_from_db($catattemptid, $contextid)
-            ?: self::create_new($adaptiveattemptid, $component, $contextid, $quizsettings);
+            ?: self::load_from_db($catattemptid, $contextid, $quizsettings !== null);
+        if (!$instance) {
+            /* Issue #149: a reader - no settings - never creates a progress, a CAT attempt or a cache entry. It
+               used to go on to create_new() with settings null and ended in a TypeError on the result page. */
+            if ($quizsettings === null) {
+                throw new progress_missing_exception($adaptiveattemptid, $component);
+            }
+            $instance = self::create_new($adaptiveattemptid, $component, $contextid, $quizsettings);
+        }
 
         // The CAT attempt may appear after this progress was first built - the component starts its
         // attempt, the CAT model files its own right after. Pick it up when it does.
@@ -446,7 +453,7 @@ class progress implements JsonSerializable {
             return null;
         }
 
-        return self::populate_from_object($record, $contextid);
+        return self::populate_from_object($record, $contextid, false);
     }
 
     /**
@@ -454,9 +461,10 @@ class progress implements JsonSerializable {
      *
      * @param int|null $catattemptid Id of the CAT attempt - local_catquiz_attempts.id.
      * @param int $contextid
+     * @param bool $cache Whether to keep it in the cache - not for a reader (issue #149).
      * @return progress|false
      */
-    private static function load_from_db(?int $catattemptid, int $contextid) {
+    private static function load_from_db(?int $catattemptid, int $contextid, bool $cache = true) {
         global $DB;
 
         if ($catattemptid === null) {
@@ -482,7 +490,7 @@ class progress implements JsonSerializable {
         if ($reason !== null) {
             progress_integrity::fail($record, $catattempt, $reason, $contextid);
         }
-        return self::populate_from_object($record, $contextid);
+        return self::populate_from_object($record, $contextid, $cache);
     }
 
     /**
@@ -490,9 +498,10 @@ class progress implements JsonSerializable {
      *
      * @param stdClass $object
      * @param int $contextid Fallback used for old records saved before contextid was persisted.
+     * @param bool $cache Whether to keep it in the cache; a reader does not write the cache (issue #149).
      * @return self
      */
-    private static function populate_from_object(stdClass $object, int $contextid): self {
+    private static function populate_from_object(stdClass $object, int $contextid, bool $cache = true): self {
         global $DB;
         $instance = new self();
         $instance->id = $object->id;
@@ -589,8 +598,9 @@ class progress implements JsonSerializable {
         }
         $instance->quizsettings = json_decode($object->quizsettings);
 
-        // Save to the cache.
-        $instance->save_to_cache();
+        if ($cache) {
+            $instance->save_to_cache();
+        }
 
         return $instance;
     }
@@ -605,13 +615,19 @@ class progress implements JsonSerializable {
      * @return self
      */
     private static function create_new(int $adaptiveattemptid, string $component, int $contextid, stdClass $quizsettings): self {
-        global $USER;
+        global $DB, $USER;
         $instance = new self();
         $instance->id = null;
-        $instance->userid = $USER->id;
         $instance->component = $component;
         $instance->attemptid = $adaptiveattemptid;
         $instance->catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, $component);
+        // The progress belongs to the person of its CAT attempt, as the CAT attempt itself - also when somebody
+        // else is the first to touch it (issue #95). Before, it was filed under that somebody, and the owner's
+        // next request was refused as somebody else's progress.
+        $owner = $instance->catattemptid !== null
+            ? $DB->get_field('local_catquiz_attempts', 'userid', ['id' => $instance->catattemptid])
+            : false;
+        $instance->userid = $owner !== false ? (int) $owner : $USER->id;
         $instance->contextid = $contextid;
 
         $instance->playedquestions = [];
@@ -774,7 +790,20 @@ class progress implements JsonSerializable {
         // If it does not exist yet, insert a new record.
         if (! $this->id) {
             $record->quizsettings = json_encode($this->quizsettings);
-            $id = $DB->insert_record('local_catquiz_progress', $record);
+            try {
+                $id = $DB->insert_record('local_catquiz_progress', $record);
+            } catch (\dml_write_exception $e) {
+                // Issue #95: a request in parallel saved the first progress of this attempt - the unique index
+                // on attemptid let only one insert through. That row is this attempt's progress; it is updated
+                // instead of failing the request with an error page.
+                $id = $DB->get_field('local_catquiz_progress', 'id', ['attemptid' => $this->catattemptid]);
+                if ($id === false) {
+                    throw $e;
+                }
+                $id = (int) $id;
+                $record->id = $id;
+                $DB->update_record('local_catquiz_progress', $record);
+            }
             if (! is_int($id)) {
                 throw new \Exception(sprintf("Could not save quiz progress of attempt %d to the database", $this->attemptid));
             }

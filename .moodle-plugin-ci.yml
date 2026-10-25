@@ -14,17 +14,16 @@ filter:
     - "*.csv"
     - "strategy_test.php"
 
-# Mustache: diese Vorlagen sind absichtlich unvollstaendiges HTML - sie oeffnen
-# bzw. schliessen einen Akkordeon-Block ueber zwei Dateien hinweg, oder sind
-# Teilvorlagen, die nur eingebettet gueltig sind. Die HTML-Pruefung sieht jede
-# Datei einzeln und meldet deshalb Fehler, die im gerenderten Ganzen nicht
-# existieren. moodle-plugin-ci liest dafuer keine Umgebungsvariable mehr
-# (MUSTACHE_IGNORE_NAMES in den Workflows ist wirkungslos), sondern nur diesen
-# befehlsspezifischen Filter.
+# Mustache: diese Vorlagen sind Teilvorlagen, die nur eingebettet gueltig sind.
+# Die HTML-Pruefung sieht jede Datei einzeln und meldet deshalb Fehler, die im
+# gerenderten Ganzen nicht existieren. moodle-plugin-ci liest dafuer keine
+# Umgebungsvariable mehr (MUSTACHE_IGNORE_NAMES in den Workflows ist
+# wirkungslos), sondern nur diesen befehlsspezifischen Filter.
+# Issue #32: der Akkordeon-Block des Feedback-Formulars ist eine einzige Vorlage
+# (feedback/feedbackform_collapsible.mustache), deren Beispielkontext Oeffnen und
+# Schliessen zusammen rendert - sie wird wieder geprueft und steht nicht mehr hier.
 filter-mustache:
   notNames:
-    - feedbackform_collapsible_close.mustache
-    - feedbackform_collapsible_open.mustache
     - catscaleshortcodetablechildren.mustache
     - colour_pick_circle.mustache
     - colour_picker.mustache

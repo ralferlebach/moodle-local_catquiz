@@ -148,4 +148,42 @@ final class customscalefeedback_sorting_test extends advanced_testcase {
             array_values($sorted)
         );
     }
+
+    /**
+     * By name as people read it (issue #77): umlauts with their letter, case does not decide, numbers in
+     * their natural order. Compared byte by byte, "Beta" and "Zulu" came before "alpha" and "Ärger" last.
+     */
+    public function test_names_sort_as_people_read_them(): void {
+        $names = [31 => 'zulu', 32 => 'Ärger', 33 => 'alpha', 34 => 'Beta', 35 => 'Skala 10', 36 => 'Skala 2'];
+        $scales = [];
+        $feedback = [];
+        foreach ($names as $id => $name) {
+            $scales[$id] = ['id' => $id, 'name' => $name];
+            $feedback[$id] = 'feedback ' . $name;
+        }
+
+        $sorted = customscalefeedback::sort_scalefeedback($feedback, $scales, null);
+
+        $this->assertSame(
+            ['feedback alpha', 'feedback Ärger', 'feedback Beta', 'feedback Skala 2', 'feedback Skala 10', 'feedback zulu'],
+            array_values($sorted)
+        );
+    }
+
+    /**
+     * Several scales without a name come last, in the order of their id; an empty name counts as none.
+     */
+    public function test_scales_without_names_come_last_by_id(): void {
+        $scales = [
+            41 => ['id' => 41, 'name' => 'Zeta'],
+            42 => ['id' => 42],
+            43 => ['id' => 43, 'name' => ''],
+            44 => ['id' => 44, 'name' => 'Alpha'],
+        ];
+        $feedback = [43 => 'third', 42 => 'second', 41 => 'zeta', 44 => 'alpha'];
+
+        $sorted = customscalefeedback::sort_scalefeedback($feedback, $scales, null);
+
+        $this->assertSame(['alpha', 'zeta', 'second', 'third'], array_values($sorted));
+    }
 }

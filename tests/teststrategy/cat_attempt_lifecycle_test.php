@@ -90,12 +90,13 @@ final class cat_attempt_lifecycle_test extends advanced_testcase {
         $this->resetAfterTest();
         $this->setUser($this->getDataGenerator()->create_user());
 
+        // Issue #149: a reader of an attempt without progress gets progress_missing_exception - no longer the
+        // TypeError of creating a progress without settings - and files nothing.
         try {
             progress::load(93003, 'mod_adaptivequiz', 9);
-        } catch (\TypeError $e) {
-            // What a reader gets for an attempt that never existed is a separate matter; what
-            // counts here is that it did not file one.
-            unset($e);
+            $this->fail('A reader got a progress of an attempt that never existed.');
+        } catch (\local_catquiz\teststrategy\progress_missing_exception $e) {
+            $this->assertSame('progressmissing', $e->errorcode);
         }
 
         $this->assertFalse($DB->record_exists('local_catquiz_attempts', ['attemptid' => 93003]));
