@@ -31,21 +31,18 @@ use UnexpectedValueException;
 /** model_item_param_test
  *
  * @package local_catquiz
- *
- *
- * @covers \local_catquiz\local\model\model_item_param
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_item_param::class)]
 final class model_item_param_test extends advanced_testcase {
     /**
      * Test import of files
      *
-     * @dataProvider read_item_param_from_db_provider
      *
      * @param array $record
      * @param array $parameters
      * @return void
-     * @group large
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('read_item_param_from_db_provider')]
     public function test_read_item_param_from_db(array $record, array $parameters): void {
         global $DB;
         $this->resetAfterTest();
@@ -206,11 +203,11 @@ final class model_item_param_test extends advanced_testcase {
     /**
      * Check if an item param can be saved to the database.
      *
-     * @dataProvider write_item_param_to_db_provider
      * @param model_item_param $itemparam
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('write_item_param_to_db_provider')]
     public function test_write_item_param_to_db(model_item_param $itemparam): void {
         $this->resetAfterTest();
         $itemparam->save();

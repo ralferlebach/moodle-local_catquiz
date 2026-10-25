@@ -39,6 +39,15 @@ body[id^="page-local-catquiz-"] canvas {
     max-width: 60%;
 }
 
+/* The link "Show chart data" of a core chart is 19px high in Moodle 4.5 - below the 24px of WCAG 2.5.8 (axe target-size). */
+.catquiz_feedback .chart-table-expand > a,
+.local-catquiz-statistics .chart-table-expand > a,
+body[id^="page-local-catquiz-"] .chart-table-expand > a {
+    display: inline-block;
+    min-height: 24px;
+    line-height: 24px;
+}
+
 .modal-content.preview-question .text_to_html {
     margin: 40px;
 }
@@ -64,7 +73,9 @@ body[id^="page-local-catquiz-"] canvas {
     position: relative;
     width: 100%;
     height: 60px;
-    border: 4px solid black;
+    /* Issue #32: theme colours with the old value as fallback - Moodle 4.5 (Bootstrap 4) has no --bs-*
+       variables and keeps its look; in a dark theme the frame turns light instead of vanishing. */
+    border: 4px solid var(--bs-emphasis-color, black);
 }
 
 .catquiz-feedbackbar-uppertext {
@@ -87,15 +98,15 @@ span.wb_colourpick .colourpickercircle {
     border-radius: 50%;
     display: inline-block;
     margin: 0 5px 0 5px;
-    border: 1px solid black;
+    border: 1px solid var(--bs-emphasis-color, black);
 }
 
 span.wb_colourpick .colourpickercircle:hover {
-    border-color: orange;
+    border-color: var(--bs-warning, orange);
 }
 span.wb_colourpick .colourpickercircle.selected {
-    border: 3px solid white;
-    outline: 5px solid black;
+    border: 3px solid var(--bs-body-bg, white);
+    outline: 5px solid var(--bs-emphasis-color, black);
 }
 
 .catquiz_feedback {
@@ -105,7 +116,7 @@ span.wb_colourpick .colourpickercircle.selected {
 /* Issue #32: the scale feedback of the test settings form, not every input, card and editor of a page. */
 #id_catquiz_feedback input.disabled {
     cursor: not-allowed;
-    background-color: #e9ecef;
+    background-color: var(--bs-secondary-bg, #e9ecef);
     opacity: 1;
     pointer-events: none;
 }
@@ -116,7 +127,7 @@ span.wb_colourpick .colourpickercircle.selected {
 #id_catquiz_feedback .card-body-disabled,
 #id_catquiz_feedback div[contenteditable="false"] {
     cursor: not-allowed;
-    background-color: #e9ecef;
+    background-color: var(--bs-secondary-bg, #e9ecef);
     opacity: 1;
 }
 
@@ -135,7 +146,7 @@ span.wb_colourpick .colourpickercircle.selected {
 }
 
 #lcq_model_override_form .activeparam {
-    background-color: #d4edda;
+    background-color: var(--bs-success-bg-subtle, #d4edda);
 }
 
 #lcq_model_override_form .param-group .accesshide {

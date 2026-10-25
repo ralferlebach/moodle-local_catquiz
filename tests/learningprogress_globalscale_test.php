@@ -38,8 +38,8 @@ use local_catquiz\local\statistics\learning_progress_series;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\statistics\learning_progress_series
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\statistics\learning_progress_series::class)]
 final class learningprogress_globalscale_test extends advanced_testcase {
     /**
      * The person's trajectory on a scale, as the learning-progress chart draws it.

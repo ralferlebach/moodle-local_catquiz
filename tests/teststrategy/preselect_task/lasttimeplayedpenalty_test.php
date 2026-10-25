@@ -35,9 +35,8 @@ use PHPUnit\Framework\TestCase;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2024 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\preselect_task\lasttimeplayedpenalty
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\lasttimeplayedpenalty::class)]
 final class lasttimeplayedpenalty_test extends TestCase {
     /**
      * @var int
@@ -54,8 +53,8 @@ final class lasttimeplayedpenalty_test extends TestCase {
      * @param int $currenttime
      * @param float $penaltytimerange
      * @return void
-     * @dataProvider penalty_is_calculated_correctly_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('penalty_is_calculated_correctly_provider')]
     public function test_penalty_is_calculated_correctly(
         float $expected,
         \stdClass $question,

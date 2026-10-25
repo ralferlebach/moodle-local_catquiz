@@ -44,14 +44,12 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\local\model\model_raschmodel
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_raschmodel::class)]
 final class model_raschmodel_test extends basic_testcase {
     /**
      * Test if the information criteria functions return the expected values.
      *
-     * @dataProvider can_calculate_information_criteria_provider
      *
      * @param string $expected
      * @param model_person_param_list $personabilities
@@ -62,8 +60,8 @@ final class model_raschmodel_test extends basic_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('can_calculate_information_criteria_provider')]
     public function test_information_criteria_functions_return_expected_values(
         string $expected,
         model_person_param_list $personabilities,

@@ -38,9 +38,8 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2024 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\output\attemptfeedback
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\output\attemptfeedback::class)]
 final class attemptfeedback_test extends advanced_testcase {
     /**
      * Checks if the attemptfeedback class returns the correct course enrolment data.
@@ -52,8 +51,8 @@ final class attemptfeedback_test extends advanced_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     * @dataProvider strategy_returns_expected_courses_to_enrol_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('strategy_returns_expected_courses_to_enrol_provider')]
     public function test_it_returns_expected_courses_to_enrol(
         array $expected,
         array $feedbackdata,
@@ -180,8 +179,8 @@ final class attemptfeedback_test extends advanced_testcase {
      *
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     * @dataProvider strategy_returns_expected_groups_to_enrol_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('strategy_returns_expected_groups_to_enrol_provider')]
     public function test_it_returns_expected_groups_to_enrol(
         array $expected,
         array $feedbackdata,

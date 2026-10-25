@@ -17,26 +17,32 @@
 namespace local_catquiz;
 
 use advanced_testcase;
-use cache;
+use core_question\local\bank\question_version_status;
+use local_catquiz\table\catscalequestions_table;
 
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/local/catquiz/lib.php');
+require_once($CFG->libdir . '/questionlib.php');
 
 /**
  * Which questions the runtime pool of a test contains (issue #82).
  *
- * Two levels hide a question: the question bank (a hidden or draft version, for every use) and the CAT
- * manager (an item deactivated in one scale). The pool holds a question only when both allow it; the
- * manager table keeps listing all of them.
+ * Two levels hide a question: the question bank (the newest version hidden or a draft, for every use) and
+ * the CAT manager (an item deactivated in one scale). The pool holds a question only when both allow it;
+ * the manager table keeps listing all of them and says which level hides it. The pool is cached: every
+ * change has to reach it without anybody purging it - the tests here never purge.
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 #[\PHPUnit\Framework\Attributes\CoversMethod(catscale::class, 'get_testitems')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(catscale::class, 'item_availability')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(catscale::class, 'unavailable_question_ids')]
 #[\PHPUnit\Framework\Attributes\CoversMethod(catquiz::class, 'return_sql_for_catscalequestions')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(catscalequestions_table::class, 'action_togglestatus')]
 final class item_availability_test extends advanced_testcase {
     /** @var int Running number. */
     private int $seq = 0;
@@ -44,18 +50,23 @@ final class item_availability_test extends advanced_testcase {
     /** @var int CAT context. */
     private int $contextid;
 
+    /** @var \stdClass Question category. */
+    private \stdClass $category;
+
     /**
-     * A CAT context.
+     * A CAT context and a question category.
      */
     protected function setUp(): void {
         global $DB;
         parent::setUp();
         $this->resetAfterTest();
+        $this->setAdminUser();
         $this->contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
             'name' => 'Availability context', 'description' => '', 'descriptionformat' => FORMAT_HTML,
             'starttimestamp' => time() - 100, 'endtimestamp' => time() + 10000,
             'timecreated' => time(), 'timemodified' => time(), 'usermodified' => 0,
         ]);
+        $this->category = $this->getDataGenerator()->get_plugin_generator('core_question')->create_question_category();
     }
 
     /**
@@ -73,26 +84,20 @@ final class item_availability_test extends advanced_testcase {
     }
 
     /**
-     * A question with a version of the given status.
+     * A real question of the question bank, its (only) version in the given status.
      *
      * @param string $versionstatus ready, hidden or draft
-     * @return int question id
+     * @return \stdClass The question, with id.
      */
-    private function question(string $versionstatus): int {
+    private function question(string $versionstatus = question_version_status::QUESTION_STATUS_READY): \stdClass {
         global $DB;
-        $category = $this->getDataGenerator()->get_plugin_generator('core_question')->create_question_category();
-        $questionid = (int) $DB->insert_record('question', (object) [
-            'name' => 'Availability item ' . (++$this->seq), 'questiontext' => 'body', 'questiontextformat' => FORMAT_HTML,
-            'qtype' => 'truefalse', 'generalfeedback' => '', 'generalfeedbackformat' => FORMAT_HTML,
-            'timecreated' => time(), 'timemodified' => time(), 'createdby' => 2, 'modifiedby' => 2,
-        ]);
-        $entryid = (int) $DB->insert_record('question_bank_entries', (object) [
-            'questioncategoryid' => $category->id, 'idnumber' => 'avail' . $this->seq, 'ownerid' => 2,
-        ]);
-        $DB->insert_record('question_versions', (object) [
-            'questionbankentryid' => $entryid, 'version' => 1, 'questionid' => $questionid, 'status' => $versionstatus,
-        ]);
-        return $questionid;
+        $question = $this->getDataGenerator()->get_plugin_generator('core_question')->create_question(
+            'truefalse',
+            null,
+            ['category' => $this->category->id, 'name' => 'Availability item ' . (++$this->seq)]
+        );
+        $DB->set_field('question_versions', 'status', $versionstatus, ['questionid' => $question->id]);
+        return $question;
     }
 
     /**
@@ -101,72 +106,276 @@ final class item_availability_test extends advanced_testcase {
      * @param int $questionid
      * @param int $scaleid
      * @param int $status LOCAL_CATQUIZ_TESTITEM_STATUS_*
+     * @return int item id
      */
-    private function item(int $questionid, int $scaleid, int $status): void {
+    private function item(int $questionid, int $scaleid, int $status = LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE): int {
         global $DB;
-        $DB->insert_record('local_catquiz_items', (object) [
+        return (int) $DB->insert_record('local_catquiz_items', (object) [
             'componentid' => $questionid, 'componentname' => 'question', 'catscaleid' => $scaleid,
             'contextid' => $this->contextid, 'status' => $status,
         ]);
     }
 
     /**
+     * The runtime pool of a scale, as the selection reads it - from the cache when it is there. Never purged.
+     *
+     * @param int $scaleid
+     * @param bool $includesubscales
+     * @param array $selectedsubscales
+     * @return array Rows keyed by question id.
+     */
+    private function pool_rows(int $scaleid, bool $includesubscales = false, array $selectedsubscales = []): array {
+        return (new catscale($scaleid))->get_testitems($this->contextid, $includesubscales, null, $selectedsubscales);
+    }
+
+    /**
      * The question ids of the runtime pool of a scale.
      *
      * @param int $scaleid
+     * @param bool $includesubscales
+     * @param array $selectedsubscales
      * @return int[]
      */
-    private function pool(int $scaleid): array {
-        cache::make('local_catquiz', 'runtimepool')->purge();
-        $ids = array_map(fn($row) => (int) $row->id, (new catscale($scaleid))->get_testitems($this->contextid));
+    private function pool(int $scaleid, bool $includesubscales = false, array $selectedsubscales = []): array {
+        $ids = array_map('intval', array_keys($this->pool_rows($scaleid, $includesubscales, $selectedsubscales)));
         sort($ids);
         return $ids;
     }
 
     /**
-     * Global x local: only a ready version that is active in its scale reaches the pool; a draft does not either.
+     * The rows the manager table lists for a scale.
+     *
+     * @param int $scaleid
+     * @return array
      */
-    public function test_global_and_local_visibility(): void {
-        $scale = $this->scale();
-        $matrix = [];
-        foreach (['ready', 'hidden'] as $versionstatus) {
-            foreach ([LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE, LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE] as $itemstatus) {
-                $questionid = $this->question($versionstatus);
-                $this->item($questionid, $scale, $itemstatus);
-                $matrix[$versionstatus . '/' . $itemstatus] = $questionid;
-            }
-        }
-        $draft = $this->question('draft');
-        $this->item($draft, $scale, LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE);
-
-        $this->assertSame([$matrix['ready/' . LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE]], $this->pool($scale));
+    private function manager_rows(int $scaleid): array {
+        global $DB;
+        [$select, $from, $where, , $params] = catquiz::return_sql_for_catscalequestions([$scaleid], $this->contextid);
+        return array_values($DB->get_records_sql("SELECT $select FROM $from WHERE $where", $params));
     }
 
     /**
-     * Deactivated in scale A, the question is still played in scale B.
+     * Global x local, and a draft.
+     *
+     * @return array
+     */
+    public static function visibility_cells(): array {
+        return [
+            'ready, active' => [question_version_status::QUESTION_STATUS_READY, LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE, true],
+            'ready, inactive' => [question_version_status::QUESTION_STATUS_READY, LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE, false],
+            'hidden, active' => [question_version_status::QUESTION_STATUS_HIDDEN, LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE, false],
+            'hidden, inactive' => [question_version_status::QUESTION_STATUS_HIDDEN, LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE, false],
+            'draft, active' => [question_version_status::QUESTION_STATUS_DRAFT, LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE, false],
+        ];
+    }
+
+    /**
+     * Each cell on its own: the pool of the scale, and the pool of its root with the subscales.
+     *
+     * @param string $versionstatus
+     * @param int $itemstatus
+     * @param bool $inpool
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('visibility_cells')]
+    public function test_visibility_cell(string $versionstatus, int $itemstatus, bool $inpool): void {
+        $root = $this->scale();
+        $leaf = $this->scale($root);
+        $question = $this->question($versionstatus);
+        $this->item((int) $question->id, $leaf, $itemstatus);
+
+        $expected = $inpool ? [(int) $question->id] : [];
+        $this->assertSame($expected, $this->pool($leaf));
+        $this->assertSame($expected, $this->pool($root, true));
+
+        // The manager lists it either way, with the state in words.
+        $rows = $this->manager_rows($leaf);
+        $this->assertCount(1, $rows);
+        $this->assertSame($versionstatus, $rows[0]->questionstatus);
+        $availability = catscale::item_availability($rows[0]->questionstatus, $rows[0]->testitemstatus);
+        $this->assertSame($inpool, $availability === catscale::AVAILABILITY_ACTIVE);
+    }
+
+    /**
+     * What the manager says for each cell.
+     */
+    public function test_availability_states(): void {
+        $this->assertSame(catscale::AVAILABILITY_ACTIVE, catscale::item_availability('ready', 0));
+        $this->assertSame(catscale::AVAILABILITY_SCALEINACTIVE, catscale::item_availability('ready', 1));
+        $this->assertSame(catscale::AVAILABILITY_GLOBALHIDDEN, catscale::item_availability('hidden', 0));
+        // Global wins: hidden in the bank stays hidden, whatever the scale says.
+        $this->assertSame(catscale::AVAILABILITY_GLOBALHIDDEN, catscale::item_availability('hidden', 1));
+        $this->assertSame(catscale::AVAILABILITY_GLOBALDRAFT, catscale::item_availability('draft', 0));
+        $this->assertSame(catscale::AVAILABILITY_GLOBALHIDDEN, catscale::item_availability(null, 0));
+    }
+
+    /**
+     * Deactivated in scale A - assigned there first, so with the lower item id - and active in scale B.
+     *
+     * A's pool is empty, the root's pool has the question from B, and a test of the root with only A selected
+     * does not get it.
      */
     public function test_deactivated_in_one_scale_only(): void {
         $root = $this->scale();
         $a = $this->scale($root);
         $b = $this->scale($root);
-        $questionid = $this->question('ready');
-        $this->item($questionid, $a, LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE);
-        $this->item($questionid, $b, LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE);
+        $question = $this->question();
+        $itema = $this->item((int) $question->id, $a, LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE);
+        $itemb = $this->item((int) $question->id, $b, LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE);
+        $this->assertLessThan($itemb, $itema);
 
         $this->assertSame([], $this->pool($a));
-        $this->assertSame([$questionid], $this->pool($b));
+        $this->assertSame([(int) $question->id], $this->pool($b));
+        $rootpool = $this->pool_rows($root, true);
+        $this->assertSame([(int) $question->id], array_map('intval', array_keys($rootpool)));
+        $this->assertSame($b, (int) $rootpool[$question->id]->catscaleid);
+        $this->assertSame([], $this->pool($root, true, [$a]));
     }
 
     /**
-     * The manager still lists every question, with both states to show.
+     * Versions: the newest version of the bank entry decides; the item plays the version it refers to; one row.
+     *
+     * @return array
      */
-    public function test_manager_lists_all(): void {
+    public static function version_cases(): array {
+        return [
+            'v1 ready, v2 hidden' => ['ready', 'hidden', false],
+            'v1 hidden, v2 ready' => ['hidden', 'ready', true],
+            'v1 ready, v2 draft' => ['ready', 'draft', false],
+            'v1 ready, v2 ready' => ['ready', 'ready', true],
+        ];
+    }
+
+    /**
+     * The item refers to version 1; a version 2 exists.
+     *
+     * @param string $v1
+     * @param string $v2
+     * @param bool $inpool
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('version_cases')]
+    public function test_the_newest_version_decides(string $v1, string $v2, bool $inpool): void {
         global $DB;
         $scale = $this->scale();
-        $this->item($this->question('hidden'), $scale, LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE);
-        $this->item($this->question('ready'), $scale, LOCAL_CATQUIZ_TESTITEM_STATUS_ACTIVE);
+        $first = $this->question($v1);
+        $second = $this->getDataGenerator()->get_plugin_generator('core_question')->update_question($first);
+        $this->assertNotEquals($first->id, $second->id, 'Fixture: a second version.');
+        $DB->set_field('question_versions', 'status', $v1, ['questionid' => $first->id]);
+        $DB->set_field('question_versions', 'status', $v2, ['questionid' => $second->id]);
+        $this->item((int) $first->id, $scale);
 
-        [$select, $from, $where, , $params] = catquiz::return_sql_for_catscalequestions([$scale], $this->contextid);
-        $this->assertCount(2, $DB->get_records_sql("SELECT $select FROM $from WHERE $where", $params));
+        $this->assertSame($inpool ? [(int) $first->id] : [], $this->pool($scale));
+        $rows = $this->manager_rows($scale);
+        $this->assertCount(1, $rows, 'One row per item, whatever the number of versions.');
+        $this->assertSame((int) $first->id, (int) $rows[0]->id);
+        $this->assertSame($v2, $rows[0]->questionstatus);
+        $this->assertSame($inpool ? [] : [(int) $first->id], catscale::unavailable_question_ids([(int) $first->id]));
+    }
+
+    /**
+     * Deactivated in the scale after the pool was cached: gone from it, without a purge.
+     */
+    public function test_deactivating_reaches_the_cached_pool(): void {
+        $scale = $this->scale();
+        $question = $this->question();
+        $this->item((int) $question->id, $scale);
+        $this->assertSame([(int) $question->id], $this->pool($scale));
+
+        catscale::add_or_update_testitem_to_scale($scale, (int) $question->id, LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE);
+
+        $this->assertSame([], $this->pool($scale));
+    }
+
+    /**
+     * Set to draft in the question bank after the pool was cached: gone from it, without a purge.
+     */
+    public function test_draft_in_the_bank_reaches_the_cached_pool(): void {
+        $scale = $this->scale();
+        $question = $this->question();
+        $this->item((int) $question->id, $scale);
+        $this->assertSame([(int) $question->id], $this->pool($scale));
+
+        $result = \qbank_editquestion\external\update_question_version_status::execute(
+            (int) $question->id,
+            question_version_status::QUESTION_STATUS_DRAFT
+        );
+        $this->assertTrue($result['status']);
+
+        $this->assertSame([], $this->pool($scale));
+    }
+
+    /**
+     * Deleted in the question bank while in use: the bank only hides it, and tells nobody. The selection asks
+     * for the question it hands out - and gets told it is out.
+     */
+    public function test_hidden_by_deletion_is_named_unavailable(): void {
+        global $DB;
+        $scale = $this->scale();
+        $question = $this->question();
+        $this->item((int) $question->id, $scale);
+        $this->assertSame([], catscale::unavailable_question_ids([(int) $question->id]));
+        // In use: a reference to it, as an activity keeps one.
+        $DB->insert_record('question_references', (object) [
+            'usingcontextid' => \context_system::instance()->id, 'component' => 'mod_quiz', 'questionarea' => 'slot',
+            'itemid' => 1, 'questionbankentryid' => $DB->get_field(
+                'question_versions',
+                'questionbankentryid',
+                ['questionid' => $question->id]
+            ),
+        ]);
+
+        question_delete_question((int) $question->id);
+
+        $this->assertTrue($DB->record_exists('question', ['id' => $question->id]), 'Fixture: hidden, not deleted.');
+        $this->assertSame([(int) $question->id], catscale::unavailable_question_ids([(int) $question->id]));
+    }
+
+    /**
+     * The toggle of the manager works on the item of the given scale only, reads the state from the database,
+     * and does not reactivate a question the bank hides.
+     */
+    public function test_toggle(): void {
+        global $DB;
+        $scale = $this->scale();
+        $other = $this->scale();
+        $question = $this->question();
+        $this->item((int) $question->id, $scale);
+        $table = new catscalequestions_table('availability_toggle');
+
+        // A scale the question is not in: no new item there.
+        $result = $table->action_togglestatus((int) $question->id, json_encode(['catscaleid' => $other]));
+        $this->assertSame(0, $result['success']);
+        $this->assertFalse($DB->record_exists('local_catquiz_items', ['catscaleid' => $other]));
+
+        // Whatever the client claims, the stored state is toggled.
+        $result = $table->action_togglestatus((int) $question->id, json_encode(['catscaleid' => $scale, 'testitemstatus' => 1]));
+        $this->assertSame(1, $result['success']);
+        $this->assertSame(
+            LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE,
+            (int) $DB->get_field('local_catquiz_items', 'status', ['catscaleid' => $scale])
+        );
+
+        // Hidden in the bank: not activated in the scale.
+        $DB->set_field('question_versions', 'status', 'hidden', ['questionid' => $question->id]);
+        $result = $table->action_togglestatus((int) $question->id, json_encode(['catscaleid' => $scale]));
+        $this->assertSame(0, $result['success']);
+        $this->assertSame(get_string('itemavailability_globallocked', 'local_catquiz'), $result['message']);
+        $this->assertSame(
+            LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE,
+            (int) $DB->get_field('local_catquiz_items', 'status', ['catscaleid' => $scale])
+        );
+    }
+
+    /**
+     * The toggle needs the capability to manage scales.
+     */
+    public function test_toggle_needs_the_capability(): void {
+        $scale = $this->scale();
+        $question = $this->question();
+        $this->item((int) $question->id, $scale);
+        $this->setUser($this->getDataGenerator()->create_user());
+
+        $this->expectException(\required_capability_exception::class);
+        (new catscalequestions_table('availability_toggle'))
+            ->action_togglestatus((int) $question->id, json_encode(['catscaleid' => $scale]));
     }
 }

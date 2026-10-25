@@ -41,8 +41,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz::get_sql_for_attempts_per_person
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'get_sql_for_attempts_per_person')]
 final class attempts_per_person_query_test extends advanced_testcase {
     /** @var int Course used by the fixture. */
     private int $courseid = 0;

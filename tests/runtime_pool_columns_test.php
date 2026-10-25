@@ -42,8 +42,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz::return_sql_for_catscalequestions
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'return_sql_for_catscalequestions')]
 final class runtime_pool_columns_test extends advanced_testcase {
     /**
      * Returns the column names of one variant of the pool query.

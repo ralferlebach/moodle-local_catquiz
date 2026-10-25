@@ -37,9 +37,8 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\strategy\personability_loader
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\strategy\personability_loader::class)]
 final class personability_loader_test extends TestCase {
     /**
      * Tests that the ability is not updated in cases where it should not be updated.

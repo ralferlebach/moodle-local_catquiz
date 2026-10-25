@@ -37,9 +37,8 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @package    catmodel_rasch
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \catmodel_rasch\rasch
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\catmodel_rasch\rasch::class)]
 final class rasch_test extends TestCase {
     use \local_catquiz\derivative_fd_trait;
 
@@ -53,12 +52,12 @@ final class rasch_test extends TestCase {
      * test instead generates responses from a known generating difficulty across
      * a wide ability range and asserts the parameter is recovered.
      *
-     * @dataProvider calculate_params_recovery_provider
      *
      * @param float $truedifficulty the generating difficulty
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('calculate_params_recovery_provider')]
     public function test_calculate_params_recovers_known_difficulty(float $truedifficulty): void {
         $responses = [];
         $i = 0;
@@ -89,7 +88,6 @@ final class rasch_test extends TestCase {
     /**
      * This test calls the get_log_jacobain function with the model and test its output with verified data.
      *
-     * @dataProvider get_log_jacobian_provider
      *
      * @param array $pp
      * @param float $k
@@ -99,8 +97,8 @@ final class rasch_test extends TestCase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_log_jacobian_provider')]
     public function test_get_log_jacobian(array $pp, float $k, array $ip, float $expected): void {
 
         $result = rasch::get_log_jacobian($pp, $ip, $k)[0];
@@ -115,7 +113,6 @@ final class rasch_test extends TestCase {
     /**
      * This test calls the get_log_jacobain function with the model and test its output with verified data.
      *
-     * @dataProvider get_log_hessian_provider
      *
      * @param array $pp
      * @param float $k
@@ -125,8 +122,8 @@ final class rasch_test extends TestCase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_log_hessian_provider')]
     public function test_get_log_hessian(array $pp, float $k, array $ip, float $expected): void {
 
         $result = rasch::get_log_hessian($pp, $ip, $k)[0][0];
@@ -141,7 +138,6 @@ final class rasch_test extends TestCase {
     /**
      * Test log_likelihood_p function.
      *
-     * @dataProvider log_likelihood_p_provider
      *
      * @param array $pp
      * @param float $k
@@ -150,6 +146,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('log_likelihood_p_provider')]
     public function test_log_likelihood_p(array $pp, float $k, array $ip, float $expected): void {
         $result = rasch::log_likelihood_p($pp, $ip, $k);
 
@@ -163,7 +160,6 @@ final class rasch_test extends TestCase {
     /**
      * Test log_likelihood_p function.
      *
-     * @dataProvider log_likelihood_p_p_provider
      *
      * @param array $pp
      * @param float $k
@@ -172,6 +168,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('log_likelihood_p_p_provider')]
     public function test_log_likelihood_p_p(array $pp, float $k, array $ip, float $expected): void {
         $result = rasch::log_likelihood_p_p($pp, $ip, $k);
 
@@ -185,7 +182,6 @@ final class rasch_test extends TestCase {
     /**
      * Test least_mean_squares_1st_derivative_ip function.
      *
-     * @dataProvider least_mean_squares_1st_derivative_ip_provider
      *
      * @param int $n
      * @param array $pp
@@ -195,6 +191,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('least_mean_squares_1st_derivative_ip_provider')]
     public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $k, array $ip, float $expected): void {
 
         $result = $this->getmodel()->least_mean_squares_1st_derivative_ip($pp, $ip, $k, $n);
@@ -209,7 +206,6 @@ final class rasch_test extends TestCase {
     /**
      * Test least_mean_squares_1st_derivative_ip function.
      *
-     * @dataProvider least_mean_squares_2nd_derivative_ip_provider
      *
      * @param int $n
      * @param array $pp
@@ -219,6 +215,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('least_mean_squares_2nd_derivative_ip_provider')]
     public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $k, array $ip, float $expected): void {
 
         $result = $this->getmodel()->least_mean_squares_2nd_derivative_ip($pp, $ip, $k, $n);
@@ -809,7 +806,6 @@ final class rasch_test extends TestCase {
     /**
      * Verifies get_log_jacobian() against the numeric gradient of log_likelihood().
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -817,6 +813,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_get_log_jacobian_numeric(array $pp, array $ip, float $response): void {
         $keys = ['difficulty'];
         $x = [];
@@ -835,7 +832,6 @@ final class rasch_test extends TestCase {
     /**
      * Verifies get_log_hessian() against the numeric Hessian of log_likelihood().
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -843,6 +839,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_get_log_hessian_numeric(array $pp, array $ip, float $response): void {
         $keys = ['difficulty'];
         $x = [];
@@ -899,7 +896,6 @@ final class rasch_test extends TestCase {
      * Verifies least_mean_squares_1st_derivative_ip() against the numeric
      * gradient of least_mean_squares() with respect to the item parameters.
      *
-     * @dataProvider lms_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -908,6 +904,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lms_cases_provider')]
     public function test_lms_1st_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
         $keys = ['difficulty'];
         $x = [];
@@ -927,7 +924,6 @@ final class rasch_test extends TestCase {
      * Verifies least_mean_squares_2nd_derivative_ip() against the numeric
      * Hessian of least_mean_squares() with respect to the item parameters.
      *
-     * @dataProvider lms_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -936,6 +932,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lms_cases_provider')]
     public function test_lms_2nd_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
         $keys = ['difficulty'];
         $x = [];
@@ -983,7 +980,6 @@ final class rasch_test extends TestCase {
      * Verifies lors_1st_derivative_ip() against the numeric gradient of
      * lors_residuals() with respect to the item parameters.
      *
-     * @dataProvider lors_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -992,6 +988,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lors_cases_provider')]
     public function test_lors_1st_derivative_numeric(array $pp, array $ip, float $or, float $n): void {
         $keys = ['difficulty'];
         $x = [];
@@ -1011,7 +1008,6 @@ final class rasch_test extends TestCase {
      * Verifies lors_2nd_derivative_ip() against the numeric Hessian of
      * lors_residuals() with respect to the item parameters.
      *
-     * @dataProvider lors_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1020,6 +1016,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lors_cases_provider')]
     public function test_lors_2nd_derivative_numeric(array $pp, array $ip, float $or, float $n): void {
         $keys = ['difficulty'];
         $x = [];
@@ -1065,7 +1062,6 @@ final class rasch_test extends TestCase {
      * Verifies log_likelihood_p() (person-ability score) against the numeric
      * gradient of log_likelihood() with respect to theta.
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1073,6 +1069,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_log_likelihood_p_numeric(array $pp, array $ip, float $response): void {
         $f = function (array $v) use ($ip, $response) {
             return rasch::log_likelihood(['ability' => $v[0]], $ip, $response);
@@ -1086,7 +1083,6 @@ final class rasch_test extends TestCase {
      * Verifies log_likelihood_p_p() (person-ability curvature) against the
      * numeric second derivative of log_likelihood() with respect to theta.
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1094,6 +1090,7 @@ final class rasch_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_log_likelihood_p_p_numeric(array $pp, array $ip, float $response): void {
         $f = function (array $v) use ($ip, $response) {
             return rasch::log_likelihood(['ability' => $v[0]], $ip, $response);

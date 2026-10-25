@@ -57,9 +57,11 @@ require_once($CFG->dirroot . '/local/catquiz/tests/lib.php');
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\strategy
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\strategy::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\firstquestionselector::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\external\render_question_with_response::class)]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'get_last_response_for_attempt')]
 final class strategy_test extends advanced_testcase {
     /**
      * Minimum share of trajectory steps that must still match the pinned reference.
@@ -125,8 +127,6 @@ final class strategy_test extends advanced_testcase {
      * threw "Unknown option to select first question" in the first-question selector,
      * surfacing as 'attemptnofirstquestion' and preventing any CAT attempt from
      * starting. The selector must fall back to the normal level instead.
-     *
-     * @covers \local_catquiz\teststrategy\preselect_task\firstquestionselector
      */
     public function test_legacy_selectfirstquestion_does_not_break_attempt(): void {
         global $DB, $USER;
@@ -172,9 +172,8 @@ final class strategy_test extends advanced_testcase {
      * @param string $filename
      * @param array $expectedscales
      * @return void
-     *
-     * @dataProvider import_overrides_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('import_overrides_provider')]
     public function test_import_overrides(string $filename, array $expectedscales): void {
         // 1. Import items.
         global $DB;
@@ -344,8 +343,8 @@ final class strategy_test extends advanced_testcase {
      * @return void
      * TODO: add group large?
      * TODO: Use different testenvironment.json files for different teststrategies.
-     * @dataProvider strategy_returns_expected_questions_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('strategy_returns_expected_questions_provider')]
     public function test_strategy_returns_expected_questions(
         int $strategy,
         array $questions,
@@ -585,8 +584,6 @@ final class strategy_test extends advanced_testcase {
      * and rejects a wrong slot or a mismatched question attempt id with a
      * controlled invalidquestionslot error rather than failing silently (which is
      * what left the "show question" modal spinner hanging). Expertise part C/J.
-     *
-     * @covers \local_catquiz\external\render_question_with_response
      */
     public function test_render_question_with_response_external(): void {
         global $DB, $USER, $PAGE, $OUTPUT;
@@ -659,8 +656,6 @@ final class strategy_test extends advanced_testcase {
      * all fields belonging to that same question - never null and never the
      * unanswered slot. This is the case the previous max(questionattemptid) query
      * got wrong (Expertise part C).
-     *
-     * @covers \local_catquiz\catquiz::get_last_response_for_attempt
      */
     public function test_get_last_response_uses_last_answered_not_last_added(): void {
         global $DB;
@@ -2398,7 +2393,6 @@ final class strategy_test extends advanced_testcase {
     /**
      * Test if the correct person ability is calculated, given a set of responses.
      * This does not test a specific strategy but just that the overall value is correct.
-     * @dataProvider given_responses_lead_to_expected_abilities_provider
      *
      * @param int $strategy The test strategy to use
      * @param array $responsepattern The given responses
@@ -2406,6 +2400,7 @@ final class strategy_test extends advanced_testcase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('given_responses_lead_to_expected_abilities_provider')]
     public function test_given_responses_lead_to_expected_abilities(
         int $strategy,
         array $responsepattern,
@@ -2912,11 +2907,11 @@ final class strategy_test extends advanced_testcase {
      * red. The two early returns go through the same helper but are not reached here - the pilot
      * path needs a pool with pilot items, which only the large simulation data set provides.
      *
-     * @dataProvider stopping_strategies_provider
      * @param int $strategy
      * @param string $label
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('stopping_strategies_provider')]
     public function test_the_first_question_is_excluded_from_then_on(int $strategy, string $label): void {
         global $DB, $USER;
 
@@ -2967,11 +2962,11 @@ final class strategy_test extends advanced_testcase {
      * This test drives the real flow: start, fetch Q1, answer it, fetch Q2. If the
      * defect reproduces, the assertion fails and the recorded stage counts say where.
      *
-     * @dataProvider stopping_strategies_provider
      * @param int $strategy
      * @param string $label
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('stopping_strategies_provider')]
     public function test_second_question_is_selected_after_answering_the_first(
         int $strategy,
         string $label
@@ -3070,11 +3065,11 @@ final class strategy_test extends advanced_testcase {
      * Driven through the real selection with pilot items (the testing class makes the third, fifth,
      * ninth ... question a pilot), answering every question in its own slot as the activity does.
      *
-     * @dataProvider pilot_strategies_provider
      * @param int $strategy
      * @param string $label
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('pilot_strategies_provider')]
     public function test_no_question_is_repeated_after_a_pilot(int $strategy, string $label): void {
         global $DB, $USER;
 

@@ -28,8 +28,8 @@ namespace local_catquiz;
  * @package local_catquiz
  * @copyright 2026 Wunderbyte GmbH
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz_generator
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz_generator::class)]
 final class generator_test extends \advanced_testcase {
     /**
      * The generator imports questions into a valid context on this platform.

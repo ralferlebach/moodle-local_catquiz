@@ -41,8 +41,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz::return_sql_for_catscalequestions_count
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'return_sql_for_catscalequestions_count')]
 final class question_count_query_test extends advanced_testcase {
     /**
      * Creates a context and a scale.

@@ -37,8 +37,8 @@ use local_catquiz\external\render_question_with_response;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\external\render_question_with_response
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\external\render_question_with_response::class)]
 final class render_question_with_response_test extends advanced_testcase {
     /**
      * Invokes the private render_question via reflection.

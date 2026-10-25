@@ -74,10 +74,10 @@ final class routing_ranges_test extends advanced_testcase {
     /**
      * Courses and groups come from the same range, and that range is the right one.
      *
-     * @dataProvider scores
      * @param float $score
      * @param int|null $range The range the score falls into; null for none.
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('scores')]
     public function test_courses_and_groups_use_the_same_range(float $score, ?int $range): void {
         $courses = attemptfeedback::courses_to_enrol(self::quizsettings(), [self::SCALE => $score]);
         $groups = attemptfeedback::groups_to_enrol(self::quizsettings(), [self::SCALE => $score]);

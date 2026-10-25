@@ -38,8 +38,8 @@ use ReflectionClass;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\output\catscalemanager\managecatscaledashboard
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\output\catscalemanager\managecatscaledashboard::class)]
 final class managecatscaledashboard_tabs_test extends advanced_testcase {
     /**
      * An unknown tab falls back to the first one instead of building everything.

@@ -32,8 +32,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz::get_snapshot_ability_per_person
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'get_snapshot_ability_per_person')]
 final class statistics_snapshot_test extends advanced_testcase {
     /**
      * Builds attempt-snapshot records.

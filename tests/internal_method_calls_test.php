@@ -50,8 +50,8 @@ use ReflectionClass;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @coversNothing
  */
+#[\PHPUnit\Framework\Attributes\CoversNothing]
 final class internal_method_calls_test extends advanced_testcase {
     /**
      * Names that are function calls rather than method calls.

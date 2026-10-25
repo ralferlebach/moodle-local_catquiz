@@ -28,7 +28,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\context\loader\pilotquestions_loader::ispilot
  */
 
 namespace local_catquiz\teststrategy;
@@ -41,8 +40,8 @@ use stdClass;
  * Guards pilot classification against the b = 0 falsiness trap.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\teststrategy\context\loader\pilotquestions_loader::ispilot
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\context\loader\pilotquestions_loader::class, 'ispilot')]
 final class pilot_classification_test extends advanced_testcase {
     /**
      * Build a question stub.

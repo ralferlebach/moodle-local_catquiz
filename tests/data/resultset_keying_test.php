@@ -234,8 +234,9 @@ final class resultset_keying_test extends advanced_testcase {
     }
 
     /**
-     * Two attempts of one person, one of them from before the attempt id was stored: both are returned,
-     * the newest first, and a limit takes the newest.
+     * Completed attempts of one person, two of them from before the attempt id was stored: all are returned,
+     * the newest first, and a limit takes the newest. A running attempt (no end time) has no result and is
+     * not among them (issues #88, #101).
      */
     public function test_every_attempt_of_a_person_is_returned(): void {
         global $DB, $USER;
@@ -246,9 +247,14 @@ final class resultset_keying_test extends advanced_testcase {
             $ids[] = (int) $DB->insert_record('local_catquiz_attempts', (object) [
                 'userid' => $USER->id, 'scaleid' => $scaleid, 'contextid' => $this->contextid, 'courseid' => $course->id,
                 'attemptid' => $attemptid, 'component' => 'mod_adaptivequiz', 'instanceid' => 1, 'status' => 0,
-                'json' => '{}', 'timecreated' => $time, 'timemodified' => $time,
+                'json' => '{}', 'timecreated' => $time, 'timemodified' => $time, 'endtime' => $time,
             ]);
         }
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $USER->id, 'scaleid' => $scaleid, 'contextid' => $this->contextid, 'courseid' => $course->id,
+            'attemptid' => 906, 'component' => 'mod_adaptivequiz', 'instanceid' => 1, 'status' => 0,
+            'json' => '{}', 'timecreated' => 400, 'timemodified' => 400, 'endtime' => null,
+        ]);
 
         $all = catquiz::return_data_from_attemptstable(0, 0, $course->id, 0, (int) $USER->id);
         $this->assertSame(array_reverse($ids), array_map('intval', array_keys($all)));

@@ -41,8 +41,8 @@ use core\lock\lock_config;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\calculation\calculation_service::execute
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\local\calculation\calculation_service::class, 'execute')]
 final class recalculation_lock_test extends advanced_testcase {
     /**
      * The lock type the calculation service uses.

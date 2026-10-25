@@ -33,13 +33,12 @@ use PHPUnit\Framework\TestCase;
  * @package    local_catquiz
  * @copyright  2025 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\model\model_raschmodel
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_raschmodel::class)]
 final class parameter_codec_test extends TestCase {
     /**
      * The codec must be a lossless round-trip for the estimated item parameters.
      *
-     * @dataProvider codec_cases_provider
      *
      * @param string $modelclass fully qualified model class name
      * @param array $ip estimated item parameters
@@ -48,6 +47,7 @@ final class parameter_codec_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('codec_cases_provider')]
     public function test_codec_roundtrip(string $modelclass, array $ip, array $fractions, int $expecteddim): void {
         $vector = $modelclass::convert_ip_to_vector($ip);
 

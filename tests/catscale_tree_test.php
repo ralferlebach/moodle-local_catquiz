@@ -38,9 +38,9 @@ use local_catquiz\output\catscales;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\output\catscales::build_tree
- * @covers     \local_catquiz\subscription::return_subscribed_itemids
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\output\catscales::class, 'build_tree')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\subscription::class, 'return_subscribed_itemids')]
 final class catscale_tree_test extends advanced_testcase {
     /**
      * Builds a list of scale structures shaped like a tree.

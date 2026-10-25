@@ -33,13 +33,12 @@ use PHPUnit\Framework\ExpectationFailedException;
  * Contains tests for the model_responses class.
  *
  * @package local_catquiz
- * @covers \local_catquiz\local\model\model_item_param_list
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_item_param_list::class)]
 final class model_responses_test extends basic_testcase {
     /**
      * Tests if reducing the model_responses to items or persons works as expected
      *
-     * @dataProvider filtering_values_works_as_expected_provider
      *
      * @param array $indata
      * @param ?array $users
@@ -51,6 +50,7 @@ final class model_responses_test extends basic_testcase {
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('filtering_values_works_as_expected_provider')]
     public function test_filtering_values_works_as_expected(
         array $indata,
         ?array $users,

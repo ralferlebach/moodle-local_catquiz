@@ -29,8 +29,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\import\fileparser
- * @covers \local_catquiz\local\model\model_item_param
  */
 
 namespace local_catquiz\import;
@@ -43,18 +41,18 @@ use stdClass;
  * Guards the sign of imported IRT item parameters.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\import\fileparser
- * @covers \local_catquiz\local\model\model_item_param
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\import\fileparser::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_item_param::class)]
 final class negative_difficulty_import_test extends advanced_testcase {
     /**
      * The parameter object must keep a negative difficulty through a record
      * roundtrip - no clamping to zero at any stage.
      *
-     * @dataProvider negative_difficulty_provider
      * @param float $difficulty The difficulty to roundtrip.
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('negative_difficulty_provider')]
     public function test_negative_difficulty_survives_record_roundtrip(float $difficulty): void {
         global $CFG;
         $this->resetAfterTest(true);

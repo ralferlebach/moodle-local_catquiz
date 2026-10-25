@@ -55,7 +55,6 @@ final class fraction_validity_test extends advanced_testcase {
     /**
      * Each fraction case gives its verdict; the values stay in the result either way.
      *
-     * @dataProvider fractions
      * @param float|null $fraction
      * @param int $n
      * @param bool $valid

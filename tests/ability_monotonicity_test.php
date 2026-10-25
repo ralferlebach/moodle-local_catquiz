@@ -34,8 +34,8 @@ use local_catquiz\local\model\model_person_param;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\catcalc::estimate_person_ability
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catcalc::class, 'estimate_person_ability')]
 final class ability_monotonicity_test extends advanced_testcase {
     /**
      * Dichotomous models with valid parameters (positive discrimination).
@@ -53,10 +53,10 @@ final class ability_monotonicity_test extends advanced_testcase {
     /**
      * An all-correct sequence never decreases the estimated ability.
      *
-     * @dataProvider model_provider
      * @param string $modelname
      * @param array $baseparams
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('model_provider')]
     public function test_all_correct_never_decreases_ability(string $modelname, array $baseparams): void {
         $abilities = $this->run_sequence($modelname, $baseparams, 1.0, 8);
         for ($i = 1, $c = count($abilities); $i < $c; $i++) {
@@ -72,10 +72,10 @@ final class ability_monotonicity_test extends advanced_testcase {
     /**
      * An all-wrong sequence never increases the estimated ability.
      *
-     * @dataProvider model_provider
      * @param string $modelname
      * @param array $baseparams
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('model_provider')]
     public function test_all_wrong_never_increases_ability(string $modelname, array $baseparams): void {
         $abilities = $this->run_sequence($modelname, $baseparams, 0.0, 8);
         for ($i = 1, $c = count($abilities); $i < $c; $i++) {

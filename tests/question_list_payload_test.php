@@ -39,11 +39,11 @@ use local_catquiz\external\get_question_preview;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz::return_sql_for_catscalequestions
- * @covers     \local_catquiz\catquiz::return_sql_for_addcatscalequestions
- * @covers     \local_catquiz\catquiz::return_sql_for_addquestions
- * @covers     \local_catquiz\external\get_question_preview
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'return_sql_for_catscalequestions')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'return_sql_for_addcatscalequestions')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'return_sql_for_addquestions')]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\external\get_question_preview::class)]
 final class question_list_payload_test extends advanced_testcase {
     /**
      * None of the list queries may mention the question text.

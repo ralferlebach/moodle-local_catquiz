@@ -192,10 +192,10 @@ final class written_report_matrix_test extends advanced_testcase {
      * N, one above the maximum standard error and one not measured never appear; a non-primary scale
      * with toreport does; lowest and highest stay with their one selected scale.
      *
-     * @dataProvider strategies
      * @param int $strategyid
      * @param int[] $expected
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('strategies')]
     public function test_each_strategy_reports_what_it_should(int $strategyid, array $expected): void {
         $this->resetAfterTest();
 
@@ -226,10 +226,10 @@ final class written_report_matrix_test extends advanced_testcase {
      * here. Reporting off, below the minimum N, above the maximum standard error and not measured
      * stay out. The root is in the list once; the template shows it as the reference, not as a row.
      *
-     * @dataProvider detail_tab
      * @param int $strategyid
      * @param int[] $expected
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('detail_tab')]
     public function test_the_detail_tab_shows_every_valid_measurement(int $strategyid, array $expected): void {
         $this->resetAfterTest();
 
@@ -292,10 +292,10 @@ final class written_report_matrix_test extends advanced_testcase {
     /**
      * Scales answered all wrong or all right are invalid in every strategy (issue #140).
      *
-     * @dataProvider fraction_rule
      * @param int $strategyid
      * @param int[] $expected
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('fraction_rule')]
     public function test_fraction_rule_in_every_strategy(int $strategyid, array $expected): void {
         $this->resetAfterTest();
 
@@ -312,10 +312,10 @@ final class written_report_matrix_test extends advanced_testcase {
      * several scales, lowest and highest their one selected scale, CAT the root; reporting off,
      * below the minimum N, above the maximum SE and not measured route nowhere.
      *
-     * @dataProvider strategies
      * @param int $strategyid
      * @param int[] $expected
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('strategies')]
     public function test_each_strategy_routes_what_it_reports(int $strategyid, array $expected): void {
         $this->resetAfterTest();
 
@@ -366,10 +366,10 @@ final class written_report_matrix_test extends advanced_testcase {
      * The range path builds its own attempt result; it must judge the scales as the written
      * feedback does - measured, valid, reported - in every strategy.
      *
-     * @dataProvider strategies
      * @param int $strategyid
      * @param int[] $expected
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('strategies')]
     public function test_custom_range_feedback_follows_the_written_report(int $strategyid, array $expected): void {
         $this->resetAfterTest();
 

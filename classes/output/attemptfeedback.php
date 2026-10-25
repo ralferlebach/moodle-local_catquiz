@@ -154,11 +154,11 @@ class attemptfeedback implements renderable, templatable {
     }
 
     /**
-     * Returns the progress object for this attempt
+     * Returns the progress object for this attempt - read, never created (issue #149).
      *
      * @return progress
+     * @throws \local_catquiz\teststrategy\progress_missing_exception The attempt has no progress.
      * @throws coding_exception
-     * @throws Exception
      */
     public function get_progress(): progress {
         if (!$this->progress) {
@@ -220,41 +220,47 @@ class attemptfeedback implements renderable, templatable {
     /**
      * Load feedbackdata
      *
-     * @param ?string $feedbackdata
-     * @param ?string $debugdata
+     * The data of a completed attempt as stored (local_catquiz_attempts.json), or the snapshot of a
+     * running one from the session cache.
+     *
+     * Issue #85: JSON handed in is used (it is the stored row the caller already read): no second query,
+     * no progress, no cache. It was overwritten with null, so every attempt of a list read its row again,
+     * loaded its progress and wrote its snapshot into the session - one per attempt shown.
+     *
+     * @param ?string $feedbackdata The stored JSON of the attempt, if the caller has it.
+     * @param ?string $debugdata The stored debug information, if the caller has it.
+     * @param bool $writecache False for read-only requests: the session cache is not written (issue #85).
      *
      * @return array
      */
-    public function load_feedbackdata(?string $feedbackdata = null, ?string $debugdata = null): array {
+    public function load_feedbackdata(?string $feedbackdata = null, ?string $debugdata = null, bool $writecache = true): array {
         global $DB;
 
-        // Try to get the attemptfeedback from the cache.
-        // For the same number of questions played, the data do not change.
-        if (($cached = $this->load_from_cache()) !== null) {
-            return $cached;
-        }
-        // Unchanged from before issue #142: the cache lookup used to overwrite the passed JSON, so
-        // a miss always read the attempt from the database (which also restores primaryscale).
-        $feedbackdata = null;
-
-        if (!$feedbackdata) {
+        $passed = $feedbackdata !== null && $feedbackdata !== '';
+        if ($passed) {
+            $feedbackdata = json_decode($feedbackdata, true);
+            $writecache = false;
+        } else {
+            // Try to get the attemptfeedback from the cache.
+            // For the same number of questions played, the data do not change.
+            if (($cached = $this->load_from_cache()) !== null) {
+                return $cached;
+            }
             $feedbackdata = json_decode(
-                $DB->get_field(
+                (string) $DB->get_field(
                     'local_catquiz_attempts',
                     'json',
                     ['attemptid' => $this->attemptid]
                 ),
                 true
             );
-            if (
-                $feedbackdata
-                && array_key_exists('primaryscale', $feedbackdata)
-                && is_array($feedbackdata['primaryscale'])
-            ) {
-                $feedbackdata['primaryscale'] = new catscale_structure($feedbackdata['primaryscale']);
-            }
-        } else {
-            $feedbackdata = json_decode($feedbackdata, true);
+        }
+        if (
+            $feedbackdata
+            && array_key_exists('primaryscale', $feedbackdata)
+            && is_array($feedbackdata['primaryscale'])
+        ) {
+            $feedbackdata['primaryscale'] = new catscale_structure($feedbackdata['primaryscale']);
         }
 
         if (empty($feedbackdata)) {
@@ -262,15 +268,13 @@ class attemptfeedback implements renderable, templatable {
         }
 
         if (!get_config('local_catquiz', 'store_debug_info')) {
-            $this->save_to_cache($feedbackdata);
-            return $feedbackdata;
+            return $this->cached($feedbackdata, $writecache);
         }
 
         // If this is an old version where feedbackdata are stored in the JSON column,
         // then just return it.
         if (array_key_exists('debuginfo', $feedbackdata)) {
-            $this->save_to_cache($feedbackdata);
-            return $feedbackdata;
+            return $this->cached($feedbackdata, $writecache);
         }
 
         // In newer versions, the debuginfo data are stored in a separate column that can be emptied in case it takes up too much
@@ -282,14 +286,26 @@ class attemptfeedback implements renderable, templatable {
                 ['attemptid' => $this->attemptid]
             )
         ) {
-            $this->save_to_cache($feedbackdata);
-            return $feedbackdata;
+            return $this->cached($feedbackdata, $writecache);
         }
 
         $debuginfo = json_decode($debugdata, true) ?? [];
         $feedbackdata['debuginfo'] = $debuginfo;
 
-        $this->save_to_cache($feedbackdata);
+        return $this->cached($feedbackdata, $writecache);
+    }
+
+    /**
+     * Stores the data in the session cache when asked to, and returns them.
+     *
+     * @param array $feedbackdata
+     * @param bool $writecache
+     * @return array
+     */
+    private function cached(array $feedbackdata, bool $writecache): array {
+        if ($writecache) {
+            $this->save_to_cache($feedbackdata);
+        }
         return $feedbackdata;
     }
 
@@ -459,11 +475,40 @@ class attemptfeedback implements renderable, templatable {
         // Below the minimum number of questions there is no result, but the attempt is shown all the
         // same: the notice with the reason, the quiz history and, for teachers, statistics and export
         // (issue #120). The page used to show the notice alone (GH-577).
+        $noresult = [
+            'noresult' => get_string('noresultforattempt', 'local_catquiz'),
+            'attemptid' => (int) $this->attemptid,
+        ];
+        try {
+            // Issue #149: a result comes from the feedback stored with the CAT attempt or from the progress.
+            // Without either there is none - said so, instead of feedback built from nothing.
+            if (!$this->has_stored_feedbackdata()) {
+                $this->get_progress();
+            }
+            $feedback = $this->get_feedback_for_attempt();
+        } catch (\local_catquiz\teststrategy\progress_missing_exception $e) {
+            return $noresult;
+        }
         return [
-            'feedback' => $this->get_feedback_for_attempt(),
+            'feedback' => $feedback,
             // The tabs load their content by attempt (issue #85); without it every lazy tab failed.
             'attemptid' => (int) $this->attemptid,
         ];
+    }
+
+    /**
+     * Whether feedback data are stored with the CAT attempt of this attempt (issue #149).
+     *
+     * @return bool
+     */
+    private function has_stored_feedbackdata(): bool {
+        global $DB;
+        $catattemptid = catquiz::get_cat_attempt_id((int) $this->attemptid, 'mod_adaptivequiz');
+        if ($catattemptid === null) {
+            return false;
+        }
+        $json = json_decode((string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), true);
+        return is_array($json) && $json !== [];
     }
 
     /**
@@ -673,7 +718,7 @@ class attemptfeedback implements renderable, templatable {
                 }
                 continue;
             }
-            $feedbacks = $generator->get_feedback($feedbackdata);
+            $feedbacks = $this->feedback_of($generator, $feedbackdata);
             // Loop over studentfeedback and teacherfeedback.
             foreach ($feedbacks as $fbtype => $feedback) {
                 if (!$feedback || !is_array($feedback)) {
@@ -915,7 +960,9 @@ class attemptfeedback implements renderable, templatable {
         }
         // Below the minimum number of questions only what reads the result stays out - as on the page
         // (issue #120): the check of the result dependency below covers it.
-        $feedbackdata = $this->load_feedbackdata();
+        // A read-only request: the session is not written (issue #85). The endpoint holds no session
+        // lock, and with read-only sessions a write would be lost or refused.
+        $feedbackdata = $this->load_feedbackdata(null, null, false);
         $generators = $this->get_feedback_generators_for_teststrategy((int) ($feedbackdata['teststrategy'] ?? $this->teststrategy));
         foreach ($generators as $generator) {
             if ($generator->get_generatorname() !== $generatorname) {
@@ -927,10 +974,46 @@ class attemptfeedback implements renderable, templatable {
             if (!self::shown_in_state($generator, $this->result_state($feedbackdata))) {
                 return [];
             }
-            $feedback = $generator->get_feedback($feedbackdata)[$audience . 'feedback'] ?? [];
+            $feedback = $this->feedback_of($generator, $feedbackdata)[$audience . 'feedback'] ?? [];
             return is_array($feedback) ? $feedback : [];
         }
         return [];
+    }
+
+    /**
+     * The feedback of one generator, or a notice in its place when it cannot be built (issue #152).
+     *
+     * One area that throws - the quiz history of an attempt stored in an older format did - took the whole feedback
+     * page down, every other area with it. Now the area says it could not be shown, the reason goes to debugging(),
+     * and the rest of the page stays.
+     *
+     * @param feedbackgenerator $generator
+     * @param array $feedbackdata
+     * @return array ['studentfeedback' => ..., 'teacherfeedback' => ...] as feedbackgenerator::get_feedback().
+     */
+    private function feedback_of(feedbackgenerator $generator, array $feedbackdata): array {
+        try {
+            return $generator->get_feedback($feedbackdata);
+        } catch (\Throwable $e) {
+            debugging(
+                'Feedback area ' . $generator->get_generatorname() . ' could not be built: ' . $e->getMessage(),
+                DEBUG_DEVELOPER,
+                $e->getTrace()
+            );
+            $notice = [
+                'heading' => $generator->get_heading(),
+                'content' => \html_writer::div(
+                    get_string('feedbackareanotshown', 'local_catquiz'),
+                    'alert alert-warning',
+                    ['data-region' => 'local_catquiz-feedbackarea-notice']
+                ),
+            ];
+            $student = in_array(feedbackgenerator::AUDIENCE_STUDENT, $generator->get_audiences(), true);
+            return [
+                'studentfeedback' => $student ? $notice : [],
+                'teacherfeedback' => $student ? [] : $notice,
+            ];
+        }
     }
 
     /**

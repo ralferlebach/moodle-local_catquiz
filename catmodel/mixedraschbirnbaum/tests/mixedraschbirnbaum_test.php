@@ -38,21 +38,23 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @package    catmodel_mixedraschbirnbaum
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \catmodel_mixedraschbirnbaum\mixedraschbirnbaum
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\catmodel_mixedraschbirnbaum\mixedraschbirnbaum::class)]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\catmodel_mixedraschbirnbaum\mixedraschbirnbaum::class, 'log_likelihood_p_p')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\catmodel_mixedraschbirnbaum\mixedraschbirnbaum::class, 'get_ability_derivatives')]
 final class mixedraschbirnbaum_test extends TestCase {
     use \local_catquiz\derivative_fd_trait;
 
     /**
      * Tests that the model calculates the item parameters correctly.
      *
-     * @dataProvider calculate_params_returns_expected_values_provider
      *
      * @param array $itemresponse
      * @param array $expected
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('calculate_params_returns_expected_values_provider')]
     public function test_calculate_params_returns_expected_values($itemresponse, array $expected): void {
         $raschbirnbaum = $this->getmodel();
         $result = $raschbirnbaum->calculate_params($itemresponse);
@@ -78,7 +80,6 @@ final class mixedraschbirnbaum_test extends TestCase {
     /**
      * This test calls the get_log_jacobain function with the model and test its output with verified data.
      *
-     * @dataProvider get_log_jacobian_provider
      *
      * @param array $pp
      * @param float $k
@@ -88,8 +89,8 @@ final class mixedraschbirnbaum_test extends TestCase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_log_jacobian_provider')]
     public function test_get_log_jacobian(array $pp, float $k, array $ip, array $expected): void {
         $result = mixedraschbirnbaum::get_log_jacobian($pp, $ip, $k);
         for ($i = 0; $i < count($result); $i++) {
@@ -100,7 +101,6 @@ final class mixedraschbirnbaum_test extends TestCase {
     /**
      * This test calls the get_log_jacobain function with the model and test its output with verified data.
      *
-     * @dataProvider get_log_hessian_provider
      *
      * @param array $pp
      * @param float $k
@@ -110,8 +110,8 @@ final class mixedraschbirnbaum_test extends TestCase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_log_hessian_provider')]
     public function test_get_log_hessian(array $pp, float $k, array $ip, array $expected): void {
         $resultsmatrix = mixedraschbirnbaum::get_log_hessian($pp, $ip, $k);
         for ($i = 0; $i < count($resultsmatrix); $i++) {
@@ -123,7 +123,6 @@ final class mixedraschbirnbaum_test extends TestCase {
 
     /**
      * Test log_likelihood_p function.
-     * @dataProvider log_likelihood_p_provider
      * @param array $pp
      * @param float $k
      * @param array $ip
@@ -131,6 +130,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('log_likelihood_p_provider')]
     public function test_log_likelihood_p(array $pp, float $k, array $ip, float $expected): void {
         $result = mixedraschbirnbaum::log_likelihood_p($pp, $ip, $k);
 
@@ -143,7 +143,6 @@ final class mixedraschbirnbaum_test extends TestCase {
 
     /**
      * Test log_likelihood_p function.
-     * @dataProvider log_likelihood_p_p_provider
      * @param array $pp
      * @param float $k
      * @param array $ip
@@ -151,6 +150,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('log_likelihood_p_p_provider')]
     public function test_log_likelihood_p_p(array $pp, float $k, array $ip, float $expected): void {
         $result = mixedraschbirnbaum::log_likelihood_p_p($pp, $ip, $k);
 
@@ -159,7 +159,6 @@ final class mixedraschbirnbaum_test extends TestCase {
 
     /**
      * Test least_mean_squares_1st_derivative_ip function.
-     * @dataProvider least_mean_squares_1st_derivative_ip_provider
      * @param int $n
      * @param array $pp
      * @param float $k
@@ -168,6 +167,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('least_mean_squares_1st_derivative_ip_provider')]
     public function test_least_mean_squares_1st_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
         $this->markTestSkipped('The formula returns unexpected results but we do not use it anywhere at the moment');
 
@@ -180,7 +180,6 @@ final class mixedraschbirnbaum_test extends TestCase {
 
     /**
      * Test least_mean_squares_2nd_derivative_ip function.
-     * @dataProvider least_mean_squares_2nd_derivative_ip_provider
      * @param int $n
      * @param array $pp
      * @param float $k
@@ -189,6 +188,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('least_mean_squares_2nd_derivative_ip_provider')]
     public function test_least_mean_squares_2nd_derivative_ip(int $n, array $pp, float $k, array $ip, array $expected): void {
         $this->markTestSkipped('The formula returns unexpected results but we do not use it anywhere at the moment');
 
@@ -919,7 +919,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * code with fisher_info(). This test fails if the 3PL information formula is
      * reverted to the (incorrect) difficulty-based expression.
      *
-     * @dataProvider fisher_info_numeric_provider
      *
      * @param array $pp
      * @param array $ip
@@ -928,6 +927,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      * @throws ExpectationFailedException
      * @throws InvalidArgumentException
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('fisher_info_numeric_provider')]
     public function test_fisher_info_numeric(array $pp, array $ip): void {
         $model = $this->getmodel();
 
@@ -994,7 +994,6 @@ final class mixedraschbirnbaum_test extends TestCase {
     /**
      * Verifies get_log_jacobian() against the numeric gradient of log_likelihood().
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1002,6 +1001,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_get_log_jacobian_numeric(array $pp, array $ip, float $response): void {
         $keys = ['difficulty', 'discrimination', 'guessing'];
         $x = [];
@@ -1020,7 +1020,6 @@ final class mixedraschbirnbaum_test extends TestCase {
     /**
      * Verifies get_log_hessian() against the numeric Hessian of log_likelihood().
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1028,6 +1027,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_get_log_hessian_numeric(array $pp, array $ip, float $response): void {
         $keys = ['difficulty', 'discrimination', 'guessing'];
         $x = [];
@@ -1087,7 +1087,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * The LORS residual is independent of the guessing parameter c, so the
      * analytic d/dc entry must be exactly zero; the numeric reference confirms it.
      *
-     * @dataProvider lors_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters (difficulty, discrimination, guessing)
@@ -1096,6 +1095,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lors_cases_provider')]
     public function test_lors_1st_derivative_numeric(array $pp, array $ip, float $or, float $n): void {
         $keys = ['difficulty', 'discrimination', 'guessing'];
         $x = [];
@@ -1116,7 +1116,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * Verifies lors_2nd_derivative_ip() against the numeric Hessian of
      * lors_residuals() with respect to the item parameters (a, b, c).
      *
-     * @dataProvider lors_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters (difficulty, discrimination, guessing)
@@ -1125,6 +1124,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lors_cases_provider')]
     public function test_lors_2nd_derivative_numeric(array $pp, array $ip, float $or, float $n): void {
         $keys = ['difficulty', 'discrimination', 'guessing'];
         $x = [];
@@ -1175,7 +1175,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * Verifies least_mean_squares_1st_derivative_ip() against the numeric
      * gradient of least_mean_squares() with respect to the item parameters.
      *
-     * @dataProvider lms_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1184,6 +1183,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lms_cases_provider')]
     public function test_lms_1st_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
         $keys = ['difficulty', 'discrimination', 'guessing'];
         $x = [];
@@ -1203,7 +1203,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * Verifies least_mean_squares_2nd_derivative_ip() against the numeric
      * Hessian of least_mean_squares() with respect to the item parameters.
      *
-     * @dataProvider lms_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1212,6 +1211,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lms_cases_provider')]
     public function test_lms_2nd_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
         $keys = ['difficulty', 'discrimination', 'guessing'];
         $x = [];
@@ -1260,7 +1260,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * Verifies log_likelihood_p() (person-ability score) against the numeric
      * gradient of log_likelihood() with respect to theta.
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1268,6 +1267,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_log_likelihood_p_numeric(array $pp, array $ip, float $response): void {
         $f = function (array $v) use ($ip, $response) {
             return mixedraschbirnbaum::log_likelihood(['ability' => $v[0]], $ip, $response);
@@ -1281,7 +1281,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * Verifies log_likelihood_p_p() (person-ability curvature) against the
      * numeric second derivative of log_likelihood() with respect to theta.
      *
-     * @dataProvider derivative_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -1289,6 +1288,7 @@ final class mixedraschbirnbaum_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('derivative_cases_provider')]
     public function test_log_likelihood_p_p_numeric(array $pp, array $ip, float $response): void {
         $f = function (array $v) use ($ip, $response) {
             return mixedraschbirnbaum::log_likelihood(['ability' => $v[0]], $ip, $response);
@@ -1347,8 +1347,6 @@ final class mixedraschbirnbaum_test extends TestCase {
      * hessian instead of the correct 2PL limit (approx 0). Reverting the ratio-based
      * form makes this test red at the negative-theta / k = 1 saturation points.
      *
-     * @covers \catmodel_mixedraschbirnbaum\mixedraschbirnbaum::log_likelihood_p_p
-     * @covers \catmodel_mixedraschbirnbaum\mixedraschbirnbaum::get_ability_derivatives
      * @return void
      */
     public function test_c0_reduces_to_2pl_at_saturation(): void {

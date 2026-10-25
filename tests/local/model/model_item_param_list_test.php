@@ -33,21 +33,19 @@ use UnexpectedValueException;
 /** model_item_param_list_test
  *
  * @package local_catquiz
- *
- *
- * @covers \local_catquiz\local\model\model_item_param_list
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_item_param_list::class)]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\local\model\model_item_param_list::class, 'calibration_warnings')]
 final class model_item_param_list_test extends advanced_testcase {
     /**
      * Test import of files
      *
-     * @dataProvider save_or_update_testitem_in_db_provider
      *
      * @param array $record
      * @param array $expected
      * @return void
-     * @group large
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('save_or_update_testitem_in_db_provider')]
     public function test_save_or_update_testitem_in_db(array $record, array $expected): void {
         $this->resetAfterTest();
         $result = model_item_param_list::save_or_update_testitem_in_db($record);
@@ -126,8 +124,6 @@ final class model_item_param_list_test extends advanced_testcase {
 
     /**
      * The calibration warnings flag degenerate or clamped item parameters on import.
-     *
-     * @covers \local_catquiz\local\model\model_item_param_list::calibration_warnings
      */
     public function test_calibration_warnings(): void {
         $method = new \ReflectionMethod(model_item_param_list::class, 'calibration_warnings');

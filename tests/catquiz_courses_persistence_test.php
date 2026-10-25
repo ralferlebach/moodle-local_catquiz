@@ -51,10 +51,10 @@ use stdClass;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz_handler::add_or_update_instance_callback
- * @covers     \local_catquiz\catquiz_handler::data_preprocessing
- * @covers     \local_catquiz\testenvironment::apply_jsonsaved_values
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz_handler::class, 'add_or_update_instance_callback')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz_handler::class, 'data_preprocessing')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\testenvironment::class, 'apply_jsonsaved_values')]
 final class catquiz_courses_persistence_test extends advanced_testcase {
     /**
      * Creates a course and an adaptivequiz instance and returns both.

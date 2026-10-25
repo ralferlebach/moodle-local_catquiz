@@ -33,9 +33,9 @@ use local_catquiz\teststrategy\feedback_helper;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\teststrategy\feedback_helper::reduce_to_one_value_per_person
- * @covers     \local_catquiz\teststrategy\feedback_helper::order_attempts_by_timerange
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'reduce_to_one_value_per_person')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'order_attempts_by_timerange')]
 final class person_weighting_test extends advanced_testcase {
     /**
      * The shared rule keeps one value per person, drops null, keeps 0.0.

@@ -412,6 +412,14 @@ class feedback_helper {
     /**
      * Get feedback data for attempts
      *
+     * Who is listed (issue #85): the viewer's own attempts; with the right to see other users' results in
+     * the scope (feedback_access, a CAT manager anywhere), the attempts of the people they may see - in
+     * separate groups, the members of their groups. Only completed attempts have a result to list.
+     *
+     * Cost (issue #85): the first, open attempt is built at once; with lazy loading every further one
+     * shows its header only and its feedback is built when it is opened (render_feedback_tab, generator
+     * "attempt"). The queries of the list no longer grow with the number of attempts.
+     *
      * @param array $args Arguments containing courseid, numberofattempts, instanceid.
      * @param context_course $context Current course context.
      * @param stdClass $USER Global user object.
@@ -428,25 +436,33 @@ class feedback_helper {
         moodle_database $DB,
         stdClass $CFG
     ) {
-        // Check capability.
-        $capability = has_capability('local/catquiz:view_users_feedback', $context);
-        $userid = !$capability ? $USER->id : null;
-
         // Get course ID.
         $currentcourseid = 0;
         if (isset($COURSE) && !empty($COURSE->id) && $COURSE->id > 1) {
             $currentcourseid = $COURSE->id;
         }
-        $courseid = $args['courseid'] ?? $currentcourseid;
+        $courseid = (int) ($args['courseid'] ?? $currentcourseid);
+        $instanceid = (int) ($args['instanceid'] ?? 0);
         $attemptid = $args['attemptid'] ?? 0;
+
+        // Judged in the scope that is listed: the test, the course asked for, otherwise the page's course.
+        $scopecontext = ($instanceid || $courseid)
+            ? \local_catquiz\local\access\context_resolver::for_statistics($courseid ?: null, $instanceid ?: null)
+            : $context;
+        $canviewothers = \local_catquiz\local\access\feedback_access::can_view_other_users($scopecontext);
+        $userid = $canviewothers ? -1 : (int) $USER->id;
+        $alloweduserids = $canviewothers
+            ? \local_catquiz\local\access\feedback_access::get_allowed_userids($scopecontext)
+            : null;
 
         // Get attempt records.
         $records = catquiz::return_data_from_attemptstable(
             intval($args['numberofattempts'] ?? 1),
-            intval($args['instanceid'] ?? 0),
-            intval($courseid),
+            $instanceid,
+            $courseid,
             intval($attemptid),
-            intval($userid ?? -1)
+            $userid,
+            $alloweduserids
         );
 
         if (!$records) {
@@ -456,6 +472,14 @@ class feedback_helper {
         $output = [
             'attempt' => [],
         ];
+        $lazy = (bool) get_config('local_catquiz', 'lazyfeedbacktabs');
+
+        // The names for the headers, in one query rather than one per attempt.
+        $otherids = array_values(array_unique(array_filter(
+            array_map(fn($r) => (int) $r->userid, $records),
+            fn($id) => $id !== (int) $USER->id
+        )));
+        $users = $otherids ? $DB->get_records_list('user', 'id', $otherids, '', 'id, firstname, lastname') : [];
 
         foreach ($records as $record) {
             if (!$attemptdata = json_decode($record->json)) {
@@ -482,15 +506,19 @@ class feedback_helper {
                 continue;
             }
 
-            $feedbacksettings = new feedbacksettings($strategyid);
-
-            $attemptfeedback = new attemptfeedback($record->attemptid, $record->contextid, $feedbacksettings);
-            try {
-                $feedback = $attemptfeedback->get_feedback_for_attempt($record->json, $record->debug_info) ?? "";
-            } catch (\Throwable $t) {
-                $feedback = get_string('attemptfeedbacknotavailable', 'local_catquiz');
+            $active = empty($output['attempt']);
+            $feedback = [];
+            if ($active || !$lazy) {
+                $feedbacksettings = new feedbacksettings($strategyid);
+                $attemptfeedback = new attemptfeedback($record->attemptid, $record->contextid, $feedbacksettings);
+                try {
+                    $feedback = $attemptfeedback->get_feedback_for_attempt($record->json, $record->debug_info) ?? "";
+                } catch (\Throwable $t) {
+                    $feedback = get_string('attemptfeedbacknotavailable', 'local_catquiz');
+                }
             }
 
+            // The authoritative end time; only completed attempts are listed.
             $timestamp = !empty($record->endtime) ? intval($record->endtime) : intval($record->timemodified);
             $timeofattempt = userdate($timestamp, get_string('strftimedatetime', 'core_langconfig'));
 
@@ -501,23 +529,15 @@ class feedback_helper {
                     $timeofattempt
                 );
             } else if (isset($record->userid)) {
-                $userrecord = $DB->get_record('user', ['id' => $record->userid], 'firstname, lastname', IGNORE_MISSING);
-
-                $firstname = '';
-                $lastname = '';
-                if ($userrecord) {
-                    $firstname = $userrecord->firstname;
-                    $lastname = $userrecord->lastname;
-                }
-
+                $userrecord = $users[(int) $record->userid] ?? null;
                 $headerstring = get_string(
                     'userfeedbacksheader',
                     'local_catquiz',
                     [
                         'attemptid' => $record->attemptid,
                         'time' => $timeofattempt,
-                        'firstname' => $firstname,
-                        'lastname' => $lastname,
+                        'firstname' => $userrecord->firstname ?? '',
+                        'lastname' => $userrecord->lastname ?? '',
                         'userid' => $record->userid,
                     ]
                 );
@@ -529,7 +549,9 @@ class feedback_helper {
                 'feedback' => $feedback,
                 'header' => $headerstring,
                 'attemptid' => $record->attemptid,
-                'active' => empty($output['attempt']) ? true : false,
+                'active' => $active,
+                // Issue #85: the header only; the feedback is loaded when the attempt is opened.
+                'lazy' => !$active && $lazy,
             ];
             $output['attempt'][] = $data;
         }
@@ -635,10 +657,11 @@ class feedback_helper {
     }
 
     /**
-     * Get fisherinfos of item for each abilitystep.
+     * Get fisherinfos of item for each abilitystep: the sum over the items whose information can be computed.
      *
      * @param array $items
-     * @param array $models
+     * @param array $models The installed models, keyed by name
+     *     (\local_catquiz\local\model\model_strategy::get_installed_models()); items of another model are left out.
      * @param array $abilitysteps
      *
      * @return array
@@ -650,20 +673,35 @@ class feedback_helper {
             if (!$item->model) {
                 continue;
             }
-            $itemparam = model_item_param::from_record($item);
-            $model = model_model::get_instance($item->model);
-            foreach ($abilitysteps as $ability) {
-                $fisherinformation = $model->fisher_info(
-                    ['ability' => $ability],
-                    $itemparam->get_params_array()
-                );
-                $stringkey = strval($ability);
-
-                if (!isset($fisherinfos[$stringkey])) {
-                    $fisherinfos[$stringkey] = $fisherinformation;
-                } else {
-                    $fisherinfos[$stringkey] += $fisherinformation;
+            // Issue #150 (re-audit 23.10.2026): an item whose model is not installed - its subplugin removed -
+            // made model_model::get_instance() return null against its return type, a TypeError that took the
+            // whole page down. The item is left out of the test information.
+            if (!array_key_exists($item->model, $models)) {
+                debugging("local_catquiz: test information without item {$item->componentid}: model {$item->model} "
+                    . 'is not installed.', DEBUG_DEVELOPER);
+                continue;
+            }
+            // The information of the item at every step, or none of it: one value that is not finite made the
+            // sum of every step not finite, and the whole line was left out for one item.
+            $iteminfos = [];
+            try {
+                $itemparam = model_item_param::from_record($item);
+                $model = model_model::get_instance($item->model);
+                $params = $itemparam->get_params_array();
+                foreach ($abilitysteps as $ability) {
+                    $fisherinformation = $model->fisher_info(['ability' => $ability], $params);
+                    if (!is_finite($fisherinformation)) {
+                        throw new \RangeException("information $fisherinformation at ability $ability");
+                    }
+                    $iteminfos[strval($ability)] = $fisherinformation;
                 }
+            } catch (\Throwable $e) {
+                debugging("local_catquiz: test information without item {$item->componentid}: "
+                    . $e->getMessage(), DEBUG_DEVELOPER);
+                continue;
+            }
+            foreach ($iteminfos as $stringkey => $fisherinformation) {
+                $fisherinfos[$stringkey] = ($fisherinfos[$stringkey] ?? 0) + $fisherinformation;
             }
         }
         return $fisherinfos;
@@ -875,25 +913,37 @@ class feedback_helper {
     /**
      * Return keys for all moments in defined timerange.
      *
+     * One key per day, week, month or quarter from the start to the end, in order, the labels of
+     * return_datestring_label() - the labels of the attempts.
+     *
+     * Issue #151: the steps were '+1 day' in the time zone of the server, the labels in the time zone of the person.
+     * Across a change of daylight saving time a step is 23 or 25 hours, and with the person in another zone a day was
+     * skipped: an attempt of that day made a series longer than the labels, and when it was the last day the loop
+     * never ended. The steps now go through the calendar days of the person, labelled at noon, up to the day of the
+     * end - a fixed number of steps.
+     *
      * @param int $timerange
-     * @param array $beginningandendofrange
+     * @param array $beginningandendofrange [start, end] as timestamps.
      *
-     * @return array
-     *
+     * @return array The labels, keyed by themselves.
      */
     public static function get_timerangekeys($timerange, $beginningandendofrange) {
-        $result = [];
-        $starttimestamp = $beginningandendofrange[0];
-        $endtimestamp = $beginningandendofrange[1];
+        $starttimestamp = (int) $beginningandendofrange[0];
+        $endtimestamp = (int) $beginningandendofrange[1];
         $lastkey = self::return_datestring_label($timerange, $endtimestamp);
+        if ($endtimestamp < $starttimestamp) {
+            return [$lastkey => $lastkey];
+        }
 
-        $currenttimestamp = $starttimestamp;
-        do {
-            $key = self::return_datestring_label($timerange, $currenttimestamp);
+        $zone = \core_date::get_user_timezone_object();
+        $day = (new \DateTimeImmutable('@' . $starttimestamp))->setTimezone($zone)->setTime(12, 0);
+        $lastday = (new \DateTimeImmutable('@' . $endtimestamp))->setTimezone($zone)->setTime(12, 0);
+        $result = [];
+        while ($day <= $lastday) {
+            $key = self::return_datestring_label($timerange, $day->getTimestamp());
             $result[$key] = $key;
-            $currenttimestamp = strtotime('+1 day', $currenttimestamp);
-        } while ($key != $lastkey);
-
+            $day = $day->modify('+1 day');
+        }
         return $result;
     }
 

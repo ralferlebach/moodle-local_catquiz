@@ -43,22 +43,20 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author     Magdalena Holczik <magdalena.holczik@wunderbyte.at>
  * @copyright  2024 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\catquiz
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\catquiz::class)]
 final class catquiz_test extends advanced_testcase {
     /**
      * Tests the return value supposed to be a human readable information about course & group enrolment.
      *
-     * @dataProvider create_strings_for_enrolement_notification_provider
      *
      * @param array $enrolementarray
      * @param array $expected
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('create_strings_for_enrolement_notification_provider')]
     public function test_create_strings_for_enrolement_notification(array $enrolementarray, array $expected): void {
 
         $result = [];
@@ -294,8 +292,8 @@ final class catquiz_test extends advanced_testcase {
      * @param bool $isenrolled
      *
      * @return void
-     * @dataProvider user_is_enrolled_according_to_ability_and_scale_setting_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('user_is_enrolled_according_to_ability_and_scale_setting_provider')]
     public function test_user_is_enrolled_according_to_ability_and_scale_settings(
         array $quizsettings,
         array $personabilities,

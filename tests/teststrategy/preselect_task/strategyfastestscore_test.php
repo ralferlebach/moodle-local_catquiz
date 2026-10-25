@@ -35,14 +35,12 @@ use local_catquiz\teststrategy\preselect_task\strategyfastestscore;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\preselect_task\strategyfastestscore
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\strategyfastestscore::class)]
 final class strategyfastestscore_test extends basic_testcase {
     /**
      * Test the strategyfastestscore class
      *
-     * @dataProvider provider
      *
      * @param array $context
      * @param mixed $expected
@@ -50,6 +48,7 @@ final class strategyfastestscore_test extends basic_testcase {
      * @return void
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('provider')]
     public function test_returns_expected_question_from_expected_catscale(
         array $context,
         $expected

@@ -36,8 +36,8 @@ require_once($CFG->libdir . '/formslib.php');
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\catquiz_handler
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\catquiz_handler::class)]
 final class instance_form_heading_test extends advanced_testcase {
     /**
      * Builds the part of the activity form the hook works on, with the given heading.

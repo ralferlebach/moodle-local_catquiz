@@ -37,8 +37,8 @@ use local_catquiz\teststrategy\progress;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\teststrategy\progress::get_fraction_for_scale
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\progress::class, 'get_fraction_for_scale')]
 final class scale_fraction_test extends advanced_testcase {
     /**
      * Builds a progress with the given responses.

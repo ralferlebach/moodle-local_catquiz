@@ -58,10 +58,10 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\calculation\incremental_recalculation
- * @covers     \local_catquiz\local\calculation\disruptive_recalculation
- * @covers     \local_catquiz\catmodel_info::update_params
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\calculation\incremental_recalculation::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\calculation\disruptive_recalculation::class)]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catmodel_info::class, 'update_params')]
 final class incremental_keeps_context_test extends advanced_testcase {
     /** @var \stdClass The course. */
     private $course;

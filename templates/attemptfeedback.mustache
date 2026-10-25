@@ -42,7 +42,8 @@
                 }
             ]
         },
-        "attemptid" : "111"
+        "attemptid" : "111",
+        "noresult" : ""
     }
 }}
 
@@ -51,6 +52,9 @@
 {{#nofeedback}}
     {{#str}} minquestionsnotreached, local_catquiz{{/str}}
 {{/nofeedback}}
+{{#noresult}}
+    <div class="alert alert-info" role="status">{{noresult}}</div>
+{{/noresult}}
 {{#feedback}}
 <div class="catquiz_feedback">
   {{#studentfeedback}}
@@ -60,12 +64,14 @@
           <div id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-frontpage-content"> {{{content}}} </div>
       {{/frontpage}}
   {{/studentfeedback}}
+      {{! No tab is open when the page is rendered: every tab aria-selected="false", each list item a presentation, so the
+          tab list holds only tabs - also for a feedback whose tabs Bootstrap has not set up yet (axe aria-required-children). }}
       {{! Ids carry the render and the attempt (issue #30): several feedbacks on one page - attempts in
           a list, a shortcode next to the result page - must not share tabs or panes. }}
       <ul class="nav nav-tabs" id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-tabs" role="tablist" style="list-style: none">
   {{#studentfeedback}}
       {{#othertabs}}
-      <li class="nav-item">
+      <li class="nav-item" role="presentation">
           <a class="nav-link feedbacktab"
               id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-student-tab"
               data-bs-toggle="tab"
@@ -75,13 +81,13 @@
               href="#local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-student"
               role="tab"
               aria-controls="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-student"
-              aria-selected="true">{{heading}}
+              aria-selected="false">{{heading}}
           </a>
       </li>
       {{/othertabs}}
   {{/studentfeedback}}
   {{#teacherfeedback}}
-          <li class="nav-item">
+          <li class="nav-item" role="presentation">
               <a class="nav-link feedbacktab"
                   id="local-catquiz-feedback-{{uniqid}}-{{attemptid}}-{{generatorname}}-teacher-tab"
                   data-bs-toggle="tab"

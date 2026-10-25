@@ -36,8 +36,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     ::local_catquiz_upgrade_drop_duplicate_indexes
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('local_catquiz_upgrade_drop_duplicate_indexes')]
 final class redundant_indexes_test extends advanced_testcase {
     /**
      * Tables whose indexes must not contain duplicates.
@@ -60,10 +60,10 @@ final class redundant_indexes_test extends advanced_testcase {
     /**
      * No two indexes on a table cover exactly the same columns.
      *
-     * @dataProvider table_provider
      * @param string $tablename
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('table_provider')]
     public function test_no_duplicate_indexes(string $tablename): void {
         global $DB;
 

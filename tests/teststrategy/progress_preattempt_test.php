@@ -24,9 +24,9 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\progress::capture_preattempt_abilities
- * @covers \local_catquiz\teststrategy\progress::get_preattempt_abilities
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\progress::class, 'capture_preattempt_abilities')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\progress::class, 'get_preattempt_abilities')]
 final class progress_preattempt_test extends advanced_testcase {
     /**
      * Capture stores the pre-attempt abilities, is idempotent (does not

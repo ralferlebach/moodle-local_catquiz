@@ -32,8 +32,8 @@ Feature: The result page of an attempt shows the feedback of that attempt's acti
       | adaptivequiz | Quiz B | C1     | 1       | adaptivecatquizB | Quiz B. |
     And the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy      | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | scalefeedbackprefix |
-      | C1     | adaptivecatquizA | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | Feedback of quiz A for |
-      | C1     | adaptivecatquizB | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | Feedback of quiz B for |
+      | C1     | adaptivecatquizA | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 1                               | 0.0                       | 1000.0                    | Feedback of quiz A for |
+      | C1     | adaptivecatquizB | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 1                               | 0.0                       | 1000.0                    | Feedback of quiz B for |
 
   @javascript
   Scenario: Each attempt shows the feedback of its own activity, also when opened again later

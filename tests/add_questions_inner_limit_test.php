@@ -37,8 +37,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\table\catscalequestions_table
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\table\catscalequestions_table::class)]
 final class add_questions_inner_limit_test extends advanced_testcase {
     /**
      * A scale in its own context.

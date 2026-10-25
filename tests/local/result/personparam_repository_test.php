@@ -24,8 +24,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\local\result\personparam_repository
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\result\personparam_repository::class)]
 final class personparam_repository_test extends advanced_testcase {
     /**
      * Builds an attempt_result with one measured primary scale, one measured

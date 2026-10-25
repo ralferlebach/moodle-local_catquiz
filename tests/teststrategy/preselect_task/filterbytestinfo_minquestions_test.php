@@ -43,8 +43,8 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\preselect_task\filterbytestinfo
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\filterbytestinfo::class)]
 final class filterbytestinfo_minquestions_test extends advanced_testcase {
     /** @var int Main scale id used throughout the test. */
     private const SCALE = 1;
@@ -56,10 +56,10 @@ final class filterbytestinfo_minquestions_test extends advanced_testcase {
      * @param int $minimumquestions Globally configured minimum.
      * @param bool $mayexclude Whether deactivation is expected at this point.
      *
-     * @dataProvider minquestions_provider
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('minquestions_provider')]
     public function test_main_scale_respects_global_minimum(int $played, int $minimumquestions, bool $mayexclude): void {
         $this->resetAfterTest();
 

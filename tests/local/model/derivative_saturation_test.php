@@ -29,13 +29,12 @@ use basic_testcase;
  * @package    local_catquiz
  * @copyright  2024 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\model\model_raschmodel
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_raschmodel::class)]
 final class derivative_saturation_test extends basic_testcase {
     /**
      * Every derivative must be finite across the full ability range, incl. saturation.
      *
-     * @dataProvider saturation_model_provider
      *
      * @param string $modelname model name
      * @param array $ip item parameters
@@ -43,6 +42,7 @@ final class derivative_saturation_test extends basic_testcase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('saturation_model_provider')]
     public function test_derivatives_are_finite_at_saturation(string $modelname, array $ip, array $fracs): void {
         $class = "catmodel_{$modelname}\\{$modelname}";
         $thetas = [0.0, 5.0, 40.0, 200.0, 800.0, -800.0];

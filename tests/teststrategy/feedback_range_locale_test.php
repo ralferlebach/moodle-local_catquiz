@@ -25,8 +25,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\feedback_helper::parse_range_limit
- * @covers \local_catquiz\teststrategy\feedback_helper::get_feedback_range_index
  */
 
 namespace local_catquiz\teststrategy;
@@ -35,9 +33,9 @@ namespace local_catquiz\teststrategy;
  * Regression test for locale-robust feedback range parsing.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\teststrategy\feedback_helper::parse_range_limit
- * @covers \local_catquiz\teststrategy\feedback_helper::get_feedback_range_index
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'parse_range_limit')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'get_feedback_range_index')]
 final class feedback_range_locale_test extends \advanced_testcase {
     /**
      * The parser must treat a decimal comma as a decimal separator, not truncate.

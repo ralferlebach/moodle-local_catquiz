@@ -43,8 +43,8 @@ use local_catquiz\teststrategy\feedback_helper;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\teststrategy\feedback_helper::is_feedback_eligible
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'is_feedback_eligible')]
 final class feedback_all_valid_scales_test extends advanced_testcase {
     /**
      * The four scales of attempt 12357, with 121 as the primary one.

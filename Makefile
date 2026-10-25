@@ -8,19 +8,25 @@
 MOODLE ?= $(HOME)/moodle
 PLUGINDIR := public/local/catquiz
 PHPCS ?= phpcs
+# The same files as the CI: .moodle-plugin-ci.yml leaves out the recorded data under tests/fixtures (86 MB), and
+# moodle-plugin-ci skips hidden directories such as .github (CI tooling, not plugin code).
 PHPCSFLAGS := --standard=moodle --severity=1 --extensions=php \
 	--exclude=PSR1.Classes.ClassDeclaration,moodle.Commenting.TodoComment \
-	--ignore=*/node_modules/*,*/vendor/*,*/catquizcentralhub/*
+	--ignore=*/node_modules/*,*/vendor/*,*/.github/*,*/catquizcentralhub/*,*/tests/fixtures/*,*/tests/behat/fixtures/*,*/strategy_test.php
 FEATURES ?= tests/behat
 
-.PHONY: check lint phpcs phpunit sync behat
+.PHONY: check lint amd phpcs phpunit sync behat
 
-check: lint phpcs phpunit
+check: lint amd phpcs phpunit
 
 lint:
 	@find . -name '*.php' -not -path './node_modules/*' -not -path './vendor/*' -not -path './catquizcentralhub/*' -print0 \
 		| xargs -0 -n 50 -P 4 php -l > /dev/null
 	@echo "lint: ok"
+
+# The committed AMD build has to belong to the committed sources (the hard CI check of issue #31).
+amd:
+	python3 .github/ci/check_amd_build.py .
 
 phpcs:
 	$(PHPCS) $(PHPCSFLAGS) .

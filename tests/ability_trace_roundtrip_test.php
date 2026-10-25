@@ -37,8 +37,8 @@ use local_catquiz\teststrategy\progress;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\teststrategy\progress
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\progress::class)]
 final class ability_trace_roundtrip_test extends advanced_testcase {
     /**
      * jsonSerialize() carries the trace.

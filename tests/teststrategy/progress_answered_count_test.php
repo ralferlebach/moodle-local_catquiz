@@ -25,7 +25,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\progress::get_num_answered_productive_questions
  */
 
 namespace local_catquiz\teststrategy;
@@ -39,8 +38,8 @@ use stdClass;
  * Guards the answered-item count against pending and pilot items.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\teststrategy\progress::get_num_answered_productive_questions
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\progress::class, 'get_num_answered_productive_questions')]
 final class progress_answered_count_test extends advanced_testcase {
     /**
      * Builds a progress instance with the given state.

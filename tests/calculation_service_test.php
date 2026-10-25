@@ -42,11 +42,12 @@ use local_catquiz\local\calculation\incremental_recalculation;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\local\calculation\calculation_service
- * @covers \local_catquiz\local\calculation\calculation_request
- * @covers \local_catquiz\local\calculation\calculation_result
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\calculation\calculation_service::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\calculation\calculation_request::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\calculation\calculation_result::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\calculation\identifiability_aware::class)]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\local\calculation\calculation_service::class, 'get_pending_status')]
 final class calculation_service_test extends advanced_testcase {
     /**
      * The request validates its inputs.
@@ -259,7 +260,6 @@ final class calculation_service_test extends advanced_testcase {
     /**
      * The identifiability summary (K5) is written into the result criteria and warnings.
      *
-     * @covers \\local_catquiz\\local\\calculation\\identifiability_aware
      * @return void
      */
     public function test_identifiability_is_applied_to_result(): void {
@@ -300,7 +300,6 @@ final class calculation_service_test extends advanced_testcase {
     /**
      * A queued adhoc calculation is reported as pending for its scale (issue #43).
      *
-     * @covers \\local_catquiz\\local\\calculation\\calculation_service::get_pending_status
      * @return void
      */
     public function test_pending_status_detects_queued_calculation(): void {

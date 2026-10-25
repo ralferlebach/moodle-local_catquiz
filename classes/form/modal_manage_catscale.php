@@ -50,6 +50,14 @@ class modal_manage_catscale extends dynamic_form {
         $mform->addElement('text', 'name', get_string('name'));
         $mform->setType('name', PARAM_TEXT);
         $mform->addRule('name', get_string('required'), 'required', PARAM_ALPHAEXT, 'client');
+        // Issue #81: the column holds 255 characters.
+        $mform->addRule(
+            'name',
+            get_string('maximumchars', '', dataapi::CONTEXT_NAME_MAXLENGTH),
+            'maxlength',
+            dataapi::CONTEXT_NAME_MAXLENGTH,
+            'client'
+        );
 
         // Add a textarea field for the catscale description.
         $mform->addElement('textarea', 'description', get_string('description'), 'wrap="virtual" rows="5" cols="50"');

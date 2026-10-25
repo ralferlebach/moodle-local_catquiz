@@ -29,7 +29,7 @@ use local_catquiz\output\attemptfeedback;
 
 require_once(__DIR__ . '/../../config.php');
 
-global $USER, $OUTPUT, $COURSE;
+global $DB, $USER, $OUTPUT, $COURSE;
 
 $attemptid = optional_param('attemptid', 0, PARAM_INT);
 $contextid = optional_param('contextid', 0, PARAM_INT);
@@ -81,6 +81,12 @@ if (!empty($cm)) {
 $PAGE->set_context($context);
 
 if (!feedback_access::can_view_other_users($context)) {
+    throw new moodle_exception('error:noreviewpermission', 'local_catquiz');
+}
+// Issue #85: in separate groups, a teacher without moodle/site:accessallgroups reviews the attempts of
+// their own groups only - the same rule as the tabs that load later.
+$owner = $DB->get_field('adaptivequiz_attempt', 'userid', ['id' => $attemptid]);
+if ($owner !== false && !feedback_access::can_view_user_in_groups($context, (int) $owner)) {
     throw new moodle_exception('error:noreviewpermission', 'local_catquiz');
 }
 

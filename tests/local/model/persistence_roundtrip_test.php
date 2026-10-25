@@ -28,13 +28,12 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2024 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\model\model_item_param
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_item_param::class)]
 final class persistence_roundtrip_test extends advanced_testcase {
     /**
      * calculate/set -> save_to_db -> reload must preserve the polytomous parameters.
      *
-     * @dataProvider polytomous_params_provider
      *
      * @param string $modelname model name
      * @param string $key parameter key ('intercepts' or 'difficulties')
@@ -42,6 +41,7 @@ final class persistence_roundtrip_test extends advanced_testcase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('polytomous_params_provider')]
     public function test_save_reload_roundtrip(string $modelname, string $key, array $params): void {
         $this->resetAfterTest();
         $contextid = \context_system::instance()->id;

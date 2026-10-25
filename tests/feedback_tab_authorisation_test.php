@@ -41,8 +41,8 @@ use local_catquiz\external\feedback_tab_clicked;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\external\feedback_tab_clicked::execute
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\external\feedback_tab_clicked::class, 'execute')]
 final class feedback_tab_authorisation_test extends advanced_testcase {
     /**
      * Creates an attempt owned by a user.

@@ -39,8 +39,8 @@ use local_catquiz\local\model\model_strategy;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\itemparam_validity
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\itemparam_validity::class)]
 final class itemparam_validity_test extends advanced_testcase {
     /**
      * Builds an item record as the question list would return it.

@@ -39,11 +39,11 @@
                 {{! Local calculation section }}
                 <div class="card-header">
                     <h5>
-                        <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#localCalc">
+                        <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#local-catquiz-localcalc-{{uniqid}}" aria-expanded="true" aria-controls="local-catquiz-localcalc-{{uniqid}}">
                             {{#str}}localcalculations, local_catquiz{{/str}}
                         </button>
                     </h5>
-                    <div id="localCalc" class="accordion-collapse collapse show">
+                    <div id="local-catquiz-localcalc-{{uniqid}}" class="accordion-collapse collapse show">
                         <div class="accordion-body">
                             <p class="mb-2">{{#str}}localcalculationshelp, local_catquiz{{/str}}</p>
                             {{{modelbutton}}}
@@ -57,11 +57,11 @@
                     {{! Local calculation section }}
                     <div class="card-header">
                         <h5 class="accordion-header">
-                            <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#syncActions">
+                            <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#local-catquiz-syncactions-{{uniqid}}" aria-expanded="true" aria-controls="local-catquiz-syncactions-{{uniqid}}">
                                 {{#str}}syncactions, local_catquiz{{/str}}
                             </button>
                         </h5>
-                        <div id="syncActions" class="accordion-collapse collapse show">
+                        <div id="local-catquiz-syncactions-{{uniqid}}" class="accordion-collapse collapse show">
                             <div class="accordion-body">
                                 <p class="mb-2">{{#str}}syncactionshelp, local_catquiz{{/str}}</p>
                                 {{{syncbutton}}}
@@ -77,11 +77,11 @@
                     {{! Local calculation section }}
                     <div class="card-header">
                         <h5 class="accordion-header">
-                            <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#hubActions">
+                            <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#local-catquiz-hubactions-{{uniqid}}" aria-expanded="true" aria-controls="local-catquiz-hubactions-{{uniqid}}">
                                 {{#str}}hubactions, local_catquiz{{/str}}
                             </button>
                         </h5>
-                        <div id="hubActions" class="accordion-collapse collapse show">
+                        <div id="local-catquiz-hubactions-{{uniqid}}" class="accordion-collapse collapse show">
                             <div class="accordion-body">
                                 <p class="mb-2">{{#str}}hubactionshelp, local_catquiz{{/str}}</p>
                                 {{{remotecalcbutton}}}

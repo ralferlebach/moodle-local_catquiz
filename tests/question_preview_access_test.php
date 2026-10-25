@@ -42,8 +42,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\external\get_question_preview
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\external\get_question_preview::class)]
 final class question_preview_access_test extends advanced_testcase {
     /**
      * Builds an attempt of $userid that contains $questionid.

@@ -45,10 +45,9 @@ use local_catquiz\local\model\model_person_param;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\catcalc::build_itemparam_objective
- * @covers \local_catquiz\catcalc::build_itemparam_jacobian
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catcalc::class, 'build_itemparam_objective')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catcalc::class, 'build_itemparam_jacobian')]
 final class edgecase_ip_test extends advanced_testcase {
     /**
      * Sets a deterministic, wide trusted region for the polytomous models.
@@ -87,11 +86,11 @@ final class edgecase_ip_test extends advanced_testcase {
     /**
      * The fixtures behave as their persisted expectation class prescribes.
      *
-     * @dataProvider fixture_provider
      *
      * @param array $fixture
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('fixture_provider')]
     public function test_edgecase_behaviour(array $fixture): void {
         $this->resetAfterTest(true);
         $this->set_trusted_region_config();

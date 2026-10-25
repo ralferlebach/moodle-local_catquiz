@@ -34,9 +34,9 @@ use local_catquiz\feedback\feedbackclass;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\teststrategy\feedback_helper::get_feedback_range_index
- * @covers     \local_catquiz\feedback\feedbackclass::validation_range_limits_nogaps
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'get_feedback_range_index')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\feedback\feedbackclass::class, 'validation_range_limits_nogaps')]
 final class feedback_ranges_test extends advanced_testcase {
     /** @var int Scale id used in the settings keys. */
     private const SCALE = 5;

@@ -38,9 +38,9 @@ use local_catquiz\table\catscalequestions_table;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\table\catscalequestions_table::resolve_questiontext_matches
- * @covers     \local_catquiz\table\catscalequestions_table::apply_questiontext_search
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\table\catscalequestions_table::class, 'resolve_questiontext_matches')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\table\catscalequestions_table::class, 'apply_questiontext_search')]
 final class questiontext_search_test extends advanced_testcase {
     /**
      * Inserts a question with the given text.

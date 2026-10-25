@@ -32,6 +32,7 @@ use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\model\model_model;
+use local_catquiz\local\statistics\chart_output;
 use local_catquiz\local\statistics\learning_progress_series;
 use local_catquiz\output\catscalemanager\questions\cards\questionpreview;
 use local_catquiz\teststrategy\feedback_helper;
@@ -446,8 +447,6 @@ class learningprogress extends feedbackgenerator {
         int $timerange,
         array $beginningandendofrange
     ) {
-        global $OUTPUT;
-
         if (!isset($primarycatscale['name']) || !isset($primarycatscale['id'])) {
             return [];
         }
@@ -459,6 +458,13 @@ class learningprogress extends feedbackgenerator {
             $timerange,
             $beginningandendofrange
         );
+        // Issue #150 (re-audit 23.10.2026): the attempts were counted, not their valid results. With none, every
+        // period is empty and so are the labels: two series without values, which core/chart_series refuses
+        // ("Invalid values received for series."). As in the statistics (catquizstatistics::render_learning_progress()).
+        $hasvalue = fn(array $values) => (bool) array_filter($values, fn($value) => $value !== null);
+        if (!$series['labels'] || (!$hasvalue($series['user']) && !$hasvalue($series['peers']))) {
+            return [];
+        }
 
         $chart = new chart_line();
         // Straight lines: a smoothed curve between periods suggests values in between (issue #119).
@@ -466,8 +472,9 @@ class learningprogress extends feedbackgenerator {
         $chart->add_series(new chart_series(get_string('yourscorein', 'local_catquiz', $scalename), $series['user']));
         $chart->add_series(new chart_series(get_string('scoreofpeers', 'local_catquiz'), $series['peers']));
         $chart->set_labels($series['labels']);
-        // With the table of values: the chart can be read without seeing it.
-        $out = $OUTPUT->render_chart($chart, true);
+        // With the table of values: the chart can be read without seeing it. Drawn as the ability profile is: what
+        // the browser cannot draw says so (issue #150).
+        $out = chart_output::render($chart, true, get_string('catquizstatisticsnodata', 'local_catquiz'));
 
         return [
             'chart' => $out,

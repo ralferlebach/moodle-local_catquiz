@@ -31,11 +31,13 @@ $plugin->component = 'local_catquiz';
 // the public webroot - is not verified yet; narrow this again if that work stalls.
 $plugin->supported = [501, 503];
 $plugin->release = '1.3.0';
-$plugin->version = 2026101702;
+$plugin->version = 2026102402;
 $plugin->requires = 2025100600;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [
     'local_wunderbyte_table' => 2024040200,
-    'mod_adaptivequiz' => 2026091013,
-    'adaptivequizcatmodel_catquiz' => 2026091100,
+    // Issue #31: what this line needs and is delivered with - the host with the stop reasons and the
+    // reason of a refused start (#60), the adapter with the attempt ids and the timeline (#146, adapter #6).
+    'mod_adaptivequiz' => 2026101801,
+    'adaptivequizcatmodel_catquiz' => 2026101801,
 ];

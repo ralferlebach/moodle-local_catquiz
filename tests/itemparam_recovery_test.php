@@ -40,9 +40,8 @@ use local_catquiz\local\model\model_person_param;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\catcalc::estimate_item_params
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catcalc::class, 'estimate_item_params')]
 final class itemparam_recovery_test extends advanced_testcase {
     /**
      * Sets the trusted-region settings explicitly so the run is deterministic
@@ -113,13 +112,13 @@ final class itemparam_recovery_test extends advanced_testcase {
     /**
      * Estimated item parameters recover the ground truth within tolerance.
      *
-     * @dataProvider recovery_provider
      *
      * @param string $modelname
      * @param array $truth Ground-truth item parameters.
      * @param float $tolerance Maximum accepted absolute deviation per parameter.
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('recovery_provider')]
     public function test_item_params_recovered(string $modelname, array $truth, float $tolerance): void {
         $this->resetAfterTest(true);
         $this->set_trusted_region_config();

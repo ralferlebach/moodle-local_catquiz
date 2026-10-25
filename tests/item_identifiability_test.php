@@ -35,9 +35,8 @@ use local_catquiz\local\model\model_person_param;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\catcalc::item_identifiability_report
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catcalc::class, 'item_identifiability_report')]
 final class item_identifiability_test extends advanced_testcase {
     /**
      * Sets a deterministic, wide trusted region for the polytomous models.

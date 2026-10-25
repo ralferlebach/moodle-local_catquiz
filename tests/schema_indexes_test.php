@@ -45,8 +45,8 @@ require_once($CFG->dirroot . '/local/catquiz/db/upgrade.php');
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     ::local_catquiz_upgrade_remove_duplicates
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('local_catquiz_upgrade_remove_duplicates')]
 final class schema_indexes_test extends advanced_testcase {
     /**
      * Data provider of the indexes issue #25 requires.
@@ -101,13 +101,13 @@ final class schema_indexes_test extends advanced_testcase {
     /**
      * Each required index exists in the installed database.
      *
-     * @dataProvider index_provider
      * @param string $tablename
      * @param string $indexname
      * @param string[] $fields
      * @param bool $unique
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('index_provider')]
     public function test_required_index_exists(string $tablename, string $indexname, array $fields, bool $unique): void {
         global $DB;
 

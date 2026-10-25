@@ -32,9 +32,8 @@ use basic_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\matrix
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\matrix::class)]
 final class matrix_test extends basic_testcase {
     /**
      * Reads a matrix into a plain nested array for comparison.
@@ -55,11 +54,11 @@ final class matrix_test extends basic_testcase {
     /**
      * identity() returns a correct n x n identity for several sizes.
      *
-     * @dataProvider identity_provider
      *
      * @param int $n
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('identity_provider')]
     public function test_identity_returns_correct_matrix(int $n): void {
         $identity = (new matrix($n, $n))->identity();
 
@@ -99,12 +98,12 @@ final class matrix_test extends basic_testcase {
     /**
      * determinant() matches known values.
      *
-     * @dataProvider determinant_provider
      *
      * @param array $values
      * @param float $expected
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('determinant_provider')]
     public function test_determinant(array $values, float $expected): void {
         $this->assertEqualsWithDelta($expected, (new matrix($values))->determinant(), 1e-12);
     }

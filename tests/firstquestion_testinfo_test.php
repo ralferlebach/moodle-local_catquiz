@@ -46,17 +46,16 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @package    local_catquiz
  * @copyright  2024 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\preselect_task\filterbytestinfo
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\filterbytestinfo::class)]
 final class firstquestion_testinfo_test extends advanced_testcase {
     /**
      * The first question can be selected for every valid start level, including
      * the extreme "very easy" (-2) that used to abort the attempt.
      *
      * @param string $selectfirstquestion The configured start level (-2..2).
-     *
-     * @dataProvider startlevel_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('startlevel_provider')]
     public function test_first_question_is_administrable(string $selectfirstquestion): void {
         global $DB;
         $this->resetAfterTest();

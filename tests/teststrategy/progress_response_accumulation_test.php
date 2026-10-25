@@ -46,8 +46,8 @@ use question_engine;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\progress::update_cached_responses
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\progress::class, 'update_cached_responses')]
 final class progress_response_accumulation_test extends advanced_testcase {
     /**
      * The response set grows by exactly one per answered question and never

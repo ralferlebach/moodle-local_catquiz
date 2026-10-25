@@ -267,12 +267,19 @@ class catscale {
         // We need the default context for the events that will be triggered.
         $catcontext = catquiz::get_default_context_id();
 
+        // The item belongs to the context of its scale. Without, the item of the scale was not found in it: the
+        // page of the item failed, and a context change of the scale passed over it (issues #82, #148).
+        $scalecontextid = (int) self::get_context_id($catscaleid);
+
         if ($record = $DB->get_record('local_catquiz_items', $searchparams)) {
             // Right now, there is nothing to do, as we don't have more data.
             $id = $record->id;
             $data['id'] = $id;
             if ($overridecatscale) {
                 $data['catscaleid'] = $catscaleid;
+            }
+            if (empty($record->contextid) && $scalecontextid) {
+                $data['contextid'] = $scalecontextid;
             }
             $DB->update_record('local_catquiz_items', (object)$data);
 
@@ -316,6 +323,9 @@ class catscale {
             $now = time();
             $data['timemodified'] = $now;
             $data['timecreated'] = $now;
+            if ($scalecontextid) {
+                $data['contextid'] = $scalecontextid;
+            }
             $id = $DB->insert_record('local_catquiz_items', (object)$data);
 
             // Trigger event.
@@ -469,9 +479,14 @@ class catscale {
         ]);
 
         if ($testitems === false) {
-            $testitems = $this->load_pool($contextid, $includesubscales, $orderby, $selectedsubscales);
+            // Issue #147: the cached pool is canonical - by question id - whatever order the first caller asked
+            // for; the order is applied below, on every return. Before, the key held no order, and the order of
+            // whoever filled the cache was the order of everybody after.
+            $testitems = $this->load_pool($contextid, $includesubscales, null, $selectedsubscales);
+            ksort($testitems, SORT_NUMERIC);
             timeline::span('pool:cache_write', fn() => $poolcache->set($poolkey, $testitems), ['pool_items' => count($testitems)]);
         }
+        $testitems = self::order_pool($testitems, $orderby);
 
         global $USER;
         $stats = self::user_question_stats((int) $USER->id);
@@ -481,6 +496,42 @@ class catscale {
             $item->userattempts = $seen ? $seen[0] : null;
             $item->userlastattempttime = $seen ? $seen[1] : null;
         }
+        return $testitems;
+    }
+
+    /**
+     * A pool in the order asked for (issue #147), the same with a cold and a warm cache.
+     *
+     * Without an order: by question id. With one: by that field ascending - numbers as numbers -, rows without
+     * a value (a pilot without difficulty) last, equal values by question id. The SQL order it replaces put
+     * NULL last on PostgreSQL and first on MariaDB, and left ties to the database.
+     *
+     * @param array $testitems Keyed by question id.
+     * @param string|null $orderby A field of the rows, e.g. difficulty.
+     * @return array Keyed by question id.
+     */
+    public static function order_pool(array $testitems, ?string $orderby): array {
+        if ($orderby === null || $orderby === '') {
+            ksort($testitems, SORT_NUMERIC);
+            return $testitems;
+        }
+        $field = trim(preg_replace('/\s+(ASC|DESC)$/i', '', $orderby));
+        uksort($testitems, function ($a, $b) use ($testitems, $field): int {
+            $va = $testitems[$a]->$field ?? null;
+            $vb = $testitems[$b]->$field ?? null;
+            $nulla = $va === null || $va === '';
+            $nullb = $vb === null || $vb === '';
+            if ($nulla !== $nullb) {
+                return $nulla ? 1 : -1;
+            }
+            if (!$nulla) {
+                $cmp = is_numeric($va) && is_numeric($vb) ? ((float) $va <=> (float) $vb) : strcmp((string) $va, (string) $vb);
+                if ($cmp !== 0) {
+                    return $cmp;
+                }
+            }
+            return (int) $a <=> (int) $b;
+        });
         return $testitems;
     }
 
@@ -549,11 +600,14 @@ class catscale {
         // the query then has a row per scale, both with the question id first, and get_records_sql()
         // kept one of them at random (and reported the duplicate). The selection plays a question once,
         // so it gets one row - the one of the scale the question was assigned to first, the lowest item id.
-        return timeline::span(
+        $pool = timeline::span(
             'pool:query',
             fn() => self::one_row_per_question($DB->get_recordset_sql($sql, $params)),
             ['pool_scales' => count($scaleids)]
         );
+        // Issue #153: an item whose model is not installed cannot be selected or scored; the manager says why
+        // (item_availability()).
+        return model_strategy::rows_of_installed_models($pool);
     }
 
     /**
@@ -599,6 +653,83 @@ class catscale {
         $cache = attempt_cache::cache();
         $cache->delete(self::user_stats_key($userid));
         $cache->set(self::STATS_GENERATION_KEY, (int) $cache->get(self::STATS_GENERATION_KEY) + 1);
+    }
+
+    /** @var string Issue #82: the question is played in this scale. */
+    public const AVAILABILITY_ACTIVE = 'active';
+
+    /** @var string Issue #82: deactivated in this scale only; other scales may play it. */
+    public const AVAILABILITY_SCALEINACTIVE = 'scaleinactive';
+
+    /** @var string Issue #82: hidden in the question bank - no test plays it, whatever the scale says. */
+    public const AVAILABILITY_GLOBALHIDDEN = 'globalhidden';
+
+    /** @var string Issue #82: a draft in the question bank - no test plays it until it is ready. */
+    public const AVAILABILITY_GLOBALDRAFT = 'globaldraft';
+
+    /** @var string Issue #153: the model of its parameters is not installed - no test can select or score it. */
+    public const AVAILABILITY_MODELNOTINSTALLED = 'modelnotinstalled';
+
+    /**
+     * Whether a test may play a question in a scale, from both levels that hide it (issue #82).
+     *
+     * The question bank comes first: a hidden or draft newest version keeps the question out of every test,
+     * and no scale can bring it back. The scale can only narrow further.
+     *
+     * Issue #153: an item whose parameters name a model that is not installed is left out of the runtime pool; the
+     * manager reads why here.
+     *
+     * @param string|null $questionstatus Status of the newest version in the question bank.
+     * @param int|string|null $testitemstatus local_catquiz_items.status in the scale.
+     * @param string|null $model The model of the active parameters of the item, if it has any.
+     * @return string One of the AVAILABILITY_* constants.
+     */
+    public static function item_availability(?string $questionstatus, $testitemstatus, ?string $model = null): string {
+        if ($questionstatus === \core_question\local\bank\question_version_status::QUESTION_STATUS_DRAFT) {
+            return self::AVAILABILITY_GLOBALDRAFT;
+        }
+        if ($questionstatus !== \core_question\local\bank\question_version_status::QUESTION_STATUS_READY) {
+            return self::AVAILABILITY_GLOBALHIDDEN;
+        }
+        if ($model !== null && $model !== '' && !array_key_exists($model, model_strategy::get_installed_models())) {
+            return self::AVAILABILITY_MODELNOTINSTALLED;
+        }
+        if ((int) $testitemstatus === LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE) {
+            return self::AVAILABILITY_SCALEINACTIVE;
+        }
+        return self::AVAILABILITY_ACTIVE;
+    }
+
+    /**
+     * The questions of a list that no test may hand out now (issue #82).
+     *
+     * A question is out when the newest version of its bank entry is not ready - hidden or a draft - or when
+     * it is gone. The runtime pool is cached, and the question bank can hide a question without any event:
+     * question_delete_question() on a question in use only sets the status of its versions. So the selection
+     * asks this for the question it is about to hand out - one query - and drops what it names.
+     *
+     * @param int[] $questionids
+     * @return int[] The ids that are not available.
+     */
+    public static function unavailable_question_ids(array $questionids): array {
+        global $DB;
+        $ids = array_values(array_unique(array_filter(array_map('intval', $questionids))));
+        $unavailable = [];
+        foreach (array_chunk($ids, 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'availq');
+            $params['availready'] = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
+            $ready = $DB->get_fieldset_sql(
+                "SELECT qv.questionid
+                   FROM {question_versions} qv
+                   JOIN {question_versions} qvl ON qvl.questionbankentryid = qv.questionbankentryid
+                    AND qvl.version = (SELECT MAX(qvm.version) FROM {question_versions} qvm
+                                        WHERE qvm.questionbankentryid = qv.questionbankentryid)
+                  WHERE qv.questionid $insql AND qvl.status = :availready",
+                $params
+            );
+            $unavailable = array_merge($unavailable, array_diff($chunk, array_map('intval', $ready)));
+        }
+        return array_values($unavailable);
     }
 
     /**

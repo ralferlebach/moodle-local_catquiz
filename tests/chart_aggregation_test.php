@@ -41,9 +41,9 @@ use local_catquiz\teststrategy\feedback_helper;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz::get_answers_per_person_histogram
- * @covers     \local_catquiz\catquiz::get_max_questions_answered_per_person
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'get_answers_per_person_histogram')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'get_max_questions_answered_per_person')]
 final class chart_aggregation_test extends advanced_testcase {
     /**
      * The SQL class expression agrees with feedback_helper::get_histogram_bin().
@@ -491,11 +491,12 @@ final class chart_aggregation_test extends advanced_testcase {
 
         $this->resetAfterTest();
 
+        // Issue #88: the charts load their attempts through the shared population.
         $source = file_get_contents(
-            $CFG->dirroot . '/local/catquiz/classes/output/catquizstatistics.php'
+            $CFG->dirroot . '/local/catquiz/classes/local/statistics/attempt_population.php'
         );
 
-        $start = strpos($source, 'private function get_attempts()');
+        $start = strpos($source, 'public function attempts(');
         $this->assertNotFalse($start);
 
         // Cut at the closing brace of the method, not at the next declaration: the
@@ -510,7 +511,7 @@ final class chart_aggregation_test extends advanced_testcase {
             'The charts need the json column.'
         );
         $this->assertStringNotContainsString(
-            'debug_info',
+            'a.debug_info',
             $body,
             'debug_info is never read here and must not be fetched.'
         );

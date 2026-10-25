@@ -41,9 +41,8 @@ use UnexpectedValueException;
  * @author     David Szkiba, Magdalena Holczik
  * @copyright  2024 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\preselect_task\customscalefeedback
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\customscalefeedback::class)]
 final class customscalefeedback_test extends basic_testcase {
     /**
      * Test that questions of subscales are removed as needed.
@@ -54,8 +53,8 @@ final class customscalefeedback_test extends basic_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     * @dataProvider get_studentfeedback_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_studentfeedback_provider')]
     public function test_get_studentfeedback(array $feedbackdata, array $expected): void {
 
         $feedbacksettings = new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB);

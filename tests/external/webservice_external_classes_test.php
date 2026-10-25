@@ -47,6 +47,12 @@ require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/external_reload_temp
 /**
  * Behaviour-level tests for each external class execute() implementation.
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\external\delete_catscale::class, 'execute')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\external\execute_action::class, 'execute')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\external\feedback_tab_clicked::class, 'execute')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\external\manage_catscale::class, 'execute')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\external\reload_template::class, 'execute')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\external\reload_template::class, 'execute_parameters')]
 final class webservice_external_classes_test extends advanced_testcase {
     /**
      * Creates a scale that is complete enough for the endpoints under test.
@@ -86,7 +92,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * delete_catscale::execute() should remove an existing catscale row.
      *
      * @return void
-     * @covers \local_catquiz\external\delete_catscale::execute
      */
     public function test_delete_catscale_execute_deletes_scale(): void {
         global $DB;
@@ -107,7 +112,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * execute_action::execute() should return failed status for unknown method.
      *
      * @return void
-     * @covers \local_catquiz\external\execute_action::execute
      */
     public function test_execute_action_execute_returns_failure_for_unknown_method(): void {
         $this->resetAfterTest(true);
@@ -125,7 +129,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * feedback_tab_clicked::execute() should trigger the feedbacktab_clicked event.
      *
      * @return void
-     * @covers \local_catquiz\external\feedback_tab_clicked::execute
      */
     public function test_feedback_tab_clicked_execute_triggers_event(): void {
         global $USER;
@@ -173,7 +176,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * manage_catscale::execute() should create a new catscale.
      *
      * @return void
-     * @covers \local_catquiz\external\manage_catscale::execute
      */
     public function test_manage_catscale_execute_creates_scale(): void {
         global $DB;
@@ -202,7 +204,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * manage_catscale::execute() should update an existing catscale.
      *
      * @return void
-     * @covers \local_catquiz\external\manage_catscale::execute
      */
     public function test_manage_catscale_execute_updates_scale(): void {
         global $DB;
@@ -232,7 +233,6 @@ final class webservice_external_classes_test extends advanced_testcase {
     /**
      * An unknown action is reported as a failure, not thrown.
      *
-     * @covers \local_catquiz\external\reload_template::execute
      * @return void
      */
     public function test_reload_template_reports_an_unknown_action(): void {
@@ -260,7 +260,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * place in a public contract - it exposes internals, breaks on rename, and invites
      * the endpoint to build whatever it is handed.
      *
-     * @covers \local_catquiz\external\reload_template::execute
      * @return void
      */
     public function test_reload_template_refuses_an_unknown_renderer(): void {
@@ -278,7 +277,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * blob, so PARAM_RAW was the only honest declaration - and no declaration at all
      * in practice.
      *
-     * @covers \local_catquiz\external\reload_template::execute_parameters
      * @return void
      */
     public function test_reload_template_declares_typed_parameters(): void {
@@ -327,7 +325,6 @@ final class webservice_external_classes_test extends advanced_testcase {
     /**
      * A participant may act on their own attempt.
      *
-     * @covers \local_catquiz\external\feedback_tab_clicked::execute
      * @return void
      */
     public function test_feedback_tab_clicked_allows_the_own_attempt(): void {
@@ -353,7 +350,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * act on this object. Without the ownership check any authenticated user could
      * pass a foreign attempt id - and was then logged as that attempt's "student".
      *
-     * @covers \local_catquiz\external\feedback_tab_clicked::execute
      * @return void
      */
     public function test_feedback_tab_clicked_denies_a_foreign_attempt(): void {
@@ -380,7 +376,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      *
      * An unknown object is not a permitted one - the check has to fail closed.
      *
-     * @covers \local_catquiz\external\feedback_tab_clicked::execute
      * @return void
      */
     public function test_feedback_tab_clicked_denies_an_unknown_attempt(): void {
@@ -405,7 +400,6 @@ final class webservice_external_classes_test extends advanced_testcase {
      * into the event log as if they described what happened. A log entry whose subject
      * the caller chose freely is not audit evidence.
      *
-     * @covers \local_catquiz\external\feedback_tab_clicked::execute
      * @return void
      */
     public function test_feedback_tab_clicked_refuses_an_unknown_identifier(): void {

@@ -29,7 +29,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\progress
  */
 
 namespace local_catquiz\teststrategy;
@@ -44,8 +43,8 @@ use stdClass;
  * Guards the last-response lookup against stale cache entries.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\teststrategy\progress
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\progress::class)]
 final class progress_lastresponse_cache_test extends advanced_testcase {
     /**
      * A pre-existing cache entry under the old key must not shadow the real value.

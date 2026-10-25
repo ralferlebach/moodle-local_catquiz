@@ -26,7 +26,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\context\loader\personability_loader
  */
 
 namespace local_catquiz\teststrategy\context\loader;
@@ -40,8 +39,8 @@ use stdClass;
  * Guards the carry-over source of person abilities.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\teststrategy\context\loader\personability_loader
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\context\loader\personability_loader::class)]
 final class personability_loader_carryover_test extends advanced_testcase {
     /**
      * Inserts a finalised attemptscale row.

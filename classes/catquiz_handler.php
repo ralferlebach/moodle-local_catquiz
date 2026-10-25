@@ -54,6 +54,15 @@ use local_catquiz\local\progress_retention;
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class catquiz_handler {
+    /** @var string Issue #89: no template action. */
+    public const TEMPLATE_ACTION_NONE = 'none';
+
+    /** @var string Issue #89: overwrite the chosen template with the settings of the activity. */
+    public const TEMPLATE_ACTION_UPDATE = 'update';
+
+    /** @var string Issue #89: save the settings of the activity as a new template. */
+    public const TEMPLATE_ACTION_COPY = 'copy';
+
     /** @var int If this is selected, the catquiz engine is deactivated. */
     public const DEACTIVATED_MODEL = 0;
     /** @var int Rasch model to select next question to be displayed to user */
@@ -122,16 +131,26 @@ class catquiz_handler {
         $context = context_system::instance();
 
         if (has_capability('local/catquiz:manage_testenvironments', $context)) {
-            // If you have the right, you can define this setting as template.
+            // Issue #89: two actions of their own, each named before the form is sent - overwrite the chosen
+            // template, or save the settings as a new one. Before, one checkbox "add or edit" did either,
+            // depending on whether the typed name matched the old one.
             $elements[] = $mform->addElement(
-                'advcheckbox',
-                'testenvironment_addoredittemplate',
-                get_string('addoredittemplate', 'local_catquiz')
+                'select',
+                'testenvironment_templateaction',
+                get_string('templateaction', 'local_catquiz'),
+                [
+                    self::TEMPLATE_ACTION_NONE => get_string('templateaction_none', 'local_catquiz'),
+                    self::TEMPLATE_ACTION_UPDATE => get_string('templateaction_update', 'local_catquiz'),
+                    self::TEMPLATE_ACTION_COPY => get_string('templateaction_copy', 'local_catquiz'),
+                ]
             );
+            $mform->setType('testenvironment_templateaction', PARAM_ALPHA);
+            $mform->setDefault('testenvironment_templateaction', self::TEMPLATE_ACTION_NONE);
+            $mform->addHelpButton('testenvironment_templateaction', 'templateaction', 'local_catquiz');
 
-            $elements[] = $mform->addElement('text', 'testenvironment_name', get_string('name', 'core'));
+            $elements[] = $mform->addElement('text', 'testenvironment_name', get_string('templatename', 'local_catquiz'));
             $mform->setType('testenvironment_name', PARAM_TEXT);
-            $mform->hideIf('testenvironment_name', 'testenvironment_addoredittemplate', 'eq', 0);
+            $mform->hideIf('testenvironment_name', 'testenvironment_templateaction', 'eq', self::TEMPLATE_ACTION_NONE);
         }
 
         // We have require JS to click no submit button on change of test environment.
@@ -429,7 +448,7 @@ class catquiz_handler {
             }
 
             $formdefaultvalues['choosetemplate'] = 0;
-            $formdefaultvalues['testenvironment_addoredittemplate'] = 0;
+            $formdefaultvalues['testenvironment_templateaction'] = self::TEMPLATE_ACTION_NONE;
         }
     }
 
@@ -484,6 +503,21 @@ class catquiz_handler {
     public static function instance_form_validation(array $data) {
 
         $errors = [];
+
+        // Issue #89: a template action needs what it acts on, and names of templates are unique.
+        $action = self::template_action((object) $data);
+        $chosen = (int) ($data['choosetemplate'] ?? 0);
+        $templatename = trim((string) ($data['testenvironment_name'] ?? ''));
+        if ($action === self::TEMPLATE_ACTION_UPDATE && !testenvironment::is_template($chosen)) {
+            $errors['testenvironment_templateaction'] = get_string('templateaction_notemplate', 'local_catquiz');
+        } else if ($action === self::TEMPLATE_ACTION_COPY && $templatename === '') {
+            $errors['testenvironment_name'] = get_string('required');
+        } else if (
+            ($action === self::TEMPLATE_ACTION_COPY || ($action === self::TEMPLATE_ACTION_UPDATE && $templatename !== ''))
+            && testenvironment::template_name_taken($templatename, $action === self::TEMPLATE_ACTION_UPDATE ? $chosen : 0)
+        ) {
+            $errors['testenvironment_name'] = get_string('templatenametaken', 'local_catquiz', $templatename);
+        }
 
         self::check_if_positive_int($errors, $data, "catquiz_minquestions", 'maxquestionsgroup');
         self::check_if_positive_int($errors, $data, "catquiz_maxquestions", 'maxquestionsgroup');
@@ -720,32 +754,52 @@ class catquiz_handler {
         unset($clone->course);
         unset($clone->section);
 
-        // If there is a new template name.
-        if (!empty($quizdata->testenvironment_addoredittemplate) && !empty($quizdata->testenvironment_name)) {
-            $clone = self::prepare_editor_fields($quizdata->choosetemplate, $clone);
-
-            // If we have a template name, we first check if we come from an existing template.
-            // Create stdClass with all the values.
-            $cattest = (object)[
-                'id' => $quizdata->choosetemplate, // When a template is selected, we might want to update it.
-                'json' => json_encode($clone),
-                'component' => 'mod_adaptivequiz',
-                'catscaleid' => $clone->catquiz_catscales,
-            ];
-
-            $test = new testenvironment($cattest);
-            // In this case, we want to add or update the template.
-            $parentid = $test->save_or_update($quizdata->testenvironment_name);
-
-            cache_helper::purge_by_event('changesintestenvironments');
+        // Issue #89: the template action, with explicit ids. The source of a copy stays as it is.
+        $action = self::template_action($quizdata);
+        $templateid = 0;
+        if ($action !== self::TEMPLATE_ACTION_NONE) {
+            require_capability('local/catquiz:manage_testenvironments', context_system::instance());
+            $settings = clone($clone);
+            $settings->testenvironment_templateaction = self::TEMPLATE_ACTION_NONE;
+            unset($settings->testenvironment_addoredittemplate);
+            $scaleid = (int) ($clone->catquiz_catscales ?? 0);
+            if ($action === self::TEMPLATE_ACTION_UPDATE) {
+                $templateid = testenvironment::update_template(
+                    (int) $quizdata->choosetemplate,
+                    $settings,
+                    $scaleid,
+                    (string) ($quizdata->testenvironment_name ?? '')
+                );
+            } else {
+                $templateid = testenvironment::create_template($settings, $scaleid, (string) $quizdata->testenvironment_name);
+            }
+            // The files of the written feedback: from the activity to the template, where loading it takes them.
+            $cmid = isset($quizdata->coursemodule) ? (int) $quizdata->coursemodule : 0;
+            $cm = $cmid
+                ? get_coursemodule_from_id('adaptivequiz', $cmid)
+                : get_coursemodule_from_instance('adaptivequiz', (int) $quizdata->id);
+            if ($cm) {
+                testenvironment::copy_feedback_files(
+                    context_module::instance($cm->id)->id,
+                    (int) $quizdata->id,
+                    context_system::instance()->id,
+                    $templateid
+                );
+            }
         }
+        // The action is done; stored with the activity it would be done again at its next save.
+        $clone->testenvironment_templateaction = self::TEMPLATE_ACTION_NONE;
+        unset($clone->testenvironment_addoredittemplate);
+        // The template the activity is based on: the one acted on, else the one loaded into the form.
+        $loaded = (int) ($quizdata->choosetemplate ?? 0);
+        $parentid = $templateid ?: (testenvironment::is_template($loaded) ? $loaded : 0);
 
         // Create stdClass with all the values.
         $cattest = (object)[
             'componentid' => $quizdata->id,
             'component' => 'mod_adaptivequiz',
             'json' => json_encode($clone),
-            'parentid' => $parentid ?? 0,
+            'parentid' => $parentid,
             // Not every caller submits the CATquiz form: an instance created by a generator or a
             // restore may carry no scale yet. The test then has none, and is not ready to run.
             'catscaleid' => $quizdata->catquiz_catscales ?? 0,
@@ -1015,6 +1069,7 @@ class catquiz_handler {
             // We only want to unset the values when we change the template.
             $overridevalues = [
                 'testenvironment_addoredittemplate' => '0',
+                'testenvironment_templateaction' => self::TEMPLATE_ACTION_NONE,
             ];
             $igonorevalues = [
                 'choosetemplate',
@@ -1100,19 +1155,23 @@ class catquiz_handler {
         $data = (object)['componentid' => $cmid, 'component' => $component];
 
         timeline::start('testenvironment');
-        $testenvironment = new testenvironment($data);
+        // The span ends also when the step throws (adapter #6).
+        try {
+            $testenvironment = new testenvironment($data);
 
-        $quizsettings = $testenvironment->return_settings();
-        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
-        $cache->set('quizsettings', $quizsettings);
+            $quizsettings = $testenvironment->return_settings();
+            $cache = cache::make('local_catquiz', 'adaptivequizattempt');
+            $cache->set('quizsettings', $quizsettings);
 
-        $catcontext = $testenvironment->get_contextid();
-        $tsinfo = new info();
-        $teststrategy = $tsinfo
-            ->return_active_strategy($quizsettings->catquiz_selectteststrategy)
-            ->set_scale($quizsettings->catquiz_catscales)
-            ->set_catcontextid($catcontext);
-        timeline::stop('testenvironment');
+            $catcontext = $testenvironment->get_contextid();
+            $tsinfo = new info();
+            $teststrategy = $tsinfo
+                ->return_active_strategy($quizsettings->catquiz_selectteststrategy)
+                ->set_scale($quizsettings->catquiz_catscales)
+                ->set_catcontextid($catcontext);
+        } finally {
+            timeline::stop('testenvironment');
+        }
 
         // Issue #60: before the first question, the settings are checked again - a template, an import or
         // settings from before the check are not refused by the form.
@@ -1143,9 +1202,10 @@ class catquiz_handler {
     /**
      * Checks the settings of a test before its first question (issue #60).
      *
-     * Nothing to play - no usable question, or a scale the strategy must cover without any - keeps the attempt
-     * from starting, with the reason. Any other contradiction is logged and the attempt goes on: the runtime
-     * ends it as it ends any attempt that runs out of questions.
+     * Every hard error keeps the attempt from starting, with the reasons: no attempt could meet the settings,
+     * and a template, an import or settings from before the check are not refused by the form. Before, only
+     * "nothing to play" blocked, and any other contradiction let the attempt run until it ran out of
+     * questions. The event settings_inconsistent records the refusal for the CAT manager.
      *
      * @param stdClass $quizsettings
      * @param stdClass $attemptdata
@@ -1157,15 +1217,6 @@ class catquiz_handler {
         if (!$errors) {
             return null;
         }
-        foreach ($errors as $finding) {
-            if (in_array($finding['code'], settings_validator::BLOCKING_AT_START, true)) {
-                $message = get_string('settingsvalidatorstartblocked', 'local_catquiz', $finding['message']);
-                if (isset($attemptdata->id)) {
-                    catquiz::set_final_attempt_status($attemptdata->id, status::ERROR_NO_ITEMS);
-                }
-                return [0, $message, status::ERROR_NO_ITEMS];
-            }
-        }
         \local_catquiz\event\settings_inconsistent::create([
             'context' => \context_system::instance(),
             'other' => [
@@ -1174,7 +1225,11 @@ class catquiz_handler {
                 'codes' => array_column($errors, 'code'),
             ],
         ])->trigger();
-        return null;
+        $message = get_string('settingsvalidatorstartblocked', 'local_catquiz', implode(' ', array_column($errors, 'message')));
+        if (!empty($attemptdata->id)) {
+            catquiz::set_final_attempt_status($attemptdata->id, status::ERROR_NO_ITEMS);
+        }
+        return [0, $message, status::ERROR_NO_ITEMS];
     }
 
     /**
@@ -1194,14 +1249,18 @@ class catquiz_handler {
     public static function prepare_attempt_caches(?int $adaptiveattemptid = null) {
         global $USER;
         timeline::start('prepare_attempt_caches');
-        attempt_cache::upgrade_session_layout();
-        if ($adaptiveattemptid) {
-            attempt_cache::set('starttime', $adaptiveattemptid, time());
-        } else {
-            attempt_cache::cache()->set('starttime', time());
+        // The span ends also when the step throws (adapter #6).
+        try {
+            attempt_cache::upgrade_session_layout();
+            if ($adaptiveattemptid) {
+                attempt_cache::set('starttime', $adaptiveattemptid, time());
+            } else {
+                attempt_cache::cache()->set('starttime', time());
+            }
+            catscale::renew_user_question_stats((int) $USER->id);
+        } finally {
+            timeline::stop('prepare_attempt_caches');
         }
-        catscale::renew_user_question_stats((int) $USER->id);
-        timeline::stop('prepare_attempt_caches');
     }
 
     /**
@@ -1362,10 +1421,13 @@ class catquiz_handler {
         $contextcreator = info::get_contextcreator();
         // If this is not the first question, load the quiz settings that were used for the first question.
         if ($attemptdata->questionsattempted > 0) {
+            // The running test may (re)create its progress: it brings the settings (issue #149). The third
+            // argument is the CAT context of the scale - it used to get the id of the scale itself.
             $quizsettings = progress::load(
                 intval($attemptdata->id),
                 'mod_adaptivequiz',
-                $quizsettings->catquiz_catscales
+                (int) catscale::get_context_id((int) $quizsettings->catquiz_catscales),
+                $quizsettings
             )
                 ->get_quiz_settings();
         }
@@ -1474,6 +1536,33 @@ class catquiz_handler {
             default:
                 return $time;
         }
+    }
+
+    /**
+     * The template action of a submitted form (issue #89).
+     *
+     * A form or a caller from before the issue sends the checkbox "add or edit template" with a name; that is
+     * read as before: the chosen template is updated when the name is its own, else a new one is saved.
+     *
+     * @param stdClass $quizdata
+     * @return string One of the TEMPLATE_ACTION_* constants.
+     */
+    public static function template_action(stdClass $quizdata): string {
+        $action = (string) ($quizdata->testenvironment_templateaction ?? '');
+        if (in_array($action, [self::TEMPLATE_ACTION_UPDATE, self::TEMPLATE_ACTION_COPY], true)) {
+            return $action;
+        }
+        if (!empty($quizdata->testenvironment_addoredittemplate) && trim((string) ($quizdata->testenvironment_name ?? '')) !== '') {
+            global $DB;
+            $chosen = (int) ($quizdata->choosetemplate ?? 0);
+            $oldname = $chosen && testenvironment::is_template($chosen)
+                ? (string) $DB->get_field('local_catquiz_tests', 'name', ['id' => $chosen])
+                : null;
+            return $oldname !== null && trim($oldname) === trim((string) $quizdata->testenvironment_name)
+                ? self::TEMPLATE_ACTION_UPDATE
+                : self::TEMPLATE_ACTION_COPY;
+        }
+        return self::TEMPLATE_ACTION_NONE;
     }
 
     /**

@@ -37,10 +37,8 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\matrixcat
- *
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\matrixcat::class)]
 final class matrixcat_test extends basic_testcase {
     /**
      * Test if callable arrays are built properly.
@@ -60,7 +58,6 @@ final class matrixcat_test extends basic_testcase {
     /**
      * Checks if the multi_sum() function works as expected.
      *
-     * @dataProvider multisumprovider
      *
      * @param mixed $expected
      * @param mixed $a
@@ -71,8 +68,8 @@ final class matrixcat_test extends basic_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('multisumprovider')]
     public function test_multi_sum($expected, $a, $b = null, $c = null, $options = []): void {
         if (array_key_exists('callable_arg', $options)) {
             $x = $options['callable_arg'];

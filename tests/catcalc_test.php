@@ -53,10 +53,8 @@ require_once($CFG->dirroot . '/local/catquiz/tests/lib.php');
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\catcalc
- *
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\catcalc::class)]
 final class catcalc_test extends basic_testcase {
     /**
      * The stabilised person-ability estimator must still reproduce the recorded radCAT
@@ -217,9 +215,8 @@ final class catcalc_test extends basic_testcase {
      * @param model_item_param_list $items
      * @param array $responses
      * @return void
-     *
-     * @dataProvider ability_can_be_calculated_with_all_models_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('ability_can_be_calculated_with_all_models_provider')]
     public function test_ability_can_be_calculated_with_all_models(model_item_param_list $items, array $responses): void {
         $this->doesNotPerformAssertions();
         $ability = catcalc::estimate_person_ability($responses, $items);

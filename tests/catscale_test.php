@@ -36,10 +36,8 @@ use local_catquiz\local\model\model_item_param_list;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\catscale
- *
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\catscale::class)]
 final class catscale_test extends basic_testcase {
     /**
      * Tests if the standarderror is calculated correctly
@@ -48,9 +46,8 @@ final class catscale_test extends basic_testcase {
      * @param float $ability
      * @param float $expected
      * @return void
-     *
-     * @dataProvider standarderror_is_calculated_correctly_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('standarderror_is_calculated_correctly_provider')]
     public function test_standarderror_is_calculated_correctly(
         model_item_param_list $items,
         float $ability,
@@ -162,8 +159,8 @@ final class catscale_test extends basic_testcase {
      * @param int $remaining
      * @param float $expected
      * @return void
-     * @dataProvider potential_returns_expected_value_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('potential_returns_expected_value_provider')]
     public function test_testpotential_returns_expected_value(
         float $ability,
         model_item_param_list $remainingitems,
@@ -255,9 +252,8 @@ final class catscale_test extends basic_testcase {
      * @param model_item_param_list $items
      * @param float $expected
      * @return void
-     *
-     * @dataProvider information_returns_expected_value_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('information_returns_expected_value_provider')]
     public function test_testinformation_returns_expected_value(
         float $ability,
         model_item_param_list $items,

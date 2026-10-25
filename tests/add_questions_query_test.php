@@ -38,8 +38,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\catquiz::return_sql_for_addcatscalequestions
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz::class, 'return_sql_for_addcatscalequestions')]
 final class add_questions_query_test extends advanced_testcase {
     /**
      * Creates a context and a scale.

@@ -39,14 +39,12 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\preselect_task\mayberemovescale
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\mayberemovescale::class)]
 final class mayberemovescale_test extends basic_testcase {
     /**
      * Test that questions of subscales are removed as needed.
      *
-     * @dataProvider provider
      *
      * @param mixed $expected
      * @param mixed $attemptcontext
@@ -55,8 +53,8 @@ final class mayberemovescale_test extends basic_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     *
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('provider')]
     public function test_questions_from_subscales_are_removed_as_needed(
         $expected,
         $attemptcontext,

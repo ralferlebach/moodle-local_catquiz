@@ -185,35 +185,328 @@ final class template_ids_test extends advanced_testcase {
         $this->resetAfterTest();
 
         $context = ['heading' => ['title' => 'Statistics', 'description' => ''], 'shortcodeid' => 'a b'];
-        $this->assert_ids_are_page_safe([
-            $OUTPUT->render_from_template('local_catquiz/catscaleshortcodes/catscalestatistics', $context),
-            $OUTPUT->render_from_template('local_catquiz/catscaleshortcodes/catscalestatistics', $context),
-        ]);
+        foreach ([$context, $context + ['exportbutton' => '<a href="#">CSV</a>'], ['shortcodeid' => 'a']] as $variant) {
+            $this->assert_ids_are_page_safe([
+                $OUTPUT->render_from_template('local_catquiz/catscaleshortcodes/catscalestatistics', $variant),
+                $OUTPUT->render_from_template('local_catquiz/catscaleshortcodes/catscalestatistics', $variant),
+            ]);
+        }
     }
 
     /**
-     * No Bootstrap 4 attributes or classes are left in the templates (issue #30).
+     * The tabs of the statistics shortcode follow the ARIA tabs pattern: a tab list, tabs that name
+     * their panel and say which one is selected, panels named by their tab (issue #30).
      */
-    public function test_no_bootstrap4_markup_in_templates(): void {
-        global $CFG;
+    public function test_statistics_tabs_are_aria_tabs(): void {
+        global $OUTPUT;
+        $this->resetAfterTest();
 
+        $html = $OUTPUT->render_from_template('local_catquiz/catscaleshortcodes/catscalestatistics', [
+            'heading' => ['title' => 'Statistics', 'description' => ''],
+            'exportbutton' => '<a href="#">CSV</a>',
+        ]);
+
+        $this->assertSame(1, substr_count($html, 'role="tablist"'));
+        preg_match_all('/<a [^>]*role="tab"[^>]*>/', $html, $tabs);
+        $this->assertCount(4, $tabs[0]);
+        $selected = 0;
+        foreach ($tabs[0] as $tab) {
+            $this->assertMatchesRegularExpression('/\sid="[^"]+-tab"/', $tab);
+            $this->assertMatchesRegularExpression('/aria-controls="[^"]+"/', $tab);
+            $this->assertMatchesRegularExpression('/aria-selected="(true|false)"/', $tab);
+            $this->assertStringNotContainsString('aria-expanded', $tab);
+            $selected += (int) str_contains($tab, 'aria-selected="true"');
+        }
+        $this->assertSame(1, $selected);
+        preg_match_all('/<div [^>]*role="tabpanel"[^>]*>/', $html, $panels);
+        $this->assertCount(4, $panels[0]);
+        foreach ($panels[0] as $panel) {
+            $this->assertMatchesRegularExpression('/aria-labelledby="[^"]+-tab"/', $panel);
+        }
+    }
+
+    /**
+     * The collapsible of the feedback form is one template: open and close rendered together make
+     * balanced markup, and the two parts the form renders separately are its halves (issue #32).
+     */
+    public function test_feedback_collapsible_is_one_template(): void {
+        global $CFG, $OUTPUT;
+        $this->resetAfterTest();
+
+        $context = ['headerid' => 'h1', 'collapseid' => 'c1', 'accordionid' => 'a1', 'headername' => 'Scale',
+            'dataname' => 'Scale', 'datadepth' => 0];
+        $whole = $OUTPUT->render_from_template(
+            'local_catquiz/feedback/feedbackform_collapsible',
+            ['open' => true, 'close' => true] + $context
+        );
+        $open = $OUTPUT->render_from_template('local_catquiz/feedback/feedbackform_collapsible', ['open' => true] + $context);
+        $close = $OUTPUT->render_from_template('local_catquiz/feedback/feedbackform_collapsible', ['close' => true]);
+
+        $this->assertSame(substr_count($whole, '<div'), substr_count($whole, '</div>'));
+        $this->assertSame(substr_count($open, '<div') - substr_count($open, '</div>'), substr_count($close, '</div>'));
+        $this->assertSame(0, substr_count($close, '<div'));
+        $this->assertSame(preg_replace('/\s+/', '', $whole), preg_replace('/\s+/', '', $open . $close));
+        $this->assert_ids_are_page_safe([$whole]);
+        $this->assertFileDoesNotExist($CFG->dirroot . '/local/catquiz/templates/feedback/feedbackform_collapsible_open.mustache');
+        $this->assertFileDoesNotExist($CFG->dirroot . '/local/catquiz/templates/feedback/feedbackform_collapsible_close.mustache');
+    }
+
+    /**
+     * Bootstrap 4 classes Bootstrap 5 dropped or renamed. Matched against single class names.
+     *
+     * "close" and "media" are ordinary words as well; they count only where a class is meant
+     * (see {@see self::bs4_findings()}).
+     */
+    private const BS4_CLASS = '/^(?:sr-only(?:-focusable)?|text-(?:sm-|md-|lg-|xl-)?(?:left|right)'
+        . '|float-(?:sm-|md-|lg-|xl-)?(?:left|right)|font-weight-[a-z]+|font-italic'
+        . '|badge-(?:primary|secondary|success|danger|warning|info|light|dark|pill)|close|no-gutters|media|media-body'
+        . '|form-group|form-row|form-inline|input-group-(?:append|prepend)'
+        . '|custom-(?:control|select|checkbox|radio|switch|file|range)[\w-]*|btn-block|jumbotron|embed-responsive[\w-]*'
+        . '|dropdown-menu-(?:sm-|md-|lg-|xl-)?(?:left|right)|[mp][lr]-(?:sm-|md-|lg-|xl-)?(?:n?[0-5]|auto)'
+        . '|card-deck|card-columns|pull-(?:left|right)|thead-(?:dark|light)|rounded-(?:left|right)'
+        . '|border-(?:left|right)(?:-0)?)$/';
+
+    /** The Bootstrap 4 data attributes; Bootstrap 5 reads data-bs-* only. */
+    private const BS4_ATTRIBUTE = '/(?<![\w-])data-(?:toggle|dismiss|target|parent|ride|slide|slide-to|spy|offset)(?![\w-])'
+        . '|\bdataset\.(?:toggle|dismiss|target|parent)\b/';
+
+    /** Class names that are words as well: only where a class is meant. */
+    private const AMBIGUOUS = ['close', 'media'];
+
+    /**
+     * The Bootstrap 4 classes and attributes in a piece of markup or code.
+     *
+     * @param string $text A string literal, a template without its comments or a class attribute.
+     * @param bool $classcontext The text is a list of classes or a selector, so "close" is the class.
+     * @return string[]
+     */
+    private static function bs4_findings(string $text, bool $classcontext): array {
         $found = [];
-        // Own class names that merely end in an old one (dashboard-card-deck) are not Bootstrap's.
-        $pattern = '/\bdata-(?:toggle|dismiss|target|parent)=|(?<![\w-])(?:sr-only|text-right|text-left|float-right|float-left|'
-            . 'form-inline|custom-select|card-deck|badge-primary|m[lr]-[0-5]|p[lr]-[0-5]|'
-            . 'pull-right|pull-left|thead-dark|thead-light)\b/';
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($CFG->dirroot . '/local/catquiz/templates'));
-        foreach ($iterator as $file) {
-            if ($file->getExtension() !== 'mustache') {
+        if (preg_match(self::BS4_ATTRIBUTE, $text, $m)) {
+            $found[] = $m[0];
+        }
+        foreach (preg_split('/[^\w-]+/', $text, -1, PREG_SPLIT_NO_EMPTY) as $token) {
+            if (preg_match(self::BS4_CLASS, $token) && ($classcontext || !in_array($token, self::AMBIGUOUS, true))) {
+                $found[] = $token;
+            }
+        }
+        // A selector: .close, .media.
+        if (preg_match('/(?<![\w-])\.(?:close|media|media-body)(?![\w-])/', $text, $m)) {
+            $found[] = $m[0];
+        }
+        // Classes inside markup in a string: class="close".
+        if (!$classcontext && preg_match_all('/class\s*=\s*\\\\?["\']([^"\'\\\\]*)/', $text, $lists)) {
+            foreach ($lists[1] as $list) {
+                $found = array_merge($found, self::bs4_findings($list, true));
+            }
+        }
+        return array_values(array_unique($found));
+    }
+
+    /**
+     * Bootstrap 4 markup in the templates, the PHP classes and the AMD sources of a plugin.
+     *
+     * Templates are read without their comments, PHP and JavaScript by their string literals - a
+     * comment that explains a migration names the old class, a method may be called close().
+     *
+     * @param string $root
+     * @param string[] $dirs
+     * @return string[] "file:line: finding"
+     */
+    public static function bs4_markup_in(string $root, array $dirs = ['templates', 'classes', 'amd/src']): array {
+        $found = [];
+        foreach ($dirs as $dir) {
+            if (is_file($root . '/' . $dir)) {
+                $iterator = [new \SplFileInfo($root . '/' . $dir)];
+            } else if (is_dir($root . '/' . $dir)) {
+                $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root . '/' . $dir));
+            } else {
                 continue;
             }
-            foreach (file($file->getPathname()) as $number => $line) {
-                if (preg_match($pattern, $line)) {
-                    $found[] = basename($file->getPathname()) . ':' . ($number + 1);
+            foreach ($iterator as $file) {
+                if (!$file->isFile() || !in_array($file->getExtension(), ['mustache', 'php', 'js'], true)) {
+                    continue;
+                }
+                $path = $file->getPathname();
+                $name = substr($path, strlen($root) + 1);
+                $source = file_get_contents($path);
+                $pieces = [];
+                switch ($file->getExtension()) {
+                    case 'mustache':
+                        // Comments out, line numbers kept.
+                        $source = preg_replace_callback(
+                            '/\{\{!.*?\}\}/s',
+                            fn($c) => str_repeat("\n", substr_count($c[0], "\n")),
+                            $source
+                        );
+                        foreach (explode("\n", $source) as $number => $line) {
+                            $pieces[] = [$number + 1, $line, false];
+                            preg_match_all('/\bclass\s*=\s*(["\'])(.*?)\1/', $line, $lists);
+                            foreach ($lists[2] as $list) {
+                                $pieces[] = [$number + 1, preg_replace('/\{\{[^}]*\}\}/', ' ', $list), true];
+                            }
+                        }
+                        break;
+                    case 'php':
+                        foreach (token_get_all($source) as $token) {
+                            if (is_array($token) && in_array($token[0], [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE])) {
+                                $pieces[] = [$token[2], $token[1], false];
+                            }
+                        }
+                        // An array key 'class' => '...' is a class list.
+                        preg_match_all("/['\"]class['\"]\s*=>\s*(['\"])(.*?)\\1/", $source, $lists, PREG_OFFSET_CAPTURE);
+                        foreach ($lists[2] as [$list, $offset]) {
+                            $pieces[] = [substr_count(substr($source, 0, $offset), "\n") + 1, $list, true];
+                        }
+                        break;
+                    case 'js':
+                        // Double, single and template literals (the backtick as chr(96)), line and block comments.
+                        $tick = chr(96);
+                        $pattern = '~("(?:\\\\.|[^"\\\\\n])*"|\'(?:\\\\.|[^\'\\\\\n])*\'|' . $tick . '(?:\\\\.|[^'
+                            . $tick . '\\\\])*' . $tick . ')|//[^\n]*|/\*.*?\*/~s';
+                        preg_match_all($pattern, $source, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER);
+                        $code = $source;
+                        foreach ($matches as $match) {
+                            if (!empty($match[1][0])) {
+                                $pieces[] = [substr_count(substr($source, 0, $match[1][1]), "\n") + 1, $match[1][0], false];
+                            }
+                            // Strings and comments out of the code, for dataset.toggle and classList calls.
+                            $length = strlen($match[0][0]);
+                            $code = substr_replace($code, str_repeat(' ', $length), $match[0][1], $length);
+                        }
+                        foreach (explode("\n", $code) as $number => $line) {
+                            if (preg_match(self::BS4_ATTRIBUTE, $line, $m)) {
+                                $found[] = $name . ':' . ($number + 1) . ': ' . $m[0];
+                            }
+                        }
+                        // The arguments of classList calls are class names.
+                        $calls = '/classList\.(?:add|remove|toggle|contains|replace)\(([^)]*)\)/';
+                        preg_match_all($calls, $source, $calls, PREG_OFFSET_CAPTURE);
+                        foreach ($calls[1] as [$arguments, $offset]) {
+                            $pieces[] = [substr_count(substr($source, 0, $offset), "\n") + 1, $arguments, true];
+                        }
+                        break;
+                    default:
+                        continue 2;
+                }
+                foreach ($pieces as [$line, $text, $classcontext]) {
+                    foreach (self::bs4_findings($text, $classcontext) as $finding) {
+                        $found[] = $name . ':' . $line . ': ' . $finding;
+                    }
                 }
             }
         }
-        $this->assertSame([], $found);
+        sort($found);
+        return array_values(array_unique($found));
+    }
+
+    /**
+     * No Bootstrap 4 attributes or classes are left - in the templates, and in what PHP and the AMD
+     * modules put into the page (issue #30).
+     */
+    public function test_no_bootstrap4_markup(): void {
+        global $CFG;
+
+        $root = $CFG->dirroot . '/local/catquiz';
+        // The entry scripts and lib.php print markup as well.
+        $scripts = array_map('basename', glob($root . '/*.php'));
+        $this->assertSame([], self::bs4_markup_in($root, array_merge(['templates', 'classes', 'amd/src'], $scripts)));
+    }
+
+    /**
+     * The guard finds what it is there for, and leaves words and comments alone.
+     */
+    public function test_bootstrap4_guard_has_teeth(): void {
+        $this->assertSame(['data-toggle', 'ml-2'], self::bs4_findings('<a class="nav-link ml-2" data-toggle="tab">', false));
+        $this->assertSame(['close'], self::bs4_findings('<button class="close">', false));
+        $this->assertSame(['.close'], self::bs4_findings('.modal .close', false));
+        $this->assertSame(['close'], self::bs4_findings('btn close', true));
+        $this->assertSame(['data-target'], self::bs4_findings('[data-target="#x"]', false));
+        $this->assertSame(['dataset.target'], self::bs4_findings('el.dataset.target', false));
+        $this->assertSame(
+            ['font-weight-bold', 'badge-pill', 'sr-only'],
+            self::bs4_findings('font-weight-bold badge-pill sr-only', true)
+        );
+        // Words, Bootstrap 5 and own classes are not findings.
+        $this->assertSame([], self::bs4_findings('close', false));
+        $this->assertSame([], self::bs4_findings('Please close the dialog', false));
+        $this->assertSame([], self::bs4_findings('<a class="ms-2 text-end fw-bold" data-bs-toggle="tab">', false));
+        $this->assertSame([], self::bs4_findings('dashboard-card-deck catquiz-ml-2', true));
+    }
+
+    /**
+     * The tabs of the CAT manager with what each of them renders: the ids of one page do not repeat,
+     * and the ids that do not change from one render to the next - the fixed ones of the page - carry
+     * the plugin prefix (issue #30).
+     */
+    public function test_manager_tabs_have_page_safe_ids(): void {
+        global $OUTPUT;
+        $this->resetAfterTest();
+
+        $tree = [['id' => 3, 'name' => 'Scale', 'description' => '', 'parentid' => 0, 'children' => []]];
+        $tabs = [
+            'issummary' => [],
+            'iscatscales' => ['catscaledetailview' => ['itemtree' => $tree]],
+            'iscatscales detail' => ['catscaledetailview' => ['scaledetailview' => [
+                'scaledetailviewheading' => 'Scale', 'is_root' => true, 'sync_as_node_enabled' => true,
+                'sync_as_hub_enabled' => true,
+                'backtoscaleslink' => ['class' => 'btn-primary', 'type' => 'button', 'label' => 'Back'],
+            ]]],
+            'isquestions' => ['questionsdisplay' => [
+                'notable' => false, 'modaltable' => '<p>t</p>', 'table' => '<table><tr><td>x</td></tr></table>',
+                'checkbox' => ['label' => 'Subscales', 'checked' => ''], 'hiddenparams' => [],
+                'testitemdashboard' => [
+                    'backtotablelink' => ['class' => 'btn-primary', 'type' => 'button', 'label' => 'Back'],
+                    'models' => [['title' => 'Rasch', 'body' => '<div>x</div>']],
+                ],
+            ]],
+            'istestsandtemplates' => ['testsandtemplatesdisplay' => ['checkbox' => ['label' => 'Subscales', 'checked' => '']]],
+            'isquizattempts' => [],
+            'iscalculations' => [],
+            'isversioning' => [],
+            'isimporter' => ['testitemsimporter' => '<div>importer</div>'],
+        ];
+        foreach ($tabs as $tab => $context) {
+            $context[strtok($tab, ' ')] = true;
+            $context['summaryheading'] = 'CAT manager';
+            $first = $OUTPUT->render_from_template('local_catquiz/catscalemanager/managecatscaledashboard', $context);
+            $second = $OUTPUT->render_from_template('local_catquiz/catscalemanager/managecatscaledashboard', $context);
+
+            $ids = self::ids($first);
+            $this->assertSame([], array_keys(array_filter(array_count_values($ids), fn($n) => $n > 1)), $tab);
+            foreach (self::targets($first) as $target) {
+                $this->assertContains($target, $ids, "$tab: target #$target is not on the page.");
+            }
+            $fixed = array_intersect($ids, self::ids($second));
+            foreach ($fixed as $id) {
+                $this->assertStringStartsWith('local-catquiz-', $id, "$tab: a fixed id without the plugin prefix.");
+            }
+            $this->assertContains('local-catquiz-manager-tabs', $fixed, $tab);
+        }
+    }
+
+    /**
+     * The parts of the manager that may stand more than once - the scale and context selector, the
+     * collapsibles of a scale - take their ids from the render, not from the template.
+     */
+    public function test_repeatable_manager_parts_have_render_ids(): void {
+        global $OUTPUT;
+        $this->resetAfterTest();
+
+        $parts = [
+            'local_catquiz/catscalemanager/scaleandcontextselector' => ['checkbox' => ['label' => 'Subscales', 'checked' => '']],
+            'local_catquiz/catscalemanager/catscales' => ['catscaledetailview' => ['scaledetailview' => [
+                'is_root' => true, 'sync_as_node_enabled' => true, 'sync_as_hub_enabled' => true,
+            ]]],
+            'local_catquiz/fetch_parameters_result' => ['hasWarnings' => true,
+                'warnings' => [['message' => 'm', 'count' => 1, 'items' => ['a'], 'index' => 1]]],
+        ];
+        foreach ($parts as $template => $context) {
+            $this->assert_ids_are_page_safe([
+                $OUTPUT->render_from_template($template, $context),
+                $OUTPUT->render_from_template($template, $context),
+            ]);
+        }
     }
 
     /**

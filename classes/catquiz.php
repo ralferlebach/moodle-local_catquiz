@@ -227,6 +227,7 @@ class catquiz {
             'usable',
             'itemparamvalidity',
             'lcipcontextid',
+            'questionstatus',
             'attempts',
             'astatlastattempttime',
             'userid',
@@ -361,8 +362,9 @@ class catquiz {
      * @param string|null $orderby If given, order by the given field in ascending order
      * @param int|null $questionid If given, restrict the query to this single question
      * @param bool $leanselect Omit the columns only the manager interface displays
-     * @param bool $onlyavailable Only questions a test may use: a ready version in the question bank and an
-     *                            item that is active in its scale (issue #82). The manager lists all.
+     * @param bool $onlyavailable Only questions a test may use: the newest version of the question is ready in
+     *                            the question bank and the item is active in its scale (issue #82). The manager
+     *                            lists all, with questionstatus and testitemstatus to tell them apart.
      *
      * @return array
      *
@@ -420,7 +422,9 @@ class catquiz {
             require_once(__DIR__ . '/../lib.php');
             $itemfilter = ' AND lci.status <> :inactiveitemstatus ';
             $params['inactiveitemstatus'] = LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE;
-            $versionfilter = ' AND qv.status = :readyversionstatus ';
+            // The state of the question is that of the newest version of its bank entry - what the question bank
+            // shows. The item plays the version it refers to; its parameters belong to that one.
+            $versionfilter = ' AND qvl.status = :readyversionstatus ';
             $params['readyversionstatus'] = \core_question\local\bank\question_version_status::QUESTION_STATUS_READY;
         }
 
@@ -513,7 +517,9 @@ class catquiz {
             -- the clicked header is called. Without the alias an ORDER BY on it would
             -- refer to a column that does not exist.
             lcip.usable AS itemparamvalidity,
-            lcip.contextid AS lcipcontextid{$statcolumns}
+            lcip.contextid AS lcipcontextid,
+            -- Issue #82: ready, draft or hidden - the status of the newest version of the question in the bank.
+            qvl.status AS questionstatus{$statcolumns}
           FROM {local_catquiz_catscales} lccs
           -- Get all corresponding items of those scales, skip if not existent
           -- (INNER JOIN)
@@ -532,8 +538,12 @@ class catquiz {
 
           -- Get all information about the question from the questionbank itself
             JOIN {question} q ON q.id=lci.componentid $questionfilter
-            JOIN {question_versions} qv ON qv.questionid=q.id $versionfilter
+            JOIN {question_versions} qv ON qv.questionid=q.id
             JOIN {question_bank_entries} qbe ON qbe.id=qv.questionbankentryid
+          -- Issue #82: the newest version of the entry, exactly one row - its status is the one the bank shows.
+            JOIN {question_versions} qvl ON qvl.questionbankentryid = qbe.id
+              AND qvl.version = (SELECT MAX(qvm.version) FROM {question_versions} qvm
+                                  WHERE qvm.questionbankentryid = qbe.id) $versionfilter
             JOIN {question_categories} qc ON qc.id=qbe.questioncategoryid
 
             {$statjoins}
@@ -1314,6 +1324,7 @@ class catquiz {
      * @param int $courseid
      * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $userid
+     * @param array|null $userids Only attempts of these people (the group rule), null for everybody.
      *
      * @return mixed
      *
@@ -1323,7 +1334,8 @@ class catquiz {
         int $instanceid = 0,
         int $courseid = 0,
         int $adaptiveattemptid = 0,
-        int $userid = -1
+        int $userid = -1,
+        ?array $userids = null
     ) {
 
         global $DB;
@@ -1333,7 +1345,8 @@ class catquiz {
             $instanceid,
             $courseid,
             $adaptiveattemptid,
-            $userid
+            $userid,
+            $userids
         );
 
         $recordsarray = $DB->get_records_sql($sqlarray[0], $sqlarray[1], 0, $sqlarray[2]);
@@ -1348,6 +1361,7 @@ class catquiz {
      * @param int $courseid
      * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
      * @param int $userid
+     * @param array|null $userids Only attempts of these people, null for everybody; empty selects nothing.
      * @return array [sql, params, the number of rows, 0 for all]
      */
     private static function return_sql_for_attemptid_contextid_json(
@@ -1355,8 +1369,10 @@ class catquiz {
         int $instanceid = 0,
         int $courseid = 0,
         int $adaptiveattemptid = 0,
-        int $userid = -1
+        int $userid = -1,
+        ?array $userids = null
     ): array {
+        global $DB;
 
         // Issue #104: keyed by the row's own id. attemptid is unique, but may be NULL - and rows with
         // NULL fell onto one key.
@@ -1366,7 +1382,7 @@ class catquiz {
         -- fails for attempts whose payload predates that field, and the feedback then
         -- cannot be built at all.
         teststrategy
-        FROM {local_catquiz_attempts} ";
+        FROM {local_catquiz_attempts} lca ";
 
         $wherearray = [];
         $params = [];
@@ -1384,22 +1400,34 @@ class catquiz {
             $wherearray[] = ' userid = :userid ';
             $params['userid'] = $userid;
         }
+        // The group rule (issue #85): in the limit, not after it, so that the number asked for is shown.
+        if ($userids !== null) {
+            if (!$userids) {
+                $wherearray[] = ' 1 = 0 ';
+            } else {
+                [$insql, $inparams] = $DB->get_in_or_equal(array_map('intval', $userids), SQL_PARAMS_NAMED, 'fbuser');
+                $wherearray[] = " userid $insql ";
+                $params += $inparams;
+            }
+        }
 
         if ($adaptiveattemptid !== 0) {
             $wherearray[] = ' attemptid = :attemptid ';
             $params['attemptid'] = $adaptiveattemptid;
         }
 
-        // A test that has started but not been saved yet has no result to show (issue #101).
-        require_once(__DIR__ . '/../lib.php');
-        $wherearray[] = ' COALESCE(status, 0) <> ' . LOCAL_CATQUIZ_ATTEMPT_RUNNING . ' ';
+        // Only completed attempts have a result to show (issues #101, #88). The status did not tell: a
+        // running attempt is saved with status "OK" after every answer and was shown as a finished
+        // result with the feedback of its last answer.
+        $wherearray[] = ' ' . \local_catquiz\local\statistics\attempt_population::completed_sql('lca') . ' ';
 
         if (count($wherearray) > 0) {
             $sql .= " WHERE " . implode(' AND ', $wherearray);
         }
 
-        // The newest first; with the same time the later row first, so that the limit takes a fixed set.
-        $sql .= " ORDER BY timemodified DESC, id DESC";
+        // The newest first by the authoritative end time (issue #88) - timemodified changes whenever the
+        // row is saved again. With the same time the later row first, so that the limit takes a fixed set.
+        $sql .= " ORDER BY endtime DESC, id DESC";
 
         // We treat both INF as 0 as infinite value here, because intval(INF) is
         // converted to 0. The limit goes to the database layer, not as LIMIT into the SQL (issue #104).
@@ -1729,11 +1757,16 @@ class catquiz {
     ): int {
         global $DB;
 
+        // Test and period reach the query (issue #88): they were accepted and dropped, so a shortcode
+        // naming one test and one period counted the answers of every test at every time.
         [$inner, $params] = self::get_sql_for_questions_answered_per_person(
             $contextid,
             $scaleid,
             $courseid,
-            $alloweduserids
+            $alloweduserids,
+            $testid,
+            $starttime,
+            $endtime
         );
 
         return self::get_max_from_subquery($inner, $params, 'total_answered');
@@ -1778,11 +1811,16 @@ class catquiz {
         ?int $starttime = null,
         ?int $endtime = null
     ): array {
+        // Test and period reach the query (issue #88): they were accepted and dropped, so a shortcode
+        // naming one test and one period counted the answers of every test at every time.
         [$inner, $params] = self::get_sql_for_questions_answered_per_person(
             $contextid,
             $scaleid,
             $courseid,
-            $alloweduserids
+            $alloweduserids,
+            $testid,
+            $starttime,
+            $endtime
         );
 
         // Unmatched abilities are dropped here, as the chart did before: a value
@@ -1805,6 +1843,7 @@ class catquiz {
      * @param int|null $testid Restrict to one activity instance, or null for all.
      * @param int|null $starttime Only attempts ending at or after this time.
      * @param int|null $endtime Only attempts ending at or before this time.
+     * @param string $selection attempt_population::ALL, FIRST or LAST (issue #88).
      * @return array<int, array<int, int>>
      */
     public static function get_attempts_per_person_histogram(
@@ -1816,7 +1855,8 @@ class catquiz {
         ?array $alloweduserids = null,
         ?int $testid = null,
         ?int $starttime = null,
-        ?int $endtime = null
+        ?int $endtime = null,
+        string $selection = \local_catquiz\local\statistics\attempt_population::ALL
     ): array {
         [$inner, $params] = self::get_sql_for_attempts_per_person(
             $contextid,
@@ -1825,7 +1865,8 @@ class catquiz {
             $alloweduserids,
             $testid,
             $starttime,
-            $endtime
+            $endtime,
+            $selection
         );
 
         // Unlike the answers chart, this one puts an unmatched ability into range 0
@@ -1843,6 +1884,7 @@ class catquiz {
      * @param int|null $testid Restrict to one activity instance, or null for all.
      * @param int|null $starttime Only attempts ending at or after this time.
      * @param int|null $endtime Only attempts ending at or before this time.
+     * @param string $selection attempt_population::ALL, FIRST or LAST (issue #88).
      * @return int
      */
     public static function get_max_attempts_per_person(
@@ -1852,7 +1894,8 @@ class catquiz {
         ?array $alloweduserids = null,
         ?int $testid = null,
         ?int $starttime = null,
-        ?int $endtime = null
+        ?int $endtime = null,
+        string $selection = \local_catquiz\local\statistics\attempt_population::ALL
     ): int {
         [$inner, $params] = self::get_sql_for_attempts_per_person(
             $contextid,
@@ -1861,7 +1904,8 @@ class catquiz {
             $alloweduserids,
             $testid,
             $starttime,
-            $endtime
+            $endtime,
+            $selection
         );
 
         return self::get_max_from_subquery($inner, $params, 'attempts');
@@ -2363,7 +2407,7 @@ class catquiz {
      *
      * The reference group is context-true and statistically sound.
      * It comprises, within the given CAT context and scale, exactly one value per
-     * person (the latest personparam per user), excludes the compared user, and
+     * person (the newest valid personparam per user, peer_population), excludes the compared user, and
      * is aggregated in SQL rather than loading every row into PHP. The returned
      * counts allow a midrank percentile:
      *     100 * (lowercount + 0.5 * equalcount) / n
@@ -2389,39 +2433,24 @@ class catquiz {
         // (e.g. the "all correct" / "all wrong" case that #10 excludes from
         // feedback) diverge and are stored clamped to the saturation bound
         // ±MODEL_POS_INF; a valid ability is strictly inside that bound.
-        $inf = model_person_param::MODEL_POS_INF;
+        // Issue #88: "valid" is the stored verdict (isvalid), the same population as the histogram next to
+        // the percentile (peer_population). Without it an invalid result inside the bound counted here
+        // and nowhere else.
+        [$peersql, $params] = \local_catquiz\local\statistics\peer_population::sql(
+            $contextid,
+            $catscaleid,
+            $excludeuserid
+        );
         $sql = "
             SELECT
                 COUNT(1) AS n,
                 AVG(peers.ability) AS meanvalue,
                 SUM(CASE WHEN peers.ability < :scorelt THEN 1 ELSE 0 END) AS lowercount,
                 SUM(CASE WHEN peers.ability = :scoreeq THEN 1 ELSE 0 END) AS equalcount
-            FROM (
-                SELECT pp.userid, pp.ability
-                FROM {local_catquiz_personparams} pp
-                WHERE pp.contextid = :contextid
-                  AND pp.catscaleid = :catscaleid
-                  AND pp.userid <> :excludeuserid
-                  AND pp.ability IS NOT NULL
-                  AND ABS(pp.ability) < :inf
-                  AND pp.id = (
-                      SELECT MAX(pp2.id)
-                      FROM {local_catquiz_personparams} pp2
-                      WHERE pp2.contextid = pp.contextid
-                        AND pp2.catscaleid = pp.catscaleid
-                        AND pp2.userid = pp.userid
-                        AND pp2.ability IS NOT NULL
-                        AND ABS(pp2.ability) < :inf2
-                  )
-            ) peers";
-        $params = [
-            'contextid' => $contextid,
-            'catscaleid' => $catscaleid,
-            'excludeuserid' => $excludeuserid,
+            FROM ($peersql) peers";
+        $params += [
             'scorelt' => $score,
             'scoreeq' => $score,
-            'inf' => $inf,
-            'inf2' => $inf,
         ];
         $record = $DB->get_record_sql($sql, $params);
         return (object) [
@@ -2895,7 +2924,8 @@ class catquiz {
     /**
      * Get all quizattempts corresponding to given params.
      *
-     * The returned attempts are sorted by endtime in ascending order.
+     * The returned attempts are completed (end time set, issue #88) and sorted by endtime in ascending
+     * order. The scale is compared with local_catquiz_attempts.scaleid, which holds the root scale.
      *
      * @param ?int $userid
      * @param ?int $catscaleid
@@ -2943,10 +2973,12 @@ class catquiz {
         // carried debug_info along - a field that can hold the full trace of an
         // attempt and that none of the charts ever reads. On a large cohort that is
         // the bulk of the transferred bytes, thrown away right after loading.
-        // A test that has started but not been saved yet is not an attempt to list (issue #101).
-        require_once(__DIR__ . '/../lib.php');
-        $sql = "$with SELECT $fields FROM {local_catquiz_attempts} a $join WHERE COALESCE(a.status, 0) <> "
-            . LOCAL_CATQUIZ_ATTEMPT_RUNNING;
+        // Completed attempts only (issue #88): the end time is stamped once, at finalisation. A running
+        // attempt is saved with status "OK" after every answer, so the status said nothing - an open
+        // attempt was listed as a result. The stop reasons share their numbers with the attempt states,
+        // so the status is no criterion at all (issue #101 kept running attempts out the same way).
+        $sql = "$with SELECT $fields FROM {local_catquiz_attempts} a $join WHERE "
+            . \local_catquiz\local\statistics\attempt_population::completed_sql('a');
 
         if (!is_null($userid)) {
             $sql .= " AND userid = :userid";
@@ -2970,7 +3002,8 @@ class catquiz {
         if (!is_null($endtime)) {
             $sql .= " AND a.endtime <= :endtime";
         }
-        $sql .= " ORDER BY a.endtime";
+        // Ties of the same second in a fixed order: the first and the last attempt are well defined.
+        $sql .= " ORDER BY a.endtime ASC, a.id ASC";
         $params = [
             'userid' => $userid,
             'catscaleid' => $catscaleid,
@@ -3410,6 +3443,9 @@ class catquiz {
      * @param int $scaleid
      * @param ?int $courseid
      * @param array|null $alloweduserids Restriction from the group rules, or null.
+     * @param int|null $testid Only answers in this test (adaptivequiz.id), or null.
+     * @param int|null $starttime Only answers in attempts ending at or after this time.
+     * @param int|null $endtime Only answers in attempts ending at or before this time.
      *
      * @return array
      *
@@ -3418,7 +3454,10 @@ class catquiz {
         int $contextid,
         int $scaleid,
         ?int $courseid = null,
-        ?array $alloweduserids = null
+        ?array $alloweduserids = null,
+        ?int $testid = null,
+        ?int $starttime = null,
+        ?int $endtime = null
     ) {
         global $DB;
 
@@ -3427,7 +3466,33 @@ class catquiz {
         // Get questions answered for the given context.
          [, $from, $where, $params] = self::get_sql_for_stat_base_request([], [$contextid]);
         [$insql, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED, 'incatscales');
-        $params = array_merge($params, $inparams, ['catscaleid' => $scaleid]);
+        $params = array_merge($params, $inparams);
+
+        // Answers count from the attempts of the statistics' population (issue #88): completed, in
+        // course, test and period. Test and period were accepted by the callers and dropped.
+        $population = new \local_catquiz\local\statistics\attempt_population(
+            $scaleid,
+            $courseid ?: null,
+            $testid ?: null,
+            null,
+            $starttime ?: null,
+            $endtime ?: null
+        );
+        [$populationwhere, $populationparams] = $population->where('ca', 'qpa');
+        // The ability: the latest valid result in the population, as in the attempts chart. The current
+        // estimate in {local_catquiz_personparams} keeps one row per estimate and returned a person once
+        // for each of them.
+        [$scopewhere, $scopeparams] = $population->where('a2', 'qpb');
+        [$value, $valueparams] = $population->value_sql('a2', 'qpv');
+        [$valuewhere, $valuewhereparams] = $population->value_sql('a2', 'qpw');
+        $abilitysql = "SELECT $value
+                         FROM {local_catquiz_attempts} a2
+                        WHERE a2.userid = ue.userid
+                          AND $scopewhere
+                          AND ($valuewhere) IS NOT NULL
+                     ORDER BY a2.endtime DESC, a2.id DESC
+                        LIMIT 1";
+        $params = array_merge($params, $populationparams, $scopeparams, $valueparams, $valuewhereparams);
         $where2 = '1=1';
         $where3 = "lci.catscaleid $insql";
         if ($courseid) {
@@ -3457,7 +3522,7 @@ class catquiz {
             }
         }
 
-        $sql = "SELECT DISTINCT ue.userid, COALESCE(answercount, 0) total_answered, lcp.ability
+        $sql = "SELECT DISTINCT ue.userid, COALESCE(answercount, 0) total_answered, ($abilitysql) ability
                 FROM {enrol} e
                 JOIN {user_enrolments} ue ON e.id = ue.enrolid
                 -- No join on {role}: enrol.roleid belongs to the enrolment instance,
@@ -3478,10 +3543,10 @@ class catquiz {
                     -- Make sure we only get responses from the quizzes in the given course.
                     JOIN {adaptivequiz_attempt} aa ON aa.uniqueid = s1.questionusageid
                     JOIN {adaptivequiz} a ON a.id = aa.instance
-                    WHERE $where3
+                    JOIN {local_catquiz_attempts} ca ON ca.attemptid = aa.id
+                    WHERE $where3 AND $populationwhere
                     GROUP BY s1.userid
                 ) s2 ON ue.userid = s2.userid
-                LEFT JOIN {local_catquiz_personparams} lcp ON ue.userid = lcp.userid AND lcp.catscaleid = :catscaleid
                 WHERE $where2 $userfilter";
         return [$sql, $params];
     }
@@ -3489,13 +3554,21 @@ class catquiz {
     /**
      * Return the number of attempts per person
      *
-     * @param int $contextid
+     * The attempts come from the population of the statistics (issue #88, attempt_population): completed,
+     * selected by the root scale, in course, test and period. The value that colours a person's bar is
+     * their latest valid result for the requested scale in that population - the same rule as the ability
+     * profile. The CAT context is no filter: it records the calibration an attempt was scored under, not
+     * whether it took place (see below).
+     *
+     * @param int $contextid Not a filter; kept for the callers.
      * @param int $scaleid
      * @param ?int $courseid
      * @param array|null $alloweduserids Restriction from the group rules, or null.
      * @param int|null $testid Restrict to one activity instance, or null for all.
      * @param int|null $starttime Only attempts ending at or after this time.
      * @param int|null $endtime Only attempts ending at or before this time.
+     * @param string $selection attempt_population::ALL, FIRST or LAST.
+     * @return array [sql, params]
      */
     public static function get_sql_for_attempts_per_person(
         int $contextid,
@@ -3504,7 +3577,8 @@ class catquiz {
         ?array $alloweduserids = null,
         ?int $testid = null,
         ?int $starttime = null,
-        ?int $endtime = null
+        ?int $endtime = null,
+        string $selection = \local_catquiz\local\statistics\attempt_population::ALL
     ): array {
         global $DB;
 
@@ -3527,94 +3601,62 @@ class catquiz {
         // an attempt was scored under, not whether it happened - and after a
         // recalibration the older attempts carry the previous context. Restricting on
         // it made the whole history vanish from the chart.
-        $params = ['attemptscaleid' => $scaleid];
-        $where = 'a.scaleid = :attemptscaleid';
+        //
+        // Scope, completion and the selection of first or last attempts come from the one definition all
+        // charts share (issue #88). A subscale selects its root scale's attempts: local_catquiz_attempts
+        // holds the root scale, and asking for the subscale itself found nothing.
+        $population = new \local_catquiz\local\statistics\attempt_population(
+            $scaleid,
+            $courseid ?: null,
+            $testid ?: null,
+            null,
+            $starttime ?: null,
+            $endtime ?: null,
+            $selection
+        );
+        [$where, $params] = $population->where('a', 'pa', $alloweduserids);
+        // The second copy of the scope, for the people without an attempt: its parameters need names of
+        // their own, Moodle counts named parameters per occurrence.
+        [$notexistswhere, $notexistsparams] = $population->where('ne', 'pne', $alloweduserids);
 
-        if ($courseid) {
-            $where .= ' AND a.courseid = :courseid';
-            $params['courseid'] = $courseid;
-        }
-
-        // The same scope the rest of the statistics uses. Without these the chart
-        // answered a different question than the page around it: a shortcode naming
-        // one test and one date range still counted attempts of other tests and from
-        // outside the range.
-        if ($testid) {
-            $where .= ' AND a.instanceid = :testinstance';
-            $params['testinstance'] = $testid;
-        }
-
-        // Bounded by endtime, like get_attempts(): an attempt belongs to the period
-        // in which it was finished, not the one in which it was begun.
-        if ($starttime) {
-            $where .= ' AND a.endtime >= :starttime';
-            $params['starttime'] = $starttime;
-        }
-
-        if ($endtime) {
-            $where .= ' AND a.endtime <= :endtime';
-            $params['endtime'] = $endtime;
-        }
+        // The ability that colours the bar: the person's latest valid result for the requested scale in
+        // the same selection - the value they were shown, not the current estimate in
+        // {local_catquiz_personparams}, which every recalibration overwrites. It used to take the latest
+        // attempt on the scale without scope or completion, ordered by an end time that sorts the NULL of
+        // a running attempt first on PostgreSQL.
+        [$scopewhere, $scopeparams] = $population->where('a2', 'pab');
+        [$value, $valueparams] = $population->value_sql('a2', 'pav');
+        [$valuewhere, $valuewhereparams] = $population->value_sql('a2', 'paw');
+        $abilitysql = "SELECT $value
+                         FROM {local_catquiz_attempts} a2
+                        WHERE a2.userid = a.userid
+                          AND $scopewhere
+                          AND ($valuewhere) IS NOT NULL
+                     ORDER BY a2.endtime DESC, a2.id DESC
+                        LIMIT 1";
 
         // The bar "no attempt" counts the people who could have taken a test of the scope - actively
         // enrolled, allowed to attempt it, the activity visible and available to them - not everyone
         // enrolled in the course, let alone on the platform (issue #132, eligible_population).
-        $population = \local_catquiz\local\statistics\eligible_population::userids($scaleid, $courseid, $testid);
+        $eligible = \local_catquiz\local\statistics\eligible_population::userids($scaleid, $courseid, $testid);
 
         // Null means no restriction; an empty array means nothing is visible and has
         // to yield no rows rather than all of them.
         if ($alloweduserids !== null) {
-            $population = array_values(array_intersect($population, array_map('intval', $alloweduserids)));
-            if (empty($alloweduserids)) {
-                $where .= ' AND 1 = 0';
-            } else {
-                [$insql, $inparams] = $DB->get_in_or_equal(
-                    $alloweduserids,
-                    SQL_PARAMS_NAMED,
-                    'alloweduser'
-                );
-                $where .= " AND a.userid $insql";
-                $params = array_merge($params, $inparams);
-            }
+            $eligible = array_values(array_intersect($eligible, array_map('intval', $alloweduserids)));
         }
         $enrolparams = [];
-        if ($population) {
-            [$populationsql, $enrolparams] = $DB->get_in_or_equal($population, SQL_PARAMS_NAMED, 'eligible');
+        if ($eligible) {
+            [$populationsql, $enrolparams] = $DB->get_in_or_equal($eligible, SQL_PARAMS_NAMED, 'eligible');
             $populationwhere = "u.id $populationsql";
         } else {
             $populationwhere = '1 = 0';
         }
 
-        // The ability that colours the bar comes from the person's last attempt in
-        // the same selection - the value they were actually shown - rather than from
-        // {local_catquiz_personparams}, which holds the current estimate and is
-        // overwritten by every recalibration.
-        $abilitysql = "SELECT a2.personability_after_attempt
-                         FROM {local_catquiz_attempts} a2
-                        WHERE a2.userid = a.userid
-                          AND a2.scaleid = a.scaleid
-                        ORDER BY a2.endtime DESC, a2.id DESC
-                        LIMIT 1";
-
-        // The clause $where appears twice in the statement below. Moodle counts named parameters
-        // per occurrence, so the second copy needs its own names - otherwise the
-        // query fails with "Incorrect number of query parameters" rather than
-        // silently doing the wrong thing.
-        $notexistswhere = $where;
-        $notexistsparams = [];
-        foreach ($params as $name => $value) {
-            $notexistswhere = preg_replace(
-                '/:' . preg_quote($name, '/') . '\b/',
-                ':ne' . $name,
-                $notexistswhere
-            );
-            $notexistsparams['ne' . $name] = $value;
-        }
-
         // The people of the population without an attempt in the selection form the
         // "no attempt" bucket. They are the one thing the attempts table cannot supply.
         //
-        // The NOT EXISTS repeats $where deliberately. It used to test the scale
+        // The NOT EXISTS repeats the scope deliberately. It used to test the scale
         // alone, while the counting half above also filtered course, test and period.
         // Anyone who had attempted this scale somewhere else therefore fell out of
         // both halves at once: out of the counts because of those filters, and out of
@@ -3625,7 +3667,7 @@ class catquiz {
                         SELECT a.userid, ($abilitysql) ability, COUNT(*) attempts
                           FROM {local_catquiz_attempts} a
                          WHERE $where
-                      GROUP BY a.userid, a.scaleid
+                      GROUP BY a.userid
 
                          UNION ALL
 
@@ -3634,15 +3676,15 @@ class catquiz {
                          WHERE $populationwhere
                            AND NOT EXISTS (
                                SELECT 1
-                                 FROM {local_catquiz_attempts} a
-                                WHERE a.userid = u.id
+                                 FROM {local_catquiz_attempts} ne
+                                WHERE ne.userid = u.id
                                   AND $notexistswhere
                            )
                   ) counted
               GROUP BY userid
               ORDER BY attempts";
 
-        $params = array_merge($params, $enrolparams, $notexistsparams);
+        $params = array_merge($params, $scopeparams, $valueparams, $valuewhereparams, $enrolparams, $notexistsparams);
 
         return [$sql, $params];
     }
@@ -3837,18 +3879,23 @@ class catquiz {
      * @param int $contextid The context ID for the item.
      * @param int $componentid The ID of the component.
      * @param string $componentname The name of the component.
-     * @return stdClass The record object retrieved from the database.
+     * @param int|null $catscaleid The scale of the item.
+     * @return stdClass|false The record object retrieved from the database.
      */
-    public static function get_item(int $contextid, int $componentid, string $componentname): stdClass {
+    public static function get_item(int $contextid, int $componentid, string $componentname, ?int $catscaleid = null) {
         global $DB;
-        return $DB->get_record(
-            'local_catquiz_items',
-            [
-                'contextid' => $contextid,
-                'componentid' => $componentid,
-                'componentname' => $componentname,
-            ]
-        );
+        // Issue #104, H3: a question can be an item of several scales. With the scale, its item; without, the
+        // item with the lowest id - not whichever row the database returns first.
+        $conditions = [
+            'contextid' => $contextid,
+            'componentid' => $componentid,
+            'componentname' => $componentname,
+        ];
+        if ($catscaleid) {
+            $conditions['catscaleid'] = $catscaleid;
+        }
+        $items = $DB->get_records('local_catquiz_items', $conditions, 'id ASC', '*', 0, 1);
+        return $items ? reset($items) : false;
     }
 
     /**
@@ -3947,130 +3994,173 @@ SQL;
         ];
     }
 
-        /**
-         * Create items in a new context.
-         *
-         * For each item parameter in the new context:
-         * 1. Get the corresponding item from either context
-         * 2. If an item is in active use in the old context (used by a test), create a new item (copy).
-         * 3. Otherwise update the existing item with new context and active parameter
-         * 4. Update all parameters to point to the correct item
-         *
-         * @param int $newcontextid The ID of the context to create items in
-         * @param ?int $oldcontextid The ID of the old context, if any
-         * @return void
-         */
+    /**
+     * Test seam (issue #148): called inside the transaction of create_items_in_new_context() before it is
+     * committed; a test throws from here to prove that nothing of the change stays.
+     *
+     * @var callable|null
+     */
+    public static $beforecontextcommit = null;
+
+    /**
+     * Moves the items of a scale tree into a new CAT context, with their parameters (issue #148).
+     *
+     * The identity of an item is its question AND its scale: the same question can be an item of several
+     * scales, each with parameters of its own. Before, items and parameters were mapped by question only - one
+     * item per question survived, all parameters of the question were attached to it, the item of the other
+     * scale lost its parameters, and with equal models the unique index (itemid, contextid, model) failed.
+     *
+     * For every item of the old or the new context (never of the contexts whose ids lie in between):
+     * 1. Its parameters in the new context: those that point to it, else - fetched without an item, e.g. from
+     *    a hub - those of its question, each item of the question with a copy of its own. Per model one: the
+     *    highest status, then the latest change, then the lowest id.
+     * 2. A model it has in the old context but not yet in the new one is copied over.
+     * 3. If the old context is in use by a test, the item is copied into the new context, else moved; its
+     *    parameters point to it, the active one is the parameter of the highest status.
+     * Everything happens in one transaction: an error leaves nothing behind. Calling it again changes nothing.
+     *
+     * @param int $newcontextid The ID of the context to create items in
+     * @param ?int $oldcontextid The ID of the old context, if any
+     * @return void
+     */
     public function create_items_in_new_context(int $newcontextid, ?int $oldcontextid): void {
         global $DB;
 
-        // Copy item parameters that are present in the old context but not in
-        // the new one from old context to the new.
-        // E.g., if we fetched 100 params from the central instance but locally we have 150, copy
-        // the remaining 50 params.
-        if ($oldcontextid) {
-            $remainingparams = $this->get_params_from_old_context($oldcontextid, $newcontextid);
-            $remainingparams = array_map(
-                function ($param) use ($newcontextid) {
-                    $param->contextid = $newcontextid;
-                    $param->id = null;
-                    return $param;
-                },
-                $remainingparams
-            );
-            foreach ($remainingparams as $remainingparam) {
-                itemparam_validity::stamp($remainingparam);
-            }
-            $DB->insert_records('local_catquiz_itemparams', $remainingparams);
-        }
-
-        // Decide if we should just replace existing items with the new contextid or create new items.
-        $createnew = false;
-        if (!$oldcontextid || $this->is_active_context($oldcontextid)) {
-            $createnew = true;
-        }
-
-        // Create a mapping of questionid -> item.
-        // If it exists in both old and new context, the mapping maps to the new context.
-        $qid2item = [];
-        $contextids = $oldcontextid
-            ? array_reverse(range($oldcontextid, $newcontextid))
-            : [$newcontextid];
-        [$insql, $inparams] = $DB->get_in_or_equal($contextids, SQL_PARAMS_NAMED, 'contextid');
-        foreach ($DB->get_records_select('local_catquiz_items', "contextid $insql", $inparams) as $i) {
-            if (!isset($qid2item[$i->componentid]) || $i->contextid > $qid2item[$i->componentid]->contextid) {
-                $qid2item[$i->componentid] = $i;
-            }
-        }
-
-        $activeparam = [];
         $transaction = $DB->start_delegated_transaction();
-        $newparams = $DB->get_records('local_catquiz_itemparams', ['contextid' => $newcontextid]);
-        $qid2params = [];
-        foreach ($newparams as $np) {
-            $qid2params[$np->componentid][] = $np;
-        }
+        try {
+            $oldcontextid = $oldcontextid && $oldcontextid !== $newcontextid ? $oldcontextid : null;
+            $createnew = !$oldcontextid || $this->is_active_context($oldcontextid);
 
-        $tosave = [];
+            [$insql, $inparams] = $DB->get_in_or_equal(
+                array_filter([$newcontextid, $oldcontextid]),
+                SQL_PARAMS_NAMED,
+                'ctx'
+            );
+            $items = $DB->get_records_select('local_catquiz_items', "contextid $insql", $inparams, 'id ASC');
 
-        foreach ($newparams as $ip) {
-            $questionid = $ip->componentid;
-            $item = $qid2item[$questionid];
+            // One item per question and scale - the one in the new context, if there is one.
+            $itembykey = [];
+            $keysbyquestion = [];
+            $keyofitem = [];
+            foreach ($items as $item) {
+                $key = self::item_identity($item);
+                $keyofitem[(int) $item->id] = $key;
+                $keysbyquestion[(int) $item->componentid][$key] = $key;
+                if (!isset($itembykey[$key]) || (int) $item->contextid === $newcontextid) {
+                    $itembykey[$key] = $item;
+                }
+            }
+            $keysof = function (stdClass $param) use ($keyofitem, $keysbyquestion): array {
+                if (isset($keyofitem[(int) $param->itemid])) {
+                    return [$keyofitem[(int) $param->itemid]];
+                }
+                return array_values($keysbyquestion[(int) $param->componentid] ?? []);
+            };
+            $better = fn(stdClass $a, stdClass $b): bool =>
+                [(int) $a->status, (int) ($a->timemodified ?? 0), -(int) $a->id]
+                > [(int) $b->status, (int) ($b->timemodified ?? 0), -(int) $b->id];
 
-            if ($createnew && $item->contextid == $oldcontextid) {
-                unset($item->id);
+            // 1. The parameters of the new context, per item and model.
+            $chosen = [];
+            foreach ($DB->get_records('local_catquiz_itemparams', ['contextid' => $newcontextid], 'id ASC') as $param) {
+                foreach ($keysof($param) as $key) {
+                    $current = $chosen[$key][$param->model] ?? null;
+                    if ($current === null || $better($param, $current)) {
+                        $chosen[$key][$param->model] = $param;
+                    }
+                }
+            }
+            // A parameter can be chosen by one item only; the others get a copy.
+            $taken = [];
+            foreach ($chosen as $key => $models) {
+                foreach ($models as $model => $param) {
+                    if (isset($taken[(int) $param->id])) {
+                        $copy = clone($param);
+                        unset($copy->id);
+                        $chosen[$key][$model] = $copy;
+                    }
+                    $taken[(int) ($param->id ?? 0)] = true;
+                }
             }
 
-            // For each itemparam in the new context, get the one with the
-            // highest `status` value. If there a multiple, pick the first one.
-            if (
-                !array_key_exists($questionid, $activeparam)
-                || $ip->status > $activeparam[$questionid]->status
-            ) {
-                $activeparam[$questionid] = $ip;
-                $item->activeparamid = $ip->id;
-                $tosave[$questionid] = $item;
+            // 2. Models an item has only in the old context.
+            if ($oldcontextid) {
+                foreach ($DB->get_records('local_catquiz_itemparams', ['contextid' => $oldcontextid], 'id ASC') as $param) {
+                    foreach ($keysof($param) as $key) {
+                        $current = $chosen[$key][$param->model] ?? null;
+                        if ($current !== null && !isset($current->oldparamid)) {
+                            // The new context has this model for the item already.
+                            continue;
+                        }
+                        if ($current === null || $better($param, $current)) {
+                            $copy = clone($param);
+                            unset($copy->id);
+                            $copy->contextid = $newcontextid;
+                            $copy->oldparamid = (int) $param->id;
+                            $chosen[$key][$param->model] = $copy;
+                        }
+                    }
+                }
             }
-        }
 
-        foreach ($tosave as $questionid => $item) {
-            if ($createnew && $item->contextid == $oldcontextid) {
-                $item->contextid = $newcontextid;
-                $itemid = $DB->insert_record('local_catquiz_items', $item, true);
-            } else {
-                // This item is already in the database because it was 1)
-                // inserted when itemparams were fetched or 2) it existed
-                // already and will be udpated.
-                $item->contextid = $newcontextid;
+            // 3. The items, and their parameters pointing to them.
+            foreach ($chosen as $key => $models) {
+                $item = clone($itembykey[$key]);
+                if ((int) $item->contextid !== $newcontextid) {
+                    if ($createnew) {
+                        unset($item->id);
+                    }
+                    $item->contextid = $newcontextid;
+                }
+                if (empty($item->id)) {
+                    $item->activeparamid = null;
+                    $item->id = (int) $DB->insert_record('local_catquiz_items', $item);
+                }
+                $active = null;
+                foreach ($models as $param) {
+                    $param->itemid = (int) $item->id;
+                    $param->contextid = $newcontextid;
+                    unset($param->oldparamid);
+                    itemparam_validity::stamp($param);
+                    if (empty($param->id)) {
+                        $param->id = (int) $DB->insert_record('local_catquiz_itemparams', $param);
+                    } else {
+                        $DB->update_record('local_catquiz_itemparams', $param, true);
+                    }
+                    if ($active === null || $better($param, $active)) {
+                        $active = $param;
+                    }
+                }
+                $item->activeparamid = (int) $active->id;
                 $DB->update_record('local_catquiz_items', $item);
-                $itemid = $item->id;
             }
-            foreach ($qid2params[$questionid] as $p) {
-                $p->itemid = $itemid;
-                itemparam_validity::stamp($p);
-                $DB->update_record('local_catquiz_itemparams', $p, true);
+
+            if (self::$beforecontextcommit) {
+                (self::$beforecontextcommit)();
             }
+            $transaction->allow_commit();
+        } catch (\Throwable $e) {
+            $transaction->rollback($e);
         }
-        $DB->commit_delegated_transaction($transaction);
+        \cache_helper::purge_by_event('changesintestitems');
+        \cache_helper::purge_by_event('changesinitemparams');
     }
 
     /**
-     * Get scales by their labels.
-     * @param array $labels Array of scale labels
-     * @return array Array of scale objects
+     * The identity of an item across contexts: its component, its question and its scale (issue #148).
+     *
+     * @param stdClass $item A row of local_catquiz_items.
+     * @return string
      */
-    public function get_scales_by_labels(array $labels) {
-        global $DB;
-
-        if (empty($labels)) {
-            return [];
-        }
-
-        [$insql, $params] = $DB->get_in_or_equal($labels);
-        return $DB->get_records_select('local_catquiz_catscales', "label $insql", $params);
+    public static function item_identity(stdClass $item): string {
+        return implode('|', [(string) ($item->componentname ?? 'question'), (int) $item->componentid, (int) $item->catscaleid]);
     }
 
     /**
      * Returns itemparams that are present in the oldcontext but not the new one
+     *
+     * Compares by question only. create_items_in_new_context() no longer uses it: it decides per item - question
+     * and scale - and model (issue #148).
      *
      * @param int $oldcontextid
      * @param int $newcontextid

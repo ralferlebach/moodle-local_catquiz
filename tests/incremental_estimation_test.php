@@ -28,8 +28,8 @@ use local_catquiz\local\model\model_strategy;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\local\model\model_strategy::run_incremental_estimation
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\local\model\model_strategy::class, 'run_incremental_estimation')]
 final class incremental_estimation_test extends advanced_testcase {
     /**
      * Build a small in-memory response set with fixed person abilities.

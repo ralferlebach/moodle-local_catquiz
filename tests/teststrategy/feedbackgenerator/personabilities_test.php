@@ -41,9 +41,8 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author     David Szkiba, Magdalena Holczik
  * @copyright  2024 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http =>//www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\feedbackgenerator\personabilities
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\feedbackgenerator\personabilities::class)]
 final class personabilities_test extends advanced_testcase {
     /**
      * Test that questions of subscales are removed as needed.
@@ -57,8 +56,8 @@ final class personabilities_test extends advanced_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     * @dataProvider get_studentfeedback_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_studentfeedback_provider')]
     public function test_get_studentfeedback(
         array $feedbackdata,
         array $expected,
@@ -120,7 +119,8 @@ final class personabilities_test extends advanced_testcase {
             ->willReturn((object)['name' => 'Global scale name']);
 
         $output = $personabilities->get_feedback($feedbackdata)['studentfeedback'];
-        // For the moment, this tests only the heading, not the whole rendered data.
+        // Only the heading: the rendered content is the markup of the template, checked where it is made
+        // (issue #30 - the Bootstrap 4 copy of it that stood here was never compared with anything).
         $this->assertEquals($expected['heading'], $output['heading']);
     }
 
@@ -233,103 +233,6 @@ final class personabilities_test extends advanced_testcase {
                 'expected' => [
                     'heading' => "Details of your result",
                     'comment' => '',
-                    'content' => '<h5>Details of your results</h5>
-                    <div class="container">
-                        <div class="row">
-                            <div
-                                    class="font-weight-bold col-4 text-right"
-                                    data-toggle="tooltip"
-                                    data-placement="top"
-                                    title="[[lowestskill =&gt;tooltiptitle]]"
-                    >
-                                SimB04 :
-                            </div>
-                            <div
-                                    class="font-weight-bold col-4 text-left"
-                                    data-toggle="tooltip"
-                                    data-placement="top"
-                                    title="[[lowestskill =&gt;tooltiptitle]]"
-                    >
-                                2.42 (Standarderror: 0.38)
-                            </div>
-                            <div class="modal fade bd-example-modal-xl
-                            catquizfeedbackabilitiesplayedquestions_284" tabindex="-1" role="dialog" aria-hidden="true">
-                            <div class="modal-dialog modal-xl">
-                                <div class="modal-content">
-                                </div>
-                            </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="modal fade bd-example-modal-xl
-                            catquizfeedbackabilitiesplayedquestions_280" tabindex="-1" role="dialog" aria-hidden="true">
-                            <div class="modal-dialog modal-xl">
-                                <div class="modal-content">
-                                </div>
-                            </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div                 class="font-weight-normal col-4 text-right"
-                                >
-                                Simulation :
-                            </div>
-                            <div                 class="font-weight-normal col-4 text-left"
-                                >
-                                2.54 (Standarderror: 0.11)
-                            </div>
-                            <div class="modal fade bd-example-modal-xl
-                            catquizfeedbackabilitiesplayedquestions_271" tabindex="-1" role="dialog" aria-hidden="true">
-                            <div class="modal-dialog modal-xl">
-                                <div class="modal-content">
-                                </div>
-                            </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="modal fade bd-example-modal-xl
-                            catquizfeedbackabilitiesplayedquestions_272" tabindex="-1" role="dialog" aria-hidden="true">
-                            <div class="modal-dialog modal-xl">
-                                <div class="modal-content">
-                                </div>
-                            </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="modal fade bd-example-modal-xl
-                            catquizfeedbackabilitiesplayedquestions_273" tabindex="-1" role="dialog" aria-hidden="true">
-                            <div class="modal-dialog modal-xl">
-                                <div class="modal-content">
-                                </div>
-                            </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="modal fade bd-example-modal-xl
-                            catquizfeedbackabilitiesplayedquestions_282" tabindex="-1" role="dialog" aria-hidden="true">
-                            <div class="modal-dialog modal-xl">
-                                <div class="modal-content">
-                                </div>
-                            </div>
-                            </div>
-                        </div>
-                    </div>
-                        <h5>
-                        Relative ability score in subscales compared to Simulation
-                        </h5>
-                        <div class="chart-area" id="chart-area-65e9d27ff251a65e9d27ff251e1">
-                        <div class="chart-image" role="presentation"
-                        aria-describedby="chart-table-data-65e9d27ff251a65e9d27ff251e1"></div>
-                        <div class="chart-table ">
-                            <p class="chart-table-expand">
-                                <a href="#" aria-controls="chart-table-data-65e9d27ff251a65e9d27ff251e1" role="button">
-                                    Show chart data
-                                </a>
-                            </p>
-                            <div class="chart-table-data" id="chart-table-data-65e9d27ff251a65e9d27ff251e1"
-                            role="complementary" aria-expanded="false"></div>
-                        </div>
-                    </div>',
                 ],
                 'abilityrange' => [
                     'minscalevalue' => -3,

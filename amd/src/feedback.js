@@ -16,79 +16,61 @@
 /**
  * Feedback tabs: log which tab is opened, and load a tab's content when it is opened (issue #85).
  *
+ * Collapsed attempts of the shortcode catquizfeedback load their feedback when they are opened.
+ *
  * @module     local_catquiz/feedback
  * @copyright  Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 import Ajax from 'core/ajax';
-import Fragment from 'core/fragment';
-import Templates from 'core/templates';
-import {addIconToContainer} from 'core/loadingicon';
-import {getString} from 'core/str';
+import {loadRegion as loadLazyRegion} from 'local_catquiz/lazyregion';
 
 const SELECTORS = {
     LAZY: '[data-region="local_catquiz-lazyfeedback"]',
+    COLLAPSE: '[data-bs-toggle="collapse"][data-bs-target]',
 };
+
+/**
+ * The request that fills a region: one tab, or the whole feedback of a collapsed attempt.
+ *
+ * @param {HTMLElement} region
+ * @return {Object}
+ */
+const request = (region) => ({
+    methodname: 'local_catquiz_render_feedback_tab',
+    args: {
+        attemptid: parseInt(region.dataset.attemptid, 10),
+        generatorname: region.dataset.generatorname,
+        audience: region.dataset.audience,
+    },
+});
 
 /**
  * Loads the content of one lazy region; on failure shows a message with a retry button.
  *
- * Failures stay inside the tab: the rest of the page keeps working.
- *
  * @param {HTMLElement} region
+ * @return {Promise<void>}
  */
-const loadRegion = async(region) => {
-    if (region.dataset.state === 'loading' || region.dataset.state === 'loaded') {
+const loadRegion = (region) => loadLazyRegion(region, request, 'feedbacktabloadfailed');
+
+/**
+ * Loads the lazy regions directly inside an element - not those of tabs nested in it.
+ *
+ * @param {HTMLElement|null} element
+ */
+const loadRegionsIn = (element) => {
+    if (!element) {
         return;
     }
-    region.dataset.state = 'loading';
-    region.innerHTML = '';
-    const icon = addIconToContainer(region);
-    try {
-        const response = await Ajax.call([{
-            methodname: 'local_catquiz_render_feedback_tab',
-            args: {
-                attemptid: parseInt(region.dataset.attemptid, 10),
-                generatorname: region.dataset.generatorname,
-                audience: region.dataset.audience,
-            },
-        }])[0];
-        await icon;
-        // Wrapped: replaceNodeContents() hands the HTML to jQuery, which reads a string that does not
-        // start with a tag as a selector - a feedback beginning with text then failed to load.
-        // The JavaScript comes as the page would print it, inside <script> tags. Handed over like that,
-        // it ran twice - jQuery runs the inner tag, the page the outer one - and every chart was drawn
-        // a second time over the table below it. Fragment unwraps it, as core's dynamic tabs do.
-        await Templates.replaceNodeContents(
-            region,
-            '<div>' + response.html + '</div>',
-            Fragment.processCollectedJavascript(response.javascript)
-        );
-        region.dataset.state = 'loaded';
-    } catch (error) {
-        region.dataset.state = 'failed';
-        const [message, retry] = await Promise.all([
-            getString('feedbacktabloadfailed', 'local_catquiz'),
-            getString('retry', 'core'),
-        ]);
-        region.innerHTML = '';
-        const alert = document.createElement('div');
-        alert.className = 'alert alert-warning';
-        alert.setAttribute('role', 'alert');
-        alert.textContent = message + ' ';
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'btn btn-link p-0';
-        button.textContent = retry;
-        button.addEventListener('click', () => {
-            region.dataset.state = '';
-            loadRegion(region);
-        });
-        alert.appendChild(button);
-        region.appendChild(alert);
-        window.console.error(error);
-    }
+    element.querySelectorAll(SELECTORS.LAZY).forEach(region => {
+        const pane = region.closest('.tab-pane');
+        if (pane && pane !== element && element.contains(pane)) {
+            // A tab of the attempt: it loads when the tab is opened.
+            return;
+        }
+        loadRegion(region);
+    });
 };
 
 /**
@@ -101,16 +83,35 @@ const loadPaneOf = (tab) => {
     if (!target || !target.startsWith('#')) {
         return;
     }
-    const pane = document.getElementById(target.substring(1));
-    if (pane) {
-        pane.querySelectorAll(SELECTORS.LAZY).forEach(loadRegion);
-    }
+    loadRegionsIn(document.getElementById(target.substring(1)));
+};
+
+/**
+ * Collapsed attempts: load the feedback when the attempt is opened.
+ */
+const initCollapsedAttempts = () => {
+    document.querySelectorAll(SELECTORS.COLLAPSE).forEach(button => {
+        if (button.dataset.localCatquizLazy) {
+            return;
+        }
+        const target = button.dataset.bsTarget;
+        if (!target || !target.startsWith('#')) {
+            return;
+        }
+        const body = document.getElementById(target.substring(1));
+        if (!body || !body.querySelector(SELECTORS.LAZY)) {
+            return;
+        }
+        button.dataset.localCatquizLazy = '1';
+        button.addEventListener('click', () => loadRegionsIn(body));
+    });
 };
 
 /**
  * Add event listeners to feedback tabs in order to call a webservice.
  */
 export const init = () => {
+    initCollapsedAttempts();
     const tabs = document.querySelectorAll('a.feedbacktab');
     tabs.forEach(tab => {
         if (tab.initialized) {

@@ -38,9 +38,8 @@ use local_catquiz\local\model\model_responses;
  *
  * @package    catmodel_grm
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
- *
- * @covers \catmodel_grm\grm
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\catmodel_grm\grm::class)]
 final class grm_test extends TestCase {
     use \local_catquiz\derivative_fd_trait;
 
@@ -68,7 +67,6 @@ final class grm_test extends TestCase {
     /**
      * Verifies least_mean_squares_1st_derivative_ip() against the numeric gradient.
      *
-     * @dataProvider lms_fd_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -77,6 +75,7 @@ final class grm_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lms_fd_cases_provider')]
     public function test_lms_1st_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
         $fractions = array_keys($ip['difficulties']);
         $x = grm::convert_ip_to_vector($ip);
@@ -89,7 +88,6 @@ final class grm_test extends TestCase {
     /**
      * Verifies least_mean_squares_2nd_derivative_ip() against the numeric Hessian.
      *
-     * @dataProvider lms_fd_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -98,6 +96,7 @@ final class grm_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lms_fd_cases_provider')]
     public function test_lms_2nd_derivative_numeric(array $pp, array $ip, float $frac, float $n): void {
         $fractions = array_keys($ip['difficulties']);
         $x = grm::convert_ip_to_vector($ip);
@@ -134,7 +133,6 @@ final class grm_test extends TestCase {
     /**
      * Verifies lors_1st_derivative_ip() against the numeric gradient of lors_residuals().
      *
-     * @dataProvider lors_fd_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -143,6 +141,7 @@ final class grm_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lors_fd_cases_provider')]
     public function test_lors_1st_derivative_numeric(array $pp, array $ip, array $ors, float $n): void {
         $fractions = array_keys($ip['difficulties']);
         $x = grm::convert_ip_to_vector($ip);
@@ -155,7 +154,6 @@ final class grm_test extends TestCase {
     /**
      * Verifies lors_2nd_derivative_ip() against the numeric Hessian of lors_residuals().
      *
-     * @dataProvider lors_fd_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -164,6 +162,7 @@ final class grm_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('lors_fd_cases_provider')]
     public function test_lors_2nd_derivative_numeric(array $pp, array $ip, array $ors, float $n): void {
         $fractions = array_keys($ip['difficulties']);
         $x = grm::convert_ip_to_vector($ip);
@@ -205,7 +204,6 @@ final class grm_test extends TestCase {
     /**
      * Verifies get_log_jacobian() against the numeric gradient of log_likelihood().
      *
-     * @dataProvider fd_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -213,6 +211,7 @@ final class grm_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('fd_cases_provider')]
     public function test_get_log_jacobian_numeric(array $pp, array $ip, float $frac): void {
         $fractions = array_keys($ip['difficulties']);
         $x = grm::convert_ip_to_vector($ip);
@@ -225,7 +224,6 @@ final class grm_test extends TestCase {
     /**
      * Verifies get_log_hessian() against the numeric Hessian of log_likelihood().
      *
-     * @dataProvider fd_cases_provider
      *
      * @param array $pp person ability parameter
      * @param array $ip item parameters
@@ -233,6 +231,7 @@ final class grm_test extends TestCase {
      *
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('fd_cases_provider')]
     public function test_get_log_hessian_numeric(array $pp, array $ip, float $frac): void {
         $fractions = array_keys($ip['difficulties']);
         $x = grm::convert_ip_to_vector($ip);
@@ -268,13 +267,13 @@ final class grm_test extends TestCase {
 
     /**
      * Test likelihood function.
-     * @dataProvider likelihood_provider
      * @param array $pp
      * @param float $frac
      * @param array $ip
      * @param float $expected
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('likelihood_provider')]
     public function test_likelihood(array $pp, float $frac, array $ip, float $expected): void {
         $result = grm::likelihood($pp, $ip, $frac);
 
@@ -287,13 +286,13 @@ final class grm_test extends TestCase {
 
     /**
      * Test log_likelihood_p function.
-     * @dataProvider log_likelihood_p_provider
      * @param array $pp
      * @param float $frac
      * @param array $ip
      * @param float $expected
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('log_likelihood_p_provider')]
     public function test_log_likelihood_p(array $pp, float $frac, array $ip, float $expected): void {
         $result = grm::log_likelihood_p($pp, $ip, $frac);
 
@@ -306,13 +305,13 @@ final class grm_test extends TestCase {
 
     /**
      * Test log_likelihood_p_p function.
-     * @dataProvider log_likelihood_p_p_provider
      * @param array $pp
      * @param float $frac
      * @param array $ip
      * @param float $expected
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('log_likelihood_p_p_provider')]
     public function test_log_likelihood_p_p(array $pp, float $frac, array $ip, float $expected): void {
         $result = grm::log_likelihood_p_p($pp, $ip, $frac);
 
@@ -473,7 +472,6 @@ final class grm_test extends TestCase {
      * log_likelihood_p_p()). This test fails if the baseline category is
      * double-counted, as the historical bug inflated I by a factor 1 + P_baseline.
      *
-     * @dataProvider fisher_info_numeric_provider
      *
      * @param array $pp
      * @param array $ip
@@ -483,6 +481,7 @@ final class grm_test extends TestCase {
      * @throws ExpectationFailedException
      * @throws InvalidArgumentException
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('fisher_info_numeric_provider')]
     public function test_fisher_info_numeric(array $pp, array $ip, array $fractions): void {
         $model = $this->getmodel();
 

@@ -42,8 +42,8 @@ use xmldb_table;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     ::local_catquiz_upgrade_drop_duplicate_indexes
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('local_catquiz_upgrade_drop_duplicate_indexes')]
 final class schema_index_cleanup_test extends advanced_testcase {
     /** @var string Scratch table name without prefix. */
     private const TABLE = 'local_catquiz_idxprobe';

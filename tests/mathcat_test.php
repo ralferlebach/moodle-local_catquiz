@@ -34,10 +34,8 @@ use basic_testcase;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\mathcat
- *
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\mathcat::class)]
 final class mathcat_test extends basic_testcase {
     /**
      * Test if the newton raphson multi stable function returns expected outputs.
@@ -126,13 +124,13 @@ final class mathcat_test extends basic_testcase {
     /**
      * Test if array_to_vector and vector_to_array work as expected
      *
-     * @dataProvider conversion_of_array_to_vector_provider
      *
      * @param array $given
      * @param array $expected
      * @param array $structure
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('conversion_of_array_to_vector_provider')]
     public function test_conversion_of_array_to_vector($given, $expected, $structure): void {
         $array = $given;
         $arraystructure = mathcat::array_to_vector($array);
@@ -240,12 +238,12 @@ final class mathcat_test extends basic_testcase {
      * polytomous models (GRM/GGRM/PCM/GPCM). This guards the assumption that
      * BFGS and gradient ascent can flatten and restore those structures.
      *
-     * @dataProvider polytomous_itemparam_provider
      *
      * @param array $ip Nested item parameters.
      * @param int $dim Expected number of scalar components.
      * @return void
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('polytomous_itemparam_provider')]
     public function test_codec_roundtrips_polytomous_itemparams(array $ip, int $dim): void {
         $vector = $ip;
         $structure = mathcat::array_to_vector($vector);

@@ -49,7 +49,14 @@
 
       <div id="local-catquiz-attempts-{{uniqid}}-{{attemptid}}" class="collapse {{#active}}show{{/active}}" aria-labelledby="local-catquiz-attempts-{{uniqid}}-{{attemptid}}-heading" data-bs-parent="#local-catquiz-attempts-{{uniqid}}">
         <div class="card-body">
+            {{#lazy}}
+            {{! Issue #85: the header only; the feedback is loaded when the attempt is opened. }}
+            <div data-region="local_catquiz-lazyfeedback" data-attemptid="{{attemptid}}"
+                 data-generatorname="attempt" data-audience="student"></div>
+            {{/lazy}}
+            {{^lazy}}
             {{> local_catquiz/attemptfeedback}}
+            {{/lazy}}
         </div>
       </div>
     </div>

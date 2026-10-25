@@ -38,8 +38,8 @@ require_once($CFG->dirroot . '/local/catquiz/db/upgradelib.php');
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers ::local_catquiz_merge_attemptscale_into_personparams
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('local_catquiz_merge_attemptscale_into_personparams')]
 final class personparams_merge_upgrade_test extends advanced_testcase {
     /**
      * Builds local_catquiz_attemptscale as it was, with the given name for the attempt reference.
@@ -90,9 +90,9 @@ final class personparams_merge_upgrade_test extends advanced_testcase {
     /**
      * Existing rows of both tables end up in the person table, and the scale table is gone.
      *
-     * @dataProvider reference_names
      * @param string $reference Name of the attempt reference in the old scale table.
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('reference_names')]
     public function test_existing_rows_are_merged(string $reference): void {
         global $DB;
 

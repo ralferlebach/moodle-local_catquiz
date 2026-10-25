@@ -35,22 +35,20 @@ use UnexpectedValueException;
 /** model_person_ability_estimator_catcalc_test
  *
  * @package local_catquiz
- *
- * @covers \local_catquiz\local\model\model_person_ability_estimator_catcalc
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_person_ability_estimator_catcalc::class)]
 final class model_person_ability_estimator_catcalc_test extends basic_testcase {
     /**
      * Function test_person_ability_estimation_returns_expected_values.
      *
-     * @dataProvider person_ability_estimation_returns_expected_values_provider
      *
      * @param mixed $expected
      * @param mixed $modelname
      * @param mixed $responses
      * @param mixed $itemparams
      * @return void
-     * @group large
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('person_ability_estimation_returns_expected_values_provider')]
     public function test_person_ability_estimation_returns_expected_values(
         $expected,
         $modelname,

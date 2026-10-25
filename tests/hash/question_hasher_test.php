@@ -31,8 +31,8 @@ use moodle_exception;
  * Tests for question_hasher.
  *
  * @package    local_catquiz
- * @covers     \local_catquiz\hash\question_hasher
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\hash\question_hasher::class)]
 final class question_hasher_test extends advanced_testcase {
     /** @var object question created for tests */
     private object $question;

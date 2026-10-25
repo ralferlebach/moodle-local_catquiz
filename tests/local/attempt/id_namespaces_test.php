@@ -69,11 +69,11 @@ final class id_namespaces_test extends advanced_testcase {
     /**
      * The component's attempt resolves to its own CAT attempt, never to a CAT attempt with that id.
      *
-     * @dataProvider cases
      * @param int $adaptiveattemptid
      * @param int $catattemptid
      * @param int|null $decoy Id of a foreign CAT attempt, belonging to another attempt of the component.
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('cases')]
     public function test_the_component_attempt_resolves_to_its_own(int $adaptiveattemptid, int $catattemptid, ?int $decoy): void {
         $this->resetAfterTest();
         if ($decoy !== null && $decoy !== $catattemptid) {
@@ -92,11 +92,11 @@ final class id_namespaces_test extends advanced_testcase {
     /**
      * Results are read by CAT attempt id, never by the number of the component's attempt.
      *
-     * @dataProvider cases
      * @param int $adaptiveattemptid
      * @param int $catattemptid
      * @param int|null $decoy
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('cases')]
     public function test_results_belong_to_the_cat_attempt(int $adaptiveattemptid, int $catattemptid, ?int $decoy): void {
         global $DB;
 

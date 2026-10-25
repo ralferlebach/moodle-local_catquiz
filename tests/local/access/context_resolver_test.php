@@ -40,9 +40,9 @@ use context_system;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\access\context_resolver
- * @covers     \local_catquiz\local\access\feedback_access
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\access\context_resolver::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\access\feedback_access::class)]
 final class context_resolver_test extends advanced_testcase {
     /**
      * Creates a course with an adaptive quiz and a CATquiz attempt row.

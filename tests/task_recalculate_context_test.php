@@ -41,9 +41,8 @@ use local_catquiz\task\recalculate_cat_model_params;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\task\recalculate_cat_model_params
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\task\recalculate_cat_model_params::class)]
 final class task_recalculate_context_test extends advanced_testcase {
     /**
      * The scheduled task ships disabled and with a quarterly cadence.

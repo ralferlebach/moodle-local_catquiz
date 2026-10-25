@@ -42,8 +42,8 @@ use local_catquiz\teststrategy\feedbacksettings;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\teststrategy\feedback_helper::is_feedback_eligible
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'is_feedback_eligible')]
 final class feedback_eligibility_test extends advanced_testcase {
     /**
      * Builds a result from scales described as [ability, toreport, extra flags].
@@ -211,7 +211,9 @@ final class feedback_eligibility_test extends advanced_testcase {
 
         // Static calls to a bare class name: Foo::bar(). Names that are fully
         // qualified (a leading backslash) resolve on their own.
-        preg_match_all('/(?<![\\\w$>])([a-z_][a-z0-9_]*)::/i', $source, $calls);
+        // The class [\\\w$>] excludes a backslash and word characters before the name: without the word
+        // characters, \ns\context_resolver:: matched as "ontext_resolver".
+        preg_match_all('/(?<![\\\\\w$>])([a-z_][a-z0-9_]*)::/i', $source, $calls);
 
         $ownclass = 'feedback_helper';
         $builtin = ['self', 'static', 'parent'];

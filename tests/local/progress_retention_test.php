@@ -37,9 +37,9 @@ use local_catquiz\task\cleanup_attempt_progress;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\progress_retention
- * @covers     \local_catquiz\task\cleanup_attempt_progress
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\progress_retention::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\task\cleanup_attempt_progress::class)]
 final class progress_retention_test extends advanced_testcase {
     /**
      * The default is the data-sparing level, not the previous behaviour.

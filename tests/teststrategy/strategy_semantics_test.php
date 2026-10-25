@@ -174,9 +174,11 @@ final class strategy_semantics_test extends advanced_testcase {
      *
      * @param int $limit Safety stop; no test here comes near it.
      * @param callable|null $correct fn(int $i): bool - whether the i-th answer is right (default alternating).
+     * @param callable|null $afterfirst fn(int $questionid) once the first question is answered - a change during the
+     *     attempt.
      * @return array [question ids, status of the end, scale ids of the questions]
      */
-    private function play(int $limit = 80, ?callable $correct = null): array {
+    private function play(int $limit = 80, ?callable $correct = null, ?callable $afterfirst = null): array {
         global $DB, $USER;
         putenv('CATQUIZ_TESTING_SKIP_FEEDBACK=true');
         catquiz_handler::prepare_attempt_caches();
@@ -211,6 +213,9 @@ final class strategy_semantics_test extends advanced_testcase {
             $DB->update_record('adaptivequiz_attempt', $record);
             if ($i === 0) {
                 $attempt->set_quba_id($this->quba->get_id());
+                if ($afterfirst) {
+                    $afterfirst($ids[0]);
+                }
             }
         }
         return [$ids, $status, $scales];
@@ -340,20 +345,38 @@ final class strategy_semantics_test extends advanced_testcase {
     }
 
     /**
+     * Deactivates the CAT items during an attempt, as a manager can; the change invalidates the pool.
+     *
+     * @param string $where Which items, SQL on local_catquiz_items.
+     * @param array $params
+     */
+    private function deactivate_items(string $where, array $params): void {
+        global $DB;
+        $DB->set_field_select('local_catquiz_items', 'status', LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE, $where, $params);
+        \cache_helper::purge_by_event('changesintestitems');
+    }
+
+    /**
      * A pool that runs out before the minimum ends with its own status, and that status is stored with the
      * CAT attempt (issue #64): not a general error, not "undefined".
+     *
+     * Settings no attempt can meet do not start any more (issue #60): the pool runs out during the attempt -
+     * every other item is deactivated after the first question.
      */
     public function test_running_out_before_the_minimum_is_stored(): void {
         global $DB;
         $leaf = (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => 'SimA01']);
         $domain = (int) $DB->get_field('local_catquiz_catscales', 'parentid', ['id' => $leaf]);
         $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, [
-            'minquestions' => 40, 'maxquestions' => 60, 'semin' => 0.0001, 'scales' => [$this->rootid, $domain, $leaf],
+            'minquestions' => 3, 'maxquestions' => 60, 'semin' => 0.0001, 'scales' => [$this->rootid, $domain, $leaf],
         ]);
 
-        [$ids, $status] = $this->play();
+        [$ids, $status] = $this->play(80, null, fn(int $first) => $this->deactivate_items(
+            "componentname = 'question' AND componentid <> ?",
+            [$first]
+        ));
 
-        $this->assertLessThan(40, count($ids));
+        $this->assertCount(1, $ids);
         $this->assertSame(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM, $status);
         $hostattempt = (int) $DB->get_field('adaptivequiz_attempt', 'id', ['instance' => $this->adaptivequiz->id]);
         $stored = (int) $DB->get_field('local_catquiz_attempts', 'status', ['attemptid' => $hostattempt]);
@@ -365,16 +388,24 @@ final class strategy_semantics_test extends advanced_testcase {
      * selection, with every scale closed by its maximum of one question - ends like an empty pool: before
      * the minimum with its own status, stored with the CAT attempt (issue #64). It used to end as a
      * general error, stored as "undefined".
+     *
+     * Settings no attempt can meet do not start any more (issue #60). After the first question only the
+     * items of its scale stay active: the pool is not empty, but that scale is closed by its maximum, and the
+     * filter empties it.
      */
     public function test_a_pool_emptied_late_ends_before_the_minimum(): void {
         global $DB;
         $this->settings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, [
-            'minquestions' => 40, 'maxquestions' => 60, 'semin' => 0.0001, 'maxperscale' => 1,
+            'minquestions' => 2, 'maxquestions' => 60, 'semin' => 0.0001, 'maxperscale' => 1,
         ]);
 
-        [$ids, $status] = $this->play();
+        [$ids, $status] = $this->play(80, null, function (int $first) use ($DB) {
+            $scaleid = (int) $DB->get_field('local_catquiz_items', 'catscaleid', ['componentid' => $first]);
+            $this->deactivate_items("componentname = 'question' AND catscaleid <> ?", [$scaleid]);
+            $this->assertGreaterThan(1, $DB->count_records('local_catquiz_items', ['catscaleid' => $scaleid]));
+        });
 
-        $this->assertLessThan(40, count($ids));
+        $this->assertCount(1, $ids);
         $this->assertSame(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM, $status);
         $hostattempt = (int) $DB->get_field('adaptivequiz_attempt', 'id', ['instance' => $this->adaptivequiz->id]);
         $stored = (int) $DB->get_field('local_catquiz_attempts', 'status', ['attemptid' => $hostattempt]);
@@ -480,8 +511,11 @@ final class strategy_semantics_test extends advanced_testcase {
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('all_strategies')]
     public function test_every_strategy_keeps_minimum_maximum_and_uniqueness(int $strategy): void {
+        // ALLSUBS covers every selected scale: a minimum of 1 per scale in all of them does not fit into 15
+        // questions, and since issue #60 (example 2, coveragebudget) such settings do not start at all.
+        $minperscale = $strategy === LOCAL_CATQUIZ_STRATEGY_ALLSUBS ? 0 : 1;
         $this->settings($strategy, [
-            'minquestions' => 8, 'maxquestions' => 15, 'semin' => 0.0001, 'minperscale' => 1, 'maxperscale' => 4,
+            'minquestions' => 8, 'maxquestions' => 15, 'semin' => 0.0001, 'minperscale' => $minperscale, 'maxperscale' => 4,
         ]);
 
         [$ids, $status] = $this->play();
@@ -494,5 +528,53 @@ final class strategy_semantics_test extends advanced_testcase {
         if (count($ids) === 15) {
             $this->assertSame(status::ERROR_REACHED_MAXIMUM_QUESTIONS, $status);
         }
+    }
+
+    /**
+     * The order in which the shared pool cache was filled does not change an attempt (issue #147): the same
+     * answers give the same questions, the same end and the same abilities, whether the cache was filled first
+     * without an order or by difficulty.
+     */
+    public function test_the_pool_cache_order_does_not_change_the_attempt(): void {
+        global $DB, $USER;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, ['minquestions' => 8, 'maxquestions' => 12, 'semin' => 0.0001]);
+        $contextid = (int) catscale::get_context_id($this->rootid);
+        // Ties an order could decide: difficulties in pairs +d, -d, the item with +d the one with the lower id, all
+        // with the same discrimination. At an ability of 0 both of a pair give the same information; the pool by id
+        // lists +d first, the pool by difficulty -d. Today the scores break ties by question id
+        // (strategy*score), and no step reads the order of the pool: this test is green also with the cache before
+        // the fix - the effect of #147 on an attempt is nil (doc/runtime-pool-cache.md). It guards that a step which
+        // lets the order decide still gets the order it asks for.
+        $itemids = array_keys($DB->get_records('local_catquiz_items', ['contextid' => $contextid], 'id', 'id'));
+        foreach (array_values($itemids) as $k => $itemid) {
+            $difficulty = ($k % 2 === 0 ? 1 : -1) * (0.3 + intdiv($k, 2) * 0.4);
+            $DB->execute(
+                'UPDATE {local_catquiz_itemparams} SET difficulty = :d, discrimination = 1, guessing = 0 WHERE itemid = :i',
+                ['d' => $difficulty, 'i' => $itemid]
+            );
+        }
+        \cache_helper::purge_all();
+        $scales = [$this->rootid, ...catscale::get_subscale_ids($this->rootid)];
+        $cm = get_coursemodule_from_instance('adaptivequiz', $this->adaptivequiz->id);
+        $runs = [];
+        foreach ([null, 'difficulty'] as $order) {
+            \cache::make('local_catquiz', 'runtimepool')->purge();
+            $this->setUser($this->getDataGenerator()->create_user());
+            // Whoever comes first fills the shared cache - here in this order.
+            (new catscale($this->rootid))->get_testitems($contextid, true, $order, $scales);
+            $this->quba = question_engine::make_questions_usage_by_activity('mod_adaptivequiz', context_module::instance($cm->id));
+            $this->quba->set_preferred_behaviour('deferredfeedback');
+            [$ids, $status] = $this->play();
+            // The latest ability of each scale; personparams keep their history, one row per update.
+            $abilities = [];
+            $rows = $DB->get_records('local_catquiz_personparams', ['userid' => $USER->id], 'id', 'id, catscaleid, ability');
+            foreach ($rows as $row) {
+                $abilities[(int) $row->catscaleid] = round((float) $row->ability, 6);
+            }
+            ksort($abilities);
+            $runs[$order ?? 'none'] = [$ids, $status, $abilities];
+        }
+        $this->assertNotEmpty($runs['none'][0]);
+        $this->assertSame($runs['none'], $runs['difficulty']);
     }
 }

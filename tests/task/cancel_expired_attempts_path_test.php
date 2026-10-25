@@ -28,7 +28,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\task\cancel_expired_attempts
  */
 
 namespace local_catquiz\task;
@@ -40,8 +39,8 @@ use ReflectionMethod;
  * Guards the cron completion path.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\task\cancel_expired_attempts
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\task\cancel_expired_attempts::class)]
 final class cancel_expired_attempts_path_test extends advanced_testcase {
     /**
      * The task must not carry a second completion mechanism of its own.

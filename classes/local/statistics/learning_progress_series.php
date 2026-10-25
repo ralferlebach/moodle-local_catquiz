@@ -134,6 +134,9 @@ final class learning_progress_series {
                 'valid' => $valid,
             ];
         }
+        // In the order of the attempts - end time, then id - whatever order the records came in: the database
+        // gave get_records_list() no order, and the series came out in a different order on PostgreSQL.
+        usort($items, fn($a, $b) => [$a['time'], $a['order']] <=> [$b['time'], $b['order']]);
         return $items;
     }
 

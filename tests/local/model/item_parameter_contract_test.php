@@ -25,8 +25,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\local\model\model_strategy::validate_item_parameters
- * @covers \local_catquiz\teststrategy\context\loader\pilotquestions_loader::ispilot
  */
 
 namespace local_catquiz\local\model;
@@ -39,9 +37,9 @@ use stdClass;
  * Guards the per-model item parameter contract.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\local\model\model_strategy::validate_item_parameters
- * @covers \local_catquiz\teststrategy\context\loader\pilotquestions_loader::ispilot
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\local\model\model_strategy::class, 'validate_item_parameters')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\context\loader\pilotquestions_loader::class, 'ispilot')]
 final class item_parameter_contract_test extends advanced_testcase {
     /**
      * Builds a raw item parameter record.

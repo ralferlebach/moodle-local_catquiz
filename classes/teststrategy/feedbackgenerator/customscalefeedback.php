@@ -25,6 +25,7 @@
 namespace local_catquiz\teststrategy\feedbackgenerator;
 
 use context_module;
+use core_collator;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbackgenerator;
 use local_catquiz\teststrategy\feedbacksettings;
@@ -379,20 +380,27 @@ class customscalefeedback extends feedbackgenerator {
             $byid[$id === null ? $key : (int) $id] = $scale;
         }
 
-        $scalename = function ($scaleid) use ($byid): string {
+        // Issue #77: by name as people read it - locale aware, umlauts with their letter, case does not
+        // decide, "Scale 2" before "Scale 10". A scale without a name, or one we know nothing about, comes
+        // last, in the order of its id.
+        $named = [];
+        $unnamed = [];
+        foreach (array_keys($scalefeedback) as $scaleid) {
             $scale = $byid[$scaleid] ?? null;
-
-            if ($scale === null) {
-                // Sorts to the end: a scale we know nothing about has no name to sort by.
-                return "\xff";
+            $name = $scale === null ? null : (is_object($scale) ? ($scale->name ?? null) : ($scale['name'] ?? null));
+            if ($name === null || trim((string) $name) === '') {
+                $unnamed[] = $scaleid;
+            } else {
+                $named[$scaleid] = (string) $name;
             }
-
-            $scale = (object) $scale;
-
-            return (string) ($scale->name ?? "\xff");
-        };
-
-        uksort($scalefeedback, fn($a, $b) => $scalename($a) <=> $scalename($b));
+        }
+        core_collator::asort($named, core_collator::SORT_NATURAL);
+        sort($unnamed);
+        $ordered = [];
+        foreach ([...array_keys($named), ...$unnamed] as $scaleid) {
+            $ordered[$scaleid] = $scalefeedback[$scaleid];
+        }
+        $scalefeedback = $ordered;
 
         if ($mainscale === null) {
             return $scalefeedback;

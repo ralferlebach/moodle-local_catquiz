@@ -37,9 +37,8 @@ use SebastianBergmann\RecursionContext\InvalidArgumentException;
  * @author     Magdalena Holczik
  * @copyright  2024 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\feedback_helper
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\feedback_helper::class)]
 final class feedback_helper_test extends advanced_testcase {
     /**
      * Test if correct string (label for chart) is returned correctly according to defined timerange and timestamp.
@@ -51,8 +50,8 @@ final class feedback_helper_test extends advanced_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     * @dataProvider return_datestring_label_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('return_datestring_label_provider')]
     public function test_return_datestring_label(
         int $timerange,
         int $timestamp,
@@ -112,8 +111,8 @@ final class feedback_helper_test extends advanced_testcase {
      * @return void
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
-     * @dataProvider get_histogram_bin_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('get_histogram_bin_provider')]
     public function test_get_histogram_bin(
         float $value,
         int $classwidth,

@@ -77,11 +77,12 @@ export const init = () => {
             switchTo(root, button.dataset.scaleid);
             return;
         }
-        const toggle = e.target.closest('[data-bs-toggle="collapse"], [data-toggle="collapse"]');
+        // Issue #30: Bootstrap 5 only - the collapsibles carry data-bs-* on Moodle 5.
+        const toggle = e.target.closest('[data-bs-toggle="collapse"]');
         if (!toggle) {
             return;
         }
-        const target = toggle.dataset.bsTarget || toggle.dataset.target || '';
+        const target = toggle.dataset.bsTarget || '';
         const match = target.match(/^#catquiz_feedback_collapse_(\d+)$/);
         const collapse = match ? document.getElementById(target.substring(1)) : null;
         if (collapse && !collapse.classList.contains('show')) {

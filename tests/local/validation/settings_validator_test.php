@@ -276,30 +276,95 @@ final class settings_validator_test extends advanced_testcase {
     }
 
     /**
-     * Before the first question: nothing to play keeps the attempt from starting, with the reason; another
-     * contradiction is logged and the attempt goes on.
+     * Pilots - calibrated, but not yet often enough answered - never add to the productive capacity while
+     * there is a productive item: 24 productive items and 6 pilots are 24, not 30.
+     *
+     * A pool of pilots only - an item bank before its calibration - is decided explicitly: the runtime plays
+     * it, so it stays startable, with the warning "onlypilotitems"; its items are the capacity then.
+     */
+    public function test_pilots_are_no_productive_capacity(): void {
+        global $DB;
+        $category = $this->getDataGenerator()->get_plugin_generator('core_question')->create_question_category();
+        for ($i = 0; $i < 6; $i++) {
+            $this->item($category->id, $this->subs[1], 0.1 * $i);
+        }
+        $pilotparams = array_keys($DB->get_records_sql(
+            'SELECT activeparamid FROM {local_catquiz_items} WHERE catscaleid = ? ORDER BY id DESC',
+            [$this->subs[1]],
+            0,
+            6
+        ));
+        [$insql, $params] = $DB->get_in_or_equal($pilotparams);
+        $DB->set_field_select('local_catquiz_itemparams', 'status', LOCAL_CATQUIZ_STATUS_CALCULATED, "id $insql", $params);
+        cache::make('local_catquiz', 'runtimepool')->purge();
+
+        $this->assertSame([], $this->errors($this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 24, 0, 0)));
+        $findings = settings_validator::errors(settings_validator::validate(
+            $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 25, 0, 0)
+        ));
+        $this->assertSame(['minimumunreachable'], array_column($findings, 'code'), '6 pilots do not make 25 reachable.');
+        $this->assertSame(24, $findings[0]['a']['items']);
+
+        // Every item a pilot: startable, with the warning, and the pool is the capacity.
+        $DB->set_field('local_catquiz_itemparams', 'status', LOCAL_CATQUIZ_STATUS_CALCULATED, []);
+        cache::make('local_catquiz', 'runtimepool')->purge();
+        $findings = settings_validator::validate($this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 30, 0, 0));
+        $this->assertSame([], settings_validator::errors($findings));
+        $this->assertContains('onlypilotitems', array_column($findings, 'code'));
+        $this->assertSame(['minimumunreachable'], $this->errors($this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 31, 0, 0)));
+    }
+
+    /**
+     * Before the first question every hard error keeps the attempt from starting, with the reasons, and is
+     * recorded for the CAT manager; warnings do not block (issue #60: "Harte Widersprüche verhindern
+     * Speichern bzw. Attempt-Start").
      */
     public function test_the_preflight_before_the_first_question(): void {
         global $DB;
         $preflight = new \ReflectionMethod(catquiz_handler::class, 'preflight');
         $preflight->setAccessible(true);
         $attempt = (object) ['id' => 0, 'questionsattempted' => 0];
+        $refused = function (stdClass $settings, int $testid) use ($preflight, $attempt): array {
+            $sink = $this->redirectEvents();
+            $answer = $preflight->invoke(null, $settings, $attempt, $testid);
+            $events = array_values(array_filter(
+                $sink->get_events(),
+                fn($e) => $e instanceof \local_catquiz\event\settings_inconsistent
+            ));
+            $sink->close();
+            return [$answer, $events];
+        };
 
-        $this->assertNull($preflight->invoke(null, $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 5, 0, 0), $attempt, 1));
+        [$answer, $events] = $refused($this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 5, 0, 0), 1);
+        $this->assertNull($answer);
+        $this->assertCount(0, $events);
 
-        $sink = $this->redirectEvents();
-        $this->assertNull($preflight->invoke(null, $this->settings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 10, 20, 4), $attempt, 7));
-        $events = array_values(array_filter(
-            $sink->get_events(),
-            fn($e) => $e instanceof \local_catquiz\event\settings_inconsistent
-        ));
-        $sink->close();
+        // A warning alone does not block.
+        $warned = $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 1, 2, 0, [
+            'catquiz_standarderrorgroup' => (object) ['catquiz_standarderror_min' => 0.05, 'catquiz_standarderror_max' => 2],
+        ]);
+        $this->assertNull($refused($warned, 1)[0]);
+
+        // The example of the issue - a contradiction, not "nothing to play" - blocks now.
+        [$answer, $events] = $refused($this->settings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 10, 20, 4), 7);
+        $this->assertSame(0, $answer[0]);
+        $this->assertSame(\local_catquiz\local\status::ERROR_NO_ITEMS, $answer[2]);
+        $this->assertStringContainsString('10', $answer[1]);
         $this->assertCount(1, $events);
         $this->assertSame(['minimumunreachable'], $events[0]->other['codes']);
+        $this->assertSame(7, $events[0]->other['testid']);
+
+        // The minimum above the maximum, and time limits switched on without a value: every reason.
+        $broken = $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 6, 5, 0, [
+            'catquiz_includetimelimit' => 1, 'catquiz_timelimitgroup' => (object) ['catquiz_maxtimeperattempt' => 0],
+        ]);
+        [$answer, $events] = $refused($broken, 1);
+        $this->assertSame(\local_catquiz\local\status::ERROR_NO_ITEMS, $answer[2]);
+        $this->assertSame(['minabovemax', 'timelimitempty', 'minimumunreachable'], $events[0]->other['codes']);
 
         $DB->set_field('local_catquiz_items', 'status', LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE, []);
         cache::make('local_catquiz', 'runtimepool')->purge();
-        $answer = $preflight->invoke(null, $this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 5, 0, 0), $attempt, 1);
+        [$answer] = $refused($this->settings(LOCAL_CATQUIZ_STRATEGY_FASTEST, 5, 0, 0), 1);
         $this->assertSame(0, $answer[0]);
         $this->assertSame(\local_catquiz\local\status::ERROR_NO_ITEMS, $answer[2]);
         $this->assertStringContainsString('K1', $answer[1]);

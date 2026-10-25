@@ -39,8 +39,8 @@ use context_system;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\local\access\feedback_access::get_allowed_userids
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\local\access\feedback_access::class, 'get_allowed_userids')]
 final class feedback_access_test extends advanced_testcase {
     /**
      * Builds a course with separate groups, a teacher in group A and two students.

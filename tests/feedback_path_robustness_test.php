@@ -39,8 +39,8 @@ use ReflectionMethod;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @coversNothing
  */
+#[\PHPUnit\Framework\Attributes\CoversNothing]
 final class feedback_path_robustness_test extends advanced_testcase {
     /**
      * Issue #62: the debug row survives a first question without a predecessor.

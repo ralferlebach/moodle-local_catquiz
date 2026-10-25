@@ -507,22 +507,9 @@ function xmldb_local_catquiz_upgrade($oldversion) {
             $dbman->add_field($table, $field);
         }
 
-        // Make sure the database has updated the itemid in the catquiz_itemparams table.
-        $sql = <<<SQL
-            SELECT lcip.id itemparamid, lci.id itemid
-              FROM {local_catquiz_itemparams} lcip
-              JOIN {local_catquiz_items} lci ON lci.componentid = lcip.componentid
-                  AND lci.componentname = lcip.componentname
-        SQL;
-
-        $sqlresult = $DB->get_records_sql($sql);
-
-        foreach ($sqlresult as $row) {
-            $updaterecord = new stdclass();
-            $updaterecord->id = $row->itemparamid;
-            $updaterecord->itemid = $row->itemid;
-            $DB->update_record('local_catquiz_itemparams', $updaterecord);
-        }
+        // Each parameter gets the item of its question - one item, chosen by a named rule (issue #104, K6).
+        require_once(__DIR__ . '/upgradelib.php');
+        local_catquiz_upgrade_assign_itemparam_items();
 
         // Catquiz savepoint reached.
         upgrade_plugin_savepoint(true, 2024080200, 'local', 'catquiz');
@@ -1601,6 +1588,15 @@ ENDSQL;
         }
 
         upgrade_plugin_savepoint(true, 2026100916, 'local', 'catquiz');
+    }
+
+    if ($oldversion < 2026101802) {
+        // Issue #86: the outer limits of the feedback ranges of every test are those of its global scale.
+        $aligned = \local_catquiz\local\feedback_limits::align_all_tests();
+        if ($aligned > 0) {
+            mtrace("local_catquiz: aligned the feedback ranges of $aligned test environment(s) to their global scale.");
+        }
+        upgrade_plugin_savepoint(true, 2026101802, 'local', 'catquiz');
     }
 
     return true;

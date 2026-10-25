@@ -34,10 +34,8 @@ use basic_testcase;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\catcontext
- *
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\catcontext::class)]
 final class catcontext_test extends basic_testcase {
     /**
      * Test if there is a default CAT context.

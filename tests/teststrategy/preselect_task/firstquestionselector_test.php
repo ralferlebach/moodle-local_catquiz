@@ -37,14 +37,12 @@ use PHPUnit\Framework\ExpectationFailedException;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\teststrategy\preselect_task\firstquestionselector
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\preselect_task\firstquestionselector::class)]
 final class firstquestionselector_test extends basic_testcase {
     /**
      * Test median ability of personparams is calculated correctly provider.
      *
-     * @dataProvider median_ability_of_personparams_is_calculated_correctly_provider
      *
      * @param float $expected
      * @param array $personparams
@@ -53,6 +51,7 @@ final class firstquestionselector_test extends basic_testcase {
      * @throws InvalidArgumentException
      * @throws ExpectationFailedException
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('median_ability_of_personparams_is_calculated_correctly_provider')]
     public function test_median_ability_of_personparams_is_calculated_correctly(
         float $expected,
         array $personparams

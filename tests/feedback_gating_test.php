@@ -43,11 +43,11 @@ use ReflectionMethod;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers     \local_catquiz\teststrategy\feedbackgenerator::no_data
- * @covers     \local_catquiz\teststrategy\feedback_helper::has_reportable_result
- * @covers     \local_catquiz\teststrategy\feedback_helper::get_reportable_scales
- * @covers     \local_catquiz\output\attemptfeedback::generate_feedback
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedbackgenerator::class, 'no_data')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'has_reportable_result')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'get_reportable_scales')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\output\attemptfeedback::class, 'generate_feedback')]
 final class feedback_gating_test extends advanced_testcase {
     /**
      * Builds a stub generator with a controllable student result.

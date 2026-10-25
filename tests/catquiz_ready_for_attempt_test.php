@@ -28,8 +28,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\catquiz_handler
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\catquiz_handler::class)]
 final class catquiz_ready_for_attempt_test extends advanced_testcase {
     /**
      * Files a CAT scale, optionally below another one.

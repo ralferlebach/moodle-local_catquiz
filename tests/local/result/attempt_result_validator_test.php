@@ -24,10 +24,10 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\local\result\attempt_result_validator
- * @covers \local_catquiz\local\result\attempt_result
- * @covers \local_catquiz\local\result\scale_result
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\result\attempt_result_validator::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\result\attempt_result::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\result\scale_result::class)]
 final class attempt_result_validator_test extends advanced_testcase {
     /**
      * A clean primary scale that was measured in the current attempt is valid,

@@ -37,8 +37,8 @@ require_once($CFG->dirroot . '/local/catquiz/db/upgradelib.php');
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers ::local_catquiz_rekey_progress_attempts
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('local_catquiz_rekey_progress_attempts')]
 final class progress_rekey_upgrade_test extends advanced_testcase {
     /**
      * Files a CAT attempt for an attempt of the component.

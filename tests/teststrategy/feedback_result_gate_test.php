@@ -29,9 +29,6 @@
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\feedback_helper::build_attempt_result
- * @covers \local_catquiz\teststrategy\feedback_helper::is_displayable
- * @covers \local_catquiz\teststrategy\feedback_helper::get_rejection_reason_string
  */
 
 namespace local_catquiz\teststrategy;
@@ -43,10 +40,10 @@ use local_catquiz\teststrategy\feedbacksettings;
  * Guards the central display gate of the feedback path.
  *
  * @package    local_catquiz
- * @covers \local_catquiz\teststrategy\feedback_helper::build_attempt_result
- * @covers \local_catquiz\teststrategy\feedback_helper::is_displayable
- * @covers \local_catquiz\teststrategy\feedback_helper::get_rejection_reason_string
  */
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'build_attempt_result')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'is_displayable')]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\teststrategy\feedback_helper::class, 'get_rejection_reason_string')]
 final class feedback_result_gate_test extends advanced_testcase {
     /**
      * Counts for every scale: the fixtures stand for scales measured in the attempt (issue #128).

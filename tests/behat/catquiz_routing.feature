@@ -126,11 +126,12 @@ Feature: An attempt routes its participant into courses and groups (issues #129,
 
   @javascript
   Scenario: All subscales route every measured, valid subscale - three and more at once
-    ## The answers of catquiz_written_feedback.feature: SimA01 and SimA02 get one answer each, below the
-    ## minimum of two per scale; every other subscale is measured validly.
+    ## The answers and settings of the first scenario of catquiz_written_feedback.feature: valid are SimA,
+    ## SimB, SimB01, SimC and SimC02 (the course has no group for SimC); SimA01, SimA02, SimB02, SimB03 and
+    ## SimC01 have one answer or two alike and no valid result (#140).
     Given the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | routinggroupprefix |
-      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | Routed             |
+      | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 1                               | 0.0                       | 1000.0                    | Routed             |
     And I am on the "adaptivecatquiz1" Activity page logged in as teacher
     And I follow "Settings"
     And I wait until the page is ready
@@ -179,13 +180,15 @@ Feature: An attempt routes its participant into courses and groups (issues #129,
     And I log out
     And I log in as "admin"
     And I am on the "Course 1" "enrolled users" page
-    Then I should see "Routed SimB01" in the "Student1 Test" "table_row"
-    And I should see "Routed SimB02" in the "Student1 Test" "table_row"
-    And I should see "Routed SimB03" in the "Student1 Test" "table_row"
-    And I should see "Routed SimC01" in the "Student1 Test" "table_row"
+    Then I should see "Routed SimA," in the "Student1 Test" "table_row"
+    And I should see "Routed SimB," in the "Student1 Test" "table_row"
+    And I should see "Routed SimB01" in the "Student1 Test" "table_row"
     And I should see "Routed SimC02" in the "Student1 Test" "table_row"
     And I should not see "Routed SimA01" in the "Student1 Test" "table_row"
     And I should not see "Routed SimA02" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimB02" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimB03" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimC01" in the "Student1 Test" "table_row"
 
   @javascript
   Scenario: Relevant subscales route the valid ones and not the fraction-invalid ones (issues #129, #140)

@@ -36,8 +36,8 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\event\testiteminscale_added
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\event\testiteminscale_added::class)]
 final class eventlog_testitemadded_test extends advanced_testcase {
     /**
      * Importing test items into a scale raises the testiteminscale_added event.

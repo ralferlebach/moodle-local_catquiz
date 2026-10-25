@@ -30,8 +30,8 @@ use advanced_testcase;
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\teststrategy\progress
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\progress::class)]
 final class progress_viewer_test extends advanced_testcase {
     /**
      * Files a CAT attempt and the progress its owner wrote.

@@ -32,8 +32,8 @@ require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/measured_progress.ph
  * @package    local_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \local_catquiz\local\attempt\attempt_finalizer
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\attempt\attempt_finalizer::class)]
 final class attempt_finalizer_test extends advanced_testcase {
     /**
      * A running attempt carries no end time until it is finalised.

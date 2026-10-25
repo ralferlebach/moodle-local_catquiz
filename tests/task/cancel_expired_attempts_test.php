@@ -35,11 +35,9 @@ use local_catquiz\task\cancel_expired_attempts;
  * @author David Szkiba <david.szkiba@wunderbyte.at>
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- *
- * @covers \local_catquiz\task\cancel_expired_attempts
- * @covers \local_catquiz\catquiz_handler::time_limits
- *
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\task\cancel_expired_attempts::class)]
+#[\PHPUnit\Framework\Attributes\CoversMethod(\local_catquiz\catquiz_handler::class, 'time_limits')]
 final class cancel_expired_attempts_test extends basic_testcase {
     /**
      * Test if attempt expiration is detected correctly.
@@ -50,8 +48,8 @@ final class cancel_expired_attempts_test extends basic_testcase {
      * @param int $now
      * @param bool $expected
      * @return void
-     * @dataProvider attempt_expiration_is_detected_correctly_provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('attempt_expiration_is_detected_correctly_provider')]
     public function test_attempt_expiration_is_detected_correctly(
         int $attemptcreated,
         ?int $quizmaxtime,
