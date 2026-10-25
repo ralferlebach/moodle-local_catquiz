@@ -83,7 +83,7 @@ jobs:
       PGHOST: localhost
       PGUSER: postgres
     steps:
-      - uses: actions/setup-php@v2
+      - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
           extensions: pgsql, zip, gd, xmlrpc, soap, intl, sodium
@@ -120,7 +120,9 @@ jobs:
         id: install
         shell: bash
         run: |
-          set -uo pipefail
+          # GitHub runs "shell: bash" with -e: without +e an installation that is refused - the expected result of
+          # the negative cases - would end this step before its exit code is recorded.
+          set +e -uo pipefail
           setup() { # setup <branch> <line>
             rm -rf moodle && git clone -q --depth 1 --branch "$1" https://github.com/moodle/moodle.git moodle
             root=moodle; [ -d moodle/public ] && root=moodle/public
@@ -135,9 +137,9 @@ jobs:
           setup "${{ matrix.moodle }}" "${{ matrix.line }}"
           mkdir -p "$HOME/moodledata"
           createdb -E UTF8 moodle
-          # Moodle 5.1 and later keep admin/ below public/; config.php stays in the root.
-          root=moodle; [ -d moodle/public ] && root=moodle/public
-          php "$root/admin/cli/install.php" --non-interactive --agree-license --allow-unstable \
+          # Moodle 5.1 and later keep the plugins below public/, the CLI scripts (admin/cli) and config.php stay
+          # in the root.
+          php moodle/admin/cli/install.php --non-interactive --agree-license --allow-unstable \
             --wwwroot=http://localhost/moodle --dataroot="$HOME/moodledata" \
             --dbtype=pgsql --dbhost=localhost --dbname=moodle --dbuser=postgres --dbpass= \
             --fullname=Matrix --shortname=matrix --adminpass='Test123!' 2>&1 | tee install.log
@@ -174,7 +176,7 @@ jobs:
           cp -a plugins/host3 "$root/mod/adaptivequiz"
           cp -a plugins/adapter3 "$root/mod/adaptivequiz/catmodel/catquiz"
           cp -a plugins/wbt "$root/local/wunderbyte_table"
-          php "$root/admin/cli/upgrade.php" --non-interactive --allow-unstable 2>&1 | tee upgrade.log
+          php moodle/admin/cli/upgrade.php --non-interactive --allow-unstable 2>&1 | tee upgrade.log
           php -r 'define("CLI_SCRIPT", true); require "moodle/config.php"; echo get_config("local_catquiz", "version"), PHP_EOL;' \
             | tee installed-version.txt
 
