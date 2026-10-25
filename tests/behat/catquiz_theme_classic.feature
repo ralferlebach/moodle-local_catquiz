@@ -5,7 +5,9 @@ Feature: The central pages of CATquiz work under a Boost based theme other than 
   statistics shortcode and the result page of an attempt are usable and pass axe-core.
 
   Background:
-    Given the following "users" exist:
+    # Classic is no longer part of the core from Moodle 5.3 on; without it there is nothing to check here.
+    Given the "theme_classic" plugin is installed
+    And the following "users" exist:
       | username | firstname | lastname | email                      |
       | student1 | Student1  | Test     | toolgenerator1@example.com |
       | student2 | Student2  | Test     | toolgenerator2@example.com |

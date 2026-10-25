@@ -193,6 +193,7 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
      *
      * @param int $contextid
      * @param int $questionid
+     * @param int|null $itemid Only the parameters of this item; without it, those of all its items.
      *
      * @return self
      *

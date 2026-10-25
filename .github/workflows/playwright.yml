@@ -153,6 +153,47 @@ jobs:
           fi
           echo "Plugin-Layout ist sauber."
 
+      # The installer reports a failed dependency check without the plugin and the version behind it. This
+      # step names both, before the installation: an older state of mod_adaptivequiz or of the adapter on the
+      # branch this run takes is the usual cause.
+      - name: Check the versions of the dependencies
+        run: |
+          root=moodle; [ -d moodle/public ] && root=moodle/public
+          php -- "$root" <<'PHP'
+          <?php
+          // Read version.php files without Moodle: the constants they may use, and $plugin in its own scope.
+          define('MOODLE_INTERNAL', true);
+          foreach (['MATURITY_ALPHA' => 50, 'MATURITY_BETA' => 100, 'MATURITY_RC' => 150, 'MATURITY_STABLE' => 200,
+              'ANY_VERSION' => 'any'] as $name => $value) {
+              defined($name) || define($name, $value);
+          }
+          $root = $argv[1];
+          $read = static function (string $file): stdClass {
+              $plugin = new stdClass();
+              include($file);
+              return $plugin;
+          };
+          $dirs = [
+              'local_wunderbyte_table' => 'local/wunderbyte_table',
+              'mod_adaptivequiz' => 'mod/adaptivequiz',
+              'adaptivequizcatmodel_catquiz' => 'mod/adaptivequiz/catmodel/catquiz',
+              'filter_shortcodes' => 'filter/shortcodes',
+          ];
+          $rc = 0;
+          foreach ($read("$root/local/catquiz/version.php")->dependencies ?? [] as $component => $required) {
+              $file = isset($dirs[$component]) ? "$root/{$dirs[$component]}/version.php" : '';
+              $found = $file !== '' && is_file($file) ? $read($file)->version : null;
+              $ok = $found !== null && ($required === ANY_VERSION || $found >= $required);
+              printf("%-30s requires %-12s found %s\n", $component, $required, $found ?? 'nothing');
+              if (!$ok) {
+                  echo "::error::local_catquiz requires $component $required, the checkout has " . ($found ?? 'nothing')
+                      . ": push that state to the branch of $component this run takes, or pin its ref.\n";
+                  $rc = 1;
+              }
+          }
+          exit($rc);
+          PHP
+
       # install.php WRITES config.php itself and aborts when one already exists, so
       # we must not pre-create one from config-dist.php. It also requires an
       # existing, writable dataroot OUTSIDE the Moodle tree.

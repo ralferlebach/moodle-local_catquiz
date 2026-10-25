@@ -38,6 +38,7 @@
  * @param array $fractionbyscale Fraction of every answer by scale id. Defaults to half credit, which keeps
  *      the fraction of each scale inside (0, 1): with all answers right or all wrong a scale is invalid
  *      (issue #140).
+ * @param int $pilots Answered pilot items: played, with the first scale, but not in the items by scale.
  */
 function local_catquiz_measured_progress(
     int $adaptiveattemptid,

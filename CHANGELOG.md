@@ -2,6 +2,24 @@
 
 ## 1.3.0 (in Arbeit)
 
+- CI-Lauf vom 25.10.2026 (2026102403):
+  - Quality: Der phpdoc-Check verlangte `@param $itemid` an `model_item_param_list::load_from_db_by_questionid()`
+    und `@param $pilots` an der Test-Fixture `local_catquiz_measured_progress()`. Beide ergänzt.
+  - Behat: `catquiz_theme_classic.feature` überspringt sich, wenn `theme_classic` fehlt (Core-Schritt „the
+    "theme_classic" plugin is installed“). Ab Moodle 5.3 gehört Classic nicht mehr zum Core; dort brachen die
+    drei Szenarien mit „theme classic … cannot be initialised“ ab.
+  - Install- und Upgrade-Matrix: `shivammathur/setup-php@v2` statt der nicht existierenden Action
+    `actions/setup-php`. Installer und Upgrade laufen über `moodle/admin/cli/` – ab Moodle 5.1 liegen die
+    CLI-Skripte nicht unter `public/`. Der Installationsschritt setzt `set +e`: GitHub startet `shell: bash` mit
+    `-e`, und ein abgelehnter Installer – das erwartete Ergebnis der Negativfälle – beendete den Schritt, bevor
+    sein Exit-Code feststand. Alle fünf Fälle lokal aus dem YAML nachgestellt und grün (`doc/ci-2026-10-25.md`).
+  - Playwright (in der Dev-CI und im eigenen Workflow): Vor der Installation prüft ein Schritt die Versionen der
+    Abhängigkeiten und nennt Plugin, verlangte und gefundene Version. Der Installer meldete nur „Dependencies
+    check failed“.
+  - Die übrigen roten Jobs (PHPUnit `plugin_versions_test`, Behat `catquiz_stop_reasons` #60, Playwright) gehen
+    auf mod_adaptivequiz zurück: Auf GitHub liegt in `v-3.0` noch 2026101702 (Stand 17.10.), verlangt ist
+    2026101801. Das ist keine Änderung hier.
+
 - Folge-Issues zu #150 (2026102402):
   - #151: Die Schlüssel der Zeiträume liefen in Tagesschritten der Server-Zeitzone und wurden in der Zeitzone der
     Person beschriftet. Über eine Zeitumstellung fehlte so ein Tag: Seine Versuche landeten in einem Balken hinter
