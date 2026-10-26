@@ -2,6 +2,14 @@
 
 ## 1.2.1 (in Arbeit)
 
+- CI-Lauf vom 26.10.2026 (2026102403): Nach Übernahme der Abhängigkeiten sind lint, Code-Analyse, Quality, PHPUnit und
+  Behat grün. Playwright läuft erstmals bis zu den Tests: 8 von 9 bestanden. `statistics-charts.spec.ts` suchte
+  irgendein `.chart-area` auf der Seite. Die Diagramme, die der Seed füttert (Versuche je Zeitraum und je Person),
+  stehen aber im Tab „Testusage“, und mit Lazy Loading (#85, Standard) entstehen sie erst beim Öffnen des Tabs.
+  Der sichtbare Tab „Overview“ zeigt für Versuche ohne Fähigkeitswerte zu Recht „keine Daten“. Der Test öffnet
+  jetzt den Tab und sucht das Diagramm darin. Lokal mit der Spec vorher rot, nachher 9/9 grün.
+
+
 - CI-Lauf vom 25.10.2026 (2026102402):
   - Quality: Der phpdoc-Check verlangte `@param $itemid` an `model_item_param_list::load_from_db_by_questionid()`
     und `@param $pilots` an der Test-Fixture `local_catquiz_measured_progress()`. Beide ergänzt.
