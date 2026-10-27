@@ -2,6 +2,18 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Re-Audit 26.10.2026 zu #150 (2026102404): Die neuen Behat-Schritte „the charts drawn in the browser are recorded“ und
+  „the recorded charts were drawn without an error“ zeichnen im Browser jedes Diagramm auf. Sie hängen sich vor
+  jedes Seitenskript (`additionalhtmlhead`, Hook auf `core/chart_base.prototype.create`) und erfassen Typ, Labels,
+  Serien mit Länge sowie Fehler der Seite. Die Prüfung verlangt mindestens ein Diagramm, jede Serie so lang wie die
+  Labels und keinen Seitenfehler. Mit `CATQUIZ_CHART_EVIDENCE` wird die Aufzeichnung als JSON geschrieben.
+  `catquiz_ability_histogram.feature` prüft so an fünf Stellen: Feedback für Teilnehmende und Lehrende, Statistik,
+  Teilpool und neuer Kontext, jeweils mit und ohne Lazy Loading. Mit dem Code vor #150 belegt die Aufzeichnung
+  den Livefehler `Invalid values received for series.` (Serie „Test information“ mit 0 Werten bei 0 Labels) im
+  Feedback für Lehrende und in der Statistik. Im Feedback für Teilnehmende kamen 20 Werte bei 0 Labels an, ohne
+  Exception, aber mit leerem Diagramm.
+
+
 - CI-Lauf vom 26.10.2026 (2026102403): Nach Übernahme der Abhängigkeiten sind lint, Code-Analyse, Quality, PHPUnit und
   Behat grün. Playwright läuft erstmals bis zu den Tests: 8 von 9 bestanden. `statistics-charts.spec.ts` suchte
   irgendein `.chart-area` auf der Seite. Die Diagramme, die der Seed füttert (Versuche je Zeitraum und je Person),
