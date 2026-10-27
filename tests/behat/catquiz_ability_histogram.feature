@@ -43,6 +43,8 @@ Feature: The ability profile is drawn without item parameters (issue #150).
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy      | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | scalefeedbacktexts |
       | C1     | adaptivecatquizA | catquiz  | Simulation | Infer all subscales | 12                   | 12                   | 1                               | 0.0                       | 1000.0                    | 1                  |
     And the "shortcodes" filter is "on"
+    ## Every chart the browser draws is recorded: labels, series and their lengths, and errors of the page.
+    And the charts drawn in the browser are recorded
 
   @javascript
   Scenario Outline: The feedback draws the bars from the results when no item has parameters (lazy <lazy>)
@@ -109,6 +111,7 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     And I click on "Overview" "link" in the "#region-main" "css_element"
     And I wait until "[data-region='local_catquiz-abilityprofile'] .chart-image canvas" "css_element" exists
     Then "[data-region='local_catquiz-abilityprofile'] .chart-image canvas" "css_element" should be visible
+    And the recorded charts were drawn without an error
     And "[data-region='local_catquiz-chart-notice']" "css_element" should not exist
     And I click on "Show chart data" "link" in the "[data-region='local_catquiz-abilityprofile']" "css_element"
     And "//div[@data-region='local_catquiz-abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='0.25']]/td[1][number(normalize-space(.)) >= 2]" "xpath_element" should exist
@@ -123,6 +126,7 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     And I click on "Overview" "link" in the "#region-main" "css_element"
     And I wait until "[data-region='local_catquiz-abilityprofile'] .chart-image canvas" "css_element" exists
     Then "[data-region='local_catquiz-abilityprofile'] .chart-image canvas" "css_element" should be visible
+    And the recorded charts were drawn without an error
     And I should see "The test information is not shown" in the "[data-region='local_catquiz-abilityprofile']" "css_element"
     And I click on "Show chart data" "link" in the "[data-region='local_catquiz-abilityprofile']" "css_element"
     And "//div[@data-region='local_catquiz-abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='0.25']]/td[1][number(normalize-space(.)) >= 2]" "xpath_element" should exist
@@ -150,6 +154,7 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     When I am on the "page1" "page activity" page logged in as teacher
     And I wait until "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" exists
     Then "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" should be visible
+    And the recorded charts were drawn without an error
     And I should see "The test information is not shown" in the "[data-chartname='abilityprofile']" "css_element"
     And I click on "Show chart data" "link" in the "[data-chartname='abilityprofile']" "css_element"
     And "//div[@data-chartname='abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='0.25']]/td[1][normalize-space(.)='3']" "xpath_element" should exist
@@ -177,6 +182,7 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     When I am on the "page1" "page activity" page logged in as teacher
     And I wait until "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" exists
     Then "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" should be visible
+    And the recorded charts were drawn without an error
     And I should not see "The test information is not shown" in the "[data-chartname='abilityprofile']" "css_element"
     And I click on "Show chart data" "link" in the "[data-chartname='abilityprofile']" "css_element"
     ## The statistics list the test information first: column 1 is the line, column 2 the bars.
@@ -206,6 +212,7 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     When I am on the "page1" "page activity" page logged in as teacher
     And I wait until "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" exists
     Then "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" should be visible
+    And the recorded charts were drawn without an error
     And I should see "The test information is not shown" in the "[data-chartname='abilityprofile']" "css_element"
     And I click on "Show chart data" "link" in the "[data-chartname='abilityprofile']" "css_element"
     And "//div[@data-chartname='abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='0.25']]/td[1][normalize-space(.)='3']" "xpath_element" should exist

@@ -1734,4 +1734,125 @@ JS;
         }
         \cache_helper::purge_all();
     }
+
+    /**
+     * Records every chart the browser draws on the pages from now on (re-audit of issue #150, 26.10.2026).
+     *
+     * The recorder goes into the head of every page (additionalhtmlhead), before any script of the page: it sees
+     * charts drawn when the page loads as well as those of a lazy region loaded later, the core way
+     * (core/chart_builder) and local_catquiz/chart alike - both create the chart through
+     * core/chart_base.prototype.create. For each chart it keeps the type, the number of labels and per series the
+     * label and the number of values - no values. Errors of the page (error, unhandledrejection, console.error) are
+     * kept with it.
+     *
+     * @Given /^the charts drawn in the browser are recorded$/
+     *
+     * @return void
+     */
+    public function the_charts_drawn_in_the_browser_are_recorded(): void {
+        $script = <<<'JS'
+<script>
+(function() {
+    var rec = window.localCatquizCharts = {charts: [], errors: []};
+    var text = function(a) {
+        return a && a.message ? a.message : String(a);
+    };
+    window.addEventListener('error', function(e) {
+        rec.errors.push(text(e.error || e.message));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+        rec.errors.push(text(e.reason));
+    });
+    var consoleerror = window.console.error;
+    window.console.error = function() {
+        rec.errors.push(Array.prototype.map.call(arguments, text).join(' '));
+        return consoleerror.apply(window.console, arguments);
+    };
+    var hook = function() {
+        if (typeof window.require !== 'function' || typeof window.require.defined !== 'function') {
+            window.setTimeout(hook, 10);
+            return;
+        }
+        window.require(['core/chart_base'], function(Base) {
+            var create = Base.prototype.create;
+            Base.prototype.create = function(Klass, data) {
+                var entry = {
+                    type: data && data.type,
+                    labels: data && Array.isArray(data.labels) ? data.labels.length : null,
+                    series: (data && Array.isArray(data.series) ? data.series : []).map(function(s) {
+                        return {label: s && s.label, values: s && Array.isArray(s.values) ? s.values.length : null};
+                    })
+                };
+                rec.charts.push(entry);
+                try {
+                    return create.call(this, Klass, data);
+                } catch (e) {
+                    entry.error = text(e);
+                    throw e;
+                }
+            };
+        });
+    };
+    hook();
+})();
+</script>
+JS;
+        set_config('additionalhtmlhead', (string) get_config('core', 'additionalhtmlhead') . $script);
+    }
+
+    /**
+     * Checks the charts recorded on the current page: at least one, each complete - every series with as many values
+     * as the chart has labels - and drawn without an error of the page.
+     *
+     * With the environment variable CATQUIZ_CHART_EVIDENCE set to a directory, the recording is written there as
+     * JSON before the check (one file per check, with the page), so that a run of an old state shows what reached
+     * the browser and what it threw.
+     *
+     * @Then /^the recorded charts were drawn without an error$/
+     *
+     * @return void
+     */
+    public function the_recorded_charts_were_drawn_without_an_error(): void {
+        $json = $this->evaluate_script('return JSON.stringify(window.localCatquizCharts || null);');
+        $recording = json_decode((string) $json, true);
+        $dir = getenv('CATQUIZ_CHART_EVIDENCE');
+        if ($dir && is_dir($dir)) {
+            static $count = 0;
+            $count++;
+            $file = sprintf('%s/charts-%d-%02d.json', $dir, getmypid(), $count);
+            $page = $this->getSession()->getCurrentUrl();
+            file_put_contents($file, json_encode(['page' => $page, 'recording' => $recording], JSON_PRETTY_PRINT));
+        }
+        if (!is_array($recording)) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'Nothing was recorded on this page; is the step "the charts drawn in the browser are recorded" missing?',
+                $this->getSession()
+            );
+        }
+        if (empty($recording['charts'])) {
+            throw new \Behat\Mink\Exception\ExpectationException('No chart was drawn on this page.', $this->getSession());
+        }
+        $problems = [];
+        foreach ($recording['charts'] as $chart) {
+            foreach ($chart['series'] as $series) {
+                if ($series['values'] !== $chart['labels']) {
+                    $problems[] = sprintf(
+                        'Series "%s": %s values, %s labels',
+                        $series['label'],
+                        var_export($series['values'], true),
+                        var_export($chart['labels'], true)
+                    );
+                }
+            }
+            if (!empty($chart['error'])) {
+                $problems[] = 'Chart ' . $chart['type'] . ': ' . $chart['error'];
+            }
+        }
+        foreach ($recording['errors'] as $error) {
+            $problems[] = 'Page: ' . $error;
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException(implode("\n", array_unique($problems)), $this->getSession());
+        }
+    }
 }
