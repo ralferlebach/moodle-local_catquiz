@@ -608,8 +608,9 @@ class progress implements JsonSerializable {
 
         // Fallback for old attempts that did not store the quizsettings: use the current ones.
         if (!property_exists($object, 'quizsettings') || $object->quizsettings === null) {
-            $attemptjson = $DB->get_record('local_catquiz_attempts', ['attemptid' => $instance->attemptid], 'json')->json;
-            $attemptdata = json_decode($attemptjson);
+            // The CAT attempt of this progress, by its own id - its external number may be another component's.
+            $attemptjson = $DB->get_field('local_catquiz_attempts', 'json', ['id' => $instance->catattemptid]);
+            $attemptdata = $attemptjson ? json_decode($attemptjson) : null;
             $quizsettings = $attemptdata->quizsettings ?? false;
             // If not even the attempt has quizsettings, get them from the test table.
             if (!$quizsettings) {
@@ -621,9 +622,12 @@ class progress implements JsonSerializable {
             }
             $object->quizsettings = json_encode($quizsettings);
 
-            // Save the quiz settings so that in the future we do not have to use the fallback anymore.
+            /* Save the quiz settings so that in the future we do not have to use the fallback anymore - but only
+               for a writer: a reader (issue #149) writes nothing, it gets the settings for this request only. */
             $instance->quizsettings = $quizsettings;
-            $instance->save();
+            if ($cache) {
+                $instance->save();
+            }
         }
         $instance->quizsettings = json_decode($object->quizsettings);
 
@@ -815,6 +819,12 @@ class progress implements JsonSerializable {
             'component' => $this->component,
             'json' => json_encode($this),
         ];
+        /* The settings go along with every save, not only the first: a progress stored before they were kept with
+           it gets them on its next save (populate_from_object()), as intended - an update without them left the
+           fallback running on every load (issue #149). */
+        if (isset($this->quizsettings)) {
+            $record->quizsettings = json_encode($this->quizsettings);
+        }
 
         // If it does not exist yet, insert a new record.
         if (! $this->id) {
@@ -830,6 +840,7 @@ class progress implements JsonSerializable {
                     throw $e;
                 }
                 $id = (int) $id;
+                $this->refuse_a_foreign_row($id);
                 $record->id = $id;
                 $DB->update_record('local_catquiz_progress', $record);
             }
@@ -838,12 +849,45 @@ class progress implements JsonSerializable {
             }
             $this->id = $id;
         } else {
-            // Otherwise, just update.
+            // Otherwise, just update - the row of this attempt, as long as it is still ours (issue #96).
+            $this->refuse_a_foreign_row((int) $this->id);
             $record->id = $this->id;
             $DB->update_record('local_catquiz_progress', $record);
         }
 
         $this->save_to_cache();
+    }
+
+    /**
+     * Stops a save that would overwrite a stored progress of somebody else (issue #96, re-audit 27.10.2026).
+     *
+     * The progress in the session cache is checked against the person when it is loaded, not against the row it is
+     * written back to. A row that belongs to another person or component by now - an id met by a foreign row, data
+     * moved by hand or by a migration - was overwritten with the state of the session, and its owner set back. Here
+     * the stored owner is compared first, with one read by primary key; on a mismatch nothing is written, the cached
+     * state is dropped, and the attempt stops with the integrity message, as a load from the database does.
+     *
+     * @param int $id local_catquiz_progress.id
+     * @return void
+     */
+    private function refuse_a_foreign_row(int $id): void {
+        global $DB;
+        $stored = $DB->get_record('local_catquiz_progress', ['id' => $id], 'id, attemptid, userid, component');
+        if (!$stored) {
+            return;
+        }
+        $samecomponent = in_array((string) $stored->component, catquiz::component_names((string) $this->component), true);
+        if ((int) $stored->userid === (int) $this->userid && $samecomponent) {
+            return;
+        }
+        cache::make('local_catquiz', 'adaptivequizattempt')
+            ->delete(self::get_cache_key($this->catattemptid, (int) $this->attemptid, (string) $this->component));
+        $catattempt = $DB->get_record('local_catquiz_attempts', ['id' => (int) $stored->attemptid]) ?: null;
+        $reason = progress_integrity::check($stored, $catattempt)
+            ?? ((int) $stored->userid !== (int) $this->userid
+                ? progress_integrity::USER_MISMATCH
+                : progress_integrity::COMPONENT_MISMATCH);
+        progress_integrity::fail($stored, $catattempt, $reason, (int) $this->contextid);
     }
 
     /**

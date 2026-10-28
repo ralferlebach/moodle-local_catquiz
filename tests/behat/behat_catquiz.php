@@ -355,6 +355,39 @@ class behat_catquiz extends behat_base {
             }
             return true;
         }, [], behat_base::get_extended_timeout());
+        // The network side of the same image (mod_adaptivequiz #16, #18): the URL the modal really shows, requested
+        // again with the session of the browser - HTTP status, type and an image in the answer.
+        $check = "return (function() {"
+            . " var img = Array.from(document.querySelectorAll('.modal.show img'))"
+            . "   .find(function(i) { return i.getAttribute('alt') === $alt; });"
+            . " var x = new XMLHttpRequest(); x.open('GET', img.currentSrc || img.src, false);"
+            . " x.overrideMimeType('text/plain; charset=x-user-defined'); x.send();"
+            . " var b = x.responseText || '';"
+            . " var png = b.length > 8 && (b.charCodeAt(1) & 0xff) === 0x50 && (b.charCodeAt(2) & 0xff) === 0x4e;"
+            . " return JSON.stringify({src: img.currentSrc || img.src, status: x.status,"
+            . "   type: x.getResponseHeader('Content-Type'), bytes: b.length, png: png,"
+            . "   width: img.naturalWidth, height: img.naturalHeight});"
+            . "})();";
+        $r = json_decode((string) $this->getSession()->evaluateScript($check), true);
+        $report = sprintf(
+            'modal image %s: %s HTTP %d, %s, %d bytes, PNG: %s, decoded %dx%d',
+            $alt,
+            $r['src'],
+            $r['status'],
+            $r['type'],
+            $r['bytes'],
+            $r['png'] ? 'yes' : 'no',
+            $r['width'],
+            $r['height']
+        );
+        $this->record_network_evidence($report);
+        $served = $r['status'] === 200 && strpos((string) $r['type'], 'image/') === 0;
+        if (!$served || strpos($r['src'], '/pluginfile.php/') === false) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'Modal image not served as a file: ' . $report,
+                $this->getSession()
+            );
+        }
     }
 
     /**
@@ -1736,6 +1769,82 @@ JS;
     }
 
     /**
+     * CAT results as the strategy "lowest skill gap" stores them (issue #150, re-audit 27.10.2026, test 20): the root
+     * scale measured validly but not the reported scale (isvalid 0, reason not_primary), the reported subscale valid.
+     *
+     * @Given /^the following CAT results of "([^"]*)" exist under the lowest skill gap:$/
+     *
+     * @param string $idnumber
+     * @param \Behat\Gherkin\Node\TableNode $table Columns: user, days ago, root ability, reported scale, reported ability.
+     * @return void
+     */
+    public function the_following_cat_results_exist_under_the_lowest_skill_gap(
+        string $idnumber,
+        \Behat\Gherkin\Node\TableNode $table
+    ): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+        static $hostattemptid = 950000;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            '*',
+            MUST_EXIST
+        );
+        $rootid = (int) $test->catscaleid;
+        $contextid = (int) \local_catquiz\catscale::get_context_id($rootid);
+        foreach ($table->getHash() as $row) {
+            $userid = (int) $DB->get_field('user', 'id', ['username' => $row['user']], MUST_EXIST);
+            $reported = $this->catquiz_scale_id($row['reported scale']);
+            $end = time() - (int) $row['days ago'] * DAYSECS;
+            $id = $DB->insert_record('local_catquiz_attempts', (object) [
+                'userid' => $userid, 'scaleid' => $rootid, 'contextid' => $contextid, 'courseid' => $cm->course,
+                'attemptid' => ++$hostattemptid, 'component' => 'mod_adaptivequiz', 'instanceid' => $cm->instance,
+                'teststrategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'status' => 0, 'starttime' => $end - 600,
+                'endtime' => $end, 'personability_after_attempt' => (float) $row['root ability'],
+                'json' => json_encode(['personabilities' => [
+                    $rootid => (float) $row['root ability'], $reported => (float) $row['reported ability'],
+                ]]),
+                'timecreated' => $end, 'timemodified' => $end,
+            ]);
+            $rows = [
+                $rootid => [(float) $row['root ability'], 0, 0, 'not_primary'],
+                $reported => [(float) $row['reported ability'], 1, 1, ''],
+            ];
+            foreach ($rows as $scaleid => [$ability, $isvalid, $isprimary, $reasons]) {
+                $DB->insert_record('local_catquiz_personparams', (object) [
+                    'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $contextid, 'attemptid' => $id,
+                    'ability' => $ability, 'isvalid' => $isvalid, 'isprimary' => $isprimary, 'resultsource' => 'current',
+                    'validationstatus' => $reasons, 'status' => 0, 'timecreated' => $end, 'timemodified' => $end,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Attaches a CAT scale to another, empty CAT context - its items and parameters stay where they are, as after
+     * a recalibration context was created and not calculated yet (issue #150, re-audit 27.10.2026).
+     *
+     * @Given /^the CAT scale "([^"]*)" is attached to the empty CAT context "([^"]*)"$/
+     *
+     * @param string $scalename
+     * @param string $contextname
+     * @return void
+     */
+    public function the_cat_scale_is_attached_to_the_empty_cat_context(string $scalename, string $contextname): void {
+        global $DB;
+        $contextid = (int) $DB->insert_record('local_catquiz_catcontext', (object) [
+            'name' => $contextname, 'description' => '', 'descriptionformat' => FORMAT_HTML,
+            'starttimestamp' => time() - 60, 'endtimestamp' => time() + YEARSECS, 'timecreated' => time(),
+            'timemodified' => time(), 'usermodified' => 0,
+        ]);
+        $DB->set_field('local_catquiz_catscales', 'contextid', $contextid, ['id' => $this->catquiz_scale_id($scalename)]);
+        \cache_helper::purge_all();
+    }
+
+    /**
      * Records every chart the browser draws on the pages from now on (re-audit of issue #150, 26.10.2026).
      *
      * The recorder goes into the head of every page (additionalhtmlhead), before any script of the page: it sees
@@ -1853,6 +1962,1095 @@ JS;
         }
         if ($problems) {
             throw new \Behat\Mink\Exception\ExpectationException(implode("\n", array_unique($problems)), $this->getSession());
+        }
+    }
+
+    /**
+     * The question attempt of a question in the last host attempt of a user (mod_adaptivequiz #16, #18).
+     *
+     * @param string $questionname
+     * @param string $username
+     * @return array [adaptivequiz_attempt record, question_attempt, slot]
+     */
+    private function question_attempt_in_last_attempt(string $questionname, string $username): array {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $attempts = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', '*', 0, 1);
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException("No attempt of $username", $this->getSession());
+        }
+        $attempt = reset($attempts);
+        $quba = \question_engine::load_questions_usage_by_activity($attempt->uniqueid);
+        foreach ($quba->get_slots() as $slot) {
+            $qa = $quba->get_question_attempt($slot);
+            if ($qa->get_question(false)->name === $questionname) {
+                return [$attempt, $qa, (int) $slot];
+            }
+        }
+        throw new \Behat\Mink\Exception\ExpectationException(
+            "The last attempt of $username has no question \"$questionname\"",
+            $this->getSession()
+        );
+    }
+
+    /**
+     * Requests the file embedded in a question of an attempt with the session of the browser - a real HTTP request
+     * to pluginfile.php, the same URL the question shows - and checks status, type and content (mod_adaptivequiz
+     * #16, #18).
+     *
+     * Delivered: HTTP 200, an image type, an image the browser can decode. Refused: no image - Moodle answers
+     * with 404 or a login/error page.
+     *
+     * @Then /^the file of question "([^"]*)" in the last attempt of "([^"]*)" is (delivered to|refused to) me$/
+     *
+     * @param string $questionname
+     * @param string $username
+     * @param string $outcome
+     * @return void
+     */
+    public function the_file_of_question_in_the_last_attempt_is(string $questionname, string $username, string $outcome): void {
+        [, $qa] = $this->question_attempt_in_last_attempt($questionname, $username);
+        $question = $qa->get_question(false);
+        $text = $qa->rewrite_pluginfile_urls($question->questiontext, 'question', 'questiontext', $question->id);
+        if (!preg_match('~src="([^"]*/pluginfile\.php/[^"]+)"~', $text, $m)) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Question \"$questionname\" has no embedded file",
+                $this->getSession()
+            );
+        }
+        $url = html_entity_decode($m[1], ENT_QUOTES);
+        $script = 'return (function() {'
+            . ' var x = new XMLHttpRequest(); x.open("GET", ' . json_encode($url) . ', false);'
+            . ' x.overrideMimeType("text/plain; charset=x-user-defined"); x.send();'
+            . ' var b = x.responseText || "";'
+            . ' var png = b.length > 8 && (b.charCodeAt(1) & 0xff) === 0x50 && (b.charCodeAt(2) & 0xff) === 0x4e;'
+            . ' var gif = b.substr(0, 3) === "GIF";'
+            . ' var jpg = b.length > 2 && (b.charCodeAt(0) & 0xff) === 0xff && (b.charCodeAt(1) & 0xff) === 0xd8;'
+            . ' return JSON.stringify({status: x.status, type: x.getResponseHeader("Content-Type"),'
+            . '   url: x.responseURL, bytes: b.length, image: png || gif || jpg});'
+            . '})();';
+        $result = json_decode((string) $this->getSession()->evaluateScript($script), true);
+        $delivered = $result['status'] === 200 && strpos((string) $result['type'], 'image/') === 0 && $result['image'];
+        $report = sprintf(
+            '%s: HTTP %d, %s, %d bytes, image: %s, final URL %s',
+            $url,
+            $result['status'],
+            $result['type'],
+            $result['bytes'],
+            $result['image'] ? 'yes' : 'no',
+            $result['url']
+        );
+        $this->record_network_evidence($report);
+        if ($outcome === 'delivered to' && !$delivered) {
+            throw new \Behat\Mink\Exception\ExpectationException("Not delivered - $report", $this->getSession());
+        }
+        if ($outcome === 'refused to' && $delivered) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Delivered although it must be refused - $report",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Calls the web service behind the question modal (local_catquiz_render_question_with_response) with the session
+     * of the browser, for a question of the last attempt of a user, with slot and question attempt id as the result
+     * page sends them (mod_adaptivequiz #16, #18).
+     *
+     * @Then /^the question "([^"]*)" in the last attempt of "([^"]*)" is (rendered for|refused to) me$/
+     *
+     * @param string $questionname
+     * @param string $username
+     * @param string $outcome
+     * @return void
+     */
+    public function the_question_in_the_last_attempt_is(string $questionname, string $username, string $outcome): void {
+        [$attempt, $qa, $slot] = $this->question_attempt_in_last_attempt($questionname, $username);
+        $args = ['slot' => $slot, 'attemptid' => (int) $attempt->id, 'questionattemptid' => (int) $qa->get_database_id()];
+        $call = json_encode([['index' => 0, 'methodname' => 'local_catquiz_render_question_with_response', 'args' => $args]]);
+        $script = 'return (function() {'
+            . ' var x = new XMLHttpRequest();'
+            . ' x.open("POST", M.cfg.wwwroot + "/lib/ajax/service.php?sesskey=" + M.cfg.sesskey, false);'
+            . ' x.setRequestHeader("Content-Type", "application/json"); x.send(' . json_encode($call) . ');'
+            . ' return JSON.stringify({status: x.status, body: x.responseText});'
+            . '})();';
+        $result = json_decode((string) $this->getSession()->evaluateScript($script), true);
+        $body = json_decode((string) $result['body'], true);
+        $answer = is_array($body) && isset($body[0]) ? $body[0] : [];
+        $rendered = empty($answer['error']) && !empty($answer['data']['questionhtml']);
+        $report = sprintf(
+            'render_question_with_response %s: HTTP %d, %s',
+            json_encode($args),
+            $result['status'],
+            $rendered
+                ? 'question HTML, ' . strlen($answer['data']['questionhtml']) . ' characters'
+                : 'error ' . ($answer['exception']['errorcode'] ?? $answer['exception']['message']
+                    ?? substr((string) $result['body'], 0, 120))
+        );
+        $this->record_network_evidence($report);
+        if ($outcome === 'rendered for' && !$rendered) {
+            throw new \Behat\Mink\Exception\ExpectationException("Not rendered - $report", $this->getSession());
+        }
+        if ($outcome === 'refused to' && $rendered) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Rendered although it must be refused - $report",
+                $this->getSession()
+            );
+        }
+        $leaked = strpos($result['body'], 'Text of resource question') !== false;
+        if ($outcome === 'refused to' && !$rendered && $leaked) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "The refusal contains the question - $report",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Appends a line of evidence to $CATQUIZ_NETWORK_EVIDENCE, if that file is set (evidence runs only).
+     *
+     * @param string $line
+     * @return void
+     */
+    private function record_network_evidence(string $line): void {
+        $file = getenv('CATQUIZ_NETWORK_EVIDENCE');
+        if ($file) {
+            $who = $this->getSession()->evaluateScript(
+                'return (document.querySelector(".usertext, .logininfo a") || {}).textContent || "";'
+            );
+            file_put_contents($file, date('H:i:s') . ' [' . trim((string) $who) . '] ' . $line . "\n", FILE_APPEND);
+        }
+    }
+
+    /**
+     * Checks every attempt of a user at an activity, oldest first (mod_adaptivequiz #5).
+     *
+     * Columns: state (inprogress, complete), stop reason (the stored code, - for none), finished (yes when
+     * timefinished is set), questions (slots of the usage), answered (slots with a graded answer stored in the usage),
+     * duplicates (yes when a question is in two slots),
+     * cat result (ended, open or none: the record of the CAT model and whether it has an end).
+     *
+     * @Then /^the attempts of "([^"]*)" at "([^"]*)" are:$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @param \Behat\Gherkin\Node\TableNode $table
+     * @return void
+     */
+    public function the_attempts_of_at_are(string $username, string $idnumber, \Behat\Gherkin\Node\TableNode $table): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $attempts = array_values($DB->get_records(
+            'adaptivequiz_attempt',
+            ['instance' => $cm->instance, 'userid' => $userid],
+            'id ASC'
+        ));
+        $actual = [];
+        foreach ($attempts as $attempt) {
+            $questions = [];
+            $answered = 0;
+            if (!empty($attempt->uniqueid) && $DB->record_exists('question_usages', ['id' => $attempt->uniqueid])) {
+                $quba = \question_engine::load_questions_usage_by_activity($attempt->uniqueid);
+                foreach ($quba->get_slots() as $slot) {
+                    $questions[] = (int) $quba->get_question($slot, false)->id;
+                    if ($quba->get_question_state($slot)->is_graded()) {
+                        $answered++;
+                    }
+                }
+            }
+            [$insql, $inparams] = $DB->get_in_or_equal(\local_catquiz\catquiz::component_names('mod_adaptivequiz'));
+            $cat = $DB->get_records_select(
+                'local_catquiz_attempts',
+                "attemptid = ? AND component $insql",
+                array_merge([$attempt->id], $inparams)
+            );
+            $catstate = 'none';
+            if ($cat) {
+                $catstate = 'open';
+                foreach ($cat as $record) {
+                    if (!empty($record->endtime)) {
+                        $catstate = 'ended';
+                    }
+                }
+            }
+            $actual[] = [
+                'state' => (string) $attempt->attemptstate,
+                'stop reason' => $attempt->stopcode === null || $attempt->stopcode === '' ? '-' : (string) $attempt->stopcode,
+                'finished' => empty($attempt->timefinished) ? 'no' : 'yes',
+                'questions' => (string) count($questions),
+                'answered' => (string) $answered,
+                'duplicates' => count($questions) !== count(array_unique($questions)) ? 'yes' : 'no',
+                'cat result' => $catstate,
+            ];
+        }
+        $expected = $table->getHash();
+        $columns = array_keys($expected[0] ?? []);
+        $shown = array_map(fn($row) => array_intersect_key($row, array_flip($columns)), $actual);
+        if ($shown != $expected) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Attempts of $username:\n" . json_encode($shown, JSON_PRETTY_PRINT) . "\nexpected:\n"
+                    . json_encode($expected, JSON_PRETTY_PRINT),
+                $this->getSession()
+            );
+        }
+        $this->record_network_evidence("attempts of $username at $idnumber: " . json_encode($actual));
+    }
+
+    /**
+     * Sends the choice for an open attempt as the form of the activity page does - a POST to attempt.php with
+     * resume, attemptid and sesskey - from the browser, with its session, once or several times in a row (a double
+     * click), optionally with a wrong sesskey (mod_adaptivequiz #5).
+     *
+     * @When /^I send the resume action "([^"]*)" for the open attempt of "([^"]*)" at "([^"]*)"( twice)?( with a wrong sesskey)?$/
+     *
+     * @param string $action
+     * @param string $username Whose open attempt is named in the request.
+     * @param string $idnumber
+     * @param string $twice
+     * @param string $wrongsesskey
+     * @return void
+     */
+    public function i_send_the_resume_action(
+        string $action,
+        string $username,
+        string $idnumber,
+        string $twice = '',
+        string $wrongsesskey = ''
+    ): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $open = $DB->get_records(
+            'adaptivequiz_attempt',
+            ['instance' => $cm->instance, 'userid' => $userid, 'attemptstate' => 'inprogress'],
+            'id DESC',
+            'id',
+            0,
+            1
+        );
+        if (!$open) {
+            throw new \Behat\Mink\Exception\ExpectationException("No open attempt of $username", $this->getSession());
+        }
+        $attemptid = (int) reset($open)->id;
+        $url = (new \moodle_url('/mod/adaptivequiz/attempt.php', ['cmid' => $cm->id]))->out(false);
+        $script = 'return (function() {'
+            . ' var key = ' . ($wrongsesskey ? '"wrongsesskey"' : '(window.M && M.cfg ? M.cfg.sesskey : "")') . ';'
+            . ' var body = "resume=" + encodeURIComponent(' . json_encode($action) . ') + "&attemptid=' . $attemptid
+            . '&sesskey=" + encodeURIComponent(key);'
+            . ' var out = [];'
+            . ' for (var i = 0; i < ' . ($twice ? 2 : 1) . '; i++) {'
+            . '   var x = new XMLHttpRequest(); x.open("POST", ' . json_encode($url) . ', false);'
+            . '   x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded"); x.send(body);'
+            . '   out.push({status: x.status, url: x.responseURL});'
+            . ' }'
+            . ' return JSON.stringify(out);'
+            . '})();';
+        $result = (string) $this->getSession()->evaluateScript($script);
+        $this->record_network_evidence("resume $action for attempt $attemptid of $username" . ($twice ? ' twice' : '')
+            . ($wrongsesskey ? ' with a wrong sesskey' : '') . ': ' . $result);
+    }
+
+    /**
+     * Requests the attempt page of an activity several times at once from the browser, as parallel tabs do
+     * (mod_adaptivequiz #5).
+     *
+     * @When /^I request the attempt page of "([^"]*)" (\d+) times at once$/
+     *
+     * @param string $idnumber
+     * @param int $count
+     * @return void
+     */
+    public function i_request_the_attempt_page_times_at_once(string $idnumber, int $count): void {
+        global $DB;
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $url = (new \moodle_url('/mod/adaptivequiz/attempt.php', ['cmid' => $cm->id]))->out(false);
+        $this->getSession()->executeScript('(function() {'
+            . ' window.localCatquizParallel = [];'
+            . ' for (var i = 0; i < ' . $count . '; i++) {'
+            . '   var x = new XMLHttpRequest(); x.open("GET", ' . json_encode($url) . ', true);'
+            . '   x.onloadend = function() { window.localCatquizParallel.push(this.status); };'
+            . '   x.send();'
+            . ' }'
+            . '})();');
+        $this->spin(function () use ($count) {
+            $done = (int) $this->getSession()->evaluateScript('return (window.localCatquizParallel || []).length;');
+            if ($done < $count) {
+                throw new \Behat\Mink\Exception\ExpectationException("$done of $count answered", $this->getSession());
+            }
+            return true;
+        }, [], behat_base::get_extended_timeout() * 2);
+        $statuses = (string) $this->getSession()->evaluateScript('return JSON.stringify(window.localCatquizParallel);');
+        $this->record_network_evidence("attempt page of $idnumber $count times at once: $statuses");
+    }
+
+    /**
+     * The last host attempt of a user at an activity and its course module (mod_adaptivequiz #22).
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return array [attempt record, course module record]
+     */
+    private function last_host_attempt_at(string $username, string $idnumber): array {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $attempts = $DB->get_records(
+            'adaptivequiz_attempt',
+            ['instance' => $cm->instance, 'userid' => $userid],
+            'id DESC',
+            '*',
+            0,
+            1
+        );
+        if (!$attempts) {
+            throw new \Behat\Mink\Exception\ExpectationException("No attempt of $username at $idnumber", $this->getSession());
+        }
+        return [reset($attempts), $cm];
+    }
+
+    /**
+     * Requests a page with the session of the browser and returns status, final URL and body.
+     *
+     * @param string $url
+     * @return array
+     */
+    private function request_in_browser(string $url): array {
+        $script = 'return (function() { var x = new XMLHttpRequest(); x.open("GET", ' . json_encode($url) . ', false);'
+            . ' x.send(); return JSON.stringify({status: x.status, url: x.responseURL, body: x.responseText}); })();';
+        return json_decode((string) $this->getSession()->evaluateScript($script), true);
+    }
+
+    /** @var array|null The last page requested with request_in_browser() by a step (mod_adaptivequiz #22). */
+    private ?array $requested = null;
+
+    /**
+     * Requests the result page of a user's last attempt at an activity with the session of the browser
+     * (mod_adaptivequiz #22). Parameters of attemptfinished.php: cmid, id (the instance), uattid (the usage).
+     *
+     * @When /^I request the result page of the last attempt of "([^"]*)" at "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function i_request_the_result_page_of_the_last_attempt(string $username, string $idnumber): void {
+        [$attempt, $cm] = $this->last_host_attempt_at($username, $idnumber);
+        $this->request_result_page(['cmid' => $cm->id, 'id' => $cm->instance, 'uattid' => $attempt->uniqueid]);
+    }
+
+    /**
+     * Requests the result page again with one parameter taken from another attempt - a manipulated link
+     * (mod_adaptivequiz #22).
+     *
+     * @When /^I request it again with the (cmid|id|uattid) of the last attempt of "([^"]*)" at "([^"]*)"$/
+     *
+     * @param string $param
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function i_request_it_again_with_the_param_of(string $param, string $username, string $idnumber): void {
+        [$attempt, $cm] = $this->last_host_attempt_at($username, $idnumber);
+        $params = $this->requested['params'];
+        $params[$param] = ['cmid' => $cm->id, 'id' => $cm->instance, 'uattid' => $attempt->uniqueid][$param];
+        $this->request_result_page($params);
+    }
+
+    /**
+     * Requests the CATquiz feedback page of a user's last attempt at an activity - the page teachers open from
+     * the reports (mod_adaptivequiz #22).
+     *
+     * @When /^I request the CAT feedback page of the last attempt of "([^"]*)" at "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function i_request_the_cat_feedback_page_of_the_last_attempt(string $username, string $idnumber): void {
+        global $DB;
+        [$attempt] = $this->last_host_attempt_at($username, $idnumber);
+        [$insql, $inparams] = $DB->get_in_or_equal(\local_catquiz\catquiz::component_names('mod_adaptivequiz'));
+        $contextid = $DB->get_field_select(
+            'local_catquiz_attempts',
+            'contextid',
+            "attemptid = ? AND component $insql",
+            array_merge([$attempt->id], $inparams),
+            MUST_EXIST
+        );
+        $params = ['attemptid' => $attempt->id, 'contextid' => $contextid];
+        $url = (new \moodle_url('/local/catquiz/show_attemptfeedback.php', $params))->out(false);
+        $this->requested = ['params' => $params] + $this->request_in_browser($url);
+        $this->record_network_evidence(sprintf('CAT feedback page %s: HTTP %d', $url, $this->requested['status']));
+    }
+
+    /**
+     * Checks the page requested last: a text it must show ("nothing" for a refused page) and one it must not.
+     *
+     * @Then /^the requested page shows "([^"]*)" and not "([^"]*)"$/
+     *
+     * @param string $expected
+     * @param string $forbidden
+     * @return void
+     */
+    public function the_requested_page_shows_and_not(string $expected, string $forbidden): void {
+        $body = (string) ($this->requested['body'] ?? '');
+        $text = trim(preg_replace('/\s+/', ' ', strip_tags(preg_replace('#<(script|style)\b.*?</\1>#si', '', $body))));
+        $report = 'HTTP ' . ($this->requested['status'] ?? '?') . ', ' . ($this->requested['url'] ?? '')
+            . ', page: ' . \core_text::substr($text, 0, 600);
+        if ($expected !== 'nothing' && strpos($body, $expected) === false) {
+            throw new \Behat\Mink\Exception\ExpectationException("\"$expected\" missing - $report", $this->getSession());
+        }
+        if (strpos($body, $forbidden) !== false) {
+            throw new \Behat\Mink\Exception\ExpectationException("\"$forbidden\" shown - $report", $this->getSession());
+        }
+    }
+
+    /**
+     * Requests attemptfinished.php with the given parameters and keeps the answer for the check.
+     *
+     * @param array $params
+     * @return void
+     */
+    private function request_result_page(array $params): void {
+        $url = (new \moodle_url('/mod/adaptivequiz/attemptfinished.php', $params))->out(false);
+        $this->requested = ['params' => $params] + $this->request_in_browser($url);
+        $this->record_network_evidence(sprintf(
+            'result page %s: HTTP %d, final URL %s',
+            $url,
+            $this->requested['status'],
+            $this->requested['url']
+        ));
+    }
+
+    /**
+     * Moves the ids of the next CAT attempts away from those of the host (issues #95, #101): local_catquiz_attempts.id
+     * then differs from adaptivequiz_attempt.id, and a mix-up of the two namespaces can no longer go unnoticed.
+     *
+     * @Given /^the next CAT attempt ids start at (\d+)$/
+     *
+     * @param int $start
+     * @return void
+     */
+    public function the_next_cat_attempt_ids_start_at(int $start): void {
+        global $DB;
+        $id = $DB->insert_record_raw('local_catquiz_attempts', [
+            'id' => $start - 1, 'userid' => 0, 'timecreated' => 0, 'timemodified' => 0,
+        ], true, false, true);
+        $DB->get_manager()->reset_sequence(new \xmldb_table('local_catquiz_attempts'));
+        $DB->delete_records('local_catquiz_attempts', ['id' => $id]);
+    }
+
+    /**
+     * The CAT attempt of a user's last attempt at an activity, with the host attempt.
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return array [CAT attempt record, host attempt record]
+     */
+    private function cat_attempt_of_last_attempt(string $username, string $idnumber): array {
+        global $DB;
+        [$hostattempt] = $this->last_host_attempt_at($username, $idnumber);
+        [$insql, $inparams] = $DB->get_in_or_equal(\local_catquiz\catquiz::component_names('mod_adaptivequiz'));
+        $catattempt = $DB->get_record_select(
+            'local_catquiz_attempts',
+            "attemptid = ? AND component $insql",
+            array_merge([$hostattempt->id], $inparams),
+            '*',
+            MUST_EXIST
+        );
+        return [$catattempt, $hostattempt];
+    }
+
+    /**
+     * Checks the id namespaces of a user's last attempt (issues #95, #101): the CAT attempt has its own id, holds the
+     * host id in its attemptid, and the progress, the stored results and the history of the questions refer to the
+     * CAT attempt - nothing is filed under the id of the host attempt.
+     *
+     * @Then /^the CAT attempt of the last attempt of "([^"]*)" at "([^"]*)" has its own id and everything refers to it$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_cat_attempt_has_its_own_id_and_everything_refers_to_it(string $username, string $idnumber): void {
+        global $DB;
+        [$catattempt, $hostattempt] = $this->cat_attempt_of_last_attempt($username, $idnumber);
+        $problems = [];
+        if ((int) $catattempt->id === (int) $hostattempt->id) {
+            $problems[] = "the ids are equal ({$catattempt->id}) - the step 'the next CAT attempt ids start at' is missing";
+        }
+        if ((int) $catattempt->userid !== (int) $hostattempt->userid) {
+            $problems[] = 'the CAT attempt belongs to another user';
+        }
+        $progress = $DB->get_records('local_catquiz_progress', ['attemptid' => $catattempt->id]);
+        if (count($progress) !== 1) {
+            $problems[] = count($progress) . ' progress rows under the CAT attempt id';
+        }
+        foreach ($progress as $row) {
+            if ((int) $row->userid !== (int) $hostattempt->userid) {
+                $problems[] = 'the progress belongs to another user';
+            }
+        }
+        if ($DB->record_exists('local_catquiz_progress', ['attemptid' => $hostattempt->id])) {
+            $problems[] = "a progress row under the host attempt id {$hostattempt->id}";
+        }
+        if (!empty($hostattempt->timefinished)) {
+            if (!$DB->record_exists('local_catquiz_personparams', ['attemptid' => $catattempt->id, 'resultsource' => 'current'])) {
+                $problems[] = 'no stored results under the CAT attempt id';
+            }
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException(sprintf(
+                'CAT attempt %d, host attempt %d: %s',
+                $catattempt->id,
+                $hostattempt->id,
+                implode('; ', $problems)
+            ), $this->getSession());
+        }
+        $this->record_network_evidence(sprintf(
+            'ids of %s at %s: CAT attempt %d, host attempt %d, progress and results under the CAT attempt',
+            $username,
+            $idnumber,
+            $catattempt->id,
+            $hostattempt->id
+        ));
+    }
+
+    /**
+     * Gives the saved state of a user's open attempt to another user - a progress row whose numeric id meets an
+     * attempt of somebody else, the collision of issue #96. The cache is cleared: the row is read from the database.
+     *
+     * @Given /^the saved state of the last attempt of "([^"]*)" at "([^"]*)" belongs to "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @param string $other
+     * @return void
+     */
+    public function the_saved_state_belongs_to(string $username, string $idnumber, string $other): void {
+        global $DB;
+        [$catattempt] = $this->cat_attempt_of_last_attempt($username, $idnumber);
+        $otherid = (int) $DB->get_field('user', 'id', ['username' => $other], MUST_EXIST);
+        $DB->set_field('local_catquiz_progress', 'userid', $otherid, ['attemptid' => $catattempt->id]);
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * Checks that the saved state was neither taken over nor overwritten (issue #96): it still belongs to the given
+     * user and is unchanged.
+     *
+     * @Then /^the saved state of the last attempt of "([^"]*)" at "([^"]*)" still belongs to "([^"]*)" and is unchanged$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @param string $other
+     * @return void
+     */
+    public function the_saved_state_still_belongs_to(string $username, string $idnumber, string $other): void {
+        global $DB;
+        [$catattempt] = $this->cat_attempt_of_last_attempt($username, $idnumber);
+        $otherid = (int) $DB->get_field('user', 'id', ['username' => $other], MUST_EXIST);
+        $rows = $DB->get_records('local_catquiz_progress', ['attemptid' => $catattempt->id]);
+        $row = reset($rows);
+        if (count($rows) !== 1 || (int) $row->userid !== $otherid) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'The saved state was taken over or replaced: ' . count($rows) . ' rows',
+                $this->getSession()
+            );
+        }
+        if (isset($this->savedstate) && $this->savedstate !== [(int) $row->id, (string) $row->json]) {
+            throw new \Behat\Mink\Exception\ExpectationException('The saved state was overwritten.', $this->getSession());
+        }
+    }
+
+    /** @var array|null Id and content of a saved state, remembered by a step (issue #96). */
+    private ?array $savedstate = null;
+
+    /**
+     * Remembers id and content of the saved state of a user's last attempt, to check later that it was not
+     * overwritten (issue #96).
+     *
+     * @Given /^I remember the saved state of the last attempt of "([^"]*)" at "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function i_remember_the_saved_state(string $username, string $idnumber): void {
+        global $DB;
+        [$catattempt] = $this->cat_attempt_of_last_attempt($username, $idnumber);
+        $row = $DB->get_record('local_catquiz_progress', ['attemptid' => $catattempt->id], '*', MUST_EXIST);
+        $this->savedstate = [(int) $row->id, (string) $row->json];
+    }
+
+    /**
+     * Submits an answer in the browser and checks that the next page refuses with the given text (issue #96).
+     *
+     * A refusal is a Moodle error page, which the hooks would report as a failure of the step; the page is read here
+     * and then left for the course page, so that only the text decides.
+     *
+     * @When /^I answer "([^"]*)" to question (\d+) and the page refuses with "([^"]*)"$/
+     *
+     * @param string $answer
+     * @param int $number
+     * @param string $text
+     * @return void
+     */
+    public function i_answer_and_the_page_refuses_with(string $answer, int $number, string $text): void {
+        $this->execute('behat_general::i_click_on_in_the', [$answer, 'text', "Question $number", 'question']);
+        // Pressed directly: execute() would stop at the error page itself.
+        $this->getSession()->getPage()->pressButton('Submit answer');
+        $this->getSession()->wait(behat_base::get_extended_timeout() * 1000, 'document.readyState === "complete"');
+        $page = $this->getSession()->getPage()->getText();
+        $url = $this->getSession()->getCurrentUrl();
+        $this->record_network_evidence(sprintf(
+            'answer to question %d at %s: %s',
+            $number,
+            $url,
+            \core_text::substr(trim(preg_replace('/\s+/', ' ', $page)), 0, 300)
+        ));
+        $this->getSession()->visit($this->locate_path('/my/courses.php'));
+        if (strpos($page, $text) === false) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "\"$text\" not shown after the answer: " . \core_text::substr(trim(preg_replace('/\s+/', ' ', $page)), 0, 600),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Files N earlier participants with the same valid result on a test's scale (issue #106): a prior without spread.
+     *
+     * @Given /^(\d+) earlier participants have the valid CAT result "([^"]*)" at "([^"]*)"$/
+     *
+     * @param int $count
+     * @param string $ability
+     * @param string $idnumber
+     * @return void
+     */
+    public function earlier_participants_have_the_same_result(int $count, string $ability, string $idnumber): void {
+        $rows = [['user', 'days ago', 'ability', 'valid']];
+        $generator = \testing_util::get_data_generator();
+        for ($i = 1; $i <= $count; $i++) {
+            $user = $generator->create_user(['username' => 'earlier' . $i]);
+            $rows[] = [$user->username, (string) (1 + $i % 20), $ability, 'yes'];
+        }
+        $this->the_following_cat_results_exist($idnumber, new \Behat\Gherkin\Node\TableNode($rows));
+    }
+
+    /**
+     * Checks that a user's last attempt stored only finite numbers (issue #106): the results of every scale, the
+     * abilities and standard errors in the CAT attempt and in its saved state. No NaN, no INF, also not as text.
+     *
+     * @Then /^the last attempt of "([^"]*)" at "([^"]*)" stored only finite abilities$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_last_attempt_stored_only_finite_abilities(string $username, string $idnumber): void {
+        global $DB;
+        [$catattempt] = $this->cat_attempt_of_last_attempt($username, $idnumber);
+        $problems = [];
+        $params = $DB->get_records('local_catquiz_personparams', ['attemptid' => $catattempt->id]);
+        if (!$params) {
+            $problems[] = "no stored result for CAT attempt {$catattempt->id} (status {$catattempt->status}); results of the "
+                . 'person: ' . json_encode($DB->get_records_menu(
+                    'local_catquiz_personparams',
+                    ['userid' => $catattempt->userid],
+                    '',
+                    'id, attemptid'
+                ));
+        }
+        foreach ($params as $param) {
+            foreach (['ability', 'standarderror'] as $field) {
+                if ($param->$field !== null && !is_finite((float) $param->$field)) {
+                    $problems[] = "personparams {$param->catscaleid} $field = {$param->$field}";
+                }
+            }
+        }
+        if (!is_finite((float) $catattempt->personability_after_attempt)) {
+            $problems[] = 'personability_after_attempt = ' . $catattempt->personability_after_attempt;
+        }
+        $texts = ['attempt' => (string) $catattempt->json,
+            'progress' => (string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattempt->id])];
+        foreach ($texts as $where => $text) {
+            if (preg_match('/\b(NAN|-?INF)\b/i', $text, $m)) {
+                $problems[] = "$where holds $m[0]";
+            }
+            $walk = function ($value, string $path) use (&$walk, &$problems, $where): void {
+                if (is_array($value) || is_object($value)) {
+                    foreach ((array) $value as $key => $inner) {
+                        $walk($inner, "$path.$key");
+                    }
+                } else if (is_float($value) && !is_finite($value)) {
+                    $problems[] = "$where$path";
+                }
+            };
+            $walk(json_decode($text), '');
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException(implode('; ', $problems), $this->getSession());
+        }
+    }
+
+    /**
+     * A numeric fallback was reported as an event (issue #106), with its reason.
+     *
+     * @Then /^a numeric fallback "([^"]*)" was logged$/
+     *
+     * @param string $reason
+     * @return void
+     */
+    public function a_numeric_fallback_was_logged(string $reason): void {
+        global $DB;
+        $events = $DB->get_records('logstore_standard_log', ['eventname' => '\\local_catquiz\\event\\numeric_fallback_applied']);
+        foreach ($events as $event) {
+            $other = json_decode((string) $event->other, true);
+            if (($other['reason'] ?? null) === $reason) {
+                return;
+            }
+        }
+        throw new \Behat\Mink\Exception\ExpectationException(
+            sprintf('No numeric fallback "%s" logged (%d others).', $reason, count($events)),
+            $this->getSession()
+        );
+    }
+
+    /**
+     * Answers the questions of the open attempt one after the other until the attempt ends (issue #106) - as many as
+     * the CAT model asks, at most a given number. Each answer is chosen by its text and sent with "Submit answer".
+     *
+     * @When /^I answer "([^"]*)" to every question until the attempt ends, at most (\d+) times$/
+     *
+     * @param string $answer
+     * @param int $max
+     * @return void
+     */
+    public function i_answer_every_question_until_the_attempt_ends(string $answer, int $max): void {
+        for ($i = 0; $i < $max; $i++) {
+            if (!$this->answer_the_question_on_the_screen($answer, $i + 1)) {
+                return;
+            }
+        }
+        if ($this->getSession()->getPage()->find('css', 'form#responseform') !== null) {
+            throw new \Behat\Mink\Exception\ExpectationException("The attempt did not end after $max answers.",
+                $this->getSession());
+        }
+    }
+
+    /**
+     * Checks the scale stored in the CAT settings of an activity (issue #123): a reload of the form stores nothing,
+     * "Save and display" stores the choice.
+     *
+     * @Then /^the stored CAT settings of "([^"]*)" use the CAT scale "([^"]*)"$/
+     *
+     * @param string $idnumber
+     * @param string $scalename
+     * @return void
+     */
+    public function the_stored_cat_settings_use_the_cat_scale(string $idnumber, string $scalename): void {
+        global $DB;
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            '*',
+            MUST_EXIST
+        );
+        $stored = (string) $DB->get_field('local_catquiz_catscales', 'name', ['id' => $test->catscaleid]);
+        $json = json_decode((string) $test->json, true) ?: [];
+        $injson = (string) $DB->get_field('local_catquiz_catscales', 'name', ['id' => (int) ($json['catquiz_catscales'] ?? 0)]);
+        if ($stored !== $scalename || $injson !== $scalename) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "The stored settings of \"$idnumber\" use \"$stored\" (settings: \"$injson\"), not \"$scalename\".",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Checks whether a subscale is switched on in the stored CAT settings of an activity (issue #123).
+     *
+     * @Then /^the stored CAT settings of "([^"]*)" have the subscale "([^"]*)" (on|off)$/
+     *
+     * @param string $idnumber
+     * @param string $scalename
+     * @param string $state
+     * @return void
+     */
+    public function the_stored_cat_settings_have_the_subscale(string $idnumber, string $scalename, string $state): void {
+        global $DB;
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $json = json_decode((string) $DB->get_field(
+            'local_catquiz_tests',
+            'json',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            MUST_EXIST
+        ), true) ?: [];
+        $scaleid = (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => $scalename], MUST_EXIST);
+        $value = $json['catquiz_subscalecheckbox_' . $scaleid] ?? null;
+        $on = !empty($value);
+        if ($on !== ($state === 'on')) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "The subscale \"$scalename\" is " . ($on ? 'on' : 'off') . " in the stored settings of \"$idnumber\" ("
+                    . json_encode($value) . ').',
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Answers the open attempt with two answers in turn until it ends (issue #131): a mixed result, so that the
+     * scales can be measured validly.
+     *
+     * @When /^I answer "([^"]*)" and "([^"]*)" in turn until the attempt ends, at most (\d+) times$/
+     *
+     * @param string $first
+     * @param string $second
+     * @param int $max
+     * @return void
+     */
+    public function i_answer_in_turn_until_the_attempt_ends(string $first, string $second, int $max): void {
+        for ($i = 0; $i < $max; $i++) {
+            if (!$this->answer_the_question_on_the_screen($i % 2 === 0 ? $first : $second, $i + 1)) {
+                return;
+            }
+        }
+        if ($this->getSession()->getPage()->find('css', 'form#responseform') !== null) {
+            throw new \Behat\Mink\Exception\ExpectationException("The attempt did not end after $max answers.",
+                $this->getSession());
+        }
+    }
+
+    /**
+     * Checks the routing of an attempt against its stored results, not against the routing code (issue #131).
+     *
+     * The groups "<prefix> <scale>" the person is in must be exactly the scales the result routes: an invalid
+     * attempt routes nobody; a strategy that selects one scale (CAT, lowest gap, greatest strength) routes its valid
+     * primary scale; the others every scale measured validly in this attempt and reported - stored as valid, or with
+     * no reason but "not primary". The course is joined if and only if a group is.
+     *
+     * @Then /^"([^"]*)" is routed by the stored results of the last attempt at "([^"]*)" into "([^"]*)" and "([^"]*)" groups$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @param string $courseshortname
+     * @param string $prefix
+     * @return void
+     */
+    public function the_routing_follows_the_stored_results(
+        string $username,
+        string $idnumber,
+        string $courseshortname,
+        string $prefix
+    ): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+        [$catattempt, $hostattempt] = $this->cat_attempt_of_last_attempt($username, $idnumber);
+        $userid = (int) $hostattempt->userid;
+        $rows = $DB->get_records('local_catquiz_personparams', ['attemptid' => $catattempt->id, 'resultsource' => 'current']);
+        $single = in_array(
+            (int) $catattempt->teststrategy,
+            [LOCAL_CATQUIZ_STRATEGY_FASTEST, LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB],
+            true
+        );
+        $expected = [];
+        $stored = [];
+        foreach ($rows as $row) {
+            $name = (string) $DB->get_field('local_catquiz_catscales', 'name', ['id' => $row->catscaleid]);
+            $stored[] = "$name:" . ((int) $row->isvalid) . ':' . (string) $row->validationstatus;
+            $reasons = array_filter(array_map('trim', explode(',', (string) $row->validationstatus)));
+            if ((int) $row->isvalid === 1 || (!$single && $reasons === ['not_primary'])) {
+                $expected[] = $name;
+            }
+        }
+        if (!(int) $hostattempt->resultvalid) {
+            $expected = [];
+        }
+        // Only a group that exists can be joined; the course is joined for every routed scale all the same.
+        $routes = $expected;
+        $existing = $DB->get_fieldset_select('groups', 'name', $DB->sql_like('name', '?'), [$DB->sql_like_escape($prefix) . ' %']);
+        $expected = array_values(array_intersect(
+            $expected,
+            array_map(fn($name) => substr($name, strlen($prefix) + 1), $existing)
+        ));
+        $actual = [];
+        $groups = $DB->get_records_sql(
+            "SELECT g.id, g.name FROM {groups} g JOIN {groups_members} gm ON gm.groupid = g.id
+              WHERE gm.userid = ? AND " . $DB->sql_like('g.name', '?'),
+            [$userid, $DB->sql_like_escape($prefix) . ' %']
+        );
+        foreach ($groups as $group) {
+            $actual[] = substr($group->name, strlen($prefix) + 1);
+        }
+        sort($expected);
+        sort($actual);
+        $course = $DB->get_record('course', ['shortname' => $courseshortname], 'id', MUST_EXIST);
+        $enrolled = is_enrolled(\context_course::instance($course->id), $userid);
+        if ($expected !== $actual || $enrolled !== ($routes !== [])) {
+            throw new \Behat\Mink\Exception\ExpectationException(sprintf(
+                'Routed into %s, enrolled in %s: %s; the stored results route %s (strategy %d, result %s; rows %s).',
+                json_encode($actual),
+                $courseshortname,
+                $enrolled ? 'yes' : 'no',
+                json_encode($expected),
+                $catattempt->teststrategy,
+                $hostattempt->resultstatus,
+                implode(' ', $stored)
+            ), $this->getSession());
+        }
+    }
+
+    /**
+     * Ends the routing of an attempt a second time, as a repeated finalisation or a retried task would (issue #131).
+     *
+     * @When /^the last attempt of "([^"]*)" at "([^"]*)" is finalised and routed again$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function the_last_attempt_is_finalised_and_routed_again(string $username, string $idnumber): void {
+        [, $hostattempt] = $this->cat_attempt_of_last_attempt($username, $idnumber);
+        \core\session\manager::set_user(get_admin());
+        \local_catquiz\local\attempt\attempt_finalizer::finalize((int) $hostattempt->id, time(), 'repeated');
+        \local_catquiz\local\attempt\attempt_enrolment::enrol((int) $hostattempt->id);
+    }
+
+    /**
+     * A person was enrolled into a course by the routing at most once (issue #131): one enrolment, one event.
+     *
+     * @Then /^"([^"]*)" was routed into "([^"]*)" at most once$/
+     *
+     * @param string $username
+     * @param string $courseshortname
+     * @return void
+     */
+    public function was_routed_at_most_once(string $username, string $courseshortname): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $courseid = (int) $DB->get_field('course', 'id', ['shortname' => $courseshortname], MUST_EXIST);
+        $enrolments = $DB->count_records_sql(
+            'SELECT COUNT(1) FROM {user_enrolments} ue JOIN {enrol} e ON e.id = ue.enrolid WHERE ue.userid = ? AND e.courseid = ?',
+            [$userid, $courseid]
+        );
+        $fullname = (string) $DB->get_field('course', 'fullname', ['id' => $courseid]);
+        $events = 0;
+        foreach (
+            $DB->get_records(
+                'logstore_standard_log',
+                ['eventname' => '\\local_catquiz\\event\\usertocourse_enroled', 'objectid' => $userid]
+            ) as $event
+        ) {
+            $other = json_decode((string) $event->other, true) ?: [];
+            $events += (($other['coursename'] ?? null) === $fullname) ? 1 : 0;
+        }
+        if ($enrolments > 1 || $events > 1) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "$username: $enrolments enrolments and $events enrolment events in $courseshortname.",
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * Answers the question on the screen with the answer of that text and waits for the next page (issues #106, #131).
+     *
+     * Waits until the question form shows another slot or is gone, so that the next step never reads the page that was
+     * just left (a stale element).
+     *
+     * @param string $answer
+     * @param int $number The number of the answer in the attempt, for the message.
+     * @return bool False when no question form is on the screen.
+     */
+    private function answer_the_question_on_the_screen(string $answer, int $number): bool {
+        $page = $this->getSession()->getPage();
+        $form = $page->find('css', 'form#responseform');
+        $button = $form ? $page->findButton('Submit answer') : null;
+        if ($button === null) {
+            return false;
+        }
+        $slotfield = $page->find('css', 'form#responseform input[name="slots"]');
+        $slot = $slotfield ? (string) $slotfield->getValue() : '';
+        $literal = behat_context_helper::escape($answer);
+        $radio = $page->find('xpath', "//div[@data-region='answer-label'][contains(normalize-space(.), $literal)]"
+            . "/preceding-sibling::input[@type='radio']");
+        if ($radio === null) {
+            $text = preg_replace('/\s+/', ' ', $page->find('css', '#region-main')?->getText() ?? $page->getText());
+            throw new \Behat\Mink\Exception\ExpectationException("No answer \"$answer\" on question $number: "
+                . mb_substr($text, 0, 600), $this->getSession());
+        }
+        $radio->click();
+        $button->press();
+        $this->spin(function () use ($slot): bool {
+            $page = $this->getSession()->getPage();
+            if ($page->find('css', 'form#responseform') === null) {
+                return true;
+            }
+            $field = $page->find('css', 'form#responseform input[name="slots"]');
+            return $field !== null && (string) $field->getValue() !== $slot;
+        }, [], behat_base::get_extended_timeout(), null, true);
+        $this->wait_for_pending_js();
+        return true;
+    }
+
+    /**
+     * Requests the CSV export of a user's last attempt with the session of the browser (issue #95: export).
+     *
+     * @When /^I request the CSV export of the last attempt of "([^"]*)" at "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @return void
+     */
+    public function i_request_the_csv_export_of_the_last_attempt(string $username, string $idnumber): void {
+        [$attempt] = $this->last_host_attempt_at($username, $idnumber);
+        $url = (new \moodle_url('/local/catquiz/export_attempt_csv.php', ['attemptid' => $attempt->id]))->out(false);
+        $this->requested = ['params' => []] + $this->request_in_browser($url);
+        $this->record_network_evidence(sprintf('csv export %s: HTTP %d', $url, $this->requested['status']));
+    }
+
+    /**
+     * Checks the requested CSV export (issue #95): every row names the attempt of the host and its person, the number
+     * of questions, and no duplicate slot - the export follows the CAT attempt of exactly this attempt.
+     *
+     * @Then /^the export names the last attempt of "([^"]*)" at "([^"]*)" with (\d+) questions and no duplicate$/
+     *
+     * @param string $username
+     * @param string $idnumber
+     * @param int $questions
+     * @return void
+     */
+    public function the_export_names_the_last_attempt(string $username, string $idnumber, int $questions): void {
+        [$attempt] = $this->last_host_attempt_at($username, $idnumber);
+        $body = (string) ($this->requested['body'] ?? '');
+        $lines = array_values(array_filter(preg_split('/\r?\n/', $body), fn($l) => trim($l) !== ''));
+        $problems = [];
+        if ((int) ($this->requested['status'] ?? 0) !== 200 || count($lines) < 2) {
+            $problems[] = 'HTTP ' . ($this->requested['status'] ?? '?') . ', ' . count($lines) . ' lines';
+        } else {
+            // The writer may put a byte order mark in front and separates with ";" (Moodle's csv_export_writer).
+            $sep = substr_count($lines[0], ';') > substr_count($lines[0], ',') ? ';' : ',';
+            $head = array_map(fn($c) => trim(preg_replace('/^\xEF\xBB\xBF/', '', $c)), str_getcsv($lines[0], $sep));
+            if (!in_array('attemptid', $head, true)) {
+                throw new \Behat\Mink\Exception\ExpectationException('Export without the expected columns: '
+                    . mb_substr($body, 0, 300), $this->getSession());
+            }
+            foreach (array_slice($lines, 1) as $line) {
+                $row = array_combine($head, array_pad(str_getcsv($line, $sep), count($head), ''));
+                if ((int) $row['attemptid'] !== (int) $attempt->id || (int) $row['userid'] !== (int) $attempt->userid) {
+                    $problems[] = "row of attempt {$row['attemptid']} / user {$row['userid']}";
+                }
+                if ((int) $row['questionsattempted'] !== $questions || (int) $row['duplicateslots'] !== 0) {
+                    $problems[] = "questions {$row['questionsattempted']}, duplicate slots {$row['duplicateslots']}";
+                }
+            }
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException('Export: ' . implode('; ', array_unique($problems)),
+                $this->getSession());
         }
     }
 }

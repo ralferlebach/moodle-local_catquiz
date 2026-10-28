@@ -232,10 +232,19 @@ final class attempt_result_validator {
             return new attempt_result([]);
         }
 
-        $personabilities = $data['personabilities_abilities']
-            ?? $data['customscalefeedback_abilities']
-            ?? [];
-        if (!is_array($personabilities) || $personabilities === []) {
+        /* The scales of the attempt: those the strategy reports, else every scale the feedback knows. An empty list of
+           reported scales is no reason to persist nothing - all right or all wrong leaves every scale with an error,
+           and the strategy then reports none (issue #106, E2E 27.10.2026). Before, `??` took the empty list, the
+           attempt got no result row at all, and the estimates written during the attempt stayed the latest valid
+           value of the person. */
+        $personabilities = [];
+        foreach (['personabilities_abilities', 'customscalefeedback_abilities'] as $key) {
+            if (!empty($data[$key]) && is_array($data[$key])) {
+                $personabilities = $data[$key];
+                break;
+            }
+        }
+        if ($personabilities === []) {
             return new attempt_result([]);
         }
 

@@ -307,4 +307,20 @@ final class capability_declaration_test extends advanced_testcase {
                 . 'guards in place.'
         );
     }
+
+    /**
+     * The legacy attempt web services are gone and stay gone (issue #67, re-audit 27.10.2026): not declared, not
+     * registered on the site, no class behind the name - nothing that could be called without the activity's context,
+     * capability and ownership checks.
+     */
+    public function test_the_legacy_attempt_services_do_not_exist(): void {
+        global $CFG, $DB;
+        $functions = [];
+        require($CFG->dirroot . '/local/catquiz/db/services.php');
+        foreach (['start_new_attempt', 'get_next_question', 'submit_result'] as $name) {
+            $this->assertArrayNotHasKey('local_catquiz_' . $name, $functions);
+            $this->assertFalse($DB->record_exists('external_functions', ['name' => 'local_catquiz_' . $name]));
+            $this->assertFalse(class_exists('\\local_catquiz\\external\\' . $name));
+        }
+    }
 }

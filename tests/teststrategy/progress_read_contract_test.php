@@ -207,4 +207,97 @@ final class progress_read_contract_test extends advanced_testcase {
         $html = $output->render_from_template('local_catquiz/attemptfeedback', $data);
         $this->assertStringContainsString(get_string('noresultforattempt', 'local_catquiz'), $html);
     }
+
+    /**
+     * Cache miss with stored progress while two persons have attempts running side by side (issue #149): a writer
+     * that comes back without cache continues its own stored progress - no new progress, no new CAT attempt - and
+     * saving one never touches the other.
+     */
+    public function test_cache_miss_with_parallel_attempts_of_two_persons(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $alice = $this->getDataGenerator()->create_user();
+        $bob = $this->getDataGenerator()->create_user();
+        $runs = [71010 => $alice, 71011 => $bob];
+        $ids = [];
+        foreach ($runs as $hostid => $user) {
+            $this->host_attempt($hostid, (int) $user->id);
+            $this->setUser($user);
+            $progress = progress::load($hostid, 'mod_adaptivequiz', 9, (object) ['catquiz_catscales' => $hostid]);
+            $progress->save();
+            $ids[$hostid] = $progress->get_id();
+        }
+        $counts = [$DB->count_records('local_catquiz_progress'), $DB->count_records('local_catquiz_attempts')];
+
+        // Both come back after the cache was lost, one after the other within the same moment.
+        cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+        $loaded = [];
+        foreach ($runs as $hostid => $user) {
+            $this->setUser($user);
+            $loaded[$hostid] = progress::load($hostid, 'mod_adaptivequiz', 9, (object) ['catquiz_catscales' => 0]);
+            $this->assertSame($ids[$hostid], $loaded[$hostid]->get_id(), "Attempt $hostid continues its own progress.");
+            $this->assertEquals($hostid, $loaded[$hostid]->get_quiz_settings()->catquiz_catscales, 'The stored settings.');
+        }
+        $this->assertSame(
+            $counts,
+            [$DB->count_records('local_catquiz_progress'), $DB->count_records('local_catquiz_attempts')],
+            'Nothing created a second time.'
+        );
+
+        // Alice saves; Bob's row stays as it was. Then Bob saves; Alice's stays.
+        $bobrow = $DB->get_record('local_catquiz_progress', ['id' => $ids[71011]]);
+        $this->setUser($alice);
+        $loaded[71010]->set_ability(1.5, 99);
+        $loaded[71010]->save();
+        $this->assertEquals($bobrow, $DB->get_record('local_catquiz_progress', ['id' => $ids[71011]]));
+        $alicerow = $DB->get_record('local_catquiz_progress', ['id' => $ids[71010]]);
+        $this->setUser($bob);
+        $loaded[71011]->save();
+        $this->assertEquals($alicerow, $DB->get_record('local_catquiz_progress', ['id' => $ids[71010]]));
+        foreach ($runs as $hostid => $user) {
+            $row = $DB->get_record('local_catquiz_progress', ['id' => $ids[$hostid]]);
+            $this->assertEquals($user->id, $row->userid);
+            $this->assertEquals($hostid, json_decode($row->quizsettings)->catquiz_catscales);
+        }
+    }
+
+    /**
+     * A progress stored before the settings were kept with it: the reader takes the settings of its CAT attempt
+     * for this request and writes nothing; only a writer stores them (issue #149).
+     */
+    public function test_an_old_progress_is_read_without_writing_it(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $this->host_attempt(71012, (int) $user->id);
+        $this->setUser($user);
+        $progress = progress::load(71012, 'mod_adaptivequiz', 9, (object) ['catquiz_catscales' => 1]);
+        $progress->save();
+        $catattemptid = (int) catquiz::get_cat_attempt_id(71012, 'mod_adaptivequiz');
+        $DB->set_field(
+            'local_catquiz_attempts',
+            'json',
+            json_encode(['quizsettings' => ['catquiz_catscales' => 7]]),
+            ['id' => $catattemptid]
+        );
+        $DB->set_field('local_catquiz_progress', 'quizsettings', null, ['id' => $progress->get_id()]);
+        $DB->set_field('local_catquiz_progress', 'timemodified', 1000, ['id' => $progress->get_id()]);
+        cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+        $before = $DB->get_record('local_catquiz_progress', ['id' => $progress->get_id()]);
+
+        $read = progress::load(71012, 'mod_adaptivequiz', 9);
+        $this->assertEquals(7, $read->get_quiz_settings()->catquiz_catscales, 'The settings of its CAT attempt.');
+        $this->assertEquals(
+            $before,
+            $DB->get_record('local_catquiz_progress', ['id' => $progress->get_id()]),
+            'The reader wrote nothing.'
+        );
+        $this->assertEquals($before->id, progress::load_for_reading($catattemptid)->get_id());
+        $this->assertEquals($before, $DB->get_record('local_catquiz_progress', ['id' => $progress->get_id()]));
+
+        // A writer stores them, so that the fallback is needed only once.
+        progress::load(71012, 'mod_adaptivequiz', 9, (object) ['catquiz_catscales' => 7]);
+        $stored = $DB->get_field('local_catquiz_progress', 'quizsettings', ['id' => $progress->get_id()]);
+        $this->assertEquals(7, json_decode($stored)->catquiz_catscales);
+    }
 }

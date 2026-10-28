@@ -26,7 +26,6 @@ use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
 use local_catquiz\local\access\context_resolver;
 use local_catquiz\local\access\feedback_access;
-use local_catquiz\local\model\model_strategy;
 use local_catquiz\local\statistics\attempt_population;
 use local_catquiz\local\statistics\chart_output;
 use local_catquiz\local\statistics\learning_progress_series;
@@ -273,6 +272,28 @@ class catquizstatistics {
         foreach ($tests as $test) {
             $this->quizsettings[$test->componentid] = json_decode($test->json);
         }
+    }
+
+    /**
+     * The CAT context the test information of the statistics refers to (issue #150, re-audit 27.10.2026).
+     *
+     * The context the results in the chart were measured in: that of the latest completed attempt of the population
+     * - an attempt is played in the context of its scale at the time (catquiz_handler, catscale::get_context_id()),
+     * and the feedback takes the context of its attempt the same way. Without attempts, the context of the scale.
+     * Before, the statistics always took the context the scale has now: after the scale moved to another context -
+     * a recalibration not yet calculated - "no item of this scale has calculated parameters" stood beside bars
+     * measured in a context with parameters for every item.
+     *
+     * @return int
+     */
+    public function get_testinfo_contextid(): int {
+        $attempts = $this->get_attempts();
+        for ($i = count($attempts) - 1; $i >= 0; $i--) {
+            if (!empty($attempts[$i]->contextid)) {
+                return (int) $attempts[$i]->contextid;
+            }
+        }
+        return (int) $this->contextid;
     }
 
     /**
@@ -582,14 +603,20 @@ class catquizstatistics {
      */
     private function get_abilityprofile_data(): array {
         $stepsize = 0.25;
-        $values = attempt_population::value_per_person($this->get_attempts(), 'last');
+        $attempts = $this->get_attempts();
+        $values = attempt_population::value_per_person($attempts, 'last');
         $steps = $this->get_ability_steps();
         // The bars (step - 0.25, step + 0.25]; the first also holds the minimum of the scale (issue #150).
         $counts = chart_output::counts_per_step($steps, $values, $stepsize);
         return [
             'labels' => chart_output::step_labels($steps),
             'series' => ['counter' => $counts],
-            'population' => ['persons' => count($values), 'values' => $values],
+            'population' => [
+                'persons' => count($values),
+                'values' => $values,
+                'attempts' => count($attempts),
+                'withoutvalue' => count(array_filter($attempts, fn($a) => $a->value === null)),
+            ],
         ];
     }
 
@@ -601,14 +628,11 @@ class catquizstatistics {
     public function render_abilityprofilechart() {
         $feedbackhelper = new feedback_helper();
         $abilitysteps = $this->get_ability_steps();
-        $items = $feedbackhelper->get_testitems_for_catscale($this->scaleid, $this->contextid, true);
-        // Prepare data for test information line.
-
-        $models = model_strategy::get_installed_models();
-        $fisherinfos = $feedbackhelper->get_fisherinfos_of_items($items, $models, $abilitysteps);
         // Issue #150: the test information covers every step or is left out, not invented - an empty pool, only
-        // pilot items, parameters not calculated yet. The bars do not depend on it.
-        $testinfo = chart_output::testinfo_at_steps($fisherinfos, $abilitysteps);
+        // pilot items, parameters not calculated yet. The bars do not depend on it. Re-audit 27.10.2026: in the
+        // CAT context of the tests, with the reason when it is missing.
+        $testinfodata = $feedbackhelper->testinfo_for_scale((int) $this->scaleid, $this->get_testinfo_contextid(), $abilitysteps);
+        $testinfo = $testinfodata['values'];
         // Build the histogram from the historical results of the attempts, not from the person's current
         // parameter. Person-weighted: one value per person, the latest valid one in the selection.
         $data = $this->get_abilityprofile_data();
@@ -640,21 +664,35 @@ class catquizstatistics {
             $tiseries->set_type(chart_series::TYPE_LINE);
             $tiseries->set_smooth(true);
             $chart->add_series($tiseries);
-        } else if ($canviewall) {
-            $notes = chart_output::notice(get_string('testinfounavailable', 'local_catquiz'));
         }
+        if ($canviewall) {
+            $notes = feedback_helper::testinfo_note($testinfodata, $scalename);
+        }
+        // Who the bars are (re-audit 27.10.2026): persons, one value each, out of how many attempts.
+        $population = \html_writer::div(
+            s(get_string('abilityprofilepopulation', 'local_catquiz', (object) [
+                'persons' => $data['population']['persons'],
+                'scale' => $scalename,
+                'attempts' => $data['population']['attempts'],
+                'withoutvalue' => $data['population']['withoutvalue'],
+            ])),
+            'small text-muted',
+            ['data-region' => 'local_catquiz-abilityprofile-population']
+        );
 
         $chart->set_legend_options(['display' => $canviewall]);
         $chart->add_series($aseries);
         // Issue #150: the bars are the ability steps - not the keys of the test information, which may be empty.
         $chart->set_labels($data['labels']);
         $chart->get_xaxis(0, true)->set_label(get_string('personability', 'local_catquiz'));
+        // Re-audit 27.10.2026: what the height of a bar counts.
+        $chart->get_yaxis(0, true)->set_label(get_string('abilityprofilepersons', 'local_catquiz'));
 
         $nodata = get_string('abilityprofilenodata', 'local_catquiz');
         $out = $data['population']['persons'] > 0 && array_sum($data['series']['counter']) > 0
             // With the data table: the values of the bars for screen readers and to check (issue #150).
-            ? chart_output::render($chart, true, $nodata) . $notes
-            : chart_output::notice($nodata);
+            ? chart_output::render($chart, true, $nodata) . $population . $notes
+            : chart_output::notice($nodata) . $population;
         return [
             'chart' => $out,
             'charttitle' => get_string('abilityprofile', 'local_catquiz', $scalename),

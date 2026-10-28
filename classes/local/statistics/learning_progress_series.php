@@ -16,6 +16,7 @@
 
 namespace local_catquiz\local\statistics;
 
+use local_catquiz\local\result\scale_result;
 use local_catquiz\teststrategy\feedback_helper;
 
 /**
@@ -97,7 +98,7 @@ final class learning_progress_series {
                 "attemptid $insql AND resultsource = :source",
                 $params + ['source' => 'current'],
                 '',
-                'id, attemptid, catscaleid, ability, isvalid'
+                'id, attemptid, catscaleid, ability, isvalid, validationstatus'
             );
             foreach ($rows as $row) {
                 $withresults[(int) $row->attemptid] = true;
@@ -113,7 +114,8 @@ final class learning_progress_series {
             $id = (int) $attempt->id;
             if (isset($stored[$id])) {
                 $value = $stored[$id]->ability === null ? null : (float) $stored[$id]->ability;
-                $valid = (int) $stored[$id]->isvalid === 1;
+                // Issue #150 (re-audit 27.10.2026): a valid measurement of the scale, reported or not.
+                $valid = scale_result::is_valid_measurement((int) $stored[$id]->isvalid, $stored[$id]->validationstatus);
             } else if (isset($withresults[$id])) {
                 continue;
             } else {

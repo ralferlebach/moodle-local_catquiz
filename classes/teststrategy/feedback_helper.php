@@ -707,6 +707,104 @@ class feedback_helper {
         return $fisherinfos;
     }
 
+    /** @var string Test information: neither the scale nor a subscale has an item in the CAT context. */
+    public const TESTINFO_NOITEMS = 'noitems';
+
+    /** @var string Test information: items, but none with active parameters of an installed model. */
+    public const TESTINFO_NOPARAMETERS = 'noparameters';
+
+    /** @var string Test information: parameters, but the information of no item could be computed. */
+    public const TESTINFO_NOTCOMPUTABLE = 'notcomputable';
+
+    /**
+     * The test information of a scale with its subscales in a CAT context, and why it is missing (issue #150,
+     * re-audit 27.10.2026).
+     *
+     * The items are those of the scale and every subscale below it - a root scale without items of its own has the
+     * items of its subscales. The four outcomes are told apart: no item in the context, items without parameters of
+     * an installed model, parameters whose information cannot be computed, and the line itself. Before, all of them
+     * were one message, "no item of this scale has calculated parameters in this CAT context", also for a root scale
+     * whose subscales had hundreds of items with parameters.
+     *
+     * @param int $scaleid
+     * @param int $contextid The CAT context the parameters are taken from.
+     * @param array $abilitysteps
+     * @return array ['values' => float[]|null (one per step), 'cause' => null|TESTINFO_*, 'items' => int,
+     *               'withparameters' => int, 'computed' => int, 'contextid' => int]
+     */
+    public function testinfo_for_scale(int $scaleid, int $contextid, array $abilitysteps): array {
+        $items = $this->get_testitems_for_catscale($scaleid, $contextid, true);
+        $models = \local_catquiz\local\model\model_strategy::get_installed_models();
+        $withparameters = 0;
+        $computed = 0;
+        $fisherinfos = [];
+        foreach ($items as $item) {
+            if (empty($item->model) || !array_key_exists($item->model, $models)) {
+                continue;
+            }
+            $withparameters++;
+            $iteminfos = $this->get_fisherinfos_of_items([$item], $models, $abilitysteps);
+            if (count($iteminfos) !== count($abilitysteps)) {
+                continue;
+            }
+            $computed++;
+            foreach ($iteminfos as $key => $value) {
+                $fisherinfos[$key] = ($fisherinfos[$key] ?? 0) + $value;
+            }
+        }
+        $values = $computed > 0 ? \local_catquiz\local\statistics\chart_output::testinfo_at_steps($fisherinfos, $abilitysteps)
+            : null;
+        $cause = null;
+        if ($values === null) {
+            if (!$items) {
+                $cause = self::TESTINFO_NOITEMS;
+            } else if ($withparameters === 0) {
+                $cause = self::TESTINFO_NOPARAMETERS;
+            } else {
+                $cause = self::TESTINFO_NOTCOMPUTABLE;
+            }
+        }
+        return [
+            'values' => $values,
+            'cause' => $cause,
+            'items' => count($items),
+            'withparameters' => $withparameters,
+            'computed' => $computed,
+            'contextid' => $contextid,
+        ];
+    }
+
+    /**
+     * The note for teachers beside an ability profile: where the test information comes from, or why it is missing -
+     * with the scale and the CAT context it refers to.
+     *
+     * @param array $testinfo The result of testinfo_for_scale().
+     * @param string $scalename
+     * @return string HTML
+     */
+    public static function testinfo_note(array $testinfo, string $scalename): string {
+        global $DB;
+        $contextname = $DB->get_field('local_catquiz_catcontext', 'name', ['id' => $testinfo['contextid']]);
+        $a = (object) [
+            'scale' => $scalename,
+            'context' => ($contextname !== false && $contextname !== null && $contextname !== '')
+                ? $contextname : (string) $testinfo['contextid'],
+            'items' => $testinfo['items'],
+            'withparameters' => $testinfo['withparameters'],
+            'computed' => $testinfo['computed'],
+        ];
+        if ($testinfo['cause'] === null) {
+            return \html_writer::div(
+                s(get_string('testinfosource', 'local_catquiz', $a)),
+                'small text-muted',
+                ['data-region' => 'local_catquiz-testinfo-source']
+            );
+        }
+        return \local_catquiz\local\statistics\chart_output::notice(
+            get_string('testinfo' . $testinfo['cause'], 'local_catquiz', $a)
+        );
+    }
+
     /**
      * Round float to steps as defined.
      *

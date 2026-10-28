@@ -294,10 +294,16 @@ final class ability_histogram_test extends advanced_testcase {
             $lines = array_filter($charts[0]['series'], fn($s) => ($s['type'] ?? null) === 'line');
             $teacher = $where !== 'feedback, student';
             $this->assertCount($teacher && $withtestinfo ? 1 : 0, $lines, "$where: test information.");
+            // Re-audit 27.10.2026: the reason names the scale and the CAT context; when the line is drawn, its source.
             $this->assertSame(
                 $teacher && !$withtestinfo,
-                str_contains($html, get_string('testinfounavailable', 'local_catquiz')),
+                str_contains($html, 'The test information is not shown:'),
                 "$where: a teacher is told why the test information is missing."
+            );
+            $this->assertSame(
+                $teacher && $withtestinfo,
+                str_contains($html, 'local_catquiz-testinfo-source'),
+                "$where: a teacher is told where the test information comes from."
             );
         }
     }

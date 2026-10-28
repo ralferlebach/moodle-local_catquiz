@@ -8,6 +8,7 @@ Feature: The result page of an attempt shows the feedback of that attempt's acti
     Given the following "users" exist:
       | username | firstname | lastname | email                      |
       | student1 | Student1  | Test     | toolgenerator1@example.com |
+      | student2 | Student2  | Test     | toolgenerator2@example.com |
       | teacher  | Teacher   | Test     | toolgenerator3@example.com |
     And the following "courses" exist:
       | fullname      | shortname |
@@ -16,6 +17,7 @@ Feature: The result page of an attempt shows the feedback of that attempt's acti
     And the following "course enrolments" exist:
       | user     | course | role           |
       | student1 | C1     | student        |
+      | student2 | C1     | student        |
       | teacher  | C1     | editingteacher |
     And the following "local_catquiz > questions" exist:
       | filepath                                                            | filename                               | course |
@@ -135,3 +137,29 @@ Feature: The result page of an attempt shows the feedback of that attempt's acti
     When I open the result page of the last attempt of "student1" in "adaptivecatquizA"
     Then I should see "Feedback of quiz A for Simulation"
     And I should not see "Feedback of quiz B for"
+    ## Links taken apart (mod_adaptivequiz #22): the result page is bound to attempt, instance and course module;
+    ## a link with a part of the other activity's attempt shows no feedback at all.
+    When I request the result page of the last attempt of "student1" at "adaptivecatquizA"
+    Then the requested page shows "Feedback of quiz A for Simulation" and not "Feedback of quiz B for"
+    When I request it again with the uattid of the last attempt of "student1" at "adaptivecatquizB"
+    Then the requested page shows "nothing" and not "Feedback of quiz"
+    When I request the result page of the last attempt of "student1" at "adaptivecatquizA"
+    And I request it again with the id of the last attempt of "student1" at "adaptivecatquizB"
+    Then the requested page shows "nothing" and not "Feedback of quiz"
+    When I request the result page of the last attempt of "student1" at "adaptivecatquizA"
+    And I request it again with the cmid of the last attempt of "student1" at "adaptivecatquizB"
+    Then the requested page shows "nothing" and not "Feedback of quiz"
+    And I log out
+    ## Another participant with the links of student1: neither the result page nor the CATquiz feedback page.
+    When I log in as "student2"
+    And I request the result page of the last attempt of "student1" at "adaptivecatquizA"
+    Then the requested page shows "nothing" and not "Feedback of quiz"
+    When I request the CAT feedback page of the last attempt of "student1" at "adaptivecatquizB"
+    Then the requested page shows "nothing" and not "Feedback of quiz"
+    And I log out
+    ## The teacher: each attempt's feedback page shows its own activity's feedback, never the other's.
+    When I log in as "teacher"
+    And I request the CAT feedback page of the last attempt of "student1" at "adaptivecatquizA"
+    Then the requested page shows "Feedback of quiz A for Simulation" and not "Feedback of quiz B for"
+    When I request the CAT feedback page of the last attempt of "student1" at "adaptivecatquizB"
+    Then the requested page shows "Feedback of quiz B for Simulation" and not "Feedback of quiz A for"

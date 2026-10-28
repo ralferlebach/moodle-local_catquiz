@@ -29,7 +29,6 @@ use core\chart_series;
 use local_catquiz\catquiz;
 use local_catquiz\catscale;
 use local_catquiz\feedback\feedbackclass;
-use local_catquiz\local\model\model_strategy;
 use local_catquiz\local\statistics\chart_output;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\feedbackgenerator;
@@ -373,13 +372,15 @@ class comparetotestaverage extends feedbackgenerator {
         for ($i = $ll + $abilitystep; $i <= ($ul - $abilitystep); $i += $interval) {
             $abilitysteps[] = $i;
         }
-        $items = $this->feedbackhelper->get_testitems_for_catscale($primarycatscale['id'], $initialcontext['contextid'], true);
         // The test information line, from the items with parameters. Issue #150: it may be missing - an empty
         // pool, only pilot items, parameters not calculated yet - and then it is left out, not invented; the bars
-        // do not depend on it.
-        $models = model_strategy::get_installed_models();
-        $fisherinfos = $this->feedbackhelper->get_fisherinfos_of_items($items, $models, $abilitysteps);
-        $testinfo = chart_output::testinfo_at_steps($fisherinfos, $abilitysteps);
+        // do not depend on it. Re-audit 27.10.2026: why it is missing, for the scale and CAT context of the attempt.
+        $testinfodata = $this->feedbackhelper->testinfo_for_scale(
+            (int) $primarycatscale['id'],
+            (int) $initialcontext['contextid'],
+            $abilitysteps
+        );
+        $testinfo = $testinfodata['values'];
 
         // Prepare data for scorecounter bars.
         // Scope the histogram to the current CAT context so it does
@@ -427,12 +428,18 @@ class comparetotestaverage extends feedbackgenerator {
             $tiseries->set_type(chart_series::TYPE_LINE);
             $tiseries->set_smooth(true);
             $chart->add_series($tiseries);
-        } else if ($extended) {
-            $notes = chart_output::notice(get_string('testinfounavailable', 'local_catquiz'));
+        }
+        if ($extended) {
+            $notename = $initialcontext['personabilities_abilities'][$primarycatscale['id']]['name']
+                ?? catscale::return_catscale_object((int) $primarycatscale['id'])->name;
+            $notes = feedback_helper::testinfo_note($testinfodata, (string) $notename);
         }
 
         // Issue #150: the bars are the ability steps - not the keys of the test information, which may be empty.
         $chart->set_labels(chart_output::step_labels($abilitysteps));
+        // Re-audit 27.10.2026: the axes, as in the statistics.
+        $chart->get_xaxis(0, true)->set_label(get_string('personability', 'local_catquiz'));
+        $chart->get_yaxis(0, true)->set_label(get_string('abilityprofilepersons', 'local_catquiz'));
 
         $nodata = get_string('abilityprofilenodata', 'local_catquiz');
         // With the data table for everybody (issue #150): the bars without it are not readable for a screen reader,

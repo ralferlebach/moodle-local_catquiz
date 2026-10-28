@@ -220,6 +220,33 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     And "//div[@data-chartname='abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='0.25']]/td[2]" "xpath_element" should not exist
 
   @javascript
+  Scenario: Lowest skill gap, scale moved to an empty context: every valid measurement and the test information of the results
+    ## Test 20 (re-audit 27.10.2026): under "lowest skill gap" the root scale is measured but stored as not the
+    ## reported scale. Then the scale is attached to a new context without parameters; the results stay in the old one.
+    Given the following CAT results of "adaptivecatquizA" exist under the lowest skill gap:
+      | user     | days ago | root ability | reported scale | reported ability |
+      | student1 | 3        | 0.1          | SimA           | -1.0             |
+      | student2 | 2        | 0.2          | SimB           | -0.5             |
+      | student3 | 1        | -4.9         | SimC           | -4.0             |
+    And the following CAT results of "adaptivecatquizA" exist:
+      | user     | days ago | ability | valid |
+      | student4 | 1        | 3.0     | no    |
+    And the CAT scale "Simulation" is attached to the empty CAT context "Recalibration not calculated"
+    When I am on the "page1" "page activity" page logged in as teacher
+    And I wait until "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" exists
+    Then "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" should be visible
+    And the recorded charts were drawn without an error
+    And I should see "n = 3 persons" in the "[data-chartname='abilityprofile']" "css_element"
+    And I should see "Out of 4 completed attempts in the selection; 1 of them have no valid measurement in this scale." in the "[data-chartname='abilityprofile']" "css_element"
+    And I should see "Test information:" in the "[data-chartname='abilityprofile']" "css_element"
+    And I should not see "The test information is not shown" in the "[data-chartname='abilityprofile']" "css_element"
+    And I should not see "Recalibration not calculated" in the "[data-chartname='abilityprofile']" "css_element"
+    And I click on "Show chart data" "link" in the "[data-chartname='abilityprofile']" "css_element"
+    And "//div[@data-chartname='abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='0.25']]/td[2][normalize-space(.)='2']" "xpath_element" should exist
+    And "//div[@data-chartname='abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='-4.75']]/td[2][normalize-space(.)='1']" "xpath_element" should exist
+    And "//div[@data-chartname='abilityprofile']//table//tr[th[@scope='row'][normalize-space(.)='2.75']]/td[2][normalize-space(.)='0']" "xpath_element" should exist
+
+  @javascript
   Scenario: A chart the browser cannot draw says so instead of leaving an empty area
     ## The chart of the live case goes past the check of the server on purpose: the test information without
     ## values. core/chart_builder threw "Invalid values received for series." where nobody caught it.
