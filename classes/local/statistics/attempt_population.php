@@ -17,6 +17,7 @@
 namespace local_catquiz\local\statistics;
 
 use local_catquiz\catscale;
+use local_catquiz\local\result\scale_result;
 
 /**
  * The attempts a statistic is built from: one definition for every chart (issue #88).
@@ -35,9 +36,16 @@ use local_catquiz\catscale;
  *
  * A completed attempt without an answer (aborted) belongs to the population: it took place. It has no
  * result. The result of an attempt for a scale is the value stored at finalisation
- * (local_catquiz_personparams, resultsource "current", attemptid = local_catquiz_attempts.id) when it is
- * valid, otherwise none. An attempt finalised before results were stored that way (legacy) counts with
- * the value it carries, as valid - it was never judged (the rule of learning_progress_series).
+ * (local_catquiz_personparams, resultsource "current", attemptid = local_catquiz_attempts.id) when it is a
+ * valid measurement of the scale, otherwise none. A valid measurement is the valid result of the attempt, or
+ * a scale measured validly that is not the reported one - the root scale under "lowest skill gap", say
+ * (scale_result::is_valid_measurement(); issue #150, re-audit 27.10.2026). Before, only the reported scale of
+ * an attempt had a value: the histogram of a root scale under such a strategy showed almost nobody.
+ * Whether the attempt as a whole has a valid result (primaryvalid) is unchanged: the reported scale, valid.
+ * Values of local_catquiz_personparams without an attempt (resultsource legacy or recalibration) are not
+ * results of an attempt: they have no course, test or end time and are not in the population. An attempt
+ * finalised before results were stored that way (legacy) counts with the value it carries, as valid - it was
+ * never judged (the rule of learning_progress_series).
  *
  * Deliberate differences, named here and tested (doc/statistics-population.md):
  * - In SQL the legacy value exists for the root scale only (personability_after_attempt); the value of a
@@ -259,12 +267,13 @@ final class attempt_population {
      * @return array [sql, params]
      */
     public function value_sql(string $alias = 'a', string $prefix = 'apv'): array {
+        [$measured, $measuredparams] = scale_result::valid_measurement_sql("{$prefix}p", $prefix);
         $stored = "(SELECT MAX({$prefix}p.ability)
                       FROM {local_catquiz_personparams} {$prefix}p
                      WHERE {$prefix}p.attemptid = $alias.id
                        AND {$prefix}p.resultsource = :{$prefix}src
                        AND {$prefix}p.catscaleid = :{$prefix}scale
-                       AND {$prefix}p.isvalid = 1)";
+                       AND $measured)";
         $legacy = $this->scaleid === $this->rootscaleid ? "$alias.personability_after_attempt" : 'NULL';
         $sql = "CASE WHEN EXISTS (SELECT 1
                                     FROM {local_catquiz_personparams} {$prefix}x
@@ -277,7 +286,7 @@ final class attempt_population {
             $prefix . 'src' => 'current',
             $prefix . 'src2' => 'current',
             $prefix . 'scale' => $this->scaleid,
-        ]];
+        ] + $measuredparams];
     }
 
     /**
@@ -329,7 +338,9 @@ final class attempt_population {
             $json = $decoded[$id];
             if (isset($stored[$id])) {
                 $row = $stored[$id]['scales'][$this->scaleid] ?? null;
-                $record->value = ($row && (int) $row->isvalid === 1 && $row->ability !== null) ? (float) $row->ability : null;
+                $record->value = ($row && $row->ability !== null
+                    && scale_result::is_valid_measurement((int) $row->isvalid, $row->validationstatus))
+                    ? (float) $row->ability : null;
                 $record->primaryvalid = $stored[$id]['primaryvalid'];
                 $record->legacy = false;
             } else {
@@ -379,7 +390,7 @@ final class attempt_population {
                 "attemptid $insql AND resultsource = :source",
                 $params + ['source' => 'current'],
                 'id',
-                'id, attemptid, catscaleid, ability, isvalid, isprimary'
+                'id, attemptid, catscaleid, ability, isvalid, isprimary, validationstatus'
             );
             foreach ($rows as $row) {
                 $id = (int) $row->attemptid;

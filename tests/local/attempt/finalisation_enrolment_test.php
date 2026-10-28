@@ -23,6 +23,7 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/measured_progress.php');
+require_once($CFG->dirroot . '/local/catquiz/lib.php');
 
 /**
  * Enrolment happens when the attempt is finalised, on every way a test ends (issue #129).
@@ -119,5 +120,78 @@ final class finalisation_enrolment_test extends advanced_testcase {
 
         $this->assertFalse(is_enrolled(\context_course::instance($target->id), $owner->id));
         $this->assertSame('', attempt_enrolment::stored_message($attemptid));
+    }
+
+    /**
+     * Routing into many scales costs a fixed number of queries per scale, not a query per scale and attempt or
+     * worse (issue #131, no N+1): the queries of routing 2, 4 and 8 scales grow by the same step. Measured on 5.3
+     * PostgreSQL 28.10.2026: about 19 queries per routed scale, nearly all in the enrolment and group API of Moodle.
+     */
+    public function test_routing_more_scales_adds_a_fixed_cost_per_scale(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $this->redirectMessages();
+
+        $queries = [];
+        // The first routing warms the caches of the site (configuration, table structure): measured, not compared.
+        foreach ([1, 2, 4, 8] as $k) {
+            $home = $this->getDataGenerator()->create_course();
+            $target = $this->getDataGenerator()->create_course();
+            $owner = $this->getDataGenerator()->create_and_enrol($home, 'student');
+            $module = $this->getDataGenerator()->create_module('adaptivequiz', [
+                'course' => $home->id,
+                'attemptfeedbackeditor' => ['text' => '', 'format' => FORMAT_MOODLE],
+            ]);
+            $now = time();
+            $attemptid = (int) $DB->insert_record('adaptivequiz_attempt', (object) [
+                'instance' => $module->id, 'userid' => $owner->id, 'uniqueid' => 67000 + $module->id,
+                'attemptstate' => 'complete', 'attemptstopcriteria' => '', 'questionsattempted' => 3 * $k,
+                'difficultysum' => 0, 'standarderror' => 0.3, 'measure' => 0, 'timecreated' => $now, 'timemodified' => $now,
+            ]);
+            $abilities = [];
+            $settings = ['name' => 'Test', 'numberoffeedbackoptionsselect' => 1];
+            $nbyscale = [];
+            for ($s = 1; $s <= $k; $s++) {
+                $scaleid = 500 + $s;
+                $abilities[$scaleid] = ['value' => 0.4, 'toreport' => true, 'primary' => $s === 1];
+                $nbyscale[$scaleid] = 3;
+                $group = $this->getDataGenerator()->create_group(['courseid' => $home->id, 'name' => "G$k-$s"]);
+                $settings += [
+                    "feedback_scaleid_limit_lower_{$scaleid}_1" => -5,
+                    "feedback_scaleid_limit_upper_{$scaleid}_1" => 5,
+                    "catquiz_courses_{$scaleid}_1" => [0, $target->id],
+                    "catquiz_group_{$scaleid}_1" => $group->name,
+                    "enrolment_message_checkbox_{$scaleid}_1" => 1,
+                ];
+            }
+            $DB->insert_record('local_catquiz_attempts', (object) [
+                'userid' => $owner->id, 'scaleid' => 501, 'contextid' => 9, 'courseid' => $home->id,
+                'instanceid' => $module->id, 'attemptid' => $attemptid, 'component' => 'mod_adaptivequiz', 'status' => 0,
+                'teststrategy' => LOCAL_CATQUIZ_STRATEGY_ALLSUBS,
+                'json' => json_encode([
+                    'personabilities_abilities' => $abilities,
+                    'se' => array_fill_keys(array_keys($abilities), 0.3),
+                ]),
+                'timecreated' => $now, 'timemodified' => $now,
+            ]);
+            $this->setUser($owner);
+            local_catquiz_measured_progress($attemptid, $nbyscale, 9, $settings);
+            $this->setAdminUser();
+
+            $before = $DB->perf_get_queries();
+            attempt_enrolment::enrol($attemptid);
+            $queries[$k] = $DB->perf_get_queries() - $before;
+            $groups = $DB->count_records_sql(
+                'SELECT COUNT(1) FROM {groups_members} gm JOIN {groups} g ON g.id = gm.groupid
+                  WHERE gm.userid = ? AND g.courseid = ?',
+                [$owner->id, $home->id]
+            );
+            $this->assertSame($k, $groups, "$k scales route into $k groups.");
+        }
+        $step24 = ($queries[4] - $queries[2]) / 2;
+        $step48 = ($queries[8] - $queries[4]) / 4;
+        $this->assertLessThanOrEqual($step24 + 1, $step48, 'Queries per scale: ' . json_encode($queries));
+        $this->assertLessThanOrEqual(25, $step48, 'Queries per routed scale: ' . json_encode($queries));
     }
 }

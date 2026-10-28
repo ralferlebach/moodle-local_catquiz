@@ -135,9 +135,10 @@ final class fraction_validity_test extends advanced_testcase {
      *
      * @param array $answers Questions as [questionid, scaleid, fraction|null, pilot]; a null fraction
      *      is a question shown but not answered.
+     * @param array|null $json The stored data of the CAT attempt; null for one reported scale 5.
      * @return int
      */
-    private function attempt_with_answers(array $answers): int {
+    private function attempt_with_answers(array $answers, ?array $json = null): int {
         global $DB;
         $this->setAdminUser();
         $now = time();
@@ -149,7 +150,7 @@ final class fraction_validity_test extends advanced_testcase {
         $DB->insert_record('local_catquiz_attempts', (object) [
             'userid' => 2, 'attemptid' => $adaptiveattemptid, 'component' => 'mod_adaptivequiz', 'contextid' => 9,
             'status' => 0, 'endtime' => $now, 'timecreated' => $now, 'timemodified' => $now,
-            'json' => json_encode([
+            'json' => json_encode($json ?? [
                 'personabilities_abilities' => [5 => ['value' => 2.9, 'toreport' => true]],
                 'se' => [5 => 0.35],
                 'primaryscale' => ['id' => 5],
@@ -264,5 +265,40 @@ final class fraction_validity_test extends advanced_testcase {
             attempt_result_validator::validate($adaptiveattemptid)->is_valid(),
             $result->is_valid()
         );
+    }
+
+    /**
+     * All wrong, and the strategy reports no scale: the attempt still has its result - invalid, with its reason - and
+     * it is stored under the CAT attempt (issue #106, E2E 27.10.2026). Before, the empty list of reported scales hid
+     * the scales of the feedback, and nothing at all was stored.
+     */
+    public function test_an_attempt_whose_strategy_reports_no_scale_still_has_its_result(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $adaptiveattemptid = $this->attempt_with_answers([
+            [8501, 5, 0.0, false],
+            [8502, 5, 0.0, false],
+            [8503, 5, 0.0, false],
+        ], [
+            'personabilities_abilities' => [],
+            'customscalefeedback_abilities' => [5 => ['value' => -2.4, 'toreport' => true, 'primary' => true,
+                'error' => ['fraction' => ['fraction' => 0, 'expected' => '0 < f < 1']]]],
+            'se' => [5 => 0.37],
+        ]);
+
+        $result = attempt_result_validator::validate($adaptiveattemptid);
+        $scale = $result->get_scale_result(5);
+
+        $this->assertNotNull($scale, 'The scale of the attempt has a result.');
+        $this->assertFalse($result->is_valid());
+        $this->assertSame(3, $scale->n);
+        $this->assertContains(scale_result::REASON_FRACTION_ALL_INCORRECT, $scale->rejectionreasons);
+
+        $catattemptid = (int) $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $adaptiveattemptid]);
+        personparam_repository::save_attempt_result($catattemptid, 2, 9, $result);
+        $rows = personparam_repository::get_for_attempt($catattemptid);
+        $this->assertCount(1, $rows, 'Stored under the CAT attempt.');
+        $this->assertSame(0, (int) reset($rows)->isvalid);
     }
 }

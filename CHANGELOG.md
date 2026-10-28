@@ -2,6 +2,49 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Nacharbeiten zum Re-Audit vom 27.10.2026 (2026102405): ein Paket für local_catquiz, mod_adaptivequiz und den Adapter.
+  Was je Issue belegt ist und was offen bleibt, steht in `doc/re-audit-2026-10-27.md` und
+  `doc/evidence/re-audit-2026-10-27/issue-<nr>-evidence.md`.
+  - #150 (Kommentare vom 27.10., Echtdaten Test 20):
+    - Ursache n = 1: „Infer lowest skill gap“ speichert die Wurzelskala als `not_primary`. Das Histogramm zählte bisher
+      nur das gemeldete Ergebnis eines Versuchs.
+    - Neue Regel für eine gültige Messung (`scale_result::is_valid_measurement()`): `isvalid = 1` oder nur Gründe, die
+      allein die Anzeige betreffen (`not_primary`, `hidden`, `reporting_disabled`). Sie gilt in Histogramm,
+      Vergleichsgruppe und Lernverlauf.
+    - Die Testinformation wird je Skala im CAT-Kontext der Versuche berechnet, nicht im aktuellen Kontext der Skala.
+      Ihr Fehlen hat einen benannten Grund: keine Items, keine Parameter, nicht berechenbar. Der Warntext ist korrigiert.
+    - Unter dem Profil steht die Bildunterschrift „n = … Personen … von … Versuchen, … ohne gültige Messung“.
+    - Neu `cli/diagnose_statistics.php`: liefert anonymisiert Trichter, Gründe, Balken aus Rohzeilen gegen die Balken
+      der Statistik und die Herkunft der Testinformation.
+    - Datenvertrag je Diagramm in `doc/statistics-data-contract.md`.
+    - Tests: `lowestsub_statistics_test.php` mit exakten Klassen und Behat „Lowest skill gap“.
+  - #106 (E2E-Befund, behoben): Ein Versuch, in dem jede Antwort richtig oder jede falsch war, speicherte **kein
+    Ergebnis**. Die Strategie meldet dann keine Skala, `personabilities_abilities` ist leer, und
+    `attempt_result_validator::validate()` nahm wegen `??` die leere Liste statt der Skalen des Feedbacks. Ohne Ergebnis
+    lief auch der Abgleich der nicht gültig gemessenen Skalen nicht, und die Zwischenschätzungen des Versuchs blieben
+    der letzte gültige Wert der Person. Jetzt werden die Skalen des Feedbacks genommen, wenn keine gemeldet ist: Das
+    Ergebnis wird ungültig mit Grund gespeichert, der Vorwert wiederhergestellt. Neu `catquiz_zero_variance.feature`
+    (50 gleiche Vorwerte, ganzer Versuch bis zur Ergebnisseite, alle richtig und alle falsch) und ein PHPUnit-Fall in
+    `fraction_validity_test.php`; beide gegen den alten Code rot.
+  - #149: Ein Leser speicherte beim Laden eines alten Fortschritts ohne Testeinstellungen diese nach. Jetzt schreibt
+    nur ein schreibender Aufruf. Dabei aufgefallen: `save()` schrieb die Einstellungen nur beim ersten Einfügen, der
+    gedachte einmalige Rückfall lief also bei jedem Laden. Sie gehen jetzt mit jedem Speichern mit. Langlauf mit 150
+    Versuchen, 4 Workern und 512 MiB auf beiden Linien; Aufrufgraph von `progress::load()` aus dem Langlauf.
+  - #95/#96 (1.3): Beim Übertragen der Prüfung „fremde Zeile nicht übernehmen“ war der Aufruf im Einfüge-Wettlauf von
+    `progress::save()` in einem Kommentar gelandet. Er steht jetzt im Code; neuer Test für den Einfüge-Wettlauf in beiden
+    Linien.
+  - #123: Neues Szenario für Wurzelskala und Subskalen an/aus (Reload speichert nichts, Speichern speichert alles).
+  - #131: `catquiz_strategy_routing_matrix.feature` prüft alle sechs Strategien mit gemischtem und ungültigem Ergebnis
+    gegen die gespeicherten Ergebnisse, dazu wiederholtes Routing. PHPUnit misst die Abfragen je gerouteter Skala
+    (linear, keine N+1).
+  - #135: `catquiz_long_attempts.feature` spielt einen ganzen FASTEST- (20 Fragen) und CLASSIC-Versuch (28 Fragen) im
+    Browser trotz Grenze je Skala.
+  - #67/#68: Regressionstests „alte Versuchs-Webservices bleiben entfernt“ und „Lehrperson eines anderen Kurses“.
+  - Lastwerkzeuge `tests/load/` (auch in 1.2): Kurzname und Präfix je Lauf, Neuanmeldung mitten im Versuch,
+    Prüfung der Ergebnisseite und des nachgeladenen Feedbacks, Integritätsauswertung; „doppelt verarbeitete Slots“
+    zählte das Speichern und das Bewerten derselben Antwort doppelt.
+
+
 - Re-Audit 26.10.2026 zu #150 (2026102404): Die neuen Behat-Schritte „the charts drawn in the browser are recorded“ und
   „the recorded charts were drawn without an error“ zeichnen im Browser jedes Diagramm auf. Sie hängen sich vor
   jedes Seitenskript (`additionalhtmlhead`, Hook auf `core/chart_base.prototype.create`) und erfassen Typ, Labels,

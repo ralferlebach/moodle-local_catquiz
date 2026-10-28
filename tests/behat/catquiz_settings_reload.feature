@@ -76,3 +76,44 @@ Feature: The CAT settings reload for a template and for the number of feedback r
     And I expand all fieldsets
     And the following fields match these values:
       | Number of ability ranges | 3 |
+
+  Scenario: Another root scale and its subscales reload the form without storing anything; the next save stores them
+    Given the following "local_catquiz > importedcatscales" exist:
+      | filepath                                           | filename              |
+      | local/catquiz/tests/fixtures/second_root_small.csv | second_root_small.csv |
+    And I am on the "target1" Activity page logged in as teacher1
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    # The root scale: a reload with the subscales of the new root; stored is still the old one.
+    When I set the field "Select CAT scale" to "Zweitskala"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    Then I should see "ZweitA" in the "#id_catquiz_headercontainer" "css_element"
+    And I should see "ZweitB" in the "#id_catquiz_headercontainer" "css_element"
+    And I should not see "SimA" in the "#id_catquiz_headercontainer" "css_element"
+    And the field with xpath "//input[@data-name='ZweitB']" matches value "checked"
+    And the stored CAT settings of "target1" use the CAT scale "Simulation"
+    # A subscale off and on again: each a reload of its own, nothing stored.
+    When I set the field with xpath "//input[@data-name='ZweitB']" to ""
+    And I wait until the page is ready
+    Then the field with xpath "//input[@data-name='ZweitB']" matches value ""
+    And the field with xpath "//input[@data-name='ZweitA']" matches value "checked"
+    And the stored CAT settings of "target1" use the CAT scale "Simulation"
+    When I set the field with xpath "//input[@data-name='ZweitB']" to "1"
+    And I wait until the page is ready
+    Then the field with xpath "//input[@data-name='ZweitB']" matches value "checked"
+    And I set the field with xpath "//input[@data-name='ZweitB']" to ""
+    And I wait until the page is ready
+    And the stored CAT settings of "target1" use the CAT scale "Simulation"
+    # The normal save stores the root and the subscale choice; the form shows them again.
+    When I click on "Save and display" "button"
+    Then the stored CAT settings of "target1" use the CAT scale "Zweitskala"
+    And the stored CAT settings of "target1" have the subscale "ZweitA" on
+    And the stored CAT settings of "target1" have the subscale "ZweitB" off
+    And I follow "Settings"
+    And I wait until the page is ready
+    And I expand all fieldsets
+    And the field "Select CAT scale" matches value "Zweitskala"
+    And the field with xpath "//input[@data-name='ZweitA']" matches value "checked"
+    And the field with xpath "//input[@data-name='ZweitB']" matches value ""

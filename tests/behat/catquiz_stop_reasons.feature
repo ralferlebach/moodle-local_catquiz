@@ -105,6 +105,11 @@ Feature: An attempt ends for a reason the participant is told, and the result fo
     And I click on "OK" "button" in the "Your test has ended" "dialogue"
     And "Submit answer" "button" should not exist
     And "[data-region='adaptivequiz-attempt-feedback']" "css_element" should be visible
+    ## The notice says the answers submitted are saved: both answers are stored and graded in the usage -
+    ## also the one that arrived after the time had run out (mod_adaptivequiz #20).
+    And the attempts of "student1" at "adaptivecatquiz1" are:
+      | state    | stop reason | finished | questions | answered | duplicates | cat result |
+      | complete | timelimit   | yes      | 2         | 2        | no         | ended      |
 
   @javascript
   Scenario: Settings no attempt can meet: the attempt does not start, and the participant is told why (issue #60)

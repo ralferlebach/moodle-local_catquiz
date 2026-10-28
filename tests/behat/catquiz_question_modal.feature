@@ -11,13 +11,16 @@ Feature: The questions of a finished attempt open in a modal on every page that 
     Given the following "users" exist:
       | username | firstname | lastname | email                      |
       | student1 | Student1  | Test     | toolgenerator1@example.com |
+      | student2 | Student2  | Test     | toolgenerator2@example.com |
       | teacher  | Teacher   | Test     | toolgenerator3@example.com |
+      | outsider | Outsider  | Test     | toolgenerator4@example.com |
     And the following "courses" exist:
       | fullname | shortname |
       | Course 1 | C1        |
     And the following "course enrolments" exist:
       | user     | course | role           |
       | student1 | C1     | student        |
+      | student2 | C1     | student        |
       | teacher  | C1     | editingteacher |
     ## Two questions with an image of their own each: the file has to reach the modal.
     And the following "local_catquiz > questions" exist:
@@ -93,6 +96,17 @@ Feature: The questions of a finished attempt open in a modal on every page that 
     And I click on "Show question" "button" in the "Resource question one" "table_row"
     Then I should see "Text of resource question one." in the "Resource question one" "dialogue"
     And the image "Figure of question one" in the question dialogue has loaded
+    And I click on "Close" "button" in the "Resource question one" "dialogue"
+    ## A second modal one after the other, still hidden.
+    And I click on "Show question" "button" in the "Resource question two" "table_row"
+    And I should see "Text of resource question two." in the "Resource question two" "dialogue"
+    And the image "Figure of question two" in the question dialogue has loaded
+    ## On the network (mod_adaptivequiz #16, #18): the files come from pluginfile.php with HTTP 200 and an
+    ## image, the modal HTML from the web service - for the owner, with the activity hidden.
+    And the file of question "Resource question one" in the last attempt of "student1" is delivered to me
+    And the file of question "Resource question two" in the last attempt of "student1" is delivered to me
+    And the question "Resource question one" in the last attempt of "student1" is rendered for me
+    And the question "Resource question two" in the last attempt of "student1" is rendered for me
 
   @javascript
   Scenario: A teacher opens a participant's questions; the course page offers the same; a missing question is reported
@@ -146,6 +160,25 @@ Feature: The questions of a finished attempt open in a modal on every page that 
     Then I should see "Text of resource question one." in the "Resource question one" "dialogue"
     And the image "Figure of question one" in the question dialogue has loaded
     And I click on "Close" "button" in the "Resource question one" "dialogue"
+    ## The reviewer with the capability, the activity still hidden: files and modal HTML on the network.
+    And the file of question "Resource question one" in the last attempt of "student1" is delivered to me
+    And the question "Resource question two" in the last attempt of "student1" is rendered for me
+    And I log out
+    ## Another participant of the course: neither the file nor the modal HTML of someone else's attempt.
+    When I log in as "student2"
+    Then the file of question "Resource question one" in the last attempt of "student1" is refused to me
+    And the file of question "Resource question two" in the last attempt of "student1" is refused to me
+    And the question "Resource question one" in the last attempt of "student1" is refused to me
+    And I log out
+    ## Someone without access to the course: the same.
+    When I log in as "outsider"
+    Then the file of question "Resource question one" in the last attempt of "student1" is refused to me
+    And the question "Resource question one" in the last attempt of "student1" is refused to me
+    And I log out
+    And I log in as "teacher"
+    And I visit the CAT attempt feedback page for the last attempt of "student1"
+    And I click on "Quiz progress summary" "link" in the "#region-main" "css_element"
+    And I wait until ".catquiz-graphicalsummary-table" "css_element" exists
     ## The questions are removed while the page is open: the modal says so.
     When the questions of the last attempt of "student1" no longer exist
     And I click on "Show question" "button" in the "Resource question two" "table_row"

@@ -9,12 +9,14 @@ Feature: An open attempt is continued or started anew by choice, and an attempt 
     Given the following "users" exist:
       | username | firstname | lastname | email                      |
       | student1 | Student1  | Test     | toolgenerator1@example.com |
+      | student2 | Student2  | Test     | toolgenerator2@example.com |
     And the following "courses" exist:
       | fullname | shortname |
       | Course 1 | C1        |
     And the following "course enrolments" exist:
       | user     | course | role    |
       | student1 | C1     | student |
+      | student2 | C1     | student |
     And the following "local_catquiz > questions" exist:
       | filepath                                              | filename                 | course |
       | local/catquiz/tests/fixtures/catquiz_resources_mc.xml | catquiz_resources_mc.xml | C1     |
@@ -81,3 +83,91 @@ Feature: An open attempt is continued or started anew by choice, and an attempt 
     Then I should see "The time for your previous attempt had run out, so it was ended."
     And I should not see "You have an attempt in progress"
     And "Start attempt" "link" should exist
+
+  Scenario: Reload and back during the choice, a double click and parallel tabs leave one open attempt
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    And I should see "Text of resource question two."
+    When I am on the "adaptivecatquiz1" Activity page
+    And I click on "Start a new attempt" "button"
+    ## The confirmation is open; a reload ends nothing.
+    And I reload the page
+    Then I should see "You have an attempt in progress"
+    And the attempts of "student1" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | inprogress | -           | no       | 2         | no         | open       |
+    ## Back out of the open confirmation: nothing either.
+    When I click on "Start a new attempt" "button"
+    And I press the "back" button in the browser
+    And I am on the "adaptivecatquiz1" Activity page
+    Then the attempts of "student1" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | inprogress | -           | no       | 2         | no         | open       |
+    ## A double click on "Yes": the old attempt is ended once, one new attempt begins.
+    When I send the resume action "restart" for the open attempt of "student1" at "adaptivecatquiz1" twice
+    Then the attempts of "student1" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | complete   | restarted   | yes      | 2         | no         | ended      |
+      | inprogress | -           | no       | 1         | no         | open       |
+    ## Three tabs open the attempt at once: still one open attempt, its question not given twice.
+    When I request the attempt page of "adaptivecatquiz1" 3 times at once
+    Then the attempts of "student1" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | complete   | restarted   | yes      | 2         | no         | ended      |
+      | inprogress | -           | no       | 1         | no         | open       |
+
+  Scenario: A request that is not the person's own choice changes nothing
+    Given I am on the "adaptivecatquiz1" Activity page logged in as student2
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I log out
+    And I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    And I am on the "adaptivecatquiz1" Activity page
+    ## A stale or forged sesskey.
+    When I send the resume action "restart" for the open attempt of "student1" at "adaptivecatquiz1" with a wrong sesskey
+    ## Someone else's attempt.
+    And I send the resume action "restart" for the open attempt of "student2" at "adaptivecatquiz1"
+    ## An action the page never offers, and a new question while the time for the current one is not over.
+    And I send the resume action "evil" for the open attempt of "student1" at "adaptivecatquiz1"
+    And I send the resume action "newquestion" for the open attempt of "student1" at "adaptivecatquiz1"
+    Then the attempts of "student1" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | inprogress | -           | no       | 2         | no         | open       |
+    And the attempts of "student2" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | inprogress | -           | no       | 1         | no         | open       |
+    ## A lost session.
+    When I log out
+    And I send the resume action "restart" for the open attempt of "student1" at "adaptivecatquiz1"
+    Then the attempts of "student1" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | inprogress | -           | no       | 2         | no         | open       |
+
+  Scenario: The attempt runs out of time while the choice is open: the time limit ends it, not the new start
+    Given the CAT settings of "adaptivecatquiz1" limit an attempt to 5 minutes
+    And I am on the "adaptivecatquiz1" Activity page logged in as student1
+    And I click on "Start attempt" "link"
+    And I wait until the page is ready
+    And I click on "richtige Antwort" "text" in the "Question 1" "question"
+    And I click on "Submit answer" "button"
+    And I wait until the page is ready
+    When I am on the "adaptivecatquiz1" Activity page
+    Then I should see "You have an attempt in progress"
+    And the open attempt of "student1" started 10 minutes ago
+    When I click on "Start a new attempt" "button"
+    And I click on "Yes" "button" in the ".modal-dialog" "css_element"
+    And I wait until the page is ready
+    Then I should see "Text of resource question one."
+    And the attempts of "student1" at "adaptivecatquiz1" are:
+      | state      | stop reason | finished | questions | duplicates | cat result |
+      | complete   | timelimit   | yes      | 2         | no         | ended      |
+      | inprogress | -           | no       | 1         | no         | open       |

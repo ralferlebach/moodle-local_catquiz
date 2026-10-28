@@ -107,6 +107,59 @@ final class progress_attempt_reference_test extends advanced_testcase {
     }
 
     /**
+     * Load, save, delete and the cache keys work with the CAT attempt only (issue #95, re-audit 27.10.2026): with the
+     * two ids different, and a CAT attempt of somebody else that has the number of the host attempt as its id, the
+     * progress of that other attempt is neither read, written nor deleted.
+     */
+    public function test_crud_and_cache_keys_use_the_cat_attempt(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $componentattemptid = 77005;
+        $contextid = 9;
+        $catattemptid = $this->make_cat_attempt($componentattemptid, $contextid);
+        $this->assertNotEquals($componentattemptid, $catattemptid);
+        // A CAT attempt of another person whose id is the number of the host attempt, with a progress.
+        $other = $this->getDataGenerator()->create_user();
+        $DB->import_record('local_catquiz_attempts', (object) [
+            'id' => $componentattemptid, 'userid' => $other->id, 'scaleid' => 1, 'contextid' => $contextid,
+            'courseid' => 1, 'attemptid' => 99999, 'component' => 'mod_adaptivequiz', 'instanceid' => 1, 'status' => 1,
+            'json' => '{}', 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $foreignid = $DB->insert_record('local_catquiz_progress', (object) [
+            'attemptid' => $componentattemptid, 'userid' => $other->id, 'component' => 'mod_adaptivequiz',
+            'json' => '{"foreign":true}', 'quizsettings' => '{}', 'timemodified' => time(),
+        ]);
+        $foreign = $DB->get_record('local_catquiz_progress', ['id' => $foreignid]);
+        $cache = \cache::make('local_catquiz', 'adaptivequizattempt');
+        $key = new \ReflectionMethod(progress::class, 'get_cache_key');
+        $key->setAccessible(true);
+        $catkey = $key->invoke(null, $catattemptid, $componentattemptid, 'mod_adaptivequiz');
+        $prekey = $key->invoke(null, null, $componentattemptid, 'mod_adaptivequiz');
+        $this->assertSame('progress_cat_' . $catattemptid, $catkey);
+
+        $progress = progress::load($componentattemptid, 'mod_adaptivequiz', $contextid, (object) []);
+        $this->assertSame($catattemptid, $progress->get_catattemptid());
+        $progress->save();
+        $this->assertTrue($DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid]));
+        $this->assertInstanceOf(progress::class, $cache->get($catkey), 'Cached under the CAT attempt.');
+        $this->assertFalse($cache->get($prekey), 'Nothing cached under the number of the host attempt.');
+
+        $cache->purge();
+        $this->assertEquals($progress->get_id(), progress::load($componentattemptid, 'mod_adaptivequiz', $contextid)->get_id());
+
+        progress::delete($componentattemptid, 'mod_adaptivequiz');
+        $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid]));
+        $this->assertFalse($cache->get($catkey));
+        $this->assertEquals(
+            $foreign,
+            $DB->get_record('local_catquiz_progress', ['id' => $foreignid]),
+            'The progress of the CAT attempt with the number of the host attempt was touched.'
+        );
+    }
+
+    /**
      * Progress of another user is not taken over.
      *
      * Issue #96: the record was accepted on the strength of a numerically matching id alone. With

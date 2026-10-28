@@ -155,6 +155,85 @@ final class progress_integrity_test extends advanced_testcase {
     }
 
     /**
+     * A row that belongs to another person by now is not overwritten with the state the session still holds
+     * (issue #96, re-audit 27.10.2026): the save stops with the integrity message, the row stays as it is, the
+     * cached state is dropped. Before, the save wrote the session's state over the row and set its owner back.
+     */
+    public function test_a_foreign_row_is_not_overwritten_from_the_cache(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        [$owner, $row] = $this->saved_progress();
+        // The session holds the owner's progress.
+        $progress = progress::load(self::ATTEMPT, 'mod_adaptivequiz', 9, (object) []);
+        $stranger = $this->getDataGenerator()->create_user();
+        $DB->set_field('local_catquiz_progress', 'userid', $stranger->id, ['id' => $row->id]);
+        $before = $DB->get_record('local_catquiz_progress', ['id' => $row->id]);
+
+        $sink = $this->redirectEvents();
+        try {
+            $progress->save();
+            $this->fail('The foreign row was overwritten.');
+        } catch (moodle_exception $e) {
+            $this->assertSame('progressintegrityerror', $e->errorcode);
+        }
+        $events = array_values(array_filter($sink->get_events(), fn($e) => $e instanceof progress_integrity_failed));
+        $sink->close();
+
+        $this->assertCount(1, $events);
+        $this->assertSame(progress_integrity::USER_MISMATCH, $events[0]->other['reason']);
+        $this->assertEquals($before, $DB->get_record('local_catquiz_progress', ['id' => $row->id]), 'The row was changed.');
+        // The cached state is gone: the next load reads the row and refuses as well.
+        $this->assertSame('progressintegrityerror', $this->load_error());
+        // The owner's own saves go on as before.
+        $DB->set_field('local_catquiz_progress', 'userid', $owner->id, ['id' => $row->id]);
+        \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+        progress::load(self::ATTEMPT, 'mod_adaptivequiz', 9, (object) [])->save();
+        $this->assertEquals($owner->id, $DB->get_field('local_catquiz_progress', 'userid', ['id' => $row->id]));
+    }
+
+    /**
+     * The first save of a progress meets a row that a request in parallel inserted for the same CAT attempt: that row
+     * is taken over only if it is the same person's (issue #95 insert race, issue #96).
+     */
+    public function test_a_foreign_row_is_not_taken_over_in_the_insert_race(): void {
+        global $DB;
+
+        $this->resetAfterTest();
+        $owner = $this->getDataGenerator()->create_user();
+        $DB->import_record('adaptivequiz_attempt', (object) [
+            'id' => self::ATTEMPT, 'instance' => 1, 'userid' => $owner->id, 'uniqueid' => 0, 'attemptstate' => 'inprogress',
+            'attemptstopcriteria' => '', 'questionsattempted' => 0, 'difficultysum' => 0, 'standarderror' => 1,
+            'measure' => 0, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $this->setUser($owner);
+        // Not saved yet: the progress of this request has no row.
+        $progress = progress::load(self::ATTEMPT, 'mod_adaptivequiz', 9, (object) []);
+        $this->assertNull($progress->get_id());
+        $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id(self::ATTEMPT, 'mod_adaptivequiz');
+        $stranger = $this->getDataGenerator()->create_user();
+        $foreignid = $DB->insert_record('local_catquiz_progress', (object) [
+            'attemptid' => $catattemptid, 'userid' => $stranger->id, 'component' => 'mod_adaptivequiz', 'json' => '{}',
+            'quizsettings' => '{}', 'timemodified' => 1000,
+        ]);
+        $before = $DB->get_record('local_catquiz_progress', ['id' => $foreignid]);
+
+        $sink = $this->redirectEvents();
+        try {
+            $progress->save();
+            $this->fail('The foreign row was taken over.');
+        } catch (moodle_exception $e) {
+            $this->assertSame('progressintegrityerror', $e->errorcode);
+        }
+        $events = array_values(array_filter($sink->get_events(), fn($e) => $e instanceof progress_integrity_failed));
+        $sink->close();
+
+        $this->assertCount(1, $events);
+        $this->assertEquals($before, $DB->get_record('local_catquiz_progress', ['id' => $foreignid]), 'The row was changed.');
+        $this->assertSame(1, $DB->count_records('local_catquiz_progress'));
+    }
+
+    /**
      * A cache entry naming another person is not used.
      */
     public function test_a_foreign_cache_entry_is_not_used(): void {

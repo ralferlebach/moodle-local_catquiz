@@ -22,12 +22,6 @@ Zwei Arten von Dokumenten:
   Messvorgehen für LTI-Starts.
 - **strategy-semantics.md** – Wann endet ein Test? Ursachen von #134/#135, Fähigkeitsmatrix der
   Strategien, Stopps je Strategie, Tests und Zahn-Tests.
-- **audit-2026-10-14.md** – Abnahmebericht der BUG-Audit-Restarbeiten: AK/DoD je Issue mit Nachweis, Testläufe 4.5/5.1/5.2/5.3, offene Punkte.
-- **re-audit-2026-10-15.md** – Abarbeitung des Re-Audits: Stand je AK/DoD für mod_adaptivequiz #14 und #136, #142–#145, was erledigt ist und was nur mit Staging-Messung oder 1.3 schließbar ist.
-- **statistik-119-132.md** – Lernverlauf als kumulative Reihe (#119), Grundgesamtheit „Ohne Versuch“ (#132),
-  Nachweise.
-- **issue-139-frage-modal.md** – Frage-Modal (#139): Zugriffsregeln, Fehlerpfad, STACK, doppelt
-  ausgeführtes JS der lazy Tabs, Nachweise.
 - **experiment-136-slo.md** – Anleitung zur Messung der Antwortzeiten im Betrieb (#136): Steckbrief,
   Messläufe kalt/warm/parallel, Export, Auswertung.
 - **issue-136-instanzcache.md** – Konzept-Issue für 1.3: instanzweiter Cache des Item-Pools mit
@@ -38,6 +32,12 @@ Zwei Arten von Dokumenten:
 - **environment-setup.md** – Reproduzierbarer Aufbau der Test-/Laufzeitumgebung
   (Moodle, PHP, PostgreSQL, PHPUnit, Behat, phpcs/moodle-cs, Gherkin/Mustache-Lint)
   inkl. verifizierter Fixpunkte und typischer Stolpersteine.
+- **release-1.2.0-changes.md** – Änderungsbericht vom Wunderbyte-v3-Stand zu
+  1.2.0: Testdurchführung, Ergebnispersistenz, Feedback, Performance, Sicherheit.
+  PR-tauglich und menschenlesbar; die Einzelheiten stehen in den Session-Doks.
+- **session-start-moodle5-migration.md** – Startpunkt für den Strang „Migration
+  zu Moodle 5.x": die offenen Issues aus allen drei Repositories in einer
+  Reihenfolge, was aus Sitzung 104 bereits einzahlt, und die Werkzeuge dafür.
 - **session-start-prompt.md** – Kopierfertiger Prompt für den Start neuer
   Sitzungen (Projekt, Pfade, Prüf-Ablauf, verbindliche Disziplinen, Auslieferung).
 
@@ -118,6 +118,13 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 
 Übergeordnet: `../CHANGELOG.md` (Auslieferungsnotizen unter Release-Label 1.1.6),
 `../README.md` (Plugin-Beschreibung).
+- `issue-141-testlaenge.md` – Testlänge (Minimum/Maximum), Produktionsbefund 33 Slots, Export, Regrade (#141, mod_adaptivequiz #19).
+- `audit-2026-10-14.md` – Abnahmebericht der BUG-Audit-Restarbeiten: AK/DoD je Issue mit Nachweis, Testläufe, offene Punkte.
+- `re-audit-2026-10-15.md` – Abarbeitung des Re-Audits: Stand je AK/DoD für mod_adaptivequiz #14 und #136, #142–#145, was erledigt ist und was nur mit Staging-Messung oder 1.3 schließbar ist.
+- `statistik-119-132.md` – Lernverlauf als kumulative Reihe (#119), Grundgesamtheit „Ohne Versuch“ (#132), Nachweise.
+- `issue-139-frage-modal.md` – Frage-Modal: Zugriffsregeln, Fehlerpfad, STACK, doppelt ausgeführtes JS der lazy Tabs, Nachweise (#139).
+- `trusted-region-prior.md` – Streuung null/nahe null/keine Zahl im Trusted-Region-Prior: Regel, Audit, Tests (#116).
+- `speicher-und-rechenpfade.md` – Ableitungs-Cache, kompakter Fortschritt, CLASSIC ohne Pool-Fisher-Information: Messungen, Kompatibilität (#143–#145).
 - `feedback-limits.md` – Äußere Grenzen der Feedbackbereiche folgen der Globalskala (#86).
 - `settings-validation.md` – Settings-Validator: Codes, Budget der Abdeckung, Speicherwege (#60).
 - `progress-read-contract.md` – Lesevertrag des Fortschritts, Ergebnisseite ohne Fortschritt (#149).
@@ -129,3 +136,4 @@ Der Strang begann als CI-Reparatur und förderte mehrere echte Defekte zutage:
 - `folge-issues-150.md` – Folge-Issues zu #150: #151 Zeitbereiche über Zeitzonen und Sommerzeit, #152 Verlauf alter Feedbackdaten und Fehlerisolierung der Feedbackbereiche, #153 Items nicht installierter Modelle, #154 Jest Bootstrap 5, #155 CI-Skript entfernt; Abgleich mit AK/DoD, Rot vor dem Fix, Läufe; Rohdaten in `evidence/folge-issues-150/`.
 - `ci-2026-10-25.md` – CI-Läufe vom 25.10.2026: Ursache je rotem Job (phpdoc, Classic auf Moodle 5.3, Install-Matrix mit falscher Action, Pfaden und `-e`, Abhängigkeiten auf GitHub zu alt), Korrekturen, lokale Nachstellung der Install-Matrix.
 - `re-audit-2026-10-26.md` – Re-Audit 26.10.2026: GitHub-SHAs und Actions-Runs je Linie, tatsächlich abgedeckte Matrix, Adapter #9 (CI strikt, Zahn), #150 Browser-Exception und Payload vor/nach dem Fix, Behat-Matrix 4.5–5.3 × PG/MariaDB, Zuordnung #151–#155; Kommentarentwürfe in `re-audit-2026-10-26-kommentare.md`, Rohdaten in `evidence/re-audit-2026-10-26/`.
+- `re-audit-2026-10-27.md` – Nacharbeiten Re-Audit 27.10.2026 (local_catquiz P0/P1, Security, Host, Adapter): Stände, Code-Befunde (#106 kein Ergebnis bei Fraction 0/1, #149 Leser schreibt, #95 Einfüge-Wettlauf 1.3), Matrix, Stand je Issue, Grenzen; Kommentarentwürfe in `re-audit-2026-10-27-kommentare.md`, Belege je Issue in `evidence/re-audit-2026-10-27/issue-<nr>-evidence.md`.
