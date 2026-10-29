@@ -1599,6 +1599,22 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026101802, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026102407) {
+        /* Issue #150 (re-audit 28.10.2026): from when on the results of attempts are stored, as the records of the
+           site give it - the upgrade log of local_catquiz at 2026082104 or later, or the first stored result. An
+           attempt finalised before counts with its own value (legacy); one finalised after without a stored row has
+           no result. Nothing in the attempts or results is changed. See result_provenance. */
+        $found = \local_catquiz\local\result\result_provenance::record(time());
+        /* Issue #157: the runtime pools and item parameter lists were built from the items of every context. They
+           are rebuilt from the items of their context only; these two application caches are emptied - not the
+           sessions, the progress of running attempts or any result. */
+        \cache::make('local_catquiz', 'runtimepool')->purge();
+        \cache::make('local_catquiz', 'catquiz_item_params')->purge();
+        mtrace('local_catquiz: results of attempts are stored since ' . userdate($found['since'])
+            . " (source: {$found['source']}).");
+        upgrade_plugin_savepoint(true, 2026102407, 'local', 'catquiz');
+    }
+
     return true;
 }
 

@@ -1420,16 +1420,20 @@ class catquiz_handler {
         global $USER;
         $contextcreator = info::get_contextcreator();
         // If this is not the first question, load the quiz settings that were used for the first question.
+        $attemptcontext = 0;
         if ($attemptdata->questionsattempted > 0) {
             // The running test may (re)create its progress: it brings the settings (issue #149). The third
             // argument is the CAT context of the scale - it used to get the id of the scale itself.
-            $quizsettings = progress::load(
+            $progress = progress::load(
                 intval($attemptdata->id),
                 'mod_adaptivequiz',
                 (int) catscale::get_context_id((int) $quizsettings->catquiz_catscales),
                 $quizsettings
-            )
-                ->get_quiz_settings();
+            );
+            $quizsettings = $progress->get_quiz_settings();
+            // Issue #157 (T10): a running attempt stays in the CAT context it started in. Its pool, parameters and
+            // estimates are of one calibration, also when the scale moves to another context meanwhile.
+            $attemptcontext = $progress->get_contextid();
         }
 
         if ($quizsettings->catquiz_includepilotquestions) {
@@ -1464,7 +1468,7 @@ class catquiz_handler {
             $firstuseexistingdata = $quizsettings->catquiz_firstquestionreuseexistingdata == "1";
         }
 
-        $catcontext = catscale::get_context_id($quizsettings->catquiz_catscales);
+        $catcontext = $attemptcontext ?: catscale::get_context_id($quizsettings->catquiz_catscales);
         $initialcontext = [
             'testid' => intval($attemptdata->instance),
             'contextid' => $catcontext,

@@ -627,7 +627,8 @@ abstract class strategy {
     protected function check_item_params() {
         $selectedscales = [$this->context['catscaleid'], ...$this->context['progress']->get_selected_subscales()];
         foreach ($selectedscales as $catscaleid) {
-            $catscalecontext = catscale::get_context_id($catscaleid);
+            // Issue #157: the CAT context of the attempt.
+            $catscalecontext = (int) ($this->context['contextid'] ?? 0) ?: catscale::get_context_id($catscaleid);
             $catscaleids = [
                 $catscaleid,
                 ...catscale::get_subscale_ids($catscaleid),

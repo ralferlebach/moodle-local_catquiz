@@ -349,6 +349,13 @@ Begleitmaterial separat ausliefern.
 
 ---
 
+### Behat: nach einem Klick auf die neue Seite warten
+
+`document.readyState === "complete"` gilt auch für die alte Seite. Ein Schritt, der nach `pressButton()` sofort
+liest, prüft je nach Timing die Seite vor dem Absenden (sporadisch rot, im Rerun grün; 28.10.2026,
+`catquiz_id_namespaces.feature`). Vor dem Klick die alte Seite markieren (`window.<marker> = true`) und warten,
+bis der Marker verschwunden und die neue Seite fertig ist; ohne Seitenwechsel fehlschlagen.
+
 ## 7. Checkliste vor Auslieferung
 
 1. Alle 7 Modell-Suiten grün (erwartete Test-/Skip-Zahlen unverändert).
@@ -357,7 +364,9 @@ Begleitmaterial separat ausliefern.
 3. FD-Abgleich neuer Item-Ableitungen; Bitgenau-Abgleich bei Refactorings.
 4. Sättigungs-Stresstest: 0 nicht-endliche Werte.
 5. Neue Fixes/Guards zahn-getestet (Rücknahme → rot).
-6. phpcs plugin-weit Exit 0.
+6. phpcs plugin-weit Exit 0: ganzer Baum mit `make phpcs` (Ausschlüsse und Warnschwelle wie die CI,
+   `--max-warnings 0`), nie nur die Dateien, die man für geändert hält. Am 28.10.2026 rutschten so neun
+   Fehler in `tests/behat/behat_catquiz.php` bis in die CI.
 7. Interne Version erhöht; CHANGELOG + Session-Doku aktualisiert.
 8. Beide ZIPs gebaut, Datei-/Ausschlusszahlen geprüft, präsentiert. Dabei
    sichergestellt, dass **kein** `.git`-Verzeichnis (auch kein verschachteltes)

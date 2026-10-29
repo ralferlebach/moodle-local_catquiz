@@ -438,6 +438,7 @@ final class pool_statistics_test extends advanced_testcase {
      * @return void
      */
     public function test_pool_cache_keys_keep_context_scope_and_subscales_apart(): void {
+        global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
         $contextid = $this->make_context();
@@ -448,6 +449,17 @@ final class pool_statistics_test extends advanced_testcase {
         $onglobal = $this->make_item($globalid, $contextid);
         $insub1 = $this->make_item($sub1, $contextid);
         $insub2 = $this->make_item($sub2, $contextid);
+        // The same questions are also items of the other context: a context's pool holds only its own items
+        // (issue #157), and this case is about the statistics of the context, not about other items.
+        foreach ([[$onglobal, $globalid], [$insub1, $sub1], [$insub2, $sub2]] as [$questionid, $scaleid]) {
+            $DB->insert_record('local_catquiz_items', (object) [
+                'componentid' => $questionid,
+                'componentname' => 'question',
+                'catscaleid' => $scaleid,
+                'contextid' => $othercontextid,
+                'status' => 0,
+            ]);
+        }
         // Two answers to the item of subscale 1 in the first context, none in the other.
         $this->make_cat_attempt($insub1, $globalid, $contextid, 11, true, 1700000000);
         $this->make_cat_attempt($insub1, $globalid, $contextid, 12, true, 1700000500);

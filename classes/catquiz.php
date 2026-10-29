@@ -227,6 +227,9 @@ class catquiz {
             'usable',
             'itemparamvalidity',
             'lcipcontextid',
+            'itemcontextid',
+            'activeparamid',
+            'invalidparamref',
             'questionstatus',
             'attempts',
             'astatlastattempttime',
@@ -388,7 +391,8 @@ class catquiz {
         // Start the params array.
         $params = [
             'contextid' => $contextid,
-
+            // Issue #157: the items of the CAT context, and only those.
+            'itemcontextid' => $contextid,
         ];
         // Items in piloting have no active parameter, so lcipcontextid is
         // NULL for them. Restricting on it alone would drop exactly those items again
@@ -518,12 +522,18 @@ class catquiz {
             -- refer to a column that does not exist.
             lcip.usable AS itemparamvalidity,
             lcip.contextid AS lcipcontextid,
+            -- Issue #157: the item's own context and its reference to the active parameters - a reference that
+            -- does not resolve to parameters of the item in its context is an error, not a pilot.
+            lci.contextid AS itemcontextid,
+            lci.activeparamid AS activeparamid,
+            CASE WHEN lci.activeparamid IS NOT NULL AND lcip.id IS NULL THEN 1 ELSE 0 END AS invalidparamref,
             -- Issue #82: ready, draft or hidden - the status of the newest version of the question in the bank.
             qvl.status AS questionstatus{$statcolumns}
           FROM {local_catquiz_catscales} lccs
           -- Get all corresponding items of those scales, skip if not existent
-          -- (INNER JOIN)
-            JOIN {local_catquiz_items} lci ON lci.catscaleid=lccs.id $itemfilter
+          -- (INNER JOIN). Issue #157: only the items of the CAT context asked for. An item belongs to one context;
+          -- the items of the same question in other contexts are other calibrations (or none) and never stand in.
+            JOIN {local_catquiz_items} lci ON lci.catscaleid=lccs.id AND lci.contextid = :itemcontextid $itemfilter
 
           -- Get the active item parameter, if there is one.
           --
@@ -533,8 +543,11 @@ class catquiz {
           -- (attempt counts, last attempt) are of interest precisely while they are
           -- being piloted. A LEFT JOIN keeps them visible; the parameter columns are
           -- then NULL, which the validity column reports as "no parameters".
+          -- Issue #157: the active parameters are those the item points to, of this very item, in its context,
+          -- for its question.
             LEFT JOIN {local_catquiz_itemparams} lcip
               ON lcip.itemid = lci.id AND lci.activeparamid = lcip.id
+                AND lcip.contextid = lci.contextid AND lcip.componentid = lci.componentid
 
           -- Get all information about the question from the questionbank itself
             JOIN {question} q ON q.id=lci.componentid $questionfilter
@@ -587,7 +600,15 @@ class catquiz {
         // NULL for them. Restricting on it alone would drop exactly those items after
         // the parameter join was widened - and their attempt numbers are the
         // interesting part while an item is being piloted.
-        $where .= sprintf(' AND (lcipcontextid = %d OR lcipcontextid IS NULL)', (int) $contextid);
+        // Issue #157: a pilot is an item without a reference to active parameters. An item whose reference does not
+        // resolve (missing parameters, of another item, context or question) is no pilot: the runtime pool leaves it
+        // out - local\integrity\item_param_integrity reports it -, the manager lists show it, marked
+        // (invalidparamref), so that it can be repaired.
+        if ($onlyavailable) {
+            $where .= sprintf(' AND (lcipcontextid = %d OR activeparamid IS NULL)', (int) $contextid);
+        } else {
+            $where .= sprintf(' AND (lcipcontextid = %d OR lcipcontextid IS NULL)', (int) $contextid);
+        }
 
         if ($orderby) {
             $where .= " ORDER BY $orderby";
@@ -1992,11 +2013,14 @@ class catquiz {
             $wherecontains[] = "lccs.id $incatscales";
         }
 
+        // Issue #157: the items of the context, with the parameters of the item in it - as the list.
+        $params['itemcontextid'] = $contextid;
         $from = <<<SQL
         {local_catquiz_catscales} lccs
-            JOIN {local_catquiz_items} lci ON lci.catscaleid = lccs.id
+            JOIN {local_catquiz_items} lci ON lci.catscaleid = lccs.id AND lci.contextid = :itemcontextid
             LEFT JOIN {local_catquiz_itemparams} lcip
               ON lcip.itemid = lci.id AND lci.activeparamid = lcip.id
+                AND lcip.contextid = lci.contextid AND lcip.componentid = lci.componentid
             JOIN {question} q ON q.id = lci.componentid
             JOIN {question_versions} qv ON qv.questionid = q.id
             JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
@@ -2653,11 +2677,13 @@ class catquiz {
             $where .= "AND lci.activeparamid = lcip.id ";
         }
 
+        // Issue #157: the parameters of items of the context only - an item of another context with parameters in
+        // this one is an integrity error (item_param_integrity), not a source of parameters.
         return $DB->get_records_sql(
             "SELECT lci.id as uniqueid, lcip.*
              FROM {local_catquiz_items} lci
              JOIN {local_catquiz_itemparams} lcip
-                ON lci.id = lcip.itemid
+                ON lci.id = lcip.itemid AND lci.contextid = lcip.contextid AND lci.componentid = lcip.componentid
             WHERE $where
             ",
             $params
@@ -2746,7 +2772,10 @@ class catquiz {
             return 0;
         }
 
-        $catcontext = catscale::get_context_id($attemptdata['catscaleid']);
+        // Issue #157 (T10): the CAT context the attempt plays in (kept by its progress), not the one its scale has now.
+        $catcontext = isset($attemptdata['progress']) && $attemptdata['progress'] instanceof \local_catquiz\teststrategy\progress
+            ? $attemptdata['progress']->get_contextid() : 0;
+        $catcontext = $catcontext ?: catscale::get_context_id($attemptdata['catscaleid']);
 
         // To query the db only once we fetch courseid und instanceid here.
         $courseandinstance = self::return_course_and_instance_id(

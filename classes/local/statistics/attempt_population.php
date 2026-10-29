@@ -17,6 +17,7 @@
 namespace local_catquiz\local\statistics;
 
 use local_catquiz\catscale;
+use local_catquiz\local\result\result_provenance;
 use local_catquiz\local\result\scale_result;
 
 /**
@@ -45,7 +46,10 @@ use local_catquiz\local\result\scale_result;
  * Values of local_catquiz_personparams without an attempt (resultsource legacy or recalibration) are not
  * results of an attempt: they have no course, test or end time and are not in the population. An attempt
  * finalised before results were stored that way (legacy) counts with the value it carries, as valid - it was
- * never judged (the rule of learning_progress_series).
+ * never judged (the rule of learning_progress_series). Which attempt that is, the time of finalisation decides,
+ * not a missing row (result_provenance; issue #150, re-audit 28.10.2026): an attempt finalised since results are
+ * stored and without a stored row has no result - aborted, nothing measured, or the error of issue #106. Before,
+ * such an attempt counted with the value it carried, as valid: the single bar of the root scale in #150.
  *
  * Deliberate differences, named here and tested (doc/statistics-population.md):
  * - In SQL the legacy value exists for the root scale only (personability_after_attempt); the value of a
@@ -259,8 +263,9 @@ final class attempt_population {
     /**
      * The valid result of an attempt for the requested scale, as an SQL expression; NULL when there is none.
      *
-     * Stored result of the finalisation when the attempt has stored results; for a legacy attempt the
-     * value of the attempt on its root scale. A legacy subscale value has no SQL expression (see the class).
+     * Stored result of the finalisation when the attempt has stored results; for a legacy attempt (finalised before
+     * results were stored, result_provenance) the value of the attempt on its root scale; otherwise none. A legacy
+     * subscale value has no SQL expression (see the class). The same rule as attempts().
      *
      * @param string $alias Alias of local_catquiz_attempts.
      * @param string $prefix Prefix of the parameter names.
@@ -275,25 +280,29 @@ final class attempt_population {
                        AND {$prefix}p.catscaleid = :{$prefix}scale
                        AND $measured)";
         $legacy = $this->scaleid === $this->rootscaleid ? "$alias.personability_after_attempt" : 'NULL';
+        [$islegacy, $legacyparams] = result_provenance::legacy_sql($alias, $prefix);
         $sql = "CASE WHEN EXISTS (SELECT 1
                                     FROM {local_catquiz_personparams} {$prefix}x
                                    WHERE {$prefix}x.attemptid = $alias.id
                                      AND {$prefix}x.resultsource = :{$prefix}src2)
                      THEN $stored
-                     ELSE $legacy
+                     WHEN $islegacy THEN $legacy
+                     ELSE NULL
                  END";
         return [$sql, [
             $prefix . 'src' => 'current',
             $prefix . 'src2' => 'current',
             $prefix . 'scale' => $this->scaleid,
-        ] + $measuredparams];
+        ] + $measuredparams + $legacyparams];
     }
 
     /**
      * The attempts of the population, in the order of their end time.
      *
-     * Every record carries `value` (the valid result for the requested scale or null) and `primaryvalid`
-     * (whether the reported scale of the attempt has a valid result).
+     * Every record carries `value` (the valid result for the requested scale or null), `primaryvalid`
+     * (whether the reported scale of the attempt has a valid result), `provenance` (result_provenance::STORED,
+     * LEGACY or NORESULT), `legacy` (provenance LEGACY) and `valuesource`: 'reported' (the valid result of the
+     * attempt), 'measured' (a valid measurement of a scale the attempt did not report), 'legacy', or null.
      *
      * @param string $fields Columns of local_catquiz_attempts, alias a; id, userid, scaleid, endtime and json
      *                       are always read.
@@ -336,19 +345,30 @@ final class attempt_population {
         $stored = $this->stored_results(array_keys($records));
         foreach ($records as $id => $record) {
             $json = $decoded[$id];
+            $record->valuesource = null;
             if (isset($stored[$id])) {
                 $row = $stored[$id]['scales'][$this->scaleid] ?? null;
                 $record->value = ($row && $row->ability !== null
                     && scale_result::is_valid_measurement((int) $row->isvalid, $row->validationstatus))
                     ? (float) $row->ability : null;
+                if ($record->value !== null) {
+                    $record->valuesource = (int) $row->isvalid === 1 ? 'reported' : 'measured';
+                }
                 $record->primaryvalid = $stored[$id]['primaryvalid'];
-                $record->legacy = false;
-            } else {
+                $record->provenance = result_provenance::STORED;
+            } else if (result_provenance::without_stored_results((int) $record->endtime) === result_provenance::LEGACY) {
                 $record->value = self::legacy_value($record, $json, $this->scaleid, $this->rootscaleid);
+                $record->valuesource = $record->value !== null ? 'legacy' : null;
                 // Never judged: valid, like its value.
                 $record->primaryvalid = true;
-                $record->legacy = true;
+                $record->provenance = result_provenance::LEGACY;
+            } else {
+                // Judged at finalisation, nothing stored: no result, whatever the attempt carries (issue #150).
+                $record->value = null;
+                $record->primaryvalid = false;
+                $record->provenance = result_provenance::NORESULT;
             }
+            $record->legacy = $record->provenance === result_provenance::LEGACY;
         }
         $this->loaded[$key] = array_values($records);
         return $this->loaded[$key];

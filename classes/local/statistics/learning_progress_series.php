@@ -16,6 +16,7 @@
 
 namespace local_catquiz\local\statistics;
 
+use local_catquiz\local\result\result_provenance;
 use local_catquiz\local\result\scale_result;
 use local_catquiz\teststrategy\feedback_helper;
 
@@ -76,8 +77,10 @@ final class learning_progress_series {
      * Source: the result stored for the scale when the attempt was finalised
      * (local_catquiz_personparams, resultsource "current", with its isvalid). An attempt finalised before
      * results were stored that way has none at all; for it the value in the attempt's own JSON is used and
-     * counted as valid - it was never judged (documented fallback, issue #119). An attempt that has stored
-     * results, but none for this scale, did not measure the scale and gives no item.
+     * counted as valid - it was never judged (documented fallback, issue #119). Which attempt that is, the time of
+     * its finalisation decides (result_provenance): one finalised since then without a stored row has no result
+     * (issue #150, re-audit 28.10.2026). An attempt that has stored results, but none for this scale, did not
+     * measure the scale and gives no item.
      *
      * @param array $attempts local_catquiz_attempts records with id, userid, endtime and json.
      * @param int $scaleid
@@ -117,6 +120,9 @@ final class learning_progress_series {
                 // Issue #150 (re-audit 27.10.2026): a valid measurement of the scale, reported or not.
                 $valid = scale_result::is_valid_measurement((int) $stored[$id]->isvalid, $stored[$id]->validationstatus);
             } else if (isset($withresults[$id])) {
+                continue;
+            } else if (result_provenance::without_stored_results((int) $attempt->endtime) !== result_provenance::LEGACY) {
+                // Finalised since results are stored, none stored: no result (issue #150, re-audit 28.10.2026).
                 continue;
             } else {
                 $json = json_decode($attempt->json ?? '');
