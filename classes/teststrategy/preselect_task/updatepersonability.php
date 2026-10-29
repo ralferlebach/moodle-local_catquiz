@@ -254,7 +254,7 @@ class updatepersonability extends preselect_task {
             $message = sprintf(
                 'Can not update ability for scale %d in context %d: %s',
                 $catscaleid,
-                catscale::get_context_id($catscaleid),
+                (int) ($this->context['contextid'] ?? 0) ?: catscale::get_context_id($catscaleid),
                 $e->getMessage()
             );
             throw new Exception($message);
@@ -379,7 +379,9 @@ class updatepersonability extends preselect_task {
             return $this->itemparamlists[$catscaleid];
         }
 
-        $catscalecontext = catscale::get_context_id($catscaleid);
+        // Issue #157: the parameters of the CAT context the attempt plays in - the context of the pool its questions
+        // came from -, not the context the scale has now. They differ after the scale moved to another context.
+        $catscalecontext = (int) ($this->context['contextid'] ?? 0) ?: catscale::get_context_id($catscaleid);
         $catscaleids = [
             $catscaleid,
             ...catscale::get_subscale_ids($catscaleid),
@@ -400,9 +402,10 @@ class updatepersonability extends preselect_task {
      *
      */
     protected function update_person_param(int $catscaleid, float $updatedability): void {
+        // Issue #157 (T10): the estimate belongs to the CAT context of the attempt, where it is read again.
         catquiz::update_person_param(
             $this->context['userid'],
-            catscale::get_context_id($catscaleid),
+            (int) ($this->context['contextid'] ?? 0) ?: catscale::get_context_id($catscaleid),
             $catscaleid,
             $updatedability
         );

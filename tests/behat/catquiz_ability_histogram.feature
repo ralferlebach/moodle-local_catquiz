@@ -237,7 +237,7 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     Then "[data-chartname='abilityprofile'] .chart-image canvas" "css_element" should be visible
     And the recorded charts were drawn without an error
     And I should see "n = 3 persons" in the "[data-chartname='abilityprofile']" "css_element"
-    And I should see "Out of 4 completed attempts in the selection; 1 of them have no valid measurement in this scale." in the "[data-chartname='abilityprofile']" "css_element"
+    And I should see "Out of 4 completed attempts of 4 persons in the selection; 1 of them have no valid measurement in this scale." in the "[data-chartname='abilityprofile']" "css_element"
     And I should see "Test information:" in the "[data-chartname='abilityprofile']" "css_element"
     And I should not see "The test information is not shown" in the "[data-chartname='abilityprofile']" "css_element"
     And I should not see "Recalibration not calculated" in the "[data-chartname='abilityprofile']" "css_element"
@@ -258,3 +258,28 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     And "[data-region='local_catquiz-fixture-live'] .chart-table" "css_element" should not be visible
     And "[data-region='local_catquiz-fixture-fine'] .chart-image canvas" "css_element" should be visible
     And I should not see "This chart could not be drawn" in the "[data-region='local_catquiz-fixture-fine']" "css_element"
+
+  @javascript
+  Scenario: Lowest skill gap without a valid root value: no bar of one person, the reported subscales instead
+    ## Re-audit 28.10.2026, test 20: the root scale is nowhere measured validly; one attempt was finalised after
+    ## results were stored, without a stored row, carrying a root value. It made the single bar of the live case.
+    Given results of CAT attempts are stored since 30 days ago
+    And the following CAT results of "adaptivecatquizA" exist under the lowest skill gap:
+      | user     | days ago | root ability | reported scale | reported ability | root reasons                                   |
+      | student1 | 3        | 0.7          | SimA           | -1.0             | se_max,reporting_disabled,not_primary          |
+      | student2 | 2        | 0.7          | SimB           | -0.5             | se_max,reporting_disabled,not_primary          |
+    And the following CAT attempts of "adaptivecatquizA" ended without a stored result:
+      | user     | days ago | root ability |
+      | student3 | 1        | -1.3505      |
+    When I am on the "page1" "page activity" page logged in as teacher
+    And I wait until "[data-chartname='detectedscales'] .chart-image canvas" "css_element" exists
+    And I wait until "[data-chartname='abilityprofile'] [data-region='local_catquiz-abilityprofile-novalue']" "css_element" exists
+    Then I should see "None of the 3 completed attempts of the selection has a valid measurement in “Simulation”." in the "[data-chartname='abilityprofile']" "css_element"
+    And I should see "2 persons have a valid reported result" in the "[data-chartname='abilityprofile']" "css_element"
+    And I should see "n = 0 persons" in the "[data-chartname='abilityprofile']" "css_element"
+    And I should see "Out of 3 completed attempts of 3 persons in the selection" in the "[data-chartname='abilityprofile']" "css_element"
+    And I should see "every test of the scale in this course (1)" in the "[data-chartname='abilityprofile']" "css_element"
+    And "[data-chartname='abilityprofile'] canvas" "css_element" should not exist
+    And I should not see "Test information" in the "[data-chartname='abilityprofile']" "css_element"
+    And "[data-chartname='detectedscales'] .chart-image canvas" "css_element" should be visible
+    And the recorded charts were drawn without an error

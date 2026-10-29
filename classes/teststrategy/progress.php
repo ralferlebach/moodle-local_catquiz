@@ -344,7 +344,11 @@ class progress implements JsonSerializable {
         // The CAT attempt may appear after this progress was first built - the component starts its
         // attempt, the CAT model files its own right after. Pick it up when it does.
         $instance->catattemptid = $catattemptid ?? $instance->catattemptid;
-        $instance->move_to_canonical_cache_key();
+        // Re-audit 28.10.2026 (#149): a reader leaves the cache as it is - the move to the key of the CAT attempt is a
+        // write, and only a writer makes it.
+        if ($quizsettings !== null) {
+            $instance->move_to_canonical_cache_key();
+        }
 
         $instance->hasnewresponse = false;
         $instance->ignorelastresponse = false;
@@ -882,6 +886,18 @@ class progress implements JsonSerializable {
             $cache->delete($prekey);
             $this->save_to_cache();
         }
+    }
+
+    /**
+     * The CAT context the attempt plays in: the one of its scale when the progress was created (issue #157, T10).
+     *
+     * A running attempt stays in it, also when the scale moves to another context in between - its questions,
+     * parameters and estimates are of one calibration. 0 for a progress stored before the context was kept with it.
+     *
+     * @return int
+     */
+    public function get_contextid(): int {
+        return (int) ($this->contextid ?? 0);
     }
 
     /**

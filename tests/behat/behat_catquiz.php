@@ -1741,11 +1741,14 @@ JS;
     /**
      * CAT results as the strategy "lowest skill gap" stores them (issue #150, re-audit 27.10.2026, test 20): the root
      * scale measured validly but not the reported scale (isvalid 0, reason not_primary), the reported subscale valid.
+     * With the optional column "root reasons" (comma-separated) the root scale carries other reasons - se_max for a
+     * root scale not measured validly (re-audit 28.10.2026).
      *
      * @Given /^the following CAT results of "([^"]*)" exist under the lowest skill gap:$/
      *
      * @param string $idnumber
-     * @param \Behat\Gherkin\Node\TableNode $table Columns: user, days ago, root ability, reported scale, reported ability.
+     * @param \Behat\Gherkin\Node\TableNode $table Columns: user, days ago, root ability, reported scale, reported ability,
+     *     optionally root reasons.
      * @return void
      */
     public function the_following_cat_results_exist_under_the_lowest_skill_gap(
@@ -1774,13 +1777,19 @@ JS;
                 'attemptid' => ++$hostattemptid, 'component' => 'mod_adaptivequiz', 'instanceid' => $cm->instance,
                 'teststrategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'status' => 0, 'starttime' => $end - 600,
                 'endtime' => $end, 'personability_after_attempt' => (float) $row['root ability'],
-                'json' => json_encode(['personabilities' => [
-                    $rootid => (float) $row['root ability'], $reported => (float) $row['reported ability'],
-                ]]),
+                'json' => json_encode([
+                    'personabilities' => [
+                        $rootid => (float) $row['root ability'], $reported => (float) $row['reported ability'],
+                    ],
+                    'personabilities_abilities' => [
+                        $reported => ['value' => (float) $row['reported ability'], 'primary' => true, 'toreport' => true],
+                        $rootid => ['value' => (float) $row['root ability'], 'primary' => false, 'toreport' => false],
+                    ],
+                ]),
                 'timecreated' => $end, 'timemodified' => $end,
             ]);
             $rows = [
-                $rootid => [(float) $row['root ability'], 0, 0, 'not_primary'],
+                $rootid => [(float) $row['root ability'], 0, 0, $row['root reasons'] ?? 'not_primary'],
                 $reported => [(float) $row['reported ability'], 1, 1, ''],
             ];
             foreach ($rows as $scaleid => [$ability, $isvalid, $isprimary, $reasons]) {
@@ -1790,6 +1799,173 @@ JS;
                     'validationstatus' => $reasons, 'status' => 0, 'timecreated' => $end, 'timemodified' => $end,
                 ]);
             }
+        }
+    }
+
+    /**
+     * A recalibration as the CAT manager starts it, with the old items left without parameters - the pattern of
+     * issue #157: the scale gets a new CAT context with a copy of the items that have parameters (higher item ids,
+     * dataapi::create_new_context_for_scale()); the items of the old context keep no parameters - pilot rows with the
+     * lower ids. The tests of the scale move to the new context.
+     *
+     * @Given /^the CAT scale "([^"]*)" is recalibrated into the CAT context "([^"]*)" and its old items keep no parameters$/
+     *
+     * @param string $scalename
+     * @param string $contextname
+     * @return void
+     */
+    public function the_cat_scale_is_recalibrated_and_its_old_items_keep_no_parameters(
+        string $scalename,
+        string $contextname
+    ): void {
+        global $DB;
+        $scaleid = $this->catquiz_scale_id($scalename);
+        $old = (int) \local_catquiz\catscale::get_context_id($scaleid);
+        $context = \local_catquiz\data\dataapi::create_new_context_for_scale($scaleid, $scalename, 'behat');
+        $DB->set_field('local_catquiz_catcontext', 'name', $contextname, ['id' => $context->id]);
+        $new = (int) \local_catquiz\catscale::get_context_id($scaleid);
+        if ($new === $old || $new !== (int) $context->id) {
+            throw new \Behat\Mink\Exception\ExpectationException("$scalename did not move.", $this->getSession());
+        }
+        $scales = [$scaleid, ...\local_catquiz\catscale::get_subscale_ids($scaleid)];
+        [$insql, $params] = $DB->get_in_or_equal($scales, SQL_PARAMS_NAMED);
+        $DB->set_field_select(
+            'local_catquiz_items',
+            'activeparamid',
+            null,
+            "contextid = :old AND catscaleid $insql",
+            $params + ['old' => $old]
+        );
+        foreach ($DB->get_records('local_catquiz_tests', ['catscaleid' => $scaleid]) as $test) {
+            $json = json_decode($test->json);
+            $json->catquiz_catcontext = $new;
+            $DB->update_record(
+                'local_catquiz_tests',
+                (object) ['id' => $test->id, 'contextid' => $new, 'json' => json_encode($json)]
+            );
+        }
+        $min = (int) $DB->get_field_sql(
+            "SELECT MIN(id) FROM {local_catquiz_items} WHERE contextid = :new AND catscaleid $insql",
+            $params + ['new' => $new]
+        );
+        $max = (int) $DB->get_field_sql(
+            "SELECT MAX(id) FROM {local_catquiz_items} WHERE contextid = :old AND catscaleid $insql",
+            $params + ['old' => $old]
+        );
+        if (!$min || $min < $max) {
+            throw new \Behat\Mink\Exception\ExpectationException('The new items do not have the higher ids.', $this->getSession());
+        }
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * Every question of the last attempt of a person is the calibrated item of a CAT context: the item played (from
+     * the progress), its context, its active parameters, no pilot; the questions of the question usage are the same
+     * (issue #157).
+     *
+     * @Then /^the questions of the last CAT attempt of "([^"]*)" are calibrated items of the CAT context "([^"]*)"$/
+     *
+     * @param string $username
+     * @param string $contextname
+     * @return void
+     */
+    public function the_questions_are_calibrated_items_of_the_context(string $username, string $contextname): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $contextid = (int) $DB->get_field('local_catquiz_catcontext', 'id', ['name' => $contextname], MUST_EXIST);
+        $attempt = $DB->get_records('adaptivequiz_attempt', ['userid' => $userid], 'id DESC', 'id, uniqueid', 0, 1);
+        $attempt = reset($attempt);
+        $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id((int) $attempt->id, 'mod_adaptivequiz');
+        $progress = \local_catquiz\teststrategy\progress::load_for_reading((int) $catattemptid);
+        $fail = fn(string $m) => throw new \Behat\Mink\Exception\ExpectationException($m, $this->getSession());
+        if (!$progress) {
+            $fail("No progress of the attempt of $username.");
+        }
+        if ((int) $progress->get_contextid() !== $contextid) {
+            $fail('The attempt played in context ' . $progress->get_contextid() . ", not in $contextname.");
+        }
+        if ((int) $DB->get_field('local_catquiz_attempts', 'contextid', ['id' => $catattemptid]) !== $contextid) {
+            $fail("The stored attempt is not in $contextname.");
+        }
+        $played = $progress->get_playedquestions();
+        $asked = array_map(
+            'intval',
+            $DB->get_fieldset_select('question_attempts', 'questionid', 'questionusageid = ?', [$attempt->uniqueid])
+        );
+        sort($asked);
+        $ids = array_map('intval', array_keys($played));
+        sort($ids);
+        if (!$ids || $ids !== $asked) {
+            $fail('Played questions and the question usage differ: ' . json_encode([$ids, $asked]));
+        }
+        foreach ($played as $questionid => $question) {
+            $item = $DB->get_record('local_catquiz_items', ['id' => $question->itemid]);
+            if (!$item || (int) $item->contextid !== $contextid || (int) $item->componentid !== (int) $questionid) {
+                $fail("Question $questionid was played with an item of another context.");
+            }
+            $param = $item->activeparamid ? $DB->get_record('local_catquiz_itemparams', ['id' => $item->activeparamid]) : null;
+            if (!$param || (int) $param->itemid !== (int) $item->id || (int) $param->contextid !== $contextid) {
+                $fail("Question $questionid has no active parameters of its item in $contextname.");
+            }
+            if (!empty($question->is_pilot)) {
+                $fail("Question $questionid was played as a pilot.");
+            }
+        }
+    }
+
+    /**
+     * The time from which the results of CAT attempts are stored (result_provenance, issue #150, re-audit 28.10.2026).
+     *
+     * @Given /^results of CAT attempts are stored since (\d+) days ago$/
+     *
+     * @param int $days
+     * @return void
+     */
+    public function results_of_cat_attempts_are_stored_since(int $days): void {
+        set_config(\local_catquiz\local\result\result_provenance::CONFIG, time() - $days * DAYSECS, 'local_catquiz');
+    }
+
+    /**
+     * Completed CAT attempts the finalisation stored no result for, carrying a value of the root scale - the attempt
+     * 180 of test 20 (issue #150, re-audit 28.10.2026).
+     *
+     * @Given /^the following CAT attempts of "([^"]*)" ended without a stored result:$/
+     *
+     * @param string $idnumber
+     * @param \Behat\Gherkin\Node\TableNode $table Columns: user, days ago, root ability.
+     * @return void
+     */
+    public function the_following_cat_attempts_ended_without_a_stored_result(
+        string $idnumber,
+        \Behat\Gherkin\Node\TableNode $table
+    ): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+        static $hostattemptid = 970000;
+
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $test = $DB->get_record(
+            'local_catquiz_tests',
+            ['componentid' => $cm->instance, 'component' => 'mod_adaptivequiz'],
+            '*',
+            MUST_EXIST
+        );
+        $rootid = (int) $test->catscaleid;
+        $contextid = (int) \local_catquiz\catscale::get_context_id($rootid);
+        foreach ($table->getHash() as $row) {
+            $userid = (int) $DB->get_field('user', 'id', ['username' => $row['user']], MUST_EXIST);
+            $end = time() - (int) $row['days ago'] * DAYSECS;
+            $DB->insert_record('local_catquiz_attempts', (object) [
+                'userid' => $userid, 'scaleid' => $rootid, 'contextid' => $contextid, 'courseid' => $cm->course,
+                'attemptid' => ++$hostattemptid, 'component' => 'mod_adaptivequiz', 'instanceid' => $cm->instance,
+                'teststrategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'status' => 0, 'starttime' => $end - 600,
+                'endtime' => $end, 'personability_after_attempt' => (float) $row['root ability'],
+                'json' => json_encode([
+                    'personabilities' => [$rootid => (float) $row['root ability']],
+                    'personabilities_abilities' => [],
+                ]),
+                'timecreated' => $end, 'timemodified' => $end,
+            ]);
         }
     }
 
@@ -2570,8 +2746,19 @@ JS;
     public function i_answer_and_the_page_refuses_with(string $answer, int $number, string $text): void {
         $this->execute('behat_general::i_click_on_in_the', [$answer, 'text', "Question $number", 'question']);
         // Pressed directly: execute() would stop at the error page itself.
+        // The old page is "complete" too: a marker in it shows when the next page has replaced it.
+        $this->getSession()->executeScript('window.catquizoldpage = true;');
         $this->getSession()->getPage()->pressButton('Submit answer');
-        $this->getSession()->wait(behat_base::get_extended_timeout() * 1000, 'document.readyState === "complete"');
+        $replaced = $this->getSession()->wait(
+            behat_base::get_extended_timeout() * 1000,
+            'typeof window.catquizoldpage === "undefined" && document.readyState === "complete"'
+        );
+        if (!$replaced) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "No new page after the answer to question $number",
+                $this->getSession()
+            );
+        }
         $page = $this->getSession()->getPage()->getText();
         $url = $this->getSession()->getCurrentUrl();
         $this->record_network_evidence(sprintf(
@@ -2705,8 +2892,10 @@ JS;
             }
         }
         if ($this->getSession()->getPage()->find('css', 'form#responseform') !== null) {
-            throw new \Behat\Mink\Exception\ExpectationException("The attempt did not end after $max answers.",
-                $this->getSession());
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "The attempt did not end after $max answers.",
+                $this->getSession()
+            );
         }
     }
 
@@ -2789,8 +2978,10 @@ JS;
             }
         }
         if ($this->getSession()->getPage()->find('css', 'form#responseform') !== null) {
-            throw new \Behat\Mink\Exception\ExpectationException("The attempt did not end after $max answers.",
-                $this->getSession());
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "The attempt did not end after $max answers.",
+                $this->getSession()
+            );
         }
     }
 
@@ -3019,8 +3210,10 @@ JS;
             }
         }
         if ($problems) {
-            throw new \Behat\Mink\Exception\ExpectationException('Export: ' . implode('; ', array_unique($problems)),
-                $this->getSession());
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'Export: ' . implode('; ', array_unique($problems)),
+                $this->getSession()
+            );
         }
     }
 }

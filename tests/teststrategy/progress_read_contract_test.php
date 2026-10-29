@@ -262,6 +262,41 @@ final class progress_read_contract_test extends advanced_testcase {
     }
 
     /**
+     * A progress cached before its CAT attempt was filed: the reader takes it and leaves the cache as it is; the
+     * writer moves it to the key of the CAT attempt (re-audit 28.10.2026).
+     */
+    public function test_a_reader_does_not_move_a_cached_progress(): void {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $this->host_attempt(71013, (int) $user->id);
+        $this->setUser($user);
+        $progress = progress::load(71013, 'mod_adaptivequiz', 9, (object) ['catquiz_catscales' => 1]);
+        $progress->save();
+        $catattemptid = (int) catquiz::get_cat_attempt_id(71013, 'mod_adaptivequiz');
+        $cache = cache::make('local_catquiz', 'adaptivequizattempt');
+        $key = new \ReflectionMethod(progress::class, 'get_cache_key');
+        $prekey = $key->invoke(null, null, 71013, 'mod_adaptivequiz');
+        $catkey = $key->invoke(null, $catattemptid, 71013, 'mod_adaptivequiz');
+        $cached = $cache->get($catkey);
+        $this->assertInstanceOf(progress::class, $cached);
+        $cache->delete($catkey);
+        $cache->set($prekey, $cached);
+        $before = $this->footprint(71013);
+        $this->assertSame(['progress' => 1, 'catattempts' => 1, 'cachedbyhost' => true, 'cachedbycat' => false], $before);
+
+        $read = progress::load(71013, 'mod_adaptivequiz', 9);
+        $this->assertSame($progress->get_id(), $read->get_id());
+        $this->assertSame($before, $this->footprint(71013), 'The reader moved nothing in the cache.');
+
+        progress::load(71013, 'mod_adaptivequiz', 9, (object) ['catquiz_catscales' => 1]);
+        $this->assertSame(
+            ['progress' => 1, 'catattempts' => 1, 'cachedbyhost' => false, 'cachedbycat' => true],
+            $this->footprint(71013),
+            'The writer moved it.'
+        );
+    }
+
+    /**
      * A progress stored before the settings were kept with it: the reader takes the settings of its CAT attempt
      * for this request and writes nothing; only a writer stores them (issue #149).
      */

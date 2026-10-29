@@ -17,6 +17,7 @@
 namespace local_catquiz\local\statistics;
 
 use advanced_testcase;
+use local_catquiz\local\result\result_provenance;
 use local_catquiz\local\result\scale_result;
 use local_catquiz\output\catquizstatistics;
 use local_catquiz\teststrategy\feedback_helper;
@@ -52,6 +53,8 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * - p7, p8: values without an attempt (resultsource legacy, attemptid null), 3.1 and -3.9: no result of an
  *   attempt - not in the statistics; estimates of the person in the context - in the peer comparison of the
  *   feedback.
+ * - p9: an attempt finalised after results were stored, without a stored row, carrying the root value -1.3505 (the
+ *   attempt 180 of the live case, re-audit 28.10.2026): no result - not in the histogram.
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -166,7 +169,7 @@ final class lowestsub_statistics_test extends advanced_testcase {
         for ($a = -4.75; $a <= 4.75; $a += 0.5) {
             $this->steps[] = strval($a);
         }
-        foreach (['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'] as $name) {
+        foreach (['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'] as $name) {
             $this->users[$name] = (int) $this->getDataGenerator()->create_and_enrol($this->course, 'student')->id;
         }
         $this->fixture();
@@ -213,6 +216,8 @@ final class lowestsub_statistics_test extends advanced_testcase {
     private function fixture(): void {
         global $DB;
         $t = time() - 10 * DAYSECS;
+        // Results are stored since just after p4's attempt (result_provenance).
+        set_config(result_provenance::CONFIG, $t + 1, 'local_catquiz');
         [$r, $a, $b] = [$this->root, $this->subs['A'], $this->subs['B']];
         $notprimary = [scale_result::REASON_NOT_PRIMARY];
         // The validator writes the reasons in this order: statistical ones first, then display ones.
@@ -230,6 +235,8 @@ final class lowestsub_statistics_test extends advanced_testcase {
         $this->attempt('p5', $t, [$r => [4.9, 1, 1, []]]);
         // Running: the finalisation, which stores the results, has not happened yet.
         $this->attempt('p6', 0, []);
+        // Finalised after results were stored, nothing stored: the attempt 180.
+        $this->attempt('p9', $t + 2 * DAYSECS, [], -1.3505);
         foreach (['p7' => 3.1, 'p8' => -3.9] as $user => $ability) {
             $DB->insert_record('local_catquiz_personparams', (object) [
                 'userid' => $this->users[$user], 'catscaleid' => $r, 'contextid' => $this->testcontext,
@@ -300,7 +307,7 @@ final class lowestsub_statistics_test extends advanced_testcase {
         ];
         ksort($expected);
         $this->assertSame($expected, $values, 'One value per person: the latest valid measurement.');
-        $this->assertCount(6, $statistics->get_population()->attempts(), 'Six completed attempts, the running one not.');
+        $this->assertCount(7, $statistics->get_population()->attempts(), 'Seven completed attempts, the running one not.');
         $this->assertSame($this->testcontext, $statistics->get_testinfo_contextid(), 'The context of the attempts.');
 
         $this->charts_sent();
@@ -313,7 +320,15 @@ final class lowestsub_statistics_test extends advanced_testcase {
         $this->assertNotNull($line, 'The test information of the subscales of the root scale is drawn.');
         $this->assertCount(count($this->steps), $line['values']);
         $this->assertStringContainsString('n = 4 persons', $out['chart']);
-        $this->assertStringContainsString('Out of 6 completed attempts in the selection; 2 of them have no valid', $out['chart']);
+        $this->assertStringContainsString(
+            '(1 the reported result of the attempt, 2 measured validly without being reported, 1 from attempts finalised '
+                . 'before results were stored)',
+            $out['chart']
+        );
+        $this->assertStringContainsString(
+            'Out of 7 completed attempts of 6 persons in the selection; 3 of them have no valid',
+            $out['chart']
+        );
         $this->assertStringContainsString(
             "Test information: {$this->calibrated} items of “Mathematik 150” and its subscales with parameters in the "
                 . 'CAT context “Context of test 20”.',
@@ -420,10 +435,11 @@ final class lowestsub_statistics_test extends advanced_testcase {
         $this->assertSame(0, $report['scope']['tests'][0]['reportcheckbox_of_scale']);
         $this->assertSame($this->scalecontext, $report['scope']['catcontext_of_scale']);
         $this->assertSame($this->testcontext, $report['scope']['tests'][0]['catcontext']);
-        $this->assertSame(7, $report['funnel']['attempts of the root scale']);
-        $this->assertSame(6, $report['funnel']['... completed (end time set)']);
-        $this->assertSame(6, $report['funnel']['... in the period and selection (the population)']);
+        $this->assertSame(8, $report['funnel']['attempts of the root scale']);
+        $this->assertSame(7, $report['funnel']['... completed (end time set)']);
+        $this->assertSame(7, $report['funnel']['... in the period and selection (the population)']);
         $this->assertSame([
+            'after results were stored, none stored, carries a value (not counted since 28.10.2026)' => 1,
             'before stored results, with value (counted)' => 1,
             'stored results, scale not among them (not measured)' => 1,
             'stored: not a valid measurement' => 1,

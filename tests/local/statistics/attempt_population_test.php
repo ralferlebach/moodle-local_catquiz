@@ -110,6 +110,8 @@ final class attempt_population_test extends advanced_testcase {
             $this->users[$name] = (int) $this->getDataGenerator()->create_and_enrol($this->course, 'student')->id;
         }
         eligible_population::reset();
+        // Results are stored since after the fixtures: an attempt without stored rows is legacy (issue #150).
+        set_config(\local_catquiz\local\result\result_provenance::CONFIG, $this->t1 + DAYSECS, 'local_catquiz');
     }
 
     /**

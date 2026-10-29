@@ -147,8 +147,13 @@ class attemptfeedback implements renderable, templatable {
         }
 
         if ($contextid === 0) {
-            // Get the contextid of the catscale.
-            $contextid = catscale::get_context_id(intval($settings->catquiz_catscales));
+            // Issue #157 (T12): the CAT context the attempt was played in, as stored with it; only without one the
+            // context of the scale now. After the scale moved to another context, the feedback of an earlier attempt
+            // compares in the context its result was measured in.
+            global $DB;
+            $catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, 'mod_adaptivequiz');
+            $stored = $catattemptid ? (int) $DB->get_field('local_catquiz_attempts', 'contextid', ['id' => $catattemptid]) : 0;
+            $contextid = $stored ?: catscale::get_context_id(intval($settings->catquiz_catscales));
         }
         $this->contextid = $contextid;
     }

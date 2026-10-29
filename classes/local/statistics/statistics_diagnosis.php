@@ -16,7 +16,12 @@
 
 namespace local_catquiz\local\statistics;
 
+use local_catquiz\catquiz;
 use local_catquiz\catscale;
+use local_catquiz\local\model\model_item_param;
+use local_catquiz\local\model\model_model;
+use local_catquiz\local\model\model_strategy;
+use local_catquiz\local\result\result_provenance;
 use local_catquiz\local\result\scale_result;
 use local_catquiz\output\catquizstatistics;
 use local_catquiz\teststrategy\feedback_helper;
@@ -57,8 +62,6 @@ final class statistics_diagnosis {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/local/catquiz/lib.php');
         $endtime = $endtime ?? time();
-        $report = [];
-
         $report = [];
 
         // 1. Scope: scale, tree, tests, strategies, reporting.
@@ -139,13 +142,29 @@ final class statistics_diagnosis {
         $funnel['... persons'] = count(array_unique(array_map(fn($a) => (int) $a->userid, $attempts)));
         $report['funnel'] = $funnel;
 
-        // 3. The value of each attempt for the scale, from the raw rows - independent of attempt_population::attempts().
+        // 3. Since when results are stored (result_provenance): attempts before count with their own value.
+        $since = result_provenance::since();
+        $report['results_stored_since'] = [
+            'time' => $since ?: null,
+            'date' => $since ? userdate($since, '%Y-%m-%d %H:%M:%S') : 'unknown: no attempt counts as before',
+            'source' => (string) get_config('local_catquiz', result_provenance::CONFIG_SOURCE),
+            'from_the_records_now' => result_provenance::determine(),
+        ];
+
+        // 4. The value of each attempt for the scale, from the raw rows - independent of attempt_population::attempts().
         $classes = [];
         $reasons = [];
         $rawvalues = [];
         foreach ($attempts as $attempt) {
             $rows = $DB->get_records('local_catquiz_personparams', ['attemptid' => $attempt->id, 'resultsource' => 'current']);
-            if (!$rows) {
+            if (!$rows && (int) $attempt->endtime >= $since) {
+                // Finalised since results are stored, none stored: no result (issue #150, re-audit 28.10.2026).
+                $value = null;
+                $carries = $scaleid === $rootid && $attempt->personability_after_attempt !== null;
+                $class = $carries
+                    ? 'after results were stored, none stored, carries a value (not counted since 28.10.2026)'
+                    : 'after results were stored, none stored, no value';
+            } else if (!$rows) {
                 $value = null;
                 if ($scaleid === $rootid && $attempt->personability_after_attempt !== null) {
                     $value = (float) $attempt->personability_after_attempt;
@@ -195,7 +214,7 @@ final class statistics_diagnosis {
         $report['attempts_by_value'] = $classes;
         $report['reasons_of_invalid_measurements'] = $reasons;
 
-        // 4. Bars: from the raw rows, and as the statistics compute them.
+        // 5. Bars: from the raw rows, and as the statistics compute them.
         $range = (new feedback_helper())->get_ability_range($scaleid);
         $steps = [];
         for ($i = (float) $range['minscalevalue'] + 0.25; $i <= (float) $range['maxscalevalue'] - 0.25; $i += 0.5) {
@@ -210,7 +229,7 @@ final class statistics_diagnosis {
             'n_persons' => count($codevalues), 'sum' => array_sum($codebars),
         ];
 
-        // 5. Values of the scale that are not results of an attempt: never in the statistics.
+        // 6. Values of the scale that are not results of an attempt: never in the statistics.
         $report['personparams_of_the_scale'] = array_values(array_map(fn($r) => (array) $r, $DB->get_records_sql(
             "SELECT "
                 . $DB->sql_concat('x.resultsource', "'/'", 'x.isvalid', "'/'", 'x.contextid', "'/'", 'x.withattempt')
@@ -225,7 +244,7 @@ final class statistics_diagnosis {
             ['scale' => $scaleid]
         )));
 
-        // 6. Test information, per CAT context in question.
+        // 7. Test information, per CAT context in question.
         $helper = new feedback_helper();
         $contexts = array_unique(array_filter(array_merge(
             [(int) catscale::get_context_id($scaleid)],
@@ -253,9 +272,246 @@ final class statistics_diagnosis {
                 'items' => $info['items'], 'of_the_scale_itself' => $direct, 'of_subscales' => $info['items'] - $direct,
                 'by_model' => $models, 'with_parameters_of_an_installed_model' => $info['withparameters'],
                 'computed' => $info['computed'], 'cause' => $info['cause'] ?? 'shown',
+                'stages' => self::testinfo_stages($scaleid, (int) $contextid, $steps),
             ];
         }
 
         return $report;
+    }
+
+    /**
+     * The test information of a scale in a CAT context, stage by stage (issue #150, re-audit 28.10.2026, AP-04).
+     *
+     * From the items assigned in the context to the information at every ability step: how many are left after each
+     * condition, and why the others dropped out. Read-only: the runtime pool is built here without its cache, and the
+     * cache is only read, never written or purged. Counts and ids of contexts only - no person, no answer, no single
+     * parameter.
+     *
+     * @param int $scaleid
+     * @param int $contextid
+     * @param float[] $steps The ability steps of the chart.
+     * @return array
+     */
+    public static function testinfo_stages(int $scaleid, int $contextid, array $steps): array {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/local/catquiz/lib.php');
+        $scaleids = array_values(array_unique(array_map('intval', [$scaleid, ...catscale::get_subscale_ids($scaleid)])));
+        [$insql, $params] = $DB->get_in_or_equal($scaleids, SQL_PARAMS_NAMED, 'tis');
+        $params += [
+            'ctx' => $contextid, 'ctx2' => $contextid,
+            'ready' => \core_question\local\bank\question_version_status::QUESTION_STATUS_READY,
+            'inactive' => LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE,
+        ];
+        // One row per item of the context, with what the conditions of the pool look at.
+        $rows = $DB->get_records_sql(
+            "SELECT lci.id, lci.componentid, lci.status AS itemstatus, lci.activeparamid,
+                    lcip.id AS paramid, lcip.model, lcip.contextid AS paramcontextid,
+                    q.id AS questionid, qvl.status AS questionstatus
+               FROM {local_catquiz_items} lci
+          LEFT JOIN {local_catquiz_itemparams} lcip ON lcip.id = lci.activeparamid AND lcip.itemid = lci.id
+                    AND lcip.contextid = :ctx2
+          LEFT JOIN {question} q ON q.id = lci.componentid
+          LEFT JOIN {question_versions} qv ON qv.questionid = q.id
+          LEFT JOIN {question_versions} qvl ON qvl.questionbankentryid = qv.questionbankentryid
+                    AND qvl.version = (SELECT MAX(qvm.version) FROM {question_versions} qvm
+                                        WHERE qvm.questionbankentryid = qv.questionbankentryid)
+              WHERE lci.catscaleid $insql AND lci.contextid = :ctx",
+            $params
+        );
+        $installed = model_strategy::get_installed_models();
+        $stages = [
+            'items of the scale and its subscales in the context' => count($rows),
+            '... with an active parameter (activeparamid)' => 0,
+            '... of the item and in this context' => 0,
+            '... question exists' => 0,
+            '... newest version of the question ready' => 0,
+            '... item active in its scale' => 0,
+            '... model installed' => 0,
+        ];
+        $bymodel = [];
+        $calibratedquestions = [];
+        foreach ($rows as $row) {
+            if (empty($row->activeparamid)) {
+                continue;
+            }
+            $stages['... with an active parameter (activeparamid)']++;
+            if (empty($row->paramid)) {
+                continue;
+            }
+            $stages['... of the item and in this context']++;
+            if (empty($row->questionid)) {
+                continue;
+            }
+            $stages['... question exists']++;
+            if ($row->questionstatus !== \core_question\local\bank\question_version_status::QUESTION_STATUS_READY) {
+                continue;
+            }
+            $stages['... newest version of the question ready']++;
+            if ((int) $row->itemstatus === LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE) {
+                continue;
+            }
+            $stages['... item active in its scale']++;
+            $model = (string) $row->model;
+            $bymodel[$model] = $bymodel[$model] ?? ['items' => 0, 'installed' => isset($installed[$model])];
+            $bymodel[$model]['items']++;
+            if (!isset($installed[$model])) {
+                continue;
+            }
+            $stages['... model installed']++;
+            $calibratedquestions[(int) $row->questionid] = true;
+        }
+        ksort($bymodel);
+
+        // The pool the statistics and the tests read: built here without the cache, compared with the cached one.
+        [$select, $from, $where, , $poolparams] = catquiz::return_sql_for_catscalequestions(
+            $scaleids,
+            $contextid,
+            [],
+            0,
+            null,
+            null,
+            true,
+            true
+        );
+        $pool = model_strategy::rows_of_installed_models(
+            catscale::one_row_per_question($DB->get_recordset_sql("SELECT $select FROM $from WHERE $where", $poolparams))
+        );
+        ksort($pool, SORT_NUMERIC);
+        $signature = fn(array $items) => hash('sha256', json_encode(array_map(
+            fn($i) => [(int) $i->itemid, (string) $i->model, (string) $i->difficulty, (string) $i->discrimination,
+                (string) $i->guessing],
+            $items
+        )));
+        $cached = \cache::make('local_catquiz', 'runtimepool')->get(catscale::pool_key($contextid, true, $scaleid, []));
+        $itemcontexts = $pool ? $DB->get_records_list(
+            'local_catquiz_items',
+            'id',
+            array_map(fn($i) => (int) $i->itemid, $pool),
+            '',
+            'id, contextid'
+        ) : [];
+        $othercontext = 0;
+        $calibratedasother = 0;
+        $withparams = 0;
+        foreach ($pool as $questionid => $item) {
+            $itemcontext = (int) ($itemcontexts[(int) $item->itemid]->contextid ?? 0);
+            if ($itemcontext !== $contextid) {
+                $othercontext++;
+            }
+            if (!empty($item->model)) {
+                $withparams++;
+            } else if (isset($calibratedquestions[(int) $questionid])) {
+                // The question has parameters in this context, the pool has a row without: the row of an item of
+                // another context won the choice of one row per question (catscale::one_row_per_question()).
+                $calibratedasother++;
+            }
+        }
+
+        // The information of the pool, item by item and step by step.
+        $contract = 0;
+        $finiteatall = 0;
+        $finiteatstep = array_fill_keys(array_map('strval', $steps), 0);
+        foreach ($pool as $item) {
+            if (empty($item->model) || !isset($installed[$item->model])) {
+                continue;
+            }
+            try {
+                $params = model_item_param::from_record($item)->get_params_array();
+                $model = model_model::get_instance($item->model);
+            } catch (\Throwable $e) {
+                continue;
+            }
+            $contract++;
+            $all = true;
+            foreach ($steps as $step) {
+                try {
+                    $info = $model->fisher_info(['ability' => (float) $step], $params);
+                } catch (\Throwable $e) {
+                    $info = NAN;
+                }
+                if (is_finite($info)) {
+                    $finiteatstep[strval($step)]++;
+                } else {
+                    $all = false;
+                }
+            }
+            if ($all) {
+                $finiteatall++;
+            }
+        }
+
+        // Issue #157: the pool as the rule before 28.10.2026 built it - items of every context, the parameters of this
+        // one or none, one row per question with the lowest item id -, for the before/after comparison.
+        [$insql3, $params3] = $DB->get_in_or_equal($scaleids, SQL_PARAMS_NAMED, 'tio');
+        $params3 += [
+            'ctx' => $contextid, 'ctx2' => $contextid,
+            'ready' => \core_question\local\bank\question_version_status::QUESTION_STATUS_READY,
+            'inactive' => LOCAL_CATQUIZ_TESTITEM_STATUS_INACTIVE,
+        ];
+        $oldrows = $DB->get_recordset_sql(
+            "SELECT lci.id, lci.componentid, lci.contextid, lcip.model
+               FROM {local_catquiz_items} lci
+          LEFT JOIN {local_catquiz_itemparams} lcip ON lcip.itemid = lci.id AND lci.activeparamid = lcip.id
+               JOIN {question} q ON q.id = lci.componentid
+               JOIN {question_versions} qv ON qv.questionid = q.id
+               JOIN {question_versions} qvl ON qvl.questionbankentryid = qv.questionbankentryid
+                    AND qvl.version = (SELECT MAX(qvm.version) FROM {question_versions} qvm
+                                        WHERE qvm.questionbankentryid = qv.questionbankentryid)
+              WHERE lci.catscaleid $insql3 AND lci.status <> :inactive AND qvl.status = :ready
+                AND (lcip.contextid = :ctx OR lcip.contextid IS NULL)",
+            $params3
+        );
+        $oldpool = [];
+        foreach ($oldrows as $row) {
+            $qid = (int) $row->componentid;
+            if (!isset($oldpool[$qid]) || (int) $row->id < (int) $oldpool[$qid]->id) {
+                $oldpool[$qid] = $row;
+            }
+        }
+        $oldrows->close();
+        $oldpool = model_strategy::rows_of_installed_models($oldpool);
+        $before = ['questions' => count($oldpool), 'with parameters' => 0, 'without parameters (as pilots)' => 0,
+            'rows of an item of another CAT context' => 0, 'by context of the row' => []];
+        foreach ($oldpool as $row) {
+            $before[empty($row->model) ? 'without parameters (as pilots)' : 'with parameters']++;
+            if ((int) $row->contextid !== $contextid) {
+                $before['rows of an item of another CAT context']++;
+            }
+            $key = (int) $row->contextid;
+            $before['by context of the row'][$key] = ($before['by context of the row'][$key] ?? 0) + 1;
+        }
+        ksort($before['by context of the row']);
+
+        [$insql2, $params2] = $DB->get_in_or_equal($scaleids, SQL_PARAMS_NAMED, 'tin');
+        $nocontext = $DB->count_records_select('local_catquiz_items', "catscaleid $insql2 AND contextid IS NULL", $params2);
+        $othercontexts = $DB->get_records_sql_menu(
+            "SELECT contextid, COUNT(1) FROM {local_catquiz_items}
+              WHERE catscaleid $insql2 AND contextid IS NOT NULL AND contextid <> :ctx GROUP BY contextid",
+            $params2 + ['ctx' => $contextid]
+        );
+        return [
+            'items of the scales in other CAT contexts, by context' => $othercontexts,
+            'items of the scales without a CAT context' => $nocontext,
+            'stages' => $stages,
+            'by_model_after_the_conditions' => $bymodel,
+            'references that do not resolve (issue #157, left out of the pool)' =>
+                \local_catquiz\local\integrity\item_param_integrity::check($contextid, $scaleids),
+            'pool before 28.10.2026 (items of every context, lowest item id)' => $before,
+            'pool' => [
+                'questions in the pool (one row per question, cold: without the cache)' => count($pool),
+                '... rows with parameters' => $withparams,
+                '... rows of an item of another CAT context' => $othercontext,
+                '... questions with parameters in this context, but a row without' => $calibratedasother,
+                'cache' => $cached === false ? 'no entry' : [
+                    'questions' => count($cached),
+                    'same as cold' => $signature($cached) === $signature($pool),
+                ],
+            ],
+            'information' => [
+                'items whose parameters can be read (model_item_param)' => $contract,
+                'items with a finite information at every step' => $finiteatall,
+                'items with a finite information, by step' => $finiteatstep,
+            ],
+        ];
     }
 }

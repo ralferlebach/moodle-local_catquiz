@@ -2,6 +2,67 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Nacharbeiten zu #150 (Auftrag mit Patch vom 28.10.2026) und zum Re-Audit-Stand vom 28.10.2026 (2026102406). Bericht:
+  `doc/re-audit-2026-10-28.md`, Belege `doc/evidence/re-audit-2026-10-28/`.
+  - #150, Defekt A (einzelner Root-Balken): Ein abgeschlossener Versuch ohne gespeicherte Ergebnisse galt immer als
+    Altversuch und zählte mit seinem Wert. Jetzt entscheidet der Zeitpunkt des Abschlusses gegen die Grenze
+    `resultsstoredsince`. Sie wird beim Upgrade einmal aus `upgrade_log` (≥ 2026082104) bzw. der ersten gespeicherten
+    Versuchszeile bestimmt; bei Neuinstallation gilt der Installationszeitpunkt (`local\result\result_provenance`).
+    Die Regel gilt gleich in `attempt_population::attempts()`, `value_sql()` und `learning_progress_series`. Daten werden
+    nicht geändert. Der Patch aus dem Auftrag wurde geprüft und nicht übernommen, die Gründe stehen im Bericht §2.
+  - #150, Darstellung: Ohne gültigen Wert zeigt das Profil keinen Balken, sondern einen Hinweis mit der Zahl der Personen
+    mit gültigem berichtetem Ergebnis in anderen Skalen. Die Zählerzeile trennt jetzt: berichtet, gültig gemessen aber
+    nicht berichtet, Altversuch. Neu sind Personen mit Versuch sowie Auswahl (Test bzw. alle Tests des Kurses) und
+    Zeitraum. Die Testinformation wird nur für Berechtigte und nur bei gezeichneten Balken berechnet. Sie ist als
+    Information des heutigen Itempools bezeichnet, mit Hinweis bei Versuchen aus mehreren CAT-Kontexten.
+  - #150, Defekt B (Testinformation trotz Parametern nicht berechenbar): Der Pool eines Kontexts nahm je Frage die
+    Zeile mit der kleinsten Item-ID. Die parameterlose Zeile eines früheren Kontexts gewann so gegen die kalibrierte
+    des aktuellen. Die Frage galt dann als Pilotfrage, auch bei der Auswahl im Test. Jetzt gilt die Zeile mit dem
+    aktiven Parametersatz des Kontexts, ohne sie die Zeile ohne Parameter (`catscale::one_row_per_question()`).
+  - #150, Diagnose: `cli/diagnose_statistics.php` zeigt jetzt die Grenze und ihre Quelle sowie Versuche „ohne
+    gespeichertes Ergebnis“. Je Kontext kommen Stufenzähler der Testinformation hinzu (Items → aktive Parameter →
+    Frage → ready → aktiv → Modell → Pool kalt/warm → Zeilen fremder Kontexte → endliche Information je Stützstelle).
+    Doppeltes `$report = [];` entfernt.
+  - #157 (P0): Der Itempool eines CAT-Kontexts las die Items aller Kontexte einer Frage und nahm je Frage die
+    kleinste Item-ID. So liefen kalibrierte Fragen als Piloten, mit Folgen für Auswahl, Ability/SE, Stopps und
+    Testinformation. Jetzt gilt:
+    - Im Pool stehen nur die Items des Kontexts.
+    - Der aktive Parameter muss zum Item, zu seinem Kontext und zu seiner Frage gehören.
+    - Nicht auflösbare Verweise sind kein Pilot. Sie fallen aus dem Pool und lösen das Event
+      `item_param_integrity_failed` aus; `cli/check_item_integrity.php` listet sie auf.
+    - Die Parameterlisten der Schätzung folgen derselben Regel.
+    - Ein laufender Versuch bleibt in seinem Kontext, auch wenn die Skala währenddessen wechselt. Das gilt für
+      Auswahl, Zwischenschätzungen, SE, gespeicherten Versuch und Feedback.
+    - Der Upgrade-Schritt leert gezielt `runtimepool` und `catquiz_item_params`.
+    - Neu sind ein Vorher/Nachher-Pool in `diagnose_statistics.php` und `cli/audit_context_pool_attempts.php` für
+      abgeschlossene Versuche.
+    - Keine Datenmigration.
+    - Doku: `doc/issue-157-context-item-pool.md`. Tests: `context_item_pool_test` (T1–T9, metamorph),
+      `context_pool_attempt_test` (alle Strategien metamorph, T10–T12), `attempt_pool_audit_test`, Behat
+      `catquiz_context_item_pool.feature`.
+  - #149 (Re-Audit 28.10.): `progress::load()` ohne Testeinstellungen (Leser) verschiebt einen Cache-Eintrag nicht mehr
+    auf den Schlüssel des CAT-Versuchs. Nur ein Schreiber schreibt in den Cache.
+  - #156: Keine CI-Zelle führt mehr PHP 8.1 aus (`moodle-plugin-ci-main.yml`: die beiden 8.1-Zellen entfallen, 8.2/8.3 ×
+    PostgreSQL/MariaDB bleiben; `moodle-plugin-ci-dev.yml`: 8.1/PostgreSQL wird 8.2/PostgreSQL). `version.php` bleibt.
+  - CI-Logs vom 28.10.2026:
+    - phpcs (blockierend, `--max-warnings 0`): neun Fehler in `tests/behat/behat_catquiz.php` (mehrzeilige Aufrufe), mit
+      phpcbf behoben. Die Prüfung der Vorrunde lief nur über einen Teil der Dateien; jetzt läuft sie über den ganzen
+      Baum mit den Ausschlüssen und der Warnschwelle der CI.
+    - Behat `catquiz_id_namespaces.feature:81` (sporadisch rot, im Rerun grün): Der Schritt „…the page refuses with“
+      las die Seite nach `pressButton()` sofort aus. `readyState` war dabei noch der der alten Seite. Jetzt markiert der
+      Schritt die alte Seite und wartet, bis die neue sie ersetzt hat; ohne Seitenwechsel schlägt er fehl.
+    - Vor der Auslieferung in der vollen Suite gefunden, in den gezielten Läufen nicht abgedeckt: drei Tests passten
+      nicht mehr zu den Änderungen dieser Runde.
+      - `light_count_test`: `provenance` und `valuesource` setzt die Population; sie werden nicht selektiert.
+      - `pool_statistics_test`: Der Fall „anderer Kontext“ erwartete die Items des ersten Kontexts. Nach #157
+        enthält der Pool nur eigene Items. Die Fragen sind jetzt auch Items des anderen Kontexts; geprüft wird wie
+        zuvor die Trennung der Statistik.
+      - `upgrade_range_snapshot_test`: Der Upgrade-Schritt von #150 meldet die Grenze. Die Meldung wird jetzt
+        erwartet; vorher galt der Test als „risky“.
+  - Tests: `root_result_contract_test`, `testinfo_stages_test`, `pool_context_row_test`, Erweiterungen in
+    `lowestsub_statistics_test`, `attempt_population_test`, `progress_read_contract_test`, Behat-Szenario „Lowest skill
+    gap without a valid root value“. Zahntests in `doc/evidence/re-audit-2026-10-28/`.
+
 - Nacharbeiten zum Re-Audit vom 27.10.2026 (2026102405): ein Paket für local_catquiz, mod_adaptivequiz und den Adapter.
   Was je Issue belegt ist und was offen bleibt, steht in `doc/re-audit-2026-10-27.md` und
   `doc/evidence/re-audit-2026-10-27/issue-<nr>-evidence.md`.

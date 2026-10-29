@@ -521,7 +521,8 @@ class model_responses {
      */
     public function get_items_for_scale(int $catscaleid, int $contextid): model_item_param_list {
         $modelstrategy = new model_strategy($this);
-        $catscalecontext = catscale::get_context_id($catscaleid);
+        // Issue #157: the parameters of the context asked for - that of the attempt -, as the person parameters.
+        $catscalecontext = $contextid ?: catscale::get_context_id($catscaleid);
         $catscaleids = [
             $catscaleid,
             ...catscale::get_subscale_ids($catscaleid),

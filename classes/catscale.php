@@ -605,6 +605,9 @@ class catscale {
             fn() => self::one_row_per_question($DB->get_recordset_sql($sql, $params)),
             ['pool_scales' => count($scaleids)]
         );
+        // Issue #157: items of the context whose reference to active parameters does not resolve were left out by the
+        // query - they are neither pilots nor calibrated. Say so, once per pool built.
+        \local_catquiz\local\integrity\item_param_integrity::report($contextid, $scaleids);
         // Issue #153: an item whose model is not installed cannot be selected or scored; the manager says why
         // (item_availability()).
         return model_strategy::rows_of_installed_models($pool);
@@ -733,18 +736,33 @@ class catscale {
     }
 
     /**
-     * The rows of the runtime pool, one per question: of several, the one with the lowest item id.
+     * The rows of the runtime pool, one per question: the row with the active parameters of the CAT context
+     * (local_catquiz_items.activeparamid); without such a row, the row without parameters.
      *
      * The order of the rows is kept - the position of a question is that of its first row.
+     *
+     * Issue #150 (re-audit 28.10.2026): the pool of a context also holds the rows of items of other contexts that
+     * have no parameters (piloting, catquiz::return_sql_for_catscalequestions()). An item of an earlier context,
+     * created first, has the lower id: its row without parameters won over the row with the parameters of this
+     * context, and the question counted as a pilot - in the selection and in the test information. A row with
+     * parameters always has them in this context (lcipcontextid; the query admits no other), so it is taken. Only
+     * between rows alike - a question in two sibling scales, both calibrated or both without parameters - the lowest
+     * item id decides, so that the choice is fixed (issue #104). The selection excludes a question played once by
+     * its question id (removeplayedquestions), so with every item it has.
      *
      * @param \moodle_recordset $rows Rows with the question id first and the item id as itemid.
      * @return array Rows keyed by question id.
      */
     public static function one_row_per_question(\moodle_recordset $rows): array {
         $items = [];
+        $calibrated = fn($row): bool => isset($row->lcipcontextid) && $row->lcipcontextid !== '';
         foreach ($rows as $row) {
             $id = $row->id;
-            if (!isset($items[$id]) || (int) $row->itemid < (int) $items[$id]->itemid) {
+            if (
+                !isset($items[$id])
+                || ($calibrated($row) && !$calibrated($items[$id]))
+                || ($calibrated($row) === $calibrated($items[$id]) && (int) $row->itemid < (int) $items[$id]->itemid)
+            ) {
                 $items[$id] = $row;
             }
         }

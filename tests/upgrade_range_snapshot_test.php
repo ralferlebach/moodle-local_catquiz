@@ -83,6 +83,8 @@ final class upgrade_range_snapshot_test extends advanced_testcase {
         $this->assertFalse($dbman->field_exists($table, 'rangelower'));
         set_config('version', 2026100912, 'local_catquiz');
 
+        // The step of issue #150 reports the boundary of stored results to the admin; that notice is expected.
+        $this->expectOutputRegex('/local_catquiz: results of attempts are stored since /');
         $this->assertTrue(xmldb_local_catquiz_upgrade(2026100912));
 
         foreach (['rangelower', 'rangeupper', 'rangebackfilled'] as $name) {

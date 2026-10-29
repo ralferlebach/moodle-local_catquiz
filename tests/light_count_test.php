@@ -279,10 +279,14 @@ final class light_count_test extends advanced_testcase {
 
         // The key 'value' is built in the reducer, not selected; 'component'
         // and 'instanceid' are read on rows from other queries in catquiz.php.
-        // 'primaryvalid' and 'legacy' are set by the population from the stored results (issue #88).
+        // 'primaryvalid' and 'legacy' are set by the population from the stored results (issue #88),
+        // 'provenance' and 'valuesource' likewise, from the time the attempt ended (issue #150).
         $needed = array_diff(
             array_unique($reads[1]),
-            ['value', 'component', 'instanceid', 'attemptid', 'uniqueid', 'primaryvalid', 'legacy']
+            [
+                'value', 'component', 'instanceid', 'attemptid', 'uniqueid',
+                'primaryvalid', 'legacy', 'provenance', 'valuesource',
+            ]
         );
 
         $this->assertSame(
