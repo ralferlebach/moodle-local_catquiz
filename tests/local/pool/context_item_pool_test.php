@@ -306,6 +306,34 @@ final class context_item_pool_test extends advanced_testcase {
     }
 
     /**
+     * Re-audit 02.11.2026 (traceability, gap 1): the standard error and the start check read the ACTIVE parameters,
+     * as the pool and the estimate do - not every parameter of a model in the context. A second, not active parameter
+     * of an item and the parameter of an item whose reference does not resolve stay out.
+     */
+    public function test_the_standard_error_reads_the_active_parameters_only(): void {
+        global $DB;
+        $active = $this->question();
+        [$itemid] = $this->item($active, 'S1', 'A', ['difficulty' => -2.0]);
+        // A second parameter of the same item under another model, not active.
+        $DB->insert_record('local_catquiz_itemparams', (object) [
+            'itemid' => $itemid, 'componentid' => $active, 'componentname' => 'question', 'contextid' => $this->contexts['A'],
+            'model' => 'rasch', 'difficulty' => 3.0, 'discrimination' => 1.0, 'guessing' => 0, 'json' => '{}',
+            'status' => LOCAL_CATQUIZ_STATUS_UPDATED_MANUALLY, 'usable' => 1, 'timecreated' => time() + 10,
+            'timemodified' => time() + 10,
+        ]);
+        $broken = $this->question();
+        $this->item($broken, 'S1', 'A', ['difficulty' => 0.5, 'broken' => 'missing']);
+        $responses = \local_catquiz\local\model\model_responses::create_from_array(
+            [2 => ['component' => [$active => ['fraction' => 1.0], $broken => ['fraction' => 0.0]]]],
+            $this->root
+        );
+        $items = $responses->get_items_for_scale($this->root, $this->contexts['A']);
+        $this->assertTrue($items->offsetExists($active));
+        $this->assertEqualsWithDelta(-2.0, $items[$active]->get_difficulty(), 1e-9, 'The active parameter.');
+        $this->assertFalse($items->offsetExists($broken), 'No parameter behind a reference that does not resolve.');
+    }
+
+    /**
      * T5: a reference that does not resolve is neither a pilot nor another calibration: the item leaves the pool and is
      * reported, by kind.
      *
