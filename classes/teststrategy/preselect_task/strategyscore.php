@@ -128,10 +128,14 @@ abstract class strategyscore extends preselect_task {
         $userresponses = $this->progress->get_user_responses();
         $scalefractions = [];
         $scalecount = [];
+        // Issue #162: the exponent of the item term is n_s, the productive questions answered in the scale - pilot
+        // questions do not count. The other terms keep the count of all questions played.
+        $productivecount = [];
 
         foreach ($this->get_scales() as $scaleid) {
             $played = $this->progress->get_playedquestions(true, $scaleid);
             $scalecount[$scaleid] = count($played);
+            $productivecount[$scaleid] = count(array_filter($played, fn($q) => empty($q->is_pilot)));
             if ($scalecount[$scaleid] === 0) {
                 $scalefractions[$scaleid] = 0.5;
             } else {
@@ -144,26 +148,26 @@ abstract class strategyscore extends preselect_task {
             }
         }
 
+        // Issue #27/#161: what depends only on the scale - its ability, the test information of the questions
+        // played in it, the path from the root - is the same for every candidate. It used to be computed again for
+        // each candidate and each of its scales: the item parameters of the scale and its subscales read from the
+        // cache, filtered by the played questions and summed up, pool size times depth times. That grew with the
+        // square of the pool (60 s per question at 2,420 items, 82 s in the load test). Now once per scale and step,
+        // in the same order and with the same functions, so every score stays bit for bit what it was.
+        $scalestate = [];
+        $ancestry = [];
         foreach ($context['questions'] as $question) {
-            $affectedscales = [$question->catscaleid, ...catscale::get_ancestors($question->catscaleid)];
-            $affectedscales = array_reverse($affectedscales); // Traverse from root to leave.
+            $affectedscales = $ancestry[$question->catscaleid]
+                ??= array_reverse([$question->catscaleid, ...catscale::get_ancestors($question->catscaleid)]);
 
             foreach ($affectedscales as $scaleid) {
-                if (
-                    $this->ignore_scale($scaleid)
-                    || is_null($scaleability = $this->get_scale_ability($scaleid))
-                ) {
+                if (!array_key_exists($scaleid, $scalestate)) {
+                    $scalestate[$scaleid] = $this->scale_state($scaleid);
+                }
+                if ($scalestate[$scaleid] === null) {
                     continue;
                 }
-
-                $scaleitems = model_item_param_list::get(
-                    $context['contextid'],
-                    null,
-                    [$scaleid, ...catscale::get_subscale_ids($scaleid)]
-                )
-                    ->filter_by_componentids(array_keys($this->progress->get_playedquestions()));
-                $standarderrorplayed = catscale::get_standarderror($scaleability, $scaleitems, INF);
-                $testinfo = $standarderrorplayed === INF ? 0 : 1 / $standarderrorplayed ** 2;
+                [$scaleability, $testinfo] = $scalestate[$scaleid];
                 $question->processterm = max(0.1, $testinfo) / max(1, $scalecount[$scaleid]);
                 $abilitydifference = ($scaleability - $this->progress->get_abilities()[$context['catscaleid']]);
                 $question->scaleterm = $this->get_question_scaleterm($testinfo, $abilitydifference);
@@ -172,7 +176,7 @@ abstract class strategyscore extends preselect_task {
                     $scalefractions[$scaleid],
                     $question->difficulty,
                     $scaleability,
-                    $scalecount[$scaleid],
+                    $productivecount[$scaleid],
                     $context['min_attempts_per_scale']
                 );
 
@@ -183,19 +187,66 @@ abstract class strategyscore extends preselect_task {
             }
         }
 
-        // In order to have predictable results, in case the values of two
-        // elements are exactly the same, sort by question ID.
-        $remainingquestions = array_filter($context['questions'], fn ($q) => property_exists($q, 'score'));
-        uasort($remainingquestions, function ($q1, $q2) {
-            if (! ($q2->score === $q1->score)) {
-                return $q2->score <=> $q1->score;
+        // Only the best question is needed (issue #27): it is kept while going through the candidates instead of
+        // sorting all of them. The order is the one the sort used - the higher score first, for exactly the same
+        // score the lower question id -, and as the sort was stable, of two scores that compare equal without being
+        // identical the earlier candidate stays.
+        $selectedquestion = false;
+        foreach ($context['questions'] as $question) {
+            if (!property_exists($question, 'score')) {
+                continue;
             }
-            return $q1->id <=> $q2->id;
-        });
-
-        $selectedquestion = reset($remainingquestions);
+            if ($selectedquestion === false || self::ranks_before($question, $selectedquestion)) {
+                $selectedquestion = $question;
+            }
+        }
 
         return result::ok($selectedquestion);
+    }
+
+    /**
+     * Whether a candidate comes before another in the order of the selection.
+     *
+     * The higher score first; for exactly the same score the lower question id. The comparison the sort used before
+     * issue #27, unchanged.
+     *
+     * @param stdClass $q1
+     * @param stdClass $q2
+     * @return bool
+     */
+    public static function ranks_before(stdClass $q1, stdClass $q2): bool {
+        if (!($q2->score === $q1->score)) {
+            return ($q2->score <=> $q1->score) < 0;
+        }
+        return ($q1->id <=> $q2->id) < 0;
+    }
+
+    /**
+     * What a scale contributes to every candidate in this step: its ability and the test information of the
+     * questions played in it, or null when the scale is left out.
+     *
+     * Computed once per scale and step (issue #27). Depends on the scale, the abilities and the questions played -
+     * never on the candidate.
+     *
+     * @param int $scaleid
+     * @return array|null [ability, test information]
+     */
+    protected function scale_state(int $scaleid): ?array {
+        if (
+            $this->ignore_scale($scaleid)
+            || is_null($scaleability = $this->get_scale_ability($scaleid))
+        ) {
+            return null;
+        }
+        $scaleitems = model_item_param_list::get(
+            $this->context['contextid'],
+            null,
+            [$scaleid, ...catscale::get_subscale_ids($scaleid)]
+        )
+            ->filter_by_componentids(array_keys($this->progress->get_playedquestions()));
+        $standarderrorplayed = catscale::get_standarderror($scaleability, $scaleitems, INF);
+        $testinfo = $standarderrorplayed === INF ? 0 : 1 / $standarderrorplayed ** 2;
+        return [$scaleability, $testinfo];
     }
 
     /**

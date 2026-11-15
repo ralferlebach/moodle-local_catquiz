@@ -48,12 +48,15 @@ class strategystrengthscore extends strategyscore {
     /**
      * Returns the item term
      *
+     * B to the power of n_s, the number of productive questions answered in the scale (issue #162, decision of
+     * 15.11.2026; before: max(1, n_s - n_min + 1)). n_s = 0 gives 1, a neutral term.
+     *
      * @param float $testinfo
      * @param float $fraction
      * @param mixed $difficulty
      * @param mixed $scaleability
      * @param mixed $scalecount
-     * @param int $minattemptsperscale
+     * @param int $minattemptsperscale Not used since issue #162; kept for the common signature.
      * @return mixed
      */
     protected function get_question_itemterm(
@@ -66,11 +69,13 @@ class strategystrengthscore extends strategyscore {
     ) {
         return (1 / (
             1 + exp($testinfo * 2 * (0.5 - $fraction) * ($difficulty - $scaleability))
-        )) ** max(1, $scalecount - $minattemptsperscale + 1);
+        )) ** $scalecount;
     }
 
     /**
      * Returns the score for the given question and scaleid
+     *
+     * With the last-time-played penalty, as in the other three subscale strategies (issue #162).
      *
      * @param stdClass $question
      * @param int $scaleid
@@ -80,6 +85,7 @@ class strategystrengthscore extends strategyscore {
         return $question->fisherinformation[$scaleid]
             * $question->processterm
             * $question->scaleterm
-            * $question->itemterm;
+            * $question->itemterm
+            * $question->lasttimeplayedpenaltyfactor;
     }
 }
