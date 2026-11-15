@@ -2,6 +2,26 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Performance-Nacharbeit 15.11.2026 (#163, #161, #165, #167, #169, #170) und CI (2026111501). Bericht:
+  `doc/performance-163-170.md`. Je Issue ein eigener Commit mit eigenem Test und Zahntest.
+  - #163 (P0): Der beobachtete Standardfehler summierte seit 2026102408 (03.11.2026) die Information aller aktiven
+    Items der Skala, auch der nie gestellten. Er zählt jetzt nur die in diesem Versuch beantworteten und bewerteten
+    Fragen; Pilotfragen und Antworten ohne Bewertung zählen nicht. Die Liste im Cache bleibt unverändert (Kopie). Der
+    ältere CLARA-Stand war davon nicht betroffen.
+  - #161: Der Cache der Parameterlisten läuft ohne Static-Acceleration. Mit Größe 1 verdrängte jede Skala die vorige
+    und wurde erneut serialisiert (18 % einer Folgefrage). 2.420 Items: Folgefrage p50 396 → 298 ms.
+  - #165: Die Vorwerte aller Skalen kommen aus einer Abfrage statt einer je Skala; die Regel (höchste id unter den
+    gültigen Zeilen) ist unverändert. Bei 80 Skalen 1 statt 80 Abfragen.
+  - #167: Mittelwert und Streuung der früheren Fähigkeiten aus einer Population, einmal je Lauf gelesen.
+  - #169: Teil- und Vorfahrenskalen über einen einmal gebauten Index statt eines Vollscans je Knoten; ein Zyklus in den
+    Daten beendet den Lauf, statt den Stack zu sprengen. 400 Skalen: 196 → 25 ms.
+  - #170: `filter_for_responses()` prüft gegen eine Menge der beantworteten IDs. 10.000 Items: 3,4 → 0,8 ms.
+    Testpotenzial unverändert (eine Top-k-Auswahl würde die Summationsreihenfolge ändern).
+  - CI `install-matrix`: Ein eigener Schritt prüft vor dem Upgrade, dass jede Linie-1.3-Version über ihrem
+    Linie-1.2-Zwilling liegt, und meldet sonst klar, welcher Zweig zuerst gepusht werden muss.
+  - Offen: #164 (Provenienz der Zwischenwerte) braucht eine fachliche Entscheidung; #166 hängt daran. #168 ist eine
+    Architekturfrage.
+
 - #161, #27, #162 (2026111500). Bericht: `doc/issue-161-27-162.md`.
   - #161/#27: `strategyscore::run()` berechnete Fähigkeit und Testinformation einer Skala für jede Kandidatenfrage neu
     (Parameterliste aus dem Cache, gefiltert, Standardfehler). Bei 2.420 Items dauerte eine Folgefrage rund 60 s, auf

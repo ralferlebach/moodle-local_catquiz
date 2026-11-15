@@ -828,15 +828,34 @@ class catscale {
      *
      */
     private static function add_subscales(?int $parentid, $all): ?array {
-        $result = [];
         if ($parentid === null) {
-            return $result;
+            return [];
         }
-
+        // Issue #169: the children of every scale in one pass, in the order of $all; then the same depth-first
+        // order as before, without searching all scales again for every node.
+        $children = [];
         foreach ($all as $scale) {
-            if (intval($scale->parentid) === $parentid) {
-                $result = [...$result, $scale->id, ...self::add_subscales(intval($scale->id), $all)];
+            $children[intval($scale->parentid)][] = $scale;
+        }
+        return self::collect_subscales($parentid, $children, [$parentid => true]);
+    }
+
+    /**
+     * The subscales below a scale, depth first, each scale followed by its own subscales.
+     *
+     * @param int $parentid
+     * @param array $children Scales by the id of their parent, in the order of all scales.
+     * @param array $path Ids on the way down: a scale met again there is a cycle and not followed (issue #169).
+     * @return array
+     */
+    private static function collect_subscales(int $parentid, array $children, array $path): array {
+        $result = [];
+        foreach ($children[$parentid] ?? [] as $scale) {
+            $id = intval($scale->id);
+            if (isset($path[$id])) {
+                continue;
             }
+            $result = [...$result, $scale->id, ...self::collect_subscales($id, $children, $path + [$id => true])];
         }
         return $result;
     }
@@ -906,12 +925,24 @@ class catscale {
      *
      */
     private static function add_parentscales(int $scaleid, array $all): ?array {
+        // Issue #169: up the tree by the scale's id instead of searching all scales on every level. $all is keyed by
+        // id (dataapi::get_all_catscales()); a list keyed otherwise is indexed first. A cycle ends the walk.
+        $byid = [];
         foreach ($all as $scale) {
-            if (intval($scale->id) === $scaleid && intval($scale->parentid) !== 0) {
-                return [$scale->parentid, ...self::add_parentscales(intval($scale->parentid), $all)];
-            }
+            $byid[intval($scale->id)] ??= $scale;
         }
-        return [];
+        $result = [];
+        $seen = [$scaleid => true];
+        while (isset($byid[$scaleid]) && intval($byid[$scaleid]->parentid) !== 0) {
+            $parent = $byid[$scaleid]->parentid;
+            $result[] = $parent;
+            $scaleid = intval($parent);
+            if (isset($seen[$scaleid])) {
+                break;
+            }
+            $seen[$scaleid] = true;
+        }
+        return $result;
     }
 
     /**

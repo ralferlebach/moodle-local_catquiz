@@ -1127,8 +1127,12 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
      * @return model_item_param_list
      */
     public function filter_for_responses(model_responses $responses): self {
+        // Issue #170: the answered question ids once, as a set - not rebuilt and searched for every item.
+        // Keys are question ids (componentid) on both sides; an integer and its numeric string are one key,
+        // as in_array() took them for equal.
+        $answered = array_flip($responses->get_item_ids());
         foreach (array_keys($this->itemparams) as $itemid) {
-            if (!in_array($itemid, $responses->get_item_ids())) {
+            if (!isset($answered[$itemid])) {
                 $this->offsetUnset($itemid);
             }
         }

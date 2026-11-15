@@ -63,7 +63,23 @@ class addscalestandarderror extends preselect_task {
             return result::ok($context);
         }
 
-        $userresponses = model_responses::create_from_array([$context['userid'] => ['component' => $responses]]);
+        // Issue #163: the observed standard error rests on the questions answered and scored in this attempt -
+        // pilot questions and responses without a fraction do not count.
+        $pilots = [];
+        foreach ($this->progress->get_playedquestions() as $questionid => $question) {
+            if (!empty($question->is_pilot)) {
+                $pilots[$questionid] = true;
+            }
+        }
+        $scored = array_filter(
+            $responses,
+            fn ($response, $questionid) => !isset($pilots[$questionid])
+                && is_array($response)
+                && isset($response['fraction'])
+                && is_numeric($response['fraction']),
+            ARRAY_FILTER_USE_BOTH
+        );
+        $userresponses = model_responses::create_from_array([$context['userid'] => ['component' => $scored]]);
         foreach ($context['person_ability'] as $catscaleid => $ability) {
             $items = $userresponses->get_items_for_scale($catscaleid, $context['contextid']);
             $se = catscale::get_standarderror($ability, $items, INF);

@@ -512,7 +512,7 @@ class model_responses {
     }
 
     /**
-     * Get item param list.
+     * The active item parameters of the scale and its subscales, of the items answered in these responses.
      *
      * @param int $catscaleid
      * @param int $contextid
@@ -529,7 +529,11 @@ class model_responses {
         // Re-audit 02.11.2026 (#157): the ACTIVE parameters of the items - those the pool selects with and the
         // ability is estimated with (catquiz::get_itemparams() without a model). Per model, the list held every
         // parameter of the context: not active ones, and those of items whose reference does not resolve.
-        return model_item_param_list::get($catscalecontext, null, $catscaleids);
+        // Issue #163: of these, only the items answered in these responses. Since 2026102408 the whole list of the
+        // scale was returned, and the standard error summed the information of every question still available.
+        // The list of the cache is not changed: filter_by_componentids() works on a copy.
+        return model_item_param_list::get($catscalecontext, null, $catscaleids)
+            ->filter_by_componentids($this->get_item_ids());
     }
 
     /**
