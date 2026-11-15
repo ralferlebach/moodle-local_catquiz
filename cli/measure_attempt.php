@@ -221,9 +221,19 @@ function run_attempt(int $cmid, stdClass $cm, int $questions, array $answers): a
     // Cleaning up keeps repeated attempts from making the pool smaller as they run.
     timeline::flush();
     timeline::reset();
+    // By the CAT attempt, not by the number of the activity's attempt (adaptivequizcatmodel_catquiz #11): deleting
+    // local_catquiz_attempts by attemptid alone left its progress and abilities behind and could take the CAT
+    // attempt of another component with the same number.
+    $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
+    $transaction = $DB->start_delegated_transaction();
     question_engine::delete_questions_usage_by_activity($uniqueid);
     $DB->delete_records('adaptivequiz_attempt', ['id' => $attemptid]);
-    $DB->delete_records('local_catquiz_attempts', ['attemptid' => $attemptid]);
+    if ($catattemptid !== null) {
+        $DB->delete_records('local_catquiz_personparams', ['attemptid' => $catattemptid]);
+        $DB->delete_records('local_catquiz_progress', ['attemptid' => $catattemptid]);
+        $DB->delete_records('local_catquiz_attempts', ['id' => $catattemptid]);
+    }
+    $transaction->allow_commit();
     // The traces stay for export_trace.php --attemptid=N; the retention task removes them.
     $steps['attemptid'] = $attemptid;
 

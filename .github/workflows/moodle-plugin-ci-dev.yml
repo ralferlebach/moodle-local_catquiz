@@ -486,7 +486,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Moodle 5.1 verlangt mindestens PHP 8.3; 8.1 und 8.2 sind entfallen.
+          # Dev laeuft auf Moodle 5.3; 5.3 verlangt mindestens PHP 8.3 (admin/environment.xml).
+          # Die kleinste Kombination der Linie (5.1 mit PHP 8.2) laeuft in moodle-plugin-ci-main.yml.
           - { php: '8.3', database: pgsql }
           - { php: '8.3', database: mariadb }
           - { php: '8.4', database: pgsql }

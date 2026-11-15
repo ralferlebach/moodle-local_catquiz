@@ -2,6 +2,16 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Adapter #10/#11, Gegenstück in local_catquiz (2026111505). Bericht: `doc/adapter-10-11-2026-11-15.md`.
+  - `cli/measure_attempt.php` räumte nach jedem Messlauf den CAT-Versuch über die Nummer des Aktivitätsversuchs ab
+    (ohne Komponente) und ließ dessen Fortschritt und Fähigkeiten zurück. Jetzt löscht es über die CAT-Versuch-ID,
+    in einer Transaktion. Gegenprobe auf der Profilumgebung: 2 Messläufe mit dem alten Skript hinterlassen 2
+    verwaiste Fortschrittszeilen, mit dem neuen keine.
+  - Die übrigen Löschpfade von local_catquiz (Privacy, `progress::delete()`) arbeiten bereits über die CAT-Versuch-ID;
+    unverändert.
+  - CI (#156): Der Kommentar zur Dev-Matrix nannte Moodle 5.1 statt 5.3 als Grund für PHP ≥ 8.3 (nur 1.3). Im Zweig
+    `main` laufen Dev und Main noch mit PHP 8.1; dafür gibt es ein eigenes Paket nur mit den Workflows.
+
 - CI/Behat nach den Läufen vom 15.11.2026 (2026111503). Bericht: `doc/ci-behat-2026-11-15.md`.
   - Behat 1.3 (3 rote Szenarien) und 1.2: RELSUBS und HIGHESTSUB wählen seit #162 andere Fragen, damit sind bei den
     nach Position beantworteten Szenarien andere Teilskalen gültig. Erwartungen in `catquiz_written_feedback` und
