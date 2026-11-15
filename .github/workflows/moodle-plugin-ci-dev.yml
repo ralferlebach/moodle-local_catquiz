@@ -705,10 +705,40 @@ jobs:
           done
           echo "::warning::Selenium-Image konnte nicht vorab geladen werden."
 
+      # moodle-plugin-ci starts the PHP web server without any output. When it died during the
+      # legacy run of 15.11.2026 (118371375170), every later scenario ended in "Connection refused"
+      # and nothing said why. The job starts the web server and Selenium itself, the way
+      # moodle-plugin-ci does, but keeps the server's request log and exit code in ci-logs.
+      - name: Start web server and Selenium (with server log)
+        if: ${{ always() }}
+        run: |
+          docroot="$GITHUB_WORKSPACE/moodle"
+          [ -f "$docroot/public/version.php" ] && docroot="$docroot/public"
+          ( cd "$GITHUB_WORKSPACE/moodle" && php -S localhost:8000 -t "$docroot"; echo "php -S exited with code $?" ) \
+              > ci-logs/php-server.log 2>&1 &
+          docker run -d --rm --name=selenium --network=host --shm-size=2g \
+              -v "$GITHUB_WORKSPACE/moodle:$GITHUB_WORKSPACE/moodle" selenium/standalone-chrome:4
+          for i in $(seq 1 60); do curl -fs http://localhost:4444/status > /dev/null && break; sleep 2; done
+          curl -fs -o /dev/null http://localhost:8000/ || echo "::warning::The web server does not answer yet."
+
       - name: Behat features
         id: behat
         if: ${{ always() }}
+        env:
+          MOODLE_START_BEHAT_SERVERS: 'NO'
         run: set -o pipefail; moodle-plugin-ci behat --profile chrome --dump 2>&1 | tee ci-logs/behat.log
+
+      - name: Web server after the run
+        if: ${{ always() }}
+        run: |
+          if pgrep -f "php -S localhost:8000" > /dev/null; then
+            echo "The web server ran through the whole suite."
+          else
+            echo "::error::The PHP web server ended during the Behat run. Last lines of its log:"
+            tail -n 40 ci-logs/php-server.log
+            sudo dmesg 2>/dev/null | grep -iE "oom|killed process|segfault" | tail -n 10 || true
+          fi
+          docker stop selenium > /dev/null 2>&1 || true
 
       - name: Collect error summary and Behat dumps
         if: ${{ always() }}

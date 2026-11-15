@@ -192,8 +192,8 @@ Feature: An attempt routes its participant into courses and groups (issues #129,
 
   @javascript
   Scenario: Relevant subscales route the valid ones and not the fraction-invalid ones (issues #129, #140)
-    ## The answers of catquiz_written_feedback.feature: SimB03 all wrong, SimC01 all right - no valid
-    ## result, no routing; SimB01, SimB02 and SimC02 are valid and route.
+    ## The answers of catquiz_written_feedback.feature: since #162 SimB01 all right, SimB03 all wrong - no
+    ## valid result, no routing; SimB02, SimC01 and SimC02 are valid and route.
     Given the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | routinggroupprefix |
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer relevant subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | Routed             |
@@ -245,9 +245,9 @@ Feature: An attempt routes its participant into courses and groups (issues #129,
     And I log out
     And I log in as "admin"
     And I am on the "Course 1" "enrolled users" page
-    Then I should see "Routed SimB01" in the "Student1 Test" "table_row"
-    And I should see "Routed SimB02" in the "Student1 Test" "table_row"
+    Then I should see "Routed SimB02" in the "Student1 Test" "table_row"
+    And I should see "Routed SimC01" in the "Student1 Test" "table_row"
     And I should see "Routed SimC02" in the "Student1 Test" "table_row"
+    And I should not see "Routed SimB01" in the "Student1 Test" "table_row"
     And I should not see "Routed SimB03" in the "Student1 Test" "table_row"
-    And I should not see "Routed SimC01" in the "Student1 Test" "table_row"
     And I should not see "Routed SimA" in the "Student1 Test" "table_row"

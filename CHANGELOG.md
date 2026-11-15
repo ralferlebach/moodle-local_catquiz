@@ -2,6 +2,18 @@
 
 ## 1.2.1 (in Arbeit)
 
+- CI/Behat nach den Läufen vom 15.11.2026 (2026111502). Bericht: `doc/ci-behat-2026-11-15.md`.
+  - Behat 1.3 (3 rote Szenarien) und 1.2: RELSUBS und HIGHESTSUB wählen seit #162 andere Fragen, damit sind bei den
+    nach Position beantworteten Szenarien andere Teilskalen gültig. Erwartungen in `catquiz_written_feedback` und
+    `catquiz_routing` am tatsächlichen Fragenpfad gegen die Gültigkeitsregel geprüft und angepasst; das Szenario
+    „reporting switched off“ schaltet jetzt SimB02 ab (SimB01 ist ungültig, das Szenario lief leer). Zahntest: ohne
+    #162 werden 4 der 9 Szenarien rot.
+  - Behat-Job: Webserver und Selenium startet der Job selbst; Serverprotokoll und Exit-Code liegen in
+    `ci-logs/php-server.log`, ein eigener Schritt meldet, wenn der Server die Suite nicht übersteht (Legacy-Lauf
+    118371375170: Server mitten in der Suite weg, 99 Szenarien „Connection refused“).
+  - phpmd brach auf `strategyscore_scale_state_test` ab (vier anonyme Klassen mit demselben Trait); jetzt benannte
+    Testklassen.
+
 - Performance-Nacharbeit 15.11.2026 (#163, #161, #165, #167, #169, #170) und CI (2026111501). Bericht:
   `doc/performance-163-170.md`. Je Issue ein eigener Commit mit eigenem Test und Zahntest.
   - #163 (P0): Der beobachtete Standardfehler summierte seit 2026102408 (03.11.2026) die Information aller aktiven
