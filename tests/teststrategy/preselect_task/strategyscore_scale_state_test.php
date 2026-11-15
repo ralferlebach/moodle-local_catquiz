@@ -121,18 +121,10 @@ final class strategyscore_scale_state_test extends advanced_testcase {
     private static function task(string $strategy, bool $legacy): strategyscore {
         if ($legacy) {
             return match ($strategy) {
-                'strength' => new class extends strategystrengthscore {
-                    use legacy_strategyscore_run;
-                },
-                'deficit' => new class extends strategydeficitscore {
-                    use legacy_strategyscore_run;
-                },
-                'allsubs' => new class extends inferallsubscalesscore {
-                    use legacy_strategyscore_run;
-                },
-                'relevant' => new class extends strategyrelevantscore {
-                    use legacy_strategyscore_run;
-                },
+                'strength' => new legacy_strategystrengthscore(),
+                'deficit' => new legacy_strategydeficitscore(),
+                'allsubs' => new legacy_inferallsubscalesscore(),
+                'relevant' => new legacy_strategyrelevantscore(),
             };
         }
         return match ($strategy) {
@@ -437,4 +429,52 @@ trait legacy_strategyscore_run {
 
         return \local_catquiz\local\result::ok($selectedquestion);
     }
+}
+
+/**
+ * strategystrengthscore with run() as before issue #27. A named class each: phpmd (pdepend) takes anonymous classes of one file
+ * for one class and stops on the trait used four times.
+ *
+ * @package    local_catquiz
+ * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class legacy_strategystrengthscore extends strategystrengthscore {
+    use legacy_strategyscore_run;
+}
+
+/**
+ * strategydeficitscore with run() as before issue #27. A named class each: phpmd (pdepend) takes anonymous classes of one file
+ * for one class and stops on the trait used four times.
+ *
+ * @package    local_catquiz
+ * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class legacy_strategydeficitscore extends strategydeficitscore {
+    use legacy_strategyscore_run;
+}
+
+/**
+ * inferallsubscalesscore with run() as before issue #27. A named class each: phpmd (pdepend) takes anonymous classes of one file
+ * for one class and stops on the trait used four times.
+ *
+ * @package    local_catquiz
+ * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class legacy_inferallsubscalesscore extends inferallsubscalesscore {
+    use legacy_strategyscore_run;
+}
+
+/**
+ * strategyrelevantscore with run() as before issue #27. A named class each: phpmd (pdepend) takes anonymous classes of one file
+ * for one class and stops on the trait used four times.
+ *
+ * @package    local_catquiz
+ * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class legacy_strategyrelevantscore extends strategyrelevantscore {
+    use legacy_strategyscore_run;
 }

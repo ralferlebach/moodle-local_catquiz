@@ -117,7 +117,8 @@ Feature: Which scales the written feedback and the detail tab show (issues #117,
 
   @javascript
   Scenario: Relevant subscales: several valid subscales at once, the invalid ones left out (issues #117, #140)
-    ## SimB03 is answered all wrong and SimC01 all right: no valid result. SimA is not measured.
+    ## Since #162 (item term B^n_s) the strategy asks: SimB01 1 1, SimB02 0 1, SimC01 1 0 1, SimB03 0 0 0,
+    ## SimC02 0 1. SimB01 is answered all right and SimB03 all wrong: no valid result. SimA is not measured.
     Given the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | scalefeedbacktexts |
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer relevant subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | 1                  |
@@ -166,11 +167,11 @@ Feature: Which scales the written feedback and the detail tab show (issues #117,
     And I click on "falsche Antwort 1" "text" in the "Question 12" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should see "Written feedback for SimB01"
-    And I should see "Written feedback for SimB02"
+    Then I should see "Written feedback for SimB02"
+    And I should see "Written feedback for SimC01"
     And I should see "Written feedback for SimC02"
+    And I should not see "Written feedback for SimB01"
     And I should not see "Written feedback for SimB03"
-    And I should not see "Written feedback for SimC01"
     And I should not see "Written feedback for SimA"
 
   @javascript
@@ -283,21 +284,23 @@ Feature: Which scales the written feedback and the detail tab show (issues #117,
     And I click on "falsche Antwort 1" "text" in the "Question 12" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    ## The strongest valid subscale is SimC01 (ability 0.00 against -0.38 for SimB02 and -0.13 for SimC02).
-    Then I should see "Written feedback for SimC01"
-    And I should not see "Written feedback for SimB02"
-    And I should not see "Written feedback for SimC02"
+    ## Since #162 (item term B^n_s, last-time-played penalty) the strategy asks: SimB01 1 0 0, SimB02 0 1,
+    ## SimC01 1 1, SimB03 0 0 0, SimC02 1 1. Valid subscales: SimB01 and SimB02; SimB03, SimC01 and SimC02 are
+    ## answered alike. The strongest valid subscale is SimB02 (ability 0.30 against -0.27 for SimB01).
+    Then I should see "Written feedback for SimB02"
+    And I should not see "Written feedback for SimB01"
+    And I should not see "Written feedback for SimC01"
     When I click on "Details of your result" "link"
-    Then I should see "selected" in the "SimC01" "table_row"
-    And I should see "SimB02" in the "region-main" "region"
-    And I should see "SimC02" in the "region-main" "region"
-    And I should not see "selected" in the "SimB02" "table_row"
-    And I should not see "selected" in the "SimC02" "table_row"
+    Then I should see "selected" in the "SimB02" "table_row"
+    And I should see "SimB01" in the "region-main" "region"
+    And I should not see "selected" in the "SimB01" "table_row"
+    And I should not see "SimC01" in the "region-main" "region"
+    And I should not see "SimC02" in the "region-main" "region"
     And I should see "Reference scale"
 
   @javascript
   Scenario: Relevant subscales: a scale whose reporting is switched off has no written feedback (issue #117)
-    ## The answers of the scenario above; SimB01 is valid but not to be reported.
+    ## The answers of the scenario above; SimB02 is valid but not to be reported.
     Given the following "local_catquiz > testsettings" exist:
       | course | adaptivecatquiz  | catmodel | catscales  | cateststrategy | catquiz_minquestions | catquiz_maxquestions | catquiz_minquestionspersubscale | catquiz_standarderror_min | catquiz_standarderror_max | scalefeedbacktexts |
       | C1     | adaptivecatquiz1 | catquiz  | Simulation | Infer relevant subscales | 12                   | 12                   | 2                               | 0.0                       | 1000.0                    | 1                  |
@@ -306,7 +309,7 @@ Feature: Which scales the written feedback and the detail tab show (issues #117,
     And I wait until the page is ready
     And I click on "Save and return to course" "button"
     And I log out
-    And the scale "SimB01" is not reported by "adaptivecatquiz1"
+    And the scale "SimB02" is not reported by "adaptivecatquiz1"
     When I am on the "adaptivecatquiz1" Activity page logged in as student1
     And I click on "Start attempt" "button"
     And I wait until the page is ready
@@ -347,6 +350,6 @@ Feature: Which scales the written feedback and the detail tab show (issues #117,
     And I click on "falsche Antwort 1" "text" in the "Question 12" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should not see "Written feedback for SimB01"
-    And I should see "Written feedback for SimB02"
+    Then I should not see "Written feedback for SimB02"
+    And I should see "Written feedback for SimC01"
     And I should see "Written feedback for SimC02"
