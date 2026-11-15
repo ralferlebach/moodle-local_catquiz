@@ -2,6 +2,18 @@
 
 ## 1.3.0 (in Arbeit)
 
+- #161, #27, #162 (2026111501). Bericht: `doc/issue-161-27-162.md`.
+  - #161/#27: `strategyscore::run()` berechnete Fähigkeit und Testinformation einer Skala für jede Kandidatenfrage neu
+    (Parameterliste aus dem Cache, gefiltert, Standardfehler). Bei 2.420 Items dauerte eine Folgefrage rund 60 s, auf
+    der Lastinstanz (65.000 Items, 2026102406) bis 85 s. Jetzt einmal je Skala und Schritt; der beste Kandidat wird
+    ohne Sortierung gemerkt, mit derselben Ordnung. Jede Punktzahl und jede Auswahl bleibt gleich (Test gegen den
+    bisherigen Code). 420 Items: Folgefrage 978 ms → 112 ms; 2.420 Items: ≈ 60 s → 0,4 s.
+  - #27: `fisherinformation::annotate()` liest Parameter und Modell einmal je Item.
+  - #162: Itemterm in HIGHESTSUB, LOWESTSUB, ALLSUBS, RELSUBS einheitlich B^n_s (n_s = produktive Fragen der Skala,
+    Pilotfragen zählen nicht); HIGHESTSUB mit Last-time-played-Pönale. Zwei getrennte Commits. Die Auswahl ändert sich
+    in HIGHESTSUB, ALLSUBS und RELSUBS bewusst; fachliche Abnahme steht aus.
+  - Tests: `strategyscore_scale_state_test`, `strategy_itemterm_test`, mit Zahntests.
+
 - Nacharbeitsauftrag nach Re-Audit vom 02.11.2026 (2026102409). Bericht: `doc/re-audit-2026-11-02.md`, Belege
   `doc/evidence/re-audit-2026-11-02/`.
   - CI (Main-CI 1.2 rot): Der Codechecker meldete Warnungen, die mein lokaler Lauf nicht sah, weil er im

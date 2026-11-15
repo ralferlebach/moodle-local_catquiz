@@ -71,8 +71,11 @@ final class fisherinformation extends preselect_task {
         }
 
         $item->fisherinformation = [];
+        // Issue #27: the parameters and the model of the item are the same for every scale; read once per item.
+        $params = model_item_param::from_record($item)->get_params_array();
+        $model = model_model::get_instance($item->model);
         foreach ($context['progress']->get_abilities() as $catscaleid => $ability) {
-            $fisherinformation = $this->get_fisherinformation($item, $ability);
+            $fisherinformation = self::information($model, $params, $ability);
             $item->fisherinformation[$catscaleid] = $fisherinformation;
             // In order to calculate the standarderror per scale, we need the
             // fisher information for all questions there.
@@ -80,6 +83,18 @@ final class fisherinformation extends preselect_task {
                 $context['original_questions'][$item->id]->fisherinformation[$catscaleid] = $fisherinformation;
             }
         }
+    }
+
+    /**
+     * The information of an item at an ability, with the types get_fisherinformation() gives them.
+     *
+     * @param model_model $model
+     * @param array $params
+     * @param float $ability
+     * @return float|null
+     */
+    private static function information(model_model $model, array $params, float $ability): ?float {
+        return $model->fisher_info(['ability' => $ability], $params);
     }
 
     /**
