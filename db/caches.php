@@ -126,11 +126,13 @@ $definitions = [
             'changesinitemparams',
         ],
     ],
+    // Issue #161: no static acceleration. With a size of 1, every read of another scale's list pushed the last one
+    // out, and every read from the store was serialized again into the acceleration (18 % of a follow-up question
+    // at 2,420 items). Without it a read unserializes once and the request holds no extra copy.
     'catquiz_item_params' => [
         'mode' => cache_store::MODE_APPLICATION,
         'simplekeys' => true,
-        'staticacceleration' => true,
-        'staticaccelerationsize' => 1,
+        'staticacceleration' => false,
         'invalidationevents' => [
             'changesincatscales',
             'changesintestitems',

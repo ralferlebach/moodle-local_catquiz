@@ -135,6 +135,11 @@ class updatepersonability extends preselect_task {
     private ?float $sdability = null;
 
     /**
+     * @var array|null The finite past abilities of this run - one population for mean and spread (issue #167).
+     */
+    private ?array $pastabilities = null;
+
+    /**
      * Stores the responses array with the last response flipped.
      *
      * @var array
@@ -165,6 +170,7 @@ class updatepersonability extends preselect_task {
     public function run(array &$context): result {
         $this->progress = $context['progress'];
         $this->context = $context;
+        $this->pastabilities = null;
 
         // If we do not know the answer to the last question, we do not have to
         // update the person ability. Also, pilot questions should not be used
@@ -510,12 +516,17 @@ class updatepersonability extends preselect_task {
      * @return float[]
      */
     private function get_finite_past_abilities(): array {
+        // Issue #167: mean and spread are taken from the same population, read once per run.
+        if ($this->pastabilities !== null) {
+            return $this->pastabilities;
+        }
         $abilities = [];
         foreach ($this->get_existing_personparams() as $pp) {
             if (isset($pp->ability) && is_numeric($pp->ability) && is_finite((float) $pp->ability)) {
                 $abilities[] = (float) $pp->ability;
             }
         }
+        $this->pastabilities = $abilities;
         return $abilities;
     }
 

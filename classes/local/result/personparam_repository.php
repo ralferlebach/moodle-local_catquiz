@@ -161,6 +161,37 @@ final class personparam_repository {
     }
 
     /**
+     * The latest valid person parameter of each of the given scales, in one query (issue #165).
+     *
+     * The same rule as get_latest_valid() - the row with the highest id among the valid rows of the user, the context
+     * and the scale -, for several scales at once. Scales without such a row are missing from the result.
+     *
+     * @param int $userid
+     * @param int $contextid
+     * @param int[] $catscaleids
+     * @return stdClass[] Rows by scale id.
+     */
+    public static function get_latest_valid_by_scale(int $userid, int $contextid, array $catscaleids): array {
+        global $DB;
+        $catscaleids = array_values(array_unique(array_map('intval', $catscaleids)));
+        if (!$catscaleids) {
+            return [];
+        }
+        [$insql, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED, 'scale');
+        $sql = "SELECT p.*
+                  FROM {" . self::TABLE . "} p
+                  JOIN (SELECT MAX(id) AS id
+                          FROM {" . self::TABLE . "}
+                         WHERE userid = :userid AND contextid = :contextid AND isvalid = 1 AND catscaleid $insql
+                      GROUP BY catscaleid) latest ON latest.id = p.id";
+        $result = [];
+        foreach ($DB->get_records_sql($sql, ['userid' => $userid, 'contextid' => $contextid] + $inparams) as $row) {
+            $result[(int) $row->catscaleid] = $row;
+        }
+        return $result;
+    }
+
+    /**
      * The most recent valid primary scale for a user/context, used to
      * prioritise re-testing the last primary scale in a following attempt.
      *

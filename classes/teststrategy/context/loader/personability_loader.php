@@ -145,6 +145,12 @@ class personability_loader implements contextloaderinterface {
             $filteredparams[$pp->catscaleid] = $pp;
         }
 
+        // Issue #165: the carry-over values of all scales in one query instead of one per scale.
+        $carryovers = personparam_repository::get_latest_valid_by_scale(
+            (int) $context['userid'],
+            (int) $context['contextid'],
+            $catscaleids
+        );
         $abilities = [];
         foreach ($catscaleids as $scaleid) {
             /* The attempt history is the authoritative source for a
@@ -156,11 +162,7 @@ class personability_loader implements contextloaderinterface {
                only for scales that were validly measured, so they are preferred
                whenever one exists; personparams remains the fallback for scales
                without such a row (older attempts, never measured). */
-            $carryover = personparam_repository::get_latest_valid(
-                (int) $context['userid'],
-                (int) $context['contextid'],
-                (int) $scaleid
-            );
+            $carryover = $carryovers[(int) $scaleid] ?? null;
             if ($carryover !== null && $carryover->ability !== null && $carryover->ability !== '') {
                 $abilities[$scaleid] = (float) $carryover->ability;
                 continue;
