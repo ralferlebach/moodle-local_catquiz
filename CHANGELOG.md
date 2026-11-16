@@ -2,15 +2,14 @@
 
 ## 1.2.1 (in Arbeit)
 
-- Adapter #10/#11, Gegenstück in local_catquiz (2026111504). Bericht: `doc/adapter-10-11-2026-11-15.md`.
+- Adapter #10/#11, Gegenstück in local_catquiz (2026111504; 2026111506: nur Text, keine Pakete für `main`). Bericht: `doc/adapter-10-11-2026-11-15.md`.
   - `cli/measure_attempt.php` räumte nach jedem Messlauf den CAT-Versuch über die Nummer des Aktivitätsversuchs ab
     (ohne Komponente) und ließ dessen Fortschritt und Fähigkeiten zurück. Jetzt löscht es über die CAT-Versuch-ID,
     in einer Transaktion. Gegenprobe auf der Profilumgebung: 2 Messläufe mit dem alten Skript hinterlassen 2
     verwaiste Fortschrittszeilen, mit dem neuen keine.
   - Die übrigen Löschpfade von local_catquiz (Privacy, `progress::delete()`) arbeiten bereits über die CAT-Versuch-ID;
     unverändert.
-  - CI (#156): Dieser Zweig hat keine Zelle mit PHP 8.1 oder älter mehr. Im Zweig `main` laufen Dev und Main noch mit
-    PHP 8.1; dafür gibt es ein eigenes Paket nur mit den Workflows.
+  - CI (#156): Dieser Zweig hat keine Zelle mit PHP 8.1 oder älter mehr.
 
 - CI/Behat nach den Läufen vom 15.11.2026 (2026111502). Bericht: `doc/ci-behat-2026-11-15.md`.
   - Behat 1.3 (3 rote Szenarien) und 1.2: RELSUBS und HIGHESTSUB wählen seit #162 andere Fragen, damit sind bei den
