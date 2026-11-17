@@ -74,6 +74,9 @@ final class addscalestandarderror_test extends advanced_testcase {
      * @param float $discrimination
      * @param int $contextid
      * @param int|null $questionid
+     * @param string $model
+     * @param float $guessing
+     * @param bool $active Whether the item gets active parameters at all.
      * @return int The question id.
      */
     private function item(
@@ -81,7 +84,10 @@ final class addscalestandarderror_test extends advanced_testcase {
         float $difficulty,
         float $discrimination,
         int $contextid = self::CONTEXTID,
-        ?int $questionid = null
+        ?int $questionid = null,
+        string $model = 'raschbirnbaum',
+        float $guessing = 0.0,
+        bool $active = true
     ): int {
         global $DB;
         $questionid = $questionid ?? $this->nextquestion++;
@@ -91,10 +97,12 @@ final class addscalestandarderror_test extends advanced_testcase {
         ]);
         $paramid = (int) $DB->insert_record('local_catquiz_itemparams', (object) [
             'itemid' => $itemid, 'componentid' => $questionid, 'componentname' => 'question', 'contextid' => $contextid,
-            'model' => 'raschbirnbaum', 'difficulty' => $difficulty, 'discrimination' => $discrimination,
-            'guessing' => 0, 'json' => '{}', 'status' => 4, 'timecreated' => 0, 'timemodified' => 0,
+            'model' => $model, 'difficulty' => $difficulty, 'discrimination' => $discrimination,
+            'guessing' => $guessing, 'json' => '{}', 'status' => 4, 'timecreated' => 0, 'timemodified' => 0,
         ]);
-        $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $itemid]);
+        if ($active) {
+            $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $itemid]);
+        }
         if ($contextid === self::CONTEXTID) {
             $this->params[$questionid] = [$difficulty, $discrimination];
         }
@@ -237,5 +245,93 @@ final class addscalestandarderror_test extends advanced_testcase {
         $se = $this->se([$pilot => 1.0], [$pilot]);
         $this->assertSame(INF, $se[$this->root]);
         $this->assertSame(INF, $se[$this->sub]);
+    }
+
+    /**
+     * The Fisher information of one item in closed form, written down independently of the engine's models
+     * (re-audit 15.11.2026, #163: an oracle per model).
+     *
+     * 1PL: P = 1 / (1 + exp(-(t - b))), I = P (1 - P).
+     * 2PL: P = 1 / (1 + exp(-a (t - b))), I = a^2 P (1 - P).
+     * 3PL: P = c + (1 - c) / (1 + exp(-a (t - b))), I = a^2 (1 - P) / P ((P - c) / (1 - c))^2.
+     *
+     * @param string $model
+     * @param float $t
+     * @param float $b
+     * @param float $a
+     * @param float $c
+     * @return float
+     */
+    private static function closed_form(string $model, float $t, float $b, float $a, float $c): float {
+        switch ($model) {
+            case 'rasch':
+                $p = 1 / (1 + exp(-($t - $b)));
+                return $p * (1 - $p);
+            case 'raschbirnbaum':
+                $p = 1 / (1 + exp(-$a * ($t - $b)));
+                return $a ** 2 * $p * (1 - $p);
+            default:
+                $p = $c + (1 - $c) / (1 + exp(-$a * ($t - $b)));
+                return $a ** 2 * (1 - $p) / $p * (($p - $c) / (1 - $c)) ** 2;
+        }
+    }
+
+    /**
+     * The models of the oracle.
+     *
+     * @return array
+     */
+    public static function models(): array {
+        return ['1PL' => ['rasch'], '2PL' => ['raschbirnbaum'], '3PL' => ['mixedraschbirnbaum']];
+    }
+
+    /**
+     * The standard error of every scale against the closed form: answered items of the scale and its subscales, a
+     * pilot, an item without active parameters and an unanswered candidate left out (#163, re-audit 15.11.2026).
+     *
+     * @param string $model
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('models')]
+    public function test_standard_error_against_the_closed_form(string $model): void {
+        $items = [
+            [$this->root, -0.7, 1.3, 0.2],
+            [$this->root, 0.4, 0.8, 0.1],
+            [$this->sub, 1.1, 1.6, 0.25],
+            [$this->sub, -1.9, 0.6, 0.0],
+        ];
+        $ids = [];
+        foreach ($items as [$scale, $b, $a, $c]) {
+            $ids[] = $this->item($scale, $b, $a, self::CONTEXTID, null, $model, $c);
+        }
+        $pilot = $this->item($this->sub, 0.0, 1.0, self::CONTEXTID, null, $model, 0.1);
+        $inactive = $this->item($this->sub, 0.3, 1.0, self::CONTEXTID, null, $model, 0.1, false);
+        $this->candidates(5);
+        $ability = 0.35;
+
+        $se = $this->se(array_fill_keys([...$ids, $pilot, $inactive], 1.0), [$pilot], $ability);
+
+        $info = fn(array $subset) => array_sum(array_map(
+            fn($i) => self::closed_form($model, $ability, $items[$i][1], $items[$i][2], $items[$i][3]),
+            $subset
+        ));
+        // The root counts its own items and those of its subscale, the subscale only its own.
+        $this->assertEqualsWithDelta(1 / sqrt($info([0, 1, 2, 3])), $se[$this->root], 1e-9);
+        $this->assertEqualsWithDelta(1 / sqrt($info([2, 3])), $se[$this->sub], 1e-9);
+    }
+
+    /**
+     * A question that is an item of the root and of its subscale counts once in the root (issue #104, H2).
+     */
+    public function test_a_question_in_two_scales_counts_once(): void {
+        $question = $this->item($this->root, 0.2, 1.1);
+        $this->item($this->sub, 0.2, 1.1, self::CONTEXTID, $question);
+
+        $se = $this->se([$question => 1.0]);
+
+        $this->assertEqualsWithDelta(
+            1 / sqrt(self::closed_form('raschbirnbaum', 0.3, 0.2, 1.1, 0.0)),
+            $se[$this->root],
+            1e-9
+        );
     }
 }

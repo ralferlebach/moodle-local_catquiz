@@ -577,4 +577,94 @@ final class strategy_semantics_test extends advanced_testcase {
         $this->assertNotEmpty($runs['none'][0]);
         $this->assertSame($runs['none'], $runs['difficulty']);
     }
+
+    /**
+     * The strategies that end when their scale set is done, with the answers that get them there first.
+     *
+     * @return array
+     */
+    public static function scale_set_strategies(): array {
+        return [
+            'RELSUBS' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS],
+            'HIGHESTSUB' => [LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB],
+        ];
+    }
+
+    /**
+     * Every scale done after the minimum: a regular end of its own, stored with the CAT attempt (issue #172).
+     *
+     * The production configuration of #172: minimum 12, maximum 25, 3 to 5 questions per scale. With every answer
+     * right the strategies drop scale after scale until none is active. In production (2026100922) that ended as a
+     * technical error after 16 or 17 questions; later as "no remaining questions", which reads like a pool that ran
+     * dry.
+     *
+     * @param int $strategy
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('scale_set_strategies')]
+    public function test_a_complete_scale_set_ends_regularly(int $strategy): void {
+        global $DB;
+        $this->settings($strategy, [
+            'minquestions' => 12, 'maxquestions' => 25, 'semin' => 0.0001, 'minperscale' => 3, 'maxperscale' => 5,
+        ]);
+
+        [$ids, $status] = $this->play(40, fn() => true);
+
+        $this->assertSame(status::STOP_SCALES_COMPLETE, $status);
+        $this->assertGreaterThanOrEqual(12, count($ids));
+        $this->assertLessThan(25, count($ids));
+        $this->assertSame(count($ids), count(array_unique($ids)), 'A question was asked twice.');
+        $hostattempt = (int) $DB->get_field('adaptivequiz_attempt', 'id', ['instance' => $this->adaptivequiz->id]);
+        $catattempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $hostattempt], '*', MUST_EXIST);
+        $this->assertSame(status::to_int(status::STOP_SCALES_COMPLETE), (int) $catattempt->status);
+        // The saved progress, read as stored: no active scale left, the scales dropped by their stop rules.
+        $saved = json_decode($DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattempt->id]), true);
+        $this->assertSame([], array_values((array) $saved['activescales']));
+        $this->assertNotEmpty($saved['droppedscales']);
+    }
+
+    /**
+     * The answer paths of the matrix.
+     *
+     * @return array
+     */
+    public static function strategy_paths(): array {
+        $cases = [];
+        foreach (self::all_strategies() as $name => [$strategy]) {
+            foreach (['alternating', 'all right', 'all wrong', 'two of three right'] as $path) {
+                $cases["$name, $path"] = [$strategy, $path];
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * With the configuration of #172 no strategy and no answer path ends in a general error: every end is typed,
+     * within minimum and maximum, without a question twice (issue #172, AK1, AK2, AK4).
+     *
+     * @param int $strategy
+     * @param string $path
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('strategy_paths')]
+    public function test_no_strategy_ends_in_a_general_error(int $strategy, string $path): void {
+        $answers = [
+            'alternating' => fn($i) => $i % 2 === 0,
+            'all right' => fn($i) => true,
+            'all wrong' => fn($i) => false,
+            'two of three right' => fn($i) => $i % 3 !== 0,
+        ];
+        // ALLSUBS covers every scale: three per scale do not fit into 25 questions and would not start (issue #60).
+        $minperscale = $strategy === LOCAL_CATQUIZ_STRATEGY_ALLSUBS ? 0 : 3;
+        $this->settings($strategy, [
+            'minquestions' => 12, 'maxquestions' => 25, 'semin' => 0.0001, 'minperscale' => $minperscale, 'maxperscale' => 5,
+        ]);
+
+        [$ids, $status] = $this->play(40, $answers[$path]);
+
+        $this->assertNotContains($status, [status::ERROR_GENERAL, status::STATUS_UNDEFINED, null], "Untyped end: $status");
+        $this->assertLessThanOrEqual(25, count($ids));
+        $this->assertSame(count($ids), count(array_unique($ids)), 'A question was asked twice.');
+        if (count($ids) < 12) {
+            $this->assertSame(status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM, $status);
+        }
+    }
 }

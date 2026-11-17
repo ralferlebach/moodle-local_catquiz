@@ -66,6 +66,13 @@ class status {
      * pool that ran dry.
      */
     const STOP_TARGET_PRECISION = 'stoptargetprecision';
+
+    /**
+     * Every scale the strategy measures is done - each dropped by its own stop rule - after the minimum: the test ends
+     * regularly before its maximum (issue #172). Before, it ended as a general error or as "no remaining questions",
+     * which cannot be told from a pool that ran dry.
+     */
+    const STOP_SCALES_COMPLETE = 'stopscalescomplete';
     /**
      * ERROR_TESTITEM_ALREADY_IN_RELATED_SCALE
      *
@@ -148,6 +155,8 @@ class status {
         self::STOP_TARGET_PRECISION => 11,
         // Issue #64: a general error is stored as such, not as "undefined". A new number; none is reused.
         self::ERROR_GENERAL => 12,
+        // Issue #172.
+        self::STOP_SCALES_COMPLETE => 13,
     ];
 
     /**

@@ -288,7 +288,7 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     And the recorded charts were drawn without an error
 
   @javascript @accessibility
-  Scenario: Lowest skill gap in the usage charts: a valid reported subscale is not "no ability" (issue #160)
+  Scenario: Lowest skill gap in the usage charts: coloured by the root scale, a subscale result is not "no ability" (issue #160)
     ## Test 20: the root scale is nowhere measured validly, but the reported subscale is valid for two of three.
     Given results of CAT attempts are stored since 30 days ago
     And the following CAT results of "adaptivecatquizA" exist under the lowest skill gap:
@@ -302,14 +302,15 @@ Feature: The ability profile is drawn without item parameters (issue #150).
     And I click on "Testusage" "link" in the "#region-main" "css_element"
     And I wait until "[data-chartname='attemptsperperson'] .chart-image canvas" "css_element" exists
     And I wait until "[data-chartname='attemptspertimerange'] .chart-image canvas" "css_element" exists
-    Then I should see "this applies to 2 attempt(s) here" in the "[data-chartname='attemptsperperson']" "css_element"
-    And I should see "this applies to 2 attempt(s) here" in the "[data-chartname='attemptspertimerange']" "css_element"
-    ## The legend of the data table: grey means "no valid reported result", and it holds one person, not three.
+    ## Decision of 16.11.2026: coloured by the measurement of the root scale; the note says a subscale may be valid.
+    Then I should see "Coloured by the valid measurement of this scale" in the "[data-chartname='attemptsperperson']" "css_element"
+    And I should see "it may have a valid result on another scale" in the "[data-chartname='attemptspertimerange']" "css_element"
+    ## The legend of the data table: grey means "no valid measurement of this scale", not "no ability".
     When I click on "Show chart data" "link" in the "[data-chartname='attemptsperperson']" "css_element"
-    Then I should see "No valid reported result" in the "[data-chartname='attemptsperperson'] .chart-table-data" "css_element"
+    Then I should see "No valid measurement of this scale" in the "[data-chartname='attemptsperperson'] .chart-table-data" "css_element"
     And I should not see "No ability was calculated" in the "[data-chartname='attemptsperperson']" "css_element"
     When I click on "Show chart data" "link" in the "[data-chartname='attemptspertimerange']" "css_element"
-    Then I should see "No valid reported result" in the "[data-chartname='attemptspertimerange'] .chart-table-data" "css_element"
+    Then I should see "No valid measurement of this scale" in the "[data-chartname='attemptspertimerange'] .chart-table-data" "css_element"
     And the "[data-chartname='attemptsperperson']" "css_element" should meet accessibility standards with "wcag131, wcag141, wcag412" extra tests
     And the "[data-chartname='attemptspertimerange']" "css_element" should meet accessibility standards with "wcag131, wcag141, wcag412" extra tests
     And the recorded charts were drawn without an error

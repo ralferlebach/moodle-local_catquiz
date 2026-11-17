@@ -23,60 +23,43 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-use local_catquiz\teststrategy\feedbackgenerator\debuginfo;
+use local_catquiz\local\attempt\attempt_debug_export;
 
 require_once(__DIR__ . '/../../config.php');
 
-use local_catquiz\teststrategy\progress;
-
+// The attempt of the activity (adaptivequiz_attempt.id), not the CAT attempt.
 $attemptid = required_param('attemptid', PARAM_INT);
 
 require_login();
+$context = context_system::instance();
+$PAGE->set_context($context);
+$PAGE->set_url(new moodle_url('/local/catquiz/export_debuginfo_pdf.php', ['attemptid' => $attemptid]));
 
-if (!has_capability('local/catquiz:canmanage', context_system::instance())) {
-    die(get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:canmanage'));
+// Ends with a page that says why there is no export.
+$refuse = function (string $message) use ($OUTPUT): void {
+    echo $OUTPUT->header();
+    echo $OUTPUT->notification($message, \core\output\notification::NOTIFY_ERROR);
+    echo $OUTPUT->footer();
+    exit;
+};
+
+// Permission first: nothing is read before it is checked (issue #173).
+if (!has_capability('local/catquiz:canmanage', $context)) {
+    $refuse(get_string('nopermissions', 'error', get_capability_string('local/catquiz:canmanage')));
 }
 
-require_once($CFG->dirroot . '/local/catquiz/lib.php');
 require_once($CFG->libdir . '/pdflib.php');
 
-$filename = date("Ymd Hi-") . "export_debuginfo_attempt_$attemptid.pdf";
-
-$downloadfilename = clean_filename($filename);
-$pdfexport = new pdf();
-
-$debuginfo = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptid], 'json,debug_info', IGNORE_MISSING);
-$pdfexport->AddPage('P', "A4");
-$pdfexport->writeHTML("<h1>Debug Info, Attempt $attemptid</h1>" . nl2br(var_export(json_decode($debuginfo->debug_info), true)));
-
-// The progress is filed under the internal CAT attempt, not under the attempt of the component.
-$catattemptid = progress::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
-$progressinfo = $catattemptid === null
-    ? false
-    : $DB->get_record('local_catquiz_progress', ['attemptid' => $catattemptid], 'json', IGNORE_MISSING);
-
-$pdfexport->AddPage('P', "A4");
-$pdfexport->writeHTML("<h1>Progress Info, Attempt $attemptid</h1>" . nl2br(var_export(json_decode($progressinfo->json), true)));
-
-$attemptinfo = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptid], 'json', IGNORE_MISSING);
-
-$pdfexport->AddPage('P', "A4");
-$pdfexport->writeHTML("<h1>Attempt Info, Attempt $attemptid</h1>" . nl2br(var_export(json_decode($attemptinfo->json), true)));
-
-// Issue #125: every administration, one row per slot, a repeated question marked with the slot it
-// first appeared in. The progress above is keyed by question id and cannot show a repetition.
-$history = \local_catquiz\local\attempt\administration_history::for_attempt($attemptid);
-$rows = '';
-foreach ($history as $entry) {
-    $rows .= '<tr><td>' . $entry->slot . '</td><td>' . $entry->questionid . '</td><td>'
-        . $entry->questionattemptid . '</td><td>' . s((string) $entry->state) . '</td><td>'
-        . ($entry->fraction === null ? '-' : format_float($entry->fraction, 2)) . '</td><td>'
-        . ($entry->technicalduplicate ? 'TECHNICAL DUPLICATE of slot ' . $entry->duplicateofslot : '')
-        . '</td></tr>';
+// Read-only; refuses when the CAT attempt or its progress does not belong to this attempt.
+try {
+    $data = attempt_debug_export::collect($attemptid);
+} catch (moodle_exception $e) {
+    $refuse($e->getMessage());
 }
-$pdfexport->AddPage('P', "A4");
-$pdfexport->writeHTML("<h1>Administration history, Attempt $attemptid</h1>"
-    . '<table border="1" cellpadding="2"><tr><th>Slot</th><th>Question</th><th>Question attempt</th>'
-    . '<th>State</th><th>Fraction</th><th>Note</th></tr>' . $rows . '</table>');
 
-$pdfexport->Output($downloadfilename, 'D');
+$pdfexport = new pdf();
+foreach (attempt_debug_export::pages($data) as $title => $html) {
+    $pdfexport->AddPage('P', 'A4');
+    $pdfexport->writeHTML('<h1>' . s($title) . '</h1>' . $html);
+}
+$pdfexport->Output(clean_filename(date('Ymd Hi-') . "export_debuginfo_attempt_$attemptid.pdf"), 'D');

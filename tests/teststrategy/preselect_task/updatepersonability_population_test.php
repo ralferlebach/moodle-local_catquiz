@@ -129,4 +129,47 @@ final class updatepersonability_population_test extends advanced_testcase {
         self::call($task, 'calculate_sd_from_past_attempts');
         $this->assertSame(2, $task->reads);
     }
+
+    /**
+     * Every past ability the same: the mean is that value, the spread 0 as computed - the estimator raises it to its
+     * minimum and the fallback is an event without any person's value (issue #167, re-audit 15.11.2026).
+     */
+    public function test_all_equal(): void {
+        $this->resetAfterTest();
+        $sink = $this->redirectEvents();
+        $task = self::task(array_fill(0, 50, 0.25));
+
+        $this->assertSame(0.25, self::call($task, 'calculate_mean_from_past_attempts'));
+        $this->assertSame(0.0, self::call($task, 'calculate_sd_from_past_attempts'));
+
+        $events = array_filter($sink->get_events(), fn($e) => $e instanceof \local_catquiz\event\numeric_fallback_applied);
+        $this->assertCount(1, $events, 'The missing spread is reported once.');
+        $this->assertSame(1, $task->reads);
+    }
+
+    /**
+     * Abilities at the ends of what the engine stores (+-800, the saturation bound) and in between: finite figures,
+     * as computed by hand.
+     */
+    public function test_extreme_values(): void {
+        $this->resetAfterTest();
+        $abilities = [];
+        for ($i = 0; $i < 51; $i++) {
+            $abilities[] = $i % 2 ? 800.0 : -800.0;
+        }
+        $abilities[] = 0.125;
+        $task = self::task($abilities);
+
+        $mean = self::call($task, 'calculate_mean_from_past_attempts');
+        $sd = self::call($task, 'calculate_sd_from_past_attempts');
+
+        $expectedmean = array_sum($abilities) / count($abilities);
+        $sum = 0.0;
+        foreach ($abilities as $a) {
+            $sum += ($a - $expectedmean) ** 2;
+        }
+        $this->assertTrue(is_finite($mean) && is_finite($sd));
+        $this->assertSame($expectedmean, $mean);
+        $this->assertSame(sqrt($sum / count($abilities)), $sd);
+    }
 }

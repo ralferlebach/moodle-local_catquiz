@@ -473,11 +473,10 @@ class catquizstatistics {
      * The class an attempt has in the usage charts ("Anzahl an Testversuchen", "Testversuche pro Person";
      * issue #160).
      *
-     * Two modes, chosen by the scale asked for:
-     *  - the root scale: the reported primary result of the attempt. Its valid measurement of the root scale when
-     *    there is one; otherwise its valid primary result on a subscale (LOWESTSUB, RELSUBS ...), classified by
-     *    the feedback ranges of THAT scale - abilities of different scales are never put on one axis;
-     *  - a subscale: the valid measurement of this very scale, nothing else.
+     * By the valid measurement of the scale asked for, the root scale included - nothing is taken from another
+     * scale. Decision of 16.11.2026 on #160: the root scale is coloured by its own measurement, as before 2026102409;
+     * an attempt whose root scale has no valid measurement is grey even when a subscale has a valid reported result
+     * (LOWESTSUB, RELSUBS ...). The note under the chart says so.
      * 0 is "no valid result" in the sense of the mode (see usage_noresult_label()); null a value outside every
      * configured range. The ranges are those of the current test settings: no earlier state of them is stored.
      *
@@ -488,10 +487,6 @@ class catquizstatistics {
     private function usage_class(\stdClass $record, ?\stdClass $qs): ?int {
         $scaleid = $this->scaleid;
         $value = $record->value;
-        if ($value === null && $this->scaleid === $this->rootscaleid && ($record->primaryvalue ?? null) !== null) {
-            $scaleid = (int) $record->primaryscaleid;
-            $value = (float) $record->primaryvalue;
-        }
         if ($value === null) {
             return 0;
         }
@@ -499,9 +494,6 @@ class catquizstatistics {
             return 1;
         }
         $range = feedback_helper::get_range_of_value($qs, $scaleid, $value);
-        if ($range && $scaleid !== $this->scaleid) {
-            $this->usageclassbyprimary[(int) $record->id] = $scaleid;
-        }
         return $range ?: null;
     }
 
@@ -511,9 +503,7 @@ class catquizstatistics {
      * @return string
      */
     private function usage_noresult_label(): string {
-        return $this->scaleid === $this->rootscaleid
-            ? get_string('noreportedresult', 'local_catquiz')
-            : get_string('novalidmeasurementofscale', 'local_catquiz');
+        return get_string('novalidmeasurementofscale', 'local_catquiz');
     }
 
     /**
@@ -523,9 +513,9 @@ class catquizstatistics {
      * @return string HTML
      */
     private function usage_note(int $byprimary): string {
-        $text = $this->scaleid === $this->rootscaleid
-            ? get_string('usagechart_note_reported', 'local_catquiz', $byprimary)
-            : get_string('usagechart_note_scale', 'local_catquiz');
+        // Decision of 16.11.2026 (#160): every scale, the root included, by its own measurement.
+        unset($byprimary);
+        $text = get_string('usagechart_note_scale', 'local_catquiz');
         return \html_writer::tag('p', $text, ['class' => 'text-muted small catquiz-usagechart-note']);
     }
 
