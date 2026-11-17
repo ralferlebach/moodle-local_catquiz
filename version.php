@@ -34,13 +34,14 @@ $plugin->supported = [405, 405];
 // Issue #31: "supported" only informs; this keeps the 1.2 line off Moodle 5.0 and later (the 1.3 line is for 5.x).
 $plugin->incompatible = 500;
 $plugin->release = '1.2.1';
-$plugin->version = 2026111700;
+$plugin->version = 2026111701;
 $plugin->requires = 2024100700;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [
     'local_wunderbyte_table' => 2024040200,
-    // Issue #31: what this line needs and is delivered with - the host with the stop reasons and the
-    // reason of a refused start (#60), the adapter with the attempt ids and the timeline (#146, adapter #6).
-    'mod_adaptivequiz' => 2026101800,
-    'adaptivequizcatmodel_catquiz' => 2026101800,
+    // Issue #31: what this line needs and is delivered with. Since 17.11.2026 the host with the stop codes
+    // scalescomplete and noeligiblebeforeminimum (#172, host #23) and the adapter that hands them over (adapter #12).
+    // The CI waits for these versions on the branches of host and adapter (.github/scripts/await_dependencies.sh).
+    'mod_adaptivequiz' => 2026111700,
+    'adaptivequizcatmodel_catquiz' => 2026111700,
 ];

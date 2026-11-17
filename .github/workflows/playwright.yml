@@ -95,6 +95,11 @@ jobs:
           git clone --depth 1 --branch "$DEP_REF" \
             https://github.com/ralferlebach/moodle-adaptivequizcatmodel_catquiz.git \
             moodle/mod/adaptivequiz/catmodel/catquiz
+          # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires
+          # (before the .git directories are removed below).
+          bash plugin/.github/scripts/await_dependencies.sh plugin/version.php \
+            mod_adaptivequiz moodle/mod/adaptivequiz "$DEP_REF" "" \
+            adaptivequizcatmodel_catquiz moodle/mod/adaptivequiz/catmodel/catquiz "$DEP_REF" ""
           git clone --depth 1 --branch main \
             https://github.com/Wunderbyte-GmbH/moodle-local_wunderbyte_table.git \
             moodle/local/wunderbyte_table
