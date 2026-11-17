@@ -2,6 +2,23 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Re-Audit 17.11.2026 und CI-Läufe vom 17.11.2026 (2026111702):
+  - **CI-Wettlauf:** Behat (5.3) und Playwright liefen gegen die alten Stände von Host und Adapter. local_catquiz wird
+    zuerst gepusht, seine CI klonte deshalb Host und Adapter vor deren Push. Neu: `.github/scripts/await_dependencies.sh`
+    wartet in allen Jobs, die Host und Adapter holen, bis zu 15 Minuten auf die in `version.php` verlangten Versionen;
+    ein festgelegter Stand (manueller Lauf) wird nicht abgewartet. Selbsttest `await_dependencies_selftest.sh` gegen
+    lokale Git-Origins, als Schritt im Job „PHP lint“.
+  - **Abhängigkeiten:** `version.php` verlangt jetzt Host 2026111701 und Adapter 2026111701, die Stände mit den
+    Stoppcodes von #172 (vorher 2026101801). Mit einem älteren Adapter bliebe Status 13 ohne Host-Code, und vor dem
+    Minimum erschiene der allgemeine Hinweis.
+  - **Löschen über die Oberfläche (Adapter #11 DoD2, AK3, AK4):** Neues Behat-Feature
+    `catquiz_delete_activity_chain.feature`. Die Lehrkraft löscht eine Aktivität auf der Kursseite; die Löschung
+    läuft als Task des Papierkorbs durch Host und CAT-Modell. Die Nummern sind gekreuzt: Der Aktivitätsversuch der
+    Person, deren Aktivität gelöscht wird, trägt die Nummer des CAT-Versuchs einer Person in einer anderen
+    Aktivität. Geprüft wird: Von der ersten Person bleibt nichts (Versuche, CAT-Versuche, Fortschritt, Fähigkeiten
+    eines Versuchs); der Fortschritt der zweiten gehört weiter ihr; die Inventur des CAT-Modells findet nichts
+    Verwaistes; die zweite Person setzt ihren Versuch fort und beendet ihn. Gegenprobe: Mit dem Löschen über die
+    Nummer des Aktivitätsversuchs (Callback in `main`) wird das Feature rot.
 - Issues ab 17.11.2026 (2026111701). Entscheidungen: `doc/entscheidungen-2026-11-16.md`.
   - #173 (P0, Sicherheit): Das Debug-PDF liest den Fortschritt über die CAT-Versuch-ID, nicht über die Nummer des
     Aktivitätsversuchs.

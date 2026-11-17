@@ -1002,6 +1002,59 @@ class behat_catquiz extends behat_base {
     }
 
     /**
+     * Nothing of a person's attempts is left: no activity attempt, no CAT attempt, no saved progress and no
+     * ability bound to an attempt (adaptivequizcatmodel_catquiz #11, deleting the activity on the course page).
+     *
+     * Abilities without an attempt belong to the person and stay (deletion-and-orphans.md, section 3).
+     *
+     * @Then /^no attempt data of "([^"]*)" is left$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function no_attempt_data_is_left(string $username): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $left = array_filter([
+            'activity attempts' => $DB->count_records('adaptivequiz_attempt', ['userid' => $userid]),
+            'CAT attempts' => $DB->count_records('local_catquiz_attempts', ['userid' => $userid]),
+            'saved progress' => $DB->count_records('local_catquiz_progress', ['userid' => $userid]),
+            'abilities of an attempt' => $DB->count_records_select(
+                'local_catquiz_personparams',
+                'userid = :userid AND attemptid IS NOT NULL',
+                ['userid' => $userid]
+            ),
+        ]);
+        if ($left) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "Left of $username: " . json_encode($left),
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
+     * The read-only orphan inventory of the CAT model finds nothing (adaptivequizcatmodel_catquiz #11 AK4).
+     *
+     * A trace of a deleted attempt waits for the retention task of local_catquiz and is allowed.
+     *
+     * @Then /^the orphan inventory of the CAT model finds nothing$/
+     *
+     * @return void
+     */
+    public function the_orphan_inventory_finds_nothing(): void {
+        $found = [];
+        foreach (\adaptivequizcatmodel_catquiz\local\orphan_inventory::collect() as $class => $counts) {
+            if ($class !== 'trace_orphan' && $counts['total'] > 0) {
+                $found[$class] = $counts['total'];
+            }
+        }
+        if ($found) {
+            throw new \Behat\Mink\Exception\ExpectationException('Orphans: ' . json_encode($found), $this->getSession());
+        }
+    }
+
+    /**
      * The last CAT attempt of a person.
      *
      * @param string $username
