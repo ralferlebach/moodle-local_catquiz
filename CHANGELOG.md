@@ -2,6 +2,13 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Re-Audit 17.11.2026, Betriebsabnahme (2026111703):
+  - **Betreiberprüfungen BP-01 bis BP-07** als nur lesendes CLI `cli/operator_checks.php` mit dem Rückgabevertrag des
+    Re-Audits (check_id, System, Zeit, Versionen und SHAs, PASS|FAIL|NOT_RUN|INCONCLUSIVE, Datensätze, Werte,
+    zulässige Abweichung, Hinweise, Links, Betreiberbestätigung). Ausgabe als JSON, nur Zählungen, kleine Zellen als
+    „<k“ (`--mincell`). BP-02 als Paar von Momentaufnahmen vor und nach einem Testlöschlauf plus Vergleich.
+    Klasse `local\operator\operator_checks`, 11 Tests mit je einem bestandenen und einem durchgefallenen Fall.
+  - **Zeilenenden:** Dateien mit CRLF im Repository auf LF normalisiert (`git add --renormalize .`); Inhalt sonst gleich.
 - Re-Audit 17.11.2026 und CI-Läufe vom 17.11.2026 (2026111702):
   - **CI-Wettlauf:** Behat (5.3) und Playwright liefen gegen die alten Stände von Host und Adapter. local_catquiz wird
     zuerst gepusht, seine CI klonte deshalb Host und Adapter vor deren Push. Neu: `.github/scripts/await_dependencies.sh`
