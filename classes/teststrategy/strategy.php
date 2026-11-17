@@ -433,19 +433,37 @@ abstract class strategy {
             /* Issue #64: a filter after noremainingquestions emptied the pool. That ended the test with a
                general error, stored as "undefined", and without saving the progress or the feedback. It is
                the same end as an empty pool - before the minimum, a status of its own - and goes the same way. */
-            $minimum = (int) ($this->context['minimumquestions'] ?? 0);
-            $answered = $this->progress->get_num_answered_productive_questions();
-            $status = $minimum > 0 && $answered < $minimum
-                ? status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM
-                : status::ERROR_NO_REMAINING_QUESTIONS;
             $this->persist_stage_counts();
-            return $this->after_error(result::err($status));
+            return $this->after_error(result::err($this->end_without_question()));
         }
 
         $this->register_administered_question($selectedquestion, $context);
         $this->persist_stage_counts();
 
         return result::ok($selectedquestion);
+    }
+
+    /**
+     * Why the selection ends without a question (issues #64, #172).
+     *
+     * Pilot questions do not count towards the minimum. In order:
+     * - before the minimum of productive questions: the questions ran out too early;
+     * - every scale the strategy measures was dropped by its own stop rule and none is active: the scale set is
+     *   complete, a regular end;
+     * - otherwise no eligible question is left for the active scales.
+     *
+     * @return string A status constant.
+     */
+    private function end_without_question(): string {
+        $minimum = (int) ($this->context['minimumquestions'] ?? 0);
+        $answered = $this->progress->get_num_answered_productive_questions();
+        if ($minimum > 0 && $answered < $minimum) {
+            return status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM;
+        }
+        if (!$this->progress->get_active_scales() && $this->progress->get_dropped_scales()) {
+            return status::STOP_SCALES_COMPLETE;
+        }
+        return status::ERROR_NO_REMAINING_QUESTIONS;
     }
 
     /**

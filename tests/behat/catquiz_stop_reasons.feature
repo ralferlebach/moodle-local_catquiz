@@ -42,7 +42,8 @@ Feature: An attempt ends for a reason the participant is told, and the result fo
     And I click on "richtige Antwort" "text" in the "Question 1" "question"
     And I click on "Submit answer" "button"
     And I wait until the page is ready
-    Then I should see "There are no further suitable questions for you at the moment" in the "Your test has ended" "dialogue"
+    ## local_catquiz #172 / adaptivequizcatmodel_catquiz #12: before the minimum the host shows its own notice.
+    Then I should see "There were not enough suitable questions for you to reach the minimum length of the test" in the "Your test has ended" "dialogue"
     And I click on "OK" "button" in the "Your test has ended" "dialogue"
     And I should see "No overall result can be determined because in the whole test the minimum number of questions was not reached."
     And I should not see "Question 2"

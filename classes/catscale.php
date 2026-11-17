@@ -841,19 +841,66 @@ class catscale {
     }
 
     /**
+     * The cycles in the scale hierarchy, for a diagnosis (issue #169).
+     *
+     * A cycle cannot be created through the plugin (issue #52); it can come from a direct change of the database or
+     * an old import. Every walk through the hierarchy refuses it (scalecycle); this finds them all, read-only.
+     *
+     * @param array|null $all All scales keyed by id; null reads them.
+     * @return int[][] One list of scale ids per cycle, each starting with its smallest id.
+     */
+    public static function find_cycles(?array $all = null): array {
+        $all ??= dataapi::get_all_catscales();
+        $parent = [];
+        foreach ($all as $scale) {
+            $parent[intval($scale->id)] = intval($scale->parentid);
+        }
+        $cycles = [];
+        $done = [];
+        foreach (array_keys($parent) as $start) {
+            $onpath = [];
+            $id = $start;
+            while ($id !== 0 && isset($parent[$id]) && !isset($done[$id]) && !isset($onpath[$id])) {
+                $onpath[$id] = count($onpath);
+                $id = $parent[$id];
+            }
+            if ($id !== 0 && isset($onpath[$id])) {
+                $cycle = array_slice(array_keys($onpath), $onpath[$id]);
+                $min = array_search(min($cycle), $cycle, true);
+                $cycles[] = array_merge(array_slice($cycle, $min), array_slice($cycle, 0, $min));
+            }
+            $done += $onpath;
+        }
+        return $cycles;
+    }
+
+    /**
+     * Refuses a cycle met on a walk through the hierarchy (issue #169).
+     *
+     * Before, the walk skipped the scale it met again: the attempt went on with a hierarchy that was silently cut.
+     *
+     * @param int $scaleid The scale met again.
+     * @throws moodle_exception Always.
+     */
+    private static function refuse_cycle(int $scaleid): void {
+        throw new moodle_exception('scalecycle', 'local_catquiz', '', $scaleid);
+    }
+
+    /**
      * The subscales below a scale, depth first, each scale followed by its own subscales.
      *
      * @param int $parentid
      * @param array $children Scales by the id of their parent, in the order of all scales.
-     * @param array $path Ids on the way down: a scale met again there is a cycle and not followed (issue #169).
+     * @param array $path Ids on the way down: a scale met again there is a cycle (issue #169).
      * @return array
+     * @throws moodle_exception On a cycle.
      */
     private static function collect_subscales(int $parentid, array $children, array $path): array {
         $result = [];
         foreach ($children[$parentid] ?? [] as $scale) {
             $id = intval($scale->id);
             if (isset($path[$id])) {
-                continue;
+                self::refuse_cycle($id);
             }
             $result = [...$result, $scale->id, ...self::collect_subscales($id, $children, $path + [$id => true])];
         }
@@ -926,7 +973,7 @@ class catscale {
      */
     private static function add_parentscales(int $scaleid, array $all): ?array {
         // Issue #169: up the tree by the scale's id instead of searching all scales on every level. $all is keyed by
-        // id (dataapi::get_all_catscales()); a list keyed otherwise is indexed first. A cycle ends the walk.
+        // id (dataapi::get_all_catscales()); a list keyed otherwise is indexed first. A cycle is refused.
         $byid = [];
         foreach ($all as $scale) {
             $byid[intval($scale->id)] ??= $scale;
@@ -938,7 +985,7 @@ class catscale {
             $result[] = $parent;
             $scaleid = intval($parent);
             if (isset($seen[$scaleid])) {
-                break;
+                self::refuse_cycle($scaleid);
             }
             $seen[$scaleid] = true;
         }

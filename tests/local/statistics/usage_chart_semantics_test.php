@@ -27,7 +27,7 @@ use local_catquiz\output\catquizstatistics;
  *
  * The reference case is test 20 of the export of 27.10.2026, reduced to its numbers: 17 persons with one completed
  * attempt each under "Infer lowest skill gap", a stored root snapshot (personability_after_attempt) for every one of
- * them, no valid measurement of the root scale, 13 with a valid reported primary subscale. Before, all 17 were grey,
+ * them, no valid measurement of the root scale, 13 with a valid reported primary subscale. All 17 are grey (decision 16.11.2026),
  * "no ability was calculated" - a wrong statement about 13 of them.
  *
  * @package    local_catquiz
@@ -185,30 +185,29 @@ final class usage_chart_semantics_test extends advanced_testcase {
     }
 
     /**
-     * R160-1: the reported result classifies; grey is "no valid reported result", 4 persons, not 17.
+     * R160-1, decision of 16.11.2026: the root scale is coloured by its own measurement. Test 20 has no valid root
+     * measurement: all 17 persons are grey, "no valid measurement of this scale", although 13 have a valid reported
+     * subscale - the note under the chart says that this is possible.
      */
-    public function test_the_root_scale_classifies_by_the_reported_result(): void {
+    public function test_the_root_scale_classifies_by_its_own_measurement(): void {
         $this->test20();
         $statistics = new catquizstatistics((int) $this->course->id, null, $this->root);
 
         $perperson = $statistics->get_chart_data(catquizstatistics::CHART_ATTEMPTSPERPERSON);
-        // S1: 9 in range 1; S2 by its own ranges: 2.0 and 0.0 in range 1, 3.0 twice in range 2.
-        $this->assertSame([0 => 4, 1 => 11, 2 => 2], self::classes($perperson));
+        $this->assertSame([0 => 17, 1 => 0, 2 => 0], self::classes($perperson));
         $this->assertSame(17, $perperson['population']['persons']);
-        $this->assertSame(13, $perperson['population']['personswithvalue']);
-        $this->assertSame(13, $perperson['population']['byprimary']);
+        $this->assertSame(0, $perperson['population']['byprimary']);
         $this->assertSame(0, $perperson['population']['noattempt']);
 
         $timerange = $statistics->get_chart_data(catquizstatistics::CHART_ATTEMPTSPERTIMERANGE);
-        $this->assertSame([0 => 4, 1 => 11, 2 => 2], array_map('array_sum', $timerange['series']));
+        $this->assertSame([0 => 17, 1 => 0, 2 => 0], array_map('array_sum', $timerange['series']));
         $this->assertSame(17, $timerange['population']['attempts']);
 
-        // The legend (in the chart data) says what grey means, the note under the chart how it classifies.
-        $this->assertSame('No valid reported result', self::grey_label($statistics));
+        $this->assertSame('No valid measurement of this scale', self::grey_label($statistics));
         foreach (['render_attempts_per_person_chart', 'render_attempts_per_timerange_chart'] as $render) {
             $out = $statistics->$render();
-            $this->assertStringContainsString('this applies to 13 attempt(s) here', $out['chart'], $render);
-            $this->assertStringContainsString('earlier ranges are not stored', $out['chart']);
+            $this->assertStringContainsString('Coloured by the valid measurement of this scale', $out['chart'], $render);
+            $this->assertStringContainsString('it may have a valid result on another scale', $out['chart']);
         }
     }
 

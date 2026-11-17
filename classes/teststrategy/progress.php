@@ -1386,6 +1386,15 @@ class progress implements JsonSerializable {
     }
 
     /**
+     * The scales dropped for good in this attempt (issue #172).
+     *
+     * @return int[]
+     */
+    public function get_dropped_scales(): array {
+        return array_values(array_map('intval', $this->droppedscales));
+    }
+
+    /**
      * Shows if the given scale was dropped.
      *
      * In contrast to a deactivated scale, a dropped scale is removed

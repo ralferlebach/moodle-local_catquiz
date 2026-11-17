@@ -58,7 +58,6 @@ final class catscale_hierarchy_test extends basic_testcase {
      */
     private static function call(string $method, array $args) {
         $m = new \ReflectionMethod(catscale::class, $method);
-        $m->setAccessible(true);
         return $m->invokeArgs(null, $args);
     }
 
@@ -134,8 +133,8 @@ final class catscale_hierarchy_test extends basic_testcase {
     /**
      * Every scale: the same subscales in the same order and the same ancestors as before (AK1, DoD1).
      *
-     * @dataProvider trees
      * @param array $parents
+     * @dataProvider trees
      */
     public function test_same_subscales_and_ancestors(array $parents): void {
         $all = self::scales($parents);
@@ -156,11 +155,51 @@ final class catscale_hierarchy_test extends basic_testcase {
     }
 
     /**
-     * A cycle in the data - the previous code recursed until the stack ran out - ends the walk instead.
+     * A cycle in the data is refused on every walk, not cut silently (issue #169). The code before #169 recursed
+     * until the stack ran out; the first fix skipped the scale met again, and the attempt went on with a cut tree.
      */
-    public function test_cycle_ends(): void {
+    public function test_a_cycle_is_refused(): void {
         $all = self::scales([1 => 3, 2 => 1, 3 => 2, 4 => 0]);
-        $this->assertSame([2, 3], self::call('add_subscales', [1, $all]));
-        $this->assertSame([3, 2, 1], self::call('add_parentscales', [1, $all]));
+        foreach (['add_subscales', 'add_parentscales'] as $walk) {
+            try {
+                self::call($walk, [1, $all]);
+                $this->fail("$walk went through a cycle");
+            } catch (\moodle_exception $e) {
+                $this->assertSame('scalecycle', $e->errorcode, $walk);
+            }
+        }
+        // Scales outside the cycle are walked as before.
+        $this->assertSame([], self::call('add_subscales', [4, $all]));
+        $this->assertSame([], self::call('add_parentscales', [4, $all]));
+    }
+
+    /**
+     * The diagnosis finds every cycle, once, and nothing in a tree.
+     *
+     * @return array
+     */
+    public static function cycle_cases(): array {
+        return [
+            'tree' => [[1 => 0, 2 => 1, 3 => 1, 4 => 2], []],
+            'scale is its own parent' => [[1 => 0, 2 => 2], [[2]]],
+            'three in a ring' => [[1 => 3, 2 => 1, 3 => 2, 4 => 0], [[1, 3, 2]]],
+            'branch hanging into a ring' => [[5 => 6, 6 => 7, 7 => 6, 8 => 5, 9 => 0], [[6, 7]]],
+            'two rings and a tree' => [[1 => 2, 2 => 1, 3 => 0, 4 => 3, 10 => 12, 11 => 10, 12 => 11], [[1, 2], [10, 12, 11]]],
+            'parent missing' => [[1 => 99, 2 => 1], []],
+        ];
+    }
+
+    /**
+     * catscale::find_cycles().
+     *
+     * @param array $parents
+     * @param array $expected
+     * @dataProvider cycle_cases
+     */
+    public function test_find_cycles(array $parents, array $expected): void {
+        $found = catscale::find_cycles(self::scales($parents));
+        sort($found);
+        sort($expected);
+        $this->assertSame($expected, $found);
     }
 }

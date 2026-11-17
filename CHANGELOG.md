@@ -2,6 +2,30 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Issues ab 17.11.2026 (2026111700). Entscheidungen: `doc/entscheidungen-2026-11-16.md`.
+  - #173 (P0, Sicherheit): Das Debug-PDF liest den Fortschritt über die CAT-Versuch-ID, nicht über die Nummer des
+    Aktivitätsversuchs.
+    - Neuer Dienst `local\attempt\attempt_debug_export`: nur lesend; prüft Person, Komponente und Aktivität; bei
+      Abweichung bricht er ab, ohne etwas zu zeigen.
+    - Fremde Fortschrittszeilen unter derselben Nummer werden nur gezählt, nie gezeigt.
+    - Datenbankfelder und gespeicherter JSON-Snapshot erscheinen getrennt; alle gespeicherten Werte werden escaped.
+    - Die Rechteprüfung kommt vor jedem Lesen.
+    - Tests: 10 PHPUnit-Tests (gekreuzte IDs, zwei Personen, fremde/fehlende Zeilen, Escaping, nur lesend) und
+      Behat (fehlende Rechte, fehlender CAT-Versuch).
+  - #172 (P0): Ist kein aktiver Skalensatz mehr übrig und jede Skala nach ihrer eigenen Regel fertig, endet der Test
+    nach dem Minimum regulär mit dem neuen Status `stopscalescomplete` (Nr. 13).
+    - Vorher hieß das „keine Fragen mehr“, in 2026100922 technischer Fehler (-1).
+    - Vor dem Minimum endet er weiter mit `noremainingquestionsbeforeminimum`.
+    - Tests: Entscheidungstabelle; RELSUBS/HIGHESTSUB in der #172-Konfiguration (12/25, 3–5 je Skala); 6 Strategien
+      × 4 Antwortpfade ohne untypisierten Abbruch.
+  - #169: Ein Zyklus in der Skalenhierarchie wird bei jedem Gang durch die Hierarchie abgelehnt (`scalecycle`)
+    statt still übersprungen. Neu: `catscale::find_cycles()` und das lesende `cli/check_scale_hierarchy.php`.
+  - #160: Die Nutzungsdiagramme färben auch in der Wurzelansicht nach der Messung der Gesamtskala, wie vor
+    2026102409 (Entscheidung 16.11.2026).
+  - #163: Fisher-SE-Orakel in geschlossener Form für 1PL, 2PL und 3PL. Pilot, inaktives Item, Hierarchie und
+    Doppel-Item fallen heraus.
+  - #170: Golden-Test des Testpotentials (0–10.000 Items, k = 0/1/n/>n, Idempotenz, keine Mutation).
+  - #167: Fälle „alle gleich“ und Extremwerte.
 - Adapter #10/#11, Gegenstück in local_catquiz (2026111504; 2026111506: nur Text, keine Pakete für `main`). Bericht: `doc/adapter-10-11-2026-11-15.md`.
   - `cli/measure_attempt.php` räumte nach jedem Messlauf den CAT-Versuch über die Nummer des Aktivitätsversuchs ab
     (ohne Komponente) und ließ dessen Fortschritt und Fähigkeiten zurück. Jetzt löscht es über die CAT-Versuch-ID,
