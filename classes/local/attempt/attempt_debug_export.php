@@ -164,6 +164,34 @@ final class attempt_debug_export {
     }
 
     /**
+     * The PDF of the export (issue #173): the pages of pages(), nothing else.
+     *
+     * export_debuginfo_pdf.php sends what this returns; a test reads the same document. Without compression the
+     * text of the document is readable in the bytes - for the test, never for the download.
+     *
+     * @param stdClass $data What collect() returned.
+     * @param bool $compress False only for a test that reads the document.
+     * @param string|null $font A core font for a test that reads the text (core fonts keep it as written).
+     * @return string The PDF document.
+     */
+    public static function pdf(stdClass $data, bool $compress = true, ?string $font = null): string {
+        global $CFG;
+        require_once($CFG->libdir . '/pdflib.php');
+        $pdf = new \pdf();
+        $pdf->setCompression($compress);
+        if ($font !== null) {
+            $pdf->SetFont($font, '', 10);
+        }
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        foreach (self::pages($data) as $title => $html) {
+            $pdf->AddPage('P', 'A4');
+            $pdf->writeHTML('<h1>' . s($title) . '</h1>' . $html);
+        }
+        return $pdf->Output('', 'S');
+    }
+
+    /**
      * Decodes a stored JSON column; null for an empty or broken one.
      *
      * @param string|null $json

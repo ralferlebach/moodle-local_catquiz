@@ -909,8 +909,8 @@ class catquiz {
         if ($joinability) {
             $selectability = ", lcp.ability ability";
             $abilityparams = ['scaleability' => $joinability, 'scalecontext' => $contextid];
-            // Issue #164: a reference value, not an intermediate estimate of an attempt.
-            $reference = \local_catquiz\local\result\personparam_repository::reference_sql('lcp2');
+            // Issue #164: an admissible value (personparam_repository::admissible_sql()), not an intermediate estimate.
+            $admissible = \local_catquiz\local\result\personparam_repository::admissible_sql('lcp2');
             /* Issue #104: personparams keeps the history of every estimate. Joined as it is, each step came
                once per history row - all with the same key, so one arbitrary row survived, an invalid one
                too. Joined is the newest valid row per person, as in get_person_abilities(). */
@@ -919,15 +919,13 @@ class catquiz {
                     ON lcp.userid = qas.userid
                     AND lcp.catscaleid = :scaleability
                     AND lcp.contextid = :scalecontext
-                    AND lcp.isvalid = 1
                     AND lcp.id = (
                         SELECT MAX(lcp2.id)
                           FROM {local_catquiz_personparams} lcp2
                          WHERE lcp2.userid = lcp.userid
                            AND lcp2.catscaleid = lcp.catscaleid
                            AND lcp2.contextid = lcp.contextid
-                           AND lcp2.isvalid = 1
-                           AND {$reference}
+                           AND {$admissible}
                     )
             SQL;
         }
@@ -2286,11 +2284,11 @@ class catquiz {
     public static function get_current_person_param(int $userid, int $contextid, int $catscaleid): ?\stdClass {
         global $DB;
 
-        // Issue #164: a reference value, not an intermediate estimate of an attempt.
+        // Issue #164: an admissible value (personparam_repository::admissible_sql()), not an intermediate estimate.
         $records = $DB->get_records_select(
             'local_catquiz_personparams',
-            'userid = :userid AND contextid = :contextid AND catscaleid = :catscaleid AND isvalid = 1 AND '
-                . \local_catquiz\local\result\personparam_repository::reference_sql(),
+            'userid = :userid AND contextid = :contextid AND catscaleid = :catscaleid AND '
+                . \local_catquiz\local\result\personparam_repository::admissible_sql(),
             ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => $catscaleid],
             'id DESC',
             '*',
@@ -2368,21 +2366,20 @@ class catquiz {
         /* The newest valid row per person and scale, not every row: the table keeps the history of
            what was estimated. Rows without an attempt count too - a recalibration produces the best
            available value and must not fall behind an older attempt result. */
-        // Issue #164: reference values only - an intermediate estimate of an attempt is no one's ability.
-        $reference = \local_catquiz\local\result\personparam_repository::reference_sql('pp2');
+        // Issue #164: the admissible values - the one definition of carry-over and peer population
+        // (personparam_repository::admissible_sql()); an intermediate estimate of an attempt is no one's ability.
+        $admissible = \local_catquiz\local\result\personparam_repository::admissible_sql('pp2');
         $sql = "
             SELECT pp.*
             FROM {local_catquiz_personparams} pp
             WHERE $where
-              AND pp.isvalid = 1
               AND pp.id = (
                   SELECT MAX(pp2.id)
                     FROM {local_catquiz_personparams} pp2
                    WHERE pp2.userid = pp.userid
                      AND pp2.contextid = pp.contextid
                      AND pp2.catscaleid = pp.catscaleid
-                     AND pp2.isvalid = 1
-                     AND $reference
+                     AND $admissible
               )";
 
         if ($userids) {
@@ -2632,6 +2629,9 @@ class catquiz {
         $catscaleids = explode(",", $testsettings->catquiz_catscales);
         [$insql, $inparams] = $DB->get_in_or_equal($catscaleids, SQL_PARAMS_NAMED, 'incatscales');
 
+        // Issue #164: the value of each person - the newest admissible row - not every row of the history with the
+        // intermediate estimates; and ordered by the ability (it was ordered by a column that does not exist).
+        $admissible = \local_catquiz\local\result\personparam_repository::admissible_sql('lcp2');
         $sql = "
             SELECT lcp.*
             FROM
@@ -2643,7 +2643,15 @@ class catquiz {
             JOIN {local_catquiz_personparams} lcp ON s1.userid = lcp.userid
             WHERE lcp.contextid = :contextid
             AND lcp.catscaleid $insql
-            ORDER BY abilityC";
+            AND lcp.id = (
+                SELECT MAX(lcp2.id)
+                  FROM {local_catquiz_personparams} lcp2
+                 WHERE lcp2.userid = lcp.userid
+                   AND lcp2.catscaleid = lcp.catscaleid
+                   AND lcp2.contextid = lcp.contextid
+                   AND $admissible
+            )
+            ORDER BY lcp.ability, lcp.id";
 
         $params = [
             'componentid' => $componentid,

@@ -814,8 +814,61 @@ class catscale {
      *
      */
     public static function get_subscale_ids(?int $catscaleid = null): array {
-        $all = dataapi::get_all_catscales();
-        return self::add_subscales($catscaleid, $all);
+        if ($catscaleid === null) {
+            return [];
+        }
+        // Issue #169: from the index of the hierarchy, built once per revision of the scales - not from all scales
+        // on every call.
+        return self::collect_subscale_ids($catscaleid, self::hierarchy()['children'], [$catscaleid => true]);
+    }
+
+    /**
+     * The index of the scale hierarchy (issue #169): parent by scale, children by parent in the order of all scales.
+     *
+     * Built once per revision of the scales and kept beside them in the cache 'catscales': a change of the scales
+     * purges both (event changesincatscales), and a rebuild of the list of scales drops the index
+     * (dataapi::get_all_catscales()). No session purge, nothing global beyond the scales themselves.
+     *
+     * @return array ['parent' => [id => parentid], 'children' => [parentid => [id, ...]]]
+     */
+    public static function hierarchy(): array {
+        $cache = cache::make('local_catquiz', 'catscales');
+        $index = $cache->get('hierarchy');
+        if (is_array($index) && isset($index['parent'], $index['children'])) {
+            return $index;
+        }
+        $index = ['parent' => [], 'children' => []];
+        foreach (dataapi::get_all_catscales() as $scale) {
+            $id = (int) $scale->id;
+            $parent = (int) $scale->parentid;
+            $index['parent'][$id] = $parent;
+            $index['children'][$parent][] = $id;
+        }
+        $cache->set('hierarchy', $index);
+        return $index;
+    }
+
+    /**
+     * The subscale ids below a scale, depth first, each followed by its own subscales (issue #169).
+     *
+     * @param int $parentid
+     * @param array $children Ids by the id of their parent.
+     * @param array $path Ids on the way down: a scale met again is a cycle.
+     * @return int[]
+     * @throws moodle_exception On a cycle.
+     */
+    private static function collect_subscale_ids(int $parentid, array $children, array $path): array {
+        $result = [];
+        foreach ($children[$parentid] ?? [] as $id) {
+            if (isset($path[$id])) {
+                self::refuse_cycle($id);
+            }
+            $result[] = $id;
+            foreach (self::collect_subscale_ids($id, $children, $path + [$id => true]) as $sub) {
+                $result[] = $sub;
+            }
+        }
+        return $result;
     }
 
     /**
@@ -943,8 +996,23 @@ class catscale {
      *
      */
     public static function get_ancestors(int $catscaleid, int $returnnames = 1) {
+        // Issue #169: up the index of the hierarchy, without the list of all scales for the ids alone.
+        $parent = self::hierarchy()['parent'];
+        $ancestorsintarray = [];
+        $seen = [$catscaleid => true];
+        $id = $catscaleid;
+        while (isset($parent[$id]) && $parent[$id] !== 0) {
+            $id = $parent[$id];
+            $ancestorsintarray[] = $id;
+            if (isset($seen[$id])) {
+                self::refuse_cycle($id);
+            }
+            $seen[$id] = true;
+        }
+        if ($returnnames === 1) {
+            return $ancestorsintarray;
+        }
         $all = dataapi::get_all_catscales();
-        $ancestorsintarray = self::add_parentscales($catscaleid, $all);
         switch ($returnnames) {
             case 1:
                 return $ancestorsintarray;

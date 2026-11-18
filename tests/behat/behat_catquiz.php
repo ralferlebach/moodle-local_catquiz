@@ -455,6 +455,8 @@ class behat_catquiz extends behat_base {
                 $DB->insert_record('local_catquiz_personparams', (object) [
                     'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $contextid, 'attemptid' => $id,
                     'ability' => $ability, 'isvalid' => $row['valid'] === 'yes' ? 1 : 0, 'resultsource' => 'current',
+                    // Issue #164: a stored result of the finaliser has its standard error and item count.
+                    'standarderror' => 0.3, 'n' => 10,
                     'isprimary' => $scaleid === $rootid ? 1 : 0, 'status' => 0, 'timecreated' => $end, 'timemodified' => $end,
                 ]);
             }
@@ -1849,6 +1851,8 @@ JS;
                 $DB->insert_record('local_catquiz_personparams', (object) [
                     'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $contextid, 'attemptid' => $id,
                     'ability' => $ability, 'isvalid' => $isvalid, 'isprimary' => $isprimary, 'resultsource' => 'current',
+                    // Issue #164: a stored result of the finaliser has its standard error and item count.
+                    'standarderror' => 0.3, 'n' => 10,
                     'validationstatus' => $reasons, 'status' => 0, 'timecreated' => $end, 'timemodified' => $end,
                 ]);
             }

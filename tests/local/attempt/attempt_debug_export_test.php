@@ -136,6 +136,25 @@ final class attempt_debug_export_test extends advanced_testcase {
     }
 
     /**
+     * Issue #173: the document itself - the PDF the page sends - holds the own attempt and nothing of the crossed one.
+     */
+    public function test_the_pdf_holds_only_the_own_attempt(): void {
+        $this->crossed();
+        $this->progress(self::B_HOST, $this->usera, 'progress-of-A');
+        $this->progress(self::A_HOST, $this->userb, 'progress-of-B');
+
+        foreach ([[self::A_HOST, 'progress-of-A', 'progress-of-B'], [self::B_HOST, 'progress-of-B', 'progress-of-A']] as $case) {
+            [$host, $own, $foreign] = $case;
+            $document = attempt_debug_export::pdf(attempt_debug_export::collect($host), false, 'helvetica');
+            $this->assertStringStartsWith('%PDF-', $document);
+            $this->assertStringContainsString($own, $document, 'The own progress is in the document.');
+            $this->assertStringNotContainsString($foreign, $document, 'Nothing of the crossed attempt.');
+        }
+        // The download is compressed - and still a PDF.
+        $this->assertStringStartsWith('%PDF-', attempt_debug_export::pdf(attempt_debug_export::collect(self::A_HOST)));
+    }
+
+    /**
      * No progress: said plainly, without a PHP notice.
      */
     public function test_missing_progress_is_reported_as_absent(): void {

@@ -29,7 +29,8 @@ $definitions = [
         'mode' => cache_store::MODE_APPLICATION,
         'simplekeys' => true,
         'staticacceleration' => true,
-        'staticaccelerationsize' => 1,
+        // Issue #169: the list of scales and the index of their hierarchy.
+        'staticaccelerationsize' => 2,
         'invalidationevents' => ['changesincatscales'],
     ],
     'testitemstable' => [

@@ -71,6 +71,8 @@ class dataapi {
                 $allcatscales = [];
             }
             $cache->set('allcatscales', $allcatscales);
+            // Issue #169: the index of the hierarchy belongs to this list of scales.
+            $cache->delete('hierarchy');
         }
         return $allcatscales;
     }
