@@ -244,11 +244,30 @@ final class attempt_result_validator {
                 break;
             }
         }
+
+        $sebyscale = (isset($data['se']) && is_array($data['se'])) ? $data['se'] : [];
+
+        // Read without cache, ownership check or a context id (issue #128): finalisation may run in a
+        // scheduled task, and a CAT attempt filed at the start has no context id yet. Without the
+        // progress, N stays unknown and no scale counts as measured.
+        $progress = progress::load_for_reading((int) $catattempt->id);
+
+        /* Issue #174: the feedback projection is no measurement state. personabilities_abilities holds the scales
+           the feedback shows - a strategy that reports one subscale leaves the global scale out, and an attempt
+           whose scales all failed a check may show none. The result was built from that projection, so the global
+           scale - estimated with every productive answer - got no result row ("global_scale_missing"), and an
+           attempt with estimates but an empty projection got none at all ("no_stored_result"). Every scale the
+           attempt estimated now gets its result, with the checks of the strategy; the projection only adds what
+           the feedback decided (primary, reported, hidden). */
+        $personabilities = self::complete_measurement_state(
+            $personabilities,
+            $progress,
+            $sebyscale,
+            (int) ($catattempt->scaleid ?? 0)
+        );
         if ($personabilities === []) {
             return new attempt_result([]);
         }
-
-        $sebyscale = (isset($data['se']) && is_array($data['se'])) ? $data['se'] : [];
 
         /* Per-scale N must be the number of ANSWERED, non-pilot items of that scale.
            This used to call get_playedquestions(), which counts DISPLAYED items - so
@@ -258,13 +277,11 @@ final class attempt_result_validator {
            authoritative counter on progress now enforces both filters (Issue #7). */
         $nbyscale = [];
         $fractionbyscale = [];
-        // Read without cache, ownership check or a context id (issue #128): finalisation may run in a
-        // scheduled task, and a CAT attempt filed at the start has no context id yet. Without the
-        // progress, N stays unknown and no scale counts as measured.
-        $progress = progress::load_for_reading((int) $catattempt->id);
         if ($progress !== null) {
-            try {
-                foreach (array_keys($personabilities) as $scaleid) {
+            foreach (array_keys($personabilities) as $scaleid) {
+                // Issue #174: one scale that cannot be counted leaves N unknown for that scale only. A failure
+                // used to reset N of every scale, and with it every result of the attempt was lost.
+                try {
                     $nbyscale[(int) $scaleid] = $progress->get_num_answered_productive_questions((int) $scaleid);
 
                     // The share of points on the same population as N. It was never
@@ -275,9 +292,9 @@ final class attempt_result_validator {
                     if ($fraction !== null) {
                         $fractionbyscale[(int) $scaleid] = $fraction;
                     }
+                } catch (\Throwable $e) {
+                    unset($nbyscale[(int) $scaleid], $fractionbyscale[(int) $scaleid]);
                 }
-            } catch (\Throwable $e) {
-                $nbyscale = [];
             }
         }
 
@@ -301,6 +318,78 @@ final class attempt_result_validator {
             self::administered_items($adaptiveattemptid),
             self::max_questions($progress, $adaptiveattemptid)
         );
+    }
+
+    /**
+     * The authoritative measurement state of an attempt (issue #174): every scale the attempt estimated.
+     *
+     * The entries of the feedback projection stay as they are, with the flags of the strategy (primary, reported,
+     * hidden, the checks it applied). A scale the attempt estimated but the projection left out - the global scale of
+     * a strategy that reports one subscale, or every scale when the projection is empty - is added with its own
+     * estimate, never with the value of another scale, and with the checks every strategy applies before it chooses:
+     * the maximum standard error and the minimum number of items per subscale. The global scale is checked against
+     * the minimum of the test, which the validator applies to the attempt as a whole. Fraction, minimum and maximum of
+     * the test are applied by the validator to every scale alike. An added scale is not reported and not primary
+     * unless the attempt named it its primary scale.
+     *
+     * @param array $projection The per-scale entries of the feedback (personabilities_abilities); may be empty.
+     * @param progress|null $progress The progress of the attempt; null when it no longer exists.
+     * @param array $sebyscale Standard error by scale, as the attempt stored it.
+     * @param int $rootid The scale of the test (local_catquiz_attempts.scaleid); 0 when unknown.
+     * @return array The projection, completed.
+     */
+    public static function complete_measurement_state(
+        array $projection,
+        ?progress $progress,
+        array $sebyscale,
+        int $rootid
+    ): array {
+        if ($progress === null) {
+            return $projection;
+        }
+        $abilities = [];
+        foreach ($progress->get_abilities() as $scaleid => $ability) {
+            if (is_numeric($ability) && is_finite((float) $ability)) {
+                $abilities[(int) $scaleid] = (float) $ability;
+            }
+        }
+        if ($abilities === []) {
+            return $projection;
+        }
+        $settings = $progress->get_quiz_settings();
+        $segroup = (array) ($settings->catquiz_standarderrorgroup ?? []);
+        $semax = isset($segroup['catquiz_standarderror_max']) && is_numeric($segroup['catquiz_standarderror_max'])
+            ? (float) $segroup['catquiz_standarderror_max'] : null;
+        $scalegroup = (array) ($settings->maxquestionsscalegroup ?? []);
+        $nminscale = (int) ($scalegroup['catquiz_minquestionspersubscale'] ?? 0);
+
+        foreach ($abilities as $scaleid => $ability) {
+            if (isset($projection[$scaleid]) && is_array($projection[$scaleid])) {
+                continue;
+            }
+            // Rounded as the projection rounds its values (progress::get_abilities(true)): the stored results - and
+            // the grades computed from them - keep the precision they have always had.
+            $entry = ['value' => round($ability, 2), 'toreport' => false, 'measurementstate' => true];
+            $se = INF;
+            if (isset($sebyscale[$scaleid]) && is_numeric($sebyscale[$scaleid])) {
+                $se = (float) $sebyscale[$scaleid];
+            }
+            // The stored JSON holds an infinite standard error as -1 (catquiz::replace_inf_with_minusone()).
+            $se = $se < 0 ? INF : $se;
+            if (!empty($semax) && (!is_finite($se) || $se > $semax)) {
+                $entry['error']['se'] = ['semaxdefined' => $semax, 'securrent' => $se];
+                $entry['excluded'] = true;
+            }
+            if ($nminscale > 0 && $scaleid !== $rootid) {
+                $n = $progress->get_num_answered_productive_questions($scaleid);
+                if ($n < $nminscale) {
+                    $entry['error']['nminscale'] = ['nminscaledefined' => $nminscale, 'nscalecurrent' => $n];
+                    $entry['excluded'] = true;
+                }
+            }
+            $projection[$scaleid] = $entry;
+        }
+        return $projection;
     }
 
     /**

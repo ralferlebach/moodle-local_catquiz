@@ -523,6 +523,59 @@ final class context_item_pool_test extends advanced_testcase {
     }
 
     /**
+     * Issue #157 at the size of the production finding (root 22, context 1605): 766 questions, 528 with active
+     * parameters, 238 real pilots - and the same questions in two other contexts, calibrated or not, created before
+     * them. The pool of the context has exactly its 766 items: 528 calibrated with the parameters of their own item,
+     * 238 pilots, no row of another context; cold, warm and after a purge, and while the other pools are built.
+     */
+    public function test_the_size_of_the_production_context(): void {
+        global $DB;
+        $questions = [];
+        for ($i = 0; $i < 766; $i++) {
+            $questions[] = $this->question();
+        }
+        // The other contexts first: lower item ids, other parameters, pilots where B is calibrated and vice versa.
+        foreach ($questions as $i => $q) {
+            if ($i % 3 === 0) {
+                $this->item($q, 'S' . (1 + $i % 3), 'A', $i % 2 ? null : ['difficulty' => 3.0]);
+            }
+            if ($i % 4 === 0) {
+                $this->item($q, 'S' . (1 + $i % 3), 'C', ['difficulty' => -3.0]);
+            }
+        }
+        foreach ($questions as $i => $q) {
+            $this->item($q, 'S' . (1 + $i % 3), 'B', $i < 528 ? ['difficulty' => -2.0 + 4.0 * $i / 528] : null);
+        }
+        $first = null;
+        foreach (['cold', 'warm', 'others built', 'purged'] as $run) {
+            if ($run === 'purged') {
+                \cache::make('local_catquiz', 'runtimepool')->purge();
+            }
+            if ($run === 'others built') {
+                $this->pool('A');
+                $this->pool('C');
+            }
+            $pool = $this->pool('B');
+            $this->assertCount(766, $pool, "$run: every question of the context, once.");
+            $calibrated = array_filter($pool, fn($row) => !empty($row->model));
+            $pilots = array_filter($pool, fn($row) => $this->is_pilot($row));
+            $this->assertCount(528, $calibrated, "$run: the calibrated items.");
+            $this->assertCount(238, $pilots, "$run: the real pilots.");
+            $this->assertSame(0, count(array_filter(
+                $pool,
+                fn($row) => (int) $row->itemcontextid !== $this->contexts['B']
+                    || (!empty($row->model) && (int) $row->lcipcontextid !== $this->contexts['B'])
+            )), "$run: no row of another context.");
+            $this->assert_invariants($pool, 'B');
+            $state = array_map(fn($row) => [(int) $row->itemid, (string) $row->model, round((float) $row->difficulty, 6)], $pool);
+            ksort($state);
+            $first = $first ?? $state;
+            $this->assertSame($first, $state, "$run: the same pool.");
+        }
+        $this->assertSame(766 + 256 + 192, $DB->count_records('local_catquiz_items'), 'The fixture as described.');
+    }
+
+    /**
      * Metamorphic: a further context with lower ids, other parameters or none, in any order of insertion, leaves the
      * pool, the parameters and the test information of the context asked for as they are.
      */

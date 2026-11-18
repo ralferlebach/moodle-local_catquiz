@@ -2,6 +2,30 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Re-Audit Restarbeiten 18.11.2026 (2026111706):
+  - **CI-Fix Behat:** Die Testdaten-Schritte „earlier participants have the valid CAT result“ und „the following CAT
+    results … exist“ legen frühere Ergebnisse wie der Finalizer an – mit Standardfehler und Itemzahl. Ohne SE galten sie
+    nach #164 als Zwischenstand; `catquiz_zero_variance` (2) und `catquiz_ability_histogram` (2) waren rot.
+  - **#174 Globalskalen-Invariante:** `attempt_result_validator::validate()` baut das Ergebnis aus dem Messzustand des
+    Versuchs (`complete_measurement_state()`), nicht nur aus der Feedback-Projektion. Jede geschätzte Skala – auch die
+    Globalskala, wenn das Feedback nur eine Teilskala zeigt, und auch bei leerer Projektion – bekommt ihre Ergebniszeile
+    mit eigener Schätzung, N (jede produktive Antwort einmal), SE und Gründen; ungültig bleibt ungültig, verschwindet aber
+    nicht. Gespeichert wird wie bisher mit zwei Nachkommastellen (keine Änderung der Noten). N einer nicht zählbaren Skala
+    bleibt unbekannt, ohne die anderen zu löschen. Test `tests/local/result/global_scale_invariant_test.php` (15 Fälle,
+    mit altem Validator 13 rot).
+  - **#164 Leser:** `catquiz::get_person_abilities()`, `get_current_person_param()`, die Fähigkeit in der Fragenliste
+    und `get_personparams_for_adaptivequiz_test()` wählen dieselbe Zeile wie Carry-over und Peers (`admissible_sql()`);
+    letzteres las vorher jede Zeile samt Zwischenständen und sortierte nach einer nicht existierenden Spalte.
+    `tests/local/result/personparam_readers_test.php` erfasst jeden Leser der Tabelle namentlich.
+  - **#173:** Das PDF entsteht in `attempt_debug_export::pdf()`; die Seite sendet es per `send_file()`. Test liest das
+    erzeugte PDF: eigener Versuch drin, gekreuzter nicht.
+  - **#157:** Test in Produktionsgröße (766 Fragen, 528 kalibriert, 238 Piloten, zwei Fremdkontexte, kalt/warm/
+    gepurgt/parallel).
+  - **#169:** Index der Skalenhierarchie (Eltern/Kinder) einmal je Revision der Skalen im Cache `catscales`, mit ihnen
+    invalidiert (`staticaccelerationsize` 2); `get_ancestors()`/`get_subscale_ids()` ohne Lauf über alle Skalen.
+    Test `tests/catscale_hierarchy_index_test.php` (bis 450 Skalen gleich der alten Lesart, ein Lesezugriff je Baum,
+    Änderungen sofort sichtbar, Zyklus abgewiesen).
+  - **Adapter #2 / #51:** Formular mit 1, 20, 191 und 401 Skalen: immer die Editoren einer Skala.
 - 2026111705: `doc/abnahme-11-164.md` ohne CatQuizLab (nicht beauftragt); Code unverändert gegenüber 2026111704.
 - CI-Nacharbeitsauftrag #11/#164 vom 17.11.2026 (2026111704):
   - **#164 Ergebnisvertrag** (`doc/ergebnisvertrag-164.md`): Zwischenschätzungen eines laufenden Versuchs werden als

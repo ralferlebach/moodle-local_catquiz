@@ -172,6 +172,42 @@ final class feedback_lazy_editors_test extends advanced_testcase {
     }
 
     /**
+     * Sizes of the scale tree (adaptivequizcatmodel_catquiz #2): one scale, 20, the 191 of the production finding
+     * (573 editors before) and more than 400.
+     *
+     * @return array
+     */
+    public static function tree_sizes(): array {
+        return ['1 scale' => [0], '20 scales' => [19], '191 scales' => [190], '401 scales' => [400]];
+    }
+
+    /**
+     * The form grows with the number of scales only by a carrier and a button per scale - never by editors: the
+     * editors, course choosers and colour pickers are those of the one scale shown, whatever the size of the tree.
+     *
+     * @dataProvider tree_sizes
+     * @param int $subscales
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('tree_sizes')]
+    public function test_the_form_has_the_editors_of_one_scale_at_any_size(int $subscales): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $scaleids = $this->tree($subscales);
+
+        $mform = $this->form([], $scaleids);
+        $this->assertCount(2, $this->elements_of_type($mform, 'editor'), 'The editors of one scale, two ranges.');
+        $this->assertCount(2, $this->elements_of_type($mform, 'autocomplete'));
+        $carriers = array_filter(
+            array_map(fn($element) => (string) $element->getName(), $mform->_elements),
+            fn($name) => str_starts_with($name, feedbackclass::CARRIER)
+        );
+        $this->assertCount(count($scaleids), $carriers, 'One hidden carrier per scale - not more.');
+        // Sent back with every scale's values: still the editors of one.
+        $mform = $this->form([feedbackclass::EDITSCALE => $scaleids[count($scaleids) - 1]], $scaleids);
+        $this->assertCount(2, $this->elements_of_type($mform, 'editor'));
+    }
+
+    /**
      * The button of a scale opens it with the values of its carrier, unsaved ones included; the scale
      * edited before keeps what its fields were sent with in its carrier.
      */

@@ -48,8 +48,6 @@ if (!has_capability('local/catquiz:canmanage', $context)) {
     $refuse(get_string('nopermissions', 'error', get_capability_string('local/catquiz:canmanage')));
 }
 
-require_once($CFG->libdir . '/pdflib.php');
-
 // Read-only; refuses when the CAT attempt or its progress does not belong to this attempt.
 try {
     $data = attempt_debug_export::collect($attemptid);
@@ -57,9 +55,13 @@ try {
     $refuse($e->getMessage());
 }
 
-$pdfexport = new pdf();
-foreach (attempt_debug_export::pages($data) as $title => $html) {
-    $pdfexport->AddPage('P', 'A4');
-    $pdfexport->writeHTML('<h1>' . s($title) . '</h1>' . $html);
-}
-$pdfexport->Output(clean_filename(date('Ymd Hi-') . "export_debuginfo_attempt_$attemptid.pdf"), 'D');
+// Issue #173: the document is built where it is tested (attempt_debug_export::pdf()).
+send_file(
+    attempt_debug_export::pdf($data),
+    clean_filename(date('Ymd Hi-') . "export_debuginfo_attempt_$attemptid.pdf"),
+    0,
+    0,
+    true,
+    true,
+    'application/pdf'
+);
