@@ -163,20 +163,10 @@ final class scale_result {
      * @return array [sql, params]
      */
     public static function valid_measurement_sql(string $alias, string $prefix): array {
-        global $DB;
-        $reasons = self::display_only_reasons();
-        $strings = [];
-        $count = count($reasons);
-        for ($mask = 1; $mask < (1 << $count); $mask++) {
-            $subset = [];
-            foreach ($reasons as $i => $reason) {
-                if ($mask & (1 << $i)) {
-                    $subset[] = $reason;
-                }
-            }
-            $strings[] = implode(',', $subset);
-        }
-        [$insql, $params] = $DB->get_in_or_equal($strings, SQL_PARAMS_NAMED, $prefix . 'vm');
-        return ["($alias.isvalid = 1 OR $alias.validationstatus $insql)", $params];
+        // Issue #164: the one definition of carry-over and peer population, with the reference rule - an
+        // intermediate estimate of an attempt is no measurement. No parameters any more; the prefix is kept for the
+        // callers.
+        unset($prefix);
+        return [personparam_repository::admissible_sql($alias), []];
     }
 }

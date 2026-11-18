@@ -36,6 +36,7 @@ use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\model\model_raschmodel;
 use local_catquiz\local\model\model_responses;
 use local_catquiz\local\result;
+use local_catquiz\local\result\personparam_repository;
 use local_catquiz\teststrategy\preselect_task;
 use local_catquiz\teststrategy\progress;
 use moodle_exception;
@@ -57,6 +58,9 @@ class updatepersonability extends preselect_task {
      * @var int
      */
     const NUM_ESTIMATION_THRESHOLD = 50;
+
+    /** @var array CAT attempt ids by host attempt and component, looked up once (issue #164). */
+    private array $catattemptids = [];
 
     /**
      *
@@ -409,12 +413,34 @@ class updatepersonability extends preselect_task {
      */
     protected function update_person_param(int $catscaleid, float $updatedability): void {
         // Issue #157 (T10): the estimate belongs to the CAT context of the attempt, where it is read again.
-        catquiz::update_person_param(
-            $this->context['userid'],
+        // Issue #164: it is an intermediate estimate of the running attempt - filed as provisional under the CAT
+        // attempt, read again only by this attempt, never a start value or peer value of anybody.
+        personparam_repository::save_provisional(
+            (int) $this->context['userid'],
             (int) ($this->context['contextid'] ?? 0) ?: catscale::get_context_id($catscaleid),
             $catscaleid,
-            $updatedability
+            $updatedability,
+            $this->running_cat_attempt_id()
         );
+    }
+
+    /**
+     * The CAT attempt (local_catquiz_attempts.id) of the running attempt, looked up once per request.
+     *
+     * @return int|null
+     */
+    protected function running_cat_attempt_id(): ?int {
+        if (empty($this->context['attemptid'])) {
+            return null;
+        }
+        $key = (int) $this->context['attemptid'] . '|' . ($this->context['component'] ?? 'mod_adaptivequiz');
+        if (!array_key_exists($key, $this->catattemptids)) {
+            $this->catattemptids[$key] = catquiz::get_cat_attempt_id(
+                (int) $this->context['attemptid'],
+                $this->context['component'] ?? 'mod_adaptivequiz'
+            );
+        }
+        return $this->catattemptids[$key];
     }
 
     /**

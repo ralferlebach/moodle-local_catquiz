@@ -151,8 +151,20 @@ class personability_loader implements contextloaderinterface {
             (int) $context['contextid'],
             $catscaleids
         );
+        // Issue #164: the running attempt goes on from its own intermediate estimates - only its own (same CAT
+        // attempt, person and context). Everybody else, and the next attempt, sees only reference values.
+        $own = personparam_repository::get_provisional(
+            $this->running_cat_attempt_id($context),
+            (int) $context['userid'],
+            (int) $context['contextid'],
+            $catscaleids
+        );
         $abilities = [];
         foreach ($catscaleids as $scaleid) {
+            if (isset($own[(int) $scaleid]) && $own[(int) $scaleid]->ability !== null) {
+                $abilities[$scaleid] = (float) $own[(int) $scaleid]->ability;
+                continue;
+            }
             /* The attempt history is the authoritative source for a
                carry-over start value. local_catquiz_personparams is written
                DURING an attempt (updatepersonability, filterbystandarderror), so
@@ -181,6 +193,19 @@ class personability_loader implements contextloaderinterface {
             }
         }
         return $abilities;
+    }
+
+    /**
+     * The CAT attempt of the running attempt, or null when there is none yet (or no attempt at all).
+     *
+     * @param array $context
+     * @return int|null
+     */
+    protected function running_cat_attempt_id(array $context): ?int {
+        if (empty($context['attemptid'])) {
+            return null;
+        }
+        return catquiz::get_cat_attempt_id((int) $context['attemptid'], $context['component'] ?? 'mod_adaptivequiz');
     }
 
     /**

@@ -82,10 +82,16 @@ jobs:
           - { php: '8.3', moodle-branch: MOODLE_501_STABLE, database: mariadb }
           - { php: '8.3', moodle-branch: MOODLE_502_STABLE, database: pgsql }
           - { php: '8.3', moodle-branch: MOODLE_502_STABLE, database: mariadb }
+          # CI-Nacharbeitsauftrag 17.11.2026: PHP 8.4 auf jeder Version der Linie, beide Datenbanken.
+          - { php: '8.4', moodle-branch: MOODLE_501_STABLE, database: pgsql }
+          - { php: '8.4', moodle-branch: MOODLE_501_STABLE, database: mariadb }
+          - { php: '8.4', moodle-branch: MOODLE_502_STABLE, database: pgsql }
+          - { php: '8.4', moodle-branch: MOODLE_502_STABLE, database: mariadb }
           # 5.3 seit dem 5. Oktober als MOODLE_503_STABLE; main ist 5.4dev und nicht Ziel.
           - { php: '8.3', moodle-branch: MOODLE_503_STABLE, database: pgsql }
           - { php: '8.3', moodle-branch: MOODLE_503_STABLE, database: mariadb }
           - { php: '8.4', moodle-branch: MOODLE_503_STABLE, database: pgsql }
+          - { php: '8.4', moodle-branch: MOODLE_503_STABLE, database: mariadb }
 
     steps:
       - name: Check out repository code

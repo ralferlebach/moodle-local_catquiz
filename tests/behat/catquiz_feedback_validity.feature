@@ -69,6 +69,8 @@ Feature: Feedback output is bound to a valid CAT result.
     And I wait until the page is ready
     Then I should see "No overall result can be determined"
     And I should see "because in the whole test all answers were correct"
+    ## Engine #164: the invalid result leaves no intermediate estimate and gives no admissible value.
+    And no intermediate CAT estimate of "student1" is left and "student1" has no admissible ability
 
   @javascript
   Scenario: A valid attempt shows feedback and not the central notice
@@ -83,6 +85,8 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "falsche Antwort 1" "text" in the "Question 2" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 3"
+    ## Engine #164: while the attempt runs, its estimates are intermediate - one per scale, nobody's reference.
+    And the running CAT attempt of "student1" holds at most one intermediate estimate per scale and no admissible value
     And I click on "richtige Antwort" "text" in the "Question 3" "question"
     And I click on "Submit answer" "button"
     And I should see "Question 4"
@@ -90,6 +94,7 @@ Feature: Feedback output is bound to a valid CAT result.
     And I click on "Submit answer" "button"
     And I wait until the page is ready
     Then I should not see "No overall result can be determined"
+    And no intermediate CAT estimate of "student1" is left and "student1" has an admissible ability
 
   @javascript
   Scenario: An invalid attempt keeps its quiz history and, for authorised users, its export (issue #120)

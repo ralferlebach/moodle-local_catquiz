@@ -2,6 +2,26 @@
 
 ## 1.3.0 (in Arbeit)
 
+- 2026111705: `doc/abnahme-11-164.md` ohne CatQuizLab (nicht beauftragt); Code unverändert gegenüber 2026111704.
+- CI-Nacharbeitsauftrag #11/#164 vom 17.11.2026 (2026111704):
+  - **#164 Ergebnisvertrag** (`doc/ergebnisvertrag-164.md`): Zwischenschätzungen eines laufenden Versuchs werden als
+    `validationstatus = provisional`, `isvalid = 0` mit der CAT-Versuchs-ID gespeichert – eine Zeile je Versuch und
+    Skala, im Ort aktualisiert (`personparam_repository::save_provisional()`), nur vom eigenen laufenden Versuch gelesen
+    (`get_provisional()`), bei der Finalisierung übernommen bzw. verworfen (`discard_provisional()`).
+  - **Eine Definition für Carry-over und Peer-Population** (`personparam_repository::admissible_sql()`): gültige Messung
+    (auch `not_primary`) und Referenzwert. Kein Referenzwert sind Zwischenschätzungen (neu markiert, und Altdaten:
+    `current` ohne Versuch oder ohne SE) sowie `prior`-Zeilen ohne früheren gemessenen Wert (Default-Startwert; das
+    CLARA-Muster der 10.129 Paare). Regel nur beim Lesen, **keine Datenänderung**; historisch verwaiste Endergebnisse
+    mit SE bleiben Werte.
+  - **Finalizer:** schreibt `prior` nur noch, wenn vorher ein gemessener Wert besteht, und nicht für eine Skala, die im
+    Versuch gültig gemessen, aber nicht berichtet wurde.
+  - Tests: `tests/local/result/reference_value_contract_test.php` (Vertragsmatrix PHP = SQL, laufender Versuch, RED mit
+    Altdaten, Wachstum, Prior, Legacy/Recalibration, Peer mit Midrank/Ties/Sättigung/Kontext, Carry-over = Peer);
+    `attempt_finalizer_test` (kein Default-Prior); Fixtures von fünf Tests auf finale Ergebnisse mit SE gebracht.
+    Behat: `catquiz_feedback_validity.feature` prüft Zwischenwerte im laufenden Versuch und nach gültigem/ungültigem Ende.
+  - **CI:** PHPUnit-Dev-Matrix jetzt Moodle 5.1, 5.2, 5.3 × PHP 8.3, 8.4 × MariaDB/PostgreSQL (12 Zellen), Main-Matrix um PHP 8.4 auf 5.1/5.2 und 5.3/MariaDB ergänzt (Moodle × PHP × MariaDB/PostgreSQL, s. Workflow); SHA-Protokoll und
+    Warten auf Host/Adapter wie bisher.
+
 - Re-Audit 17.11.2026, Betriebsabnahme (2026111703):
   - **Betreiberprüfungen BP-01 bis BP-07** als nur lesendes CLI `cli/operator_checks.php` mit dem Rückgabevertrag des
     Re-Audits (check_id, System, Zeit, Versionen und SHAs, PASS|FAIL|NOT_RUN|INCONCLUSIVE, Datensätze, Werte,

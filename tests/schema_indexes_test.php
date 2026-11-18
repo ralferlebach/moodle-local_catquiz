@@ -204,6 +204,9 @@ final class schema_indexes_test extends advanced_testcase {
             'ability' => 0.5,
             'isvalid' => 1,
             'resultsource' => 'current',
+            // Issue #164: a result of an attempt, with its standard error - not an intermediate estimate.
+            'attemptid' => 501,
+            'standarderror' => 0.3,
             'timecreated' => time(),
             'timemodified' => time(),
         ];

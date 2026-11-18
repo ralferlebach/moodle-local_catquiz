@@ -183,6 +183,8 @@ final class attempt_population_test extends advanced_testcase {
                 $DB->insert_record('local_catquiz_personparams', (object) [
                     'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $this->contextid, 'attemptid' => $id,
                     'ability' => $ability, 'isvalid' => $valid ? 1 : 0, 'resultsource' => 'current',
+                    // Issue #164: a stored result of the finaliser has its standard error.
+                    'standarderror' => 0.3,
                     'isprimary' => $scaleid === $this->root ? 1 : 0, 'status' => 0,
                     'timecreated' => $endtime, 'timemodified' => $endtime,
                 ]);

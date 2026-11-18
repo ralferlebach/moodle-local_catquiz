@@ -93,7 +93,8 @@ final class personparam_attempt_test extends advanced_testcase {
         $this->resetAfterTest();
 
         $catattemptid = $this->make_cat_attempt(4712, 2, 9);
-        catquiz::update_person_param(2, 9, 1, 0.75, $catattemptid);
+        // Issue #164: a result of the attempt, with its standard error (as the finaliser files it).
+        catquiz::update_person_param(2, 9, 1, 0.75, $catattemptid, true, 'current', 0.3);
 
         // The table is appended to; the current value is the newest valid row.
         $record = catquiz::get_current_person_param(2, 9, 1);
@@ -118,7 +119,8 @@ final class personparam_attempt_test extends advanced_testcase {
 
         $this->resetAfterTest();
 
-        catquiz::update_person_param(2, 9, 1, 0.5);
+        // Issue #164: as model_person_param_list::save_to_db() files it.
+        catquiz::update_person_param(2, 9, 1, 0.5, null, true, 'recalibration');
 
         // The table is appended to; the current value is the newest valid row.
         $record = catquiz::get_current_person_param(2, 9, 1);
@@ -137,8 +139,8 @@ final class personparam_attempt_test extends advanced_testcase {
         $first = $this->make_cat_attempt(4713, 2, 9);
         $second = $this->make_cat_attempt(4714, 2, 9);
 
-        catquiz::update_person_param(2, 9, 1, 0.1, $first);
-        catquiz::update_person_param(2, 9, 1, 0.9, $second);
+        catquiz::update_person_param(2, 9, 1, 0.1, $first, true, 'current', 0.3);
+        catquiz::update_person_param(2, 9, 1, 0.9, $second, true, 'current', 0.3);
 
         // The table is appended to; the current value is the newest valid row.
         $record = catquiz::get_current_person_param(2, 9, 1);

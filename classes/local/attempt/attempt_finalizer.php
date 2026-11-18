@@ -178,7 +178,13 @@ final class attempt_finalizer {
 
             foreach ($result->get_scale_results() as $scaleresult) {
                 $scaleid = $scaleresult->scaleid;
-                if ($scaleresult->valid && $scaleresult->score !== null) {
+                // Issue #164: also a scale measured validly but not reported (not_primary): its own row is an
+                // admissible value; a 'prior' copy of the start value would stand in front of it.
+                $measured = $scaleresult->valid || \local_catquiz\local\result\scale_result::is_valid_measurement(
+                    0,
+                    implode(',', $scaleresult->rejectionreasons)
+                );
+                if ($measured && $scaleresult->score !== null) {
                     /* Nothing to write here: personparam_repository::save_attempt_result() above
                        has already filed this scale, with the standard error, the item count and
                        the validation status that only it knows. A second write would append a
@@ -192,25 +198,30 @@ final class attempt_finalizer {
                 // tasks may have written one). Prefer the exact pre-attempt value
                 // (Phase 2); fall back to the last valid history value (Phase 1);
                 // otherwise leave it untouched.
-                if (array_key_exists($scaleid, $preattempt)) {
-                    // Carried over, not measured in this attempt - hence 'prior'.
-                    catquiz::update_person_param(
-                        $userid,
-                        $contextid,
-                        $scaleid,
-                        (float) $preattempt[$scaleid],
-                        (int) $catattempt->id,
-                        true,
-                        'prior'
-                    );
+                // Issue #164: only a value that was measured before is carried over as 'prior'. Without one the
+                // start value was the default ability, and a 'prior' row of it would make a person who was never
+                // measured validly a peer and a carry-over source (the 10,129 pairs of CLARA, 17.11.2026).
+                $lastvalid = personparam_repository::get_latest_valid($userid, $contextid, $scaleid);
+                if ($lastvalid === null || $lastvalid->ability === null) {
                     continue;
                 }
-
-                $lastvalid = personparam_repository::get_latest_valid($userid, $contextid, $scaleid);
-                if ($lastvalid !== null && $lastvalid->ability !== null) {
-                    catquiz::update_person_param($userid, $contextid, $scaleid, (float) $lastvalid->ability, (int) $catattempt->id);
-                }
+                // Carried over, not measured in this attempt - hence 'prior'. The exact pre-attempt value (Phase 2)
+                // where it was captured, else the last valid history value (Phase 1).
+                $carried = array_key_exists($scaleid, $preattempt) ? $preattempt[$scaleid] : $lastvalid->ability;
+                catquiz::update_person_param(
+                    $userid,
+                    $contextid,
+                    $scaleid,
+                    (float) $carried,
+                    (int) $catattempt->id,
+                    true,
+                    'prior'
+                );
             }
+
+            // Issue #164: the intermediate estimates of the attempt are done with. A measured scale's row has become
+            // its result above; what is left was never a result. A finished attempt keeps none.
+            personparam_repository::discard_provisional((int) $catattempt->id);
         }
 
         // The fields resultstatus and resultvalid are set on the adaptivequiz_attempt

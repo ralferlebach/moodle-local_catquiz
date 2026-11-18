@@ -3414,4 +3414,96 @@ JS;
         $text = preg_replace('~\b(?:[a-z_]*)?[0-9a-f]{13,}\b~i', '#', $text);
         return trim(preg_replace('~\s+~u', ' ', $text));
     }
+
+    /**
+     * Engine #164: the running attempt of a person holds its intermediate estimates as provisional rows of its own CAT
+     * attempt, at most one per scale, and none of them is an admissible value (carry-over, peers).
+     *
+     * @Then /^the running CAT attempt of "([^"]*)" holds at most one intermediate estimate per scale and no admissible value$/
+     *
+     * @param string $username
+     * @return void
+     */
+    public function the_running_attempt_holds_intermediate_estimates(string $username): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $catid = (int) $DB->get_field_sql(
+            'SELECT MAX(id) FROM {local_catquiz_attempts} WHERE userid = ? AND endtime IS NULL',
+            [$userid]
+        );
+        $rows = $DB->get_records('local_catquiz_personparams', ['userid' => $userid]);
+        $problems = [];
+        if ($catid === 0) {
+            $problems[] = 'no running CAT attempt';
+        }
+        $scales = array_unique(array_map(fn($r) => (int) $r->catscaleid, $rows));
+        if (!$rows || count($rows) !== count($scales)) {
+            $problems[] = count($rows) . ' rows for ' . count($scales) . ' scales (expected one per scale)';
+        }
+        foreach ($rows as $row) {
+            if (
+                $row->validationstatus !== \local_catquiz\local\result\personparam_repository::PROVISIONAL
+                    || (int) $row->attemptid !== $catid || (int) $row->isvalid !== 0
+            ) {
+                $problems[] = "row {$row->id} is not a provisional row of CAT attempt $catid";
+            }
+        }
+        if (
+            $DB->record_exists_select(
+                'local_catquiz_personparams',
+                'userid = :userid AND ' . \local_catquiz\local\result\personparam_repository::admissible_sql(),
+                ['userid' => $userid]
+            )
+        ) {
+            $problems[] = 'an intermediate estimate is admissible';
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException(implode('; ', $problems), $this->getSession());
+        }
+    }
+
+    /**
+     * Engine #164: after the end no intermediate estimate is left; the person has (or has not) an admissible value.
+     *
+     * @Then /^no intermediate CAT estimate of "([^"]*)" is left and "([^"]*)" has (an|no) admissible ability$/
+     *
+     * @param string $username
+     * @param string $again The same person, for readability.
+     * @param string $has an or no
+     * @return void
+     */
+    public function no_intermediate_estimate_is_left(string $username, string $again, string $has): void {
+        global $DB;
+        $userid = (int) $DB->get_field('user', 'id', ['username' => $username], MUST_EXIST);
+        $problems = [];
+        if (
+            $DB->record_exists('local_catquiz_personparams', ['userid' => $userid,
+                'validationstatus' => \local_catquiz\local\result\personparam_repository::PROVISIONAL])
+        ) {
+            $problems[] = 'provisional rows are left';
+        }
+        if (
+            $DB->record_exists_select(
+                'local_catquiz_personparams',
+                "userid = :userid AND resultsource = 'current' AND standarderror IS NULL",
+                ['userid' => $userid]
+            )
+        ) {
+            $problems[] = 'a result without standard error';
+        }
+        $admissible = $DB->record_exists_select(
+            'local_catquiz_personparams',
+            'userid = :userid AND ' . \local_catquiz\local\result\personparam_repository::admissible_sql(),
+            ['userid' => $userid]
+        );
+        if ($admissible !== ($has === 'an')) {
+            $problems[] = $admissible ? 'an admissible value although none was expected' : 'no admissible value';
+        }
+        if ($problems) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                "$again: " . implode('; ', $problems),
+                $this->getSession()
+            );
+        }
+    }
 }
