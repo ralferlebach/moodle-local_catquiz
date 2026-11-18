@@ -25,6 +25,7 @@
 namespace local_catquiz\teststrategy\preselect_task;
 
 use local_catquiz\catquiz;
+use local_catquiz\local\result\personparam_repository;
 use local_catquiz\catscale;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\result;
@@ -132,11 +133,12 @@ class filterbystandarderror extends preselect_task {
                 }
                 $fisherinformation = new fisherinformation();
                 foreach ($inheritscales as $subscaleid) {
-                    catquiz::update_person_param(
-                        $this->context['userid'],
-                        $this->context['contextid'],
-                        $subscaleid,
-                        $inheritval,
+                    // Issue #164: an inherited value is an intermediate estimate of the running attempt.
+                    personparam_repository::save_provisional(
+                        (int) $this->context['userid'],
+                        (int) $this->context['contextid'],
+                        (int) $subscaleid,
+                        (float) $inheritval,
                         $this->cat_attempt_id()
                     );
                     getenv('CATQUIZ_CREATE_TESTOUTPUT') && printf(

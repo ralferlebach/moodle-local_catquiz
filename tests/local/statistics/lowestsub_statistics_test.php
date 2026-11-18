@@ -201,6 +201,8 @@ final class lowestsub_statistics_test extends advanced_testcase {
             $DB->insert_record('local_catquiz_personparams', (object) [
                 'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $this->testcontext, 'attemptid' => $id,
                 'ability' => $ability, 'isvalid' => $isvalid, 'isprimary' => $isprimary, 'resultsource' => 'current',
+                // Issue #164: a stored result of the finaliser has its standard error.
+                'standarderror' => 0.3,
                 'validationstatus' => implode(',', $reasons), 'status' => 0, 'timecreated' => $endtime ?: time(),
                 'timemodified' => $endtime ?: time(),
             ]);

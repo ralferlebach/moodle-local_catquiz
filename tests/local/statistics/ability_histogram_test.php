@@ -159,6 +159,8 @@ final class ability_histogram_test extends advanced_testcase {
             $DB->insert_record('local_catquiz_personparams', (object) [
                 'userid' => $userid, 'catscaleid' => $this->root, 'contextid' => $this->contextid,
                 'attemptid' => $attemptid, 'ability' => $ability, 'isvalid' => 1, 'resultsource' => 'current',
+                // Issue #164: a stored result of the finaliser has its standard error.
+                'standarderror' => 0.3,
                 'isprimary' => 1, 'status' => 0, 'timecreated' => $time, 'timemodified' => $time,
             ]);
         }

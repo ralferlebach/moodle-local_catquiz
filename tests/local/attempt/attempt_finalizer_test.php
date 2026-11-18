@@ -303,11 +303,75 @@ final class attempt_finalizer_test extends advanced_testcase {
     }
 
     /**
-     * Issue #9 (Phase 2): when a scale has no valid history but a pre-attempt
-     * value was captured, an invalid attempt restores that exact pre-attempt
-     * value (not the intermediate estimate, and not a default).
+     * Issue #9 (Phase 2): an invalid attempt restores the exact pre-attempt value of a scale that was measured
+     * before (not the intermediate estimate, and not the newer history value).
      */
     public function test_finalize_restores_exact_preattempt_value(): void {
+        global $DB;
+        $this->resetAfterTest();
+
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
+        $userid = (int) $user->id;
+        $contextid = 9;
+        $now = time();
+
+        // Issue #164: measured before the attempt - only then is a start value carried over as 'prior'.
+        $DB->insert_record('local_catquiz_personparams', (object) [
+            'userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5, 'ability' => 0.4, 'attemptid' => 777,
+            'standarderror' => 0.3, 'n' => 9, 'isvalid' => 1, 'resultsource' => 'current',
+            'timecreated' => $now - 100, 'timemodified' => $now - 100,
+        ]);
+        // Intermediate estimate currently in personparams (a during-attempt write).
+        $DB->insert_record('local_catquiz_personparams', (object) [
+            'userid' => $userid, 'contextid' => $contextid, 'catscaleid' => 5, 'ability' => 0.15,
+            'timecreated' => $now, 'timemodified' => $now,
+        ]);
+
+        $json = json_encode([
+            'personabilities_abilities' => [
+                5 => ['value' => 0.15, 'toreport' => true, 'excluded' => true,
+                    'error' => ['nminscale' => ['nminscaledefined' => 5, 'nscalecurrent' => 1]]],
+            ],
+            'se' => [5 => 0.9],
+        ]);
+        $adaptiveattemptid = $DB->insert_record('adaptivequiz_attempt', (object) [
+            'instance' => 1, 'userid' => $userid, 'uniqueid' => 9911, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 1, 'difficultysum' => 0,
+            'standarderror' => 0.9, 'measure' => 0, 'timecreated' => $now, 'timemodified' => $now,
+        ]);
+        $DB->insert_record('local_catquiz_attempts', (object) [
+            'userid' => $userid, 'scaleid' => 5, 'contextid' => $contextid, 'attemptid' => $adaptiveattemptid,
+            'component' => 'mod_adaptivequiz', 'status' => 0, 'endtime' => null, 'json' => $json,
+            'timecreated' => $now, 'timemodified' => $now,
+        ]);
+        // Issue #128: the attempt's progress - without it no scale counts as measured.
+        $this->setAdminUser();
+        local_catquiz_measured_progress((int) $adaptiveattemptid, [5 => 1]);
+
+        // Capture the pre-attempt value (0.55) on the attempt's progress.
+        $progress = progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid, (object) []);
+        $progress->capture_preattempt_abilities([5 => 0.55]);
+        $progress->save();
+
+        $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
+
+        // The table is appended to, so the current value is the newest valid row, not the only one.
+        $snapshot = catquiz::get_current_person_param($userid, $contextid, 5);
+
+        $this->assertEquals(0.55, (float) $snapshot->ability);
+        $this->assertEquals(
+            'prior',
+            $snapshot->resultsource,
+            'A carried-over value must say that it was not measured in this attempt.'
+        );
+    }
+
+    /**
+     * Issue #164: a scale that was never measured validly gets no 'prior' row - its start value was the default
+     * ability (the 10,129 pairs of CLARA, 17.11.2026); the person has no admissible value of the scale.
+     */
+    public function test_finalize_carries_no_start_value_without_a_measured_one(): void {
         global $DB;
         $this->resetAfterTest();
 
@@ -344,23 +408,19 @@ final class attempt_finalizer_test extends advanced_testcase {
         $this->setAdminUser();
         local_catquiz_measured_progress((int) $adaptiveattemptid, [5 => 1]);
 
-        // Capture the pre-attempt value (0.55) on the attempt's progress. No
-        // valid attempt-scale history exists for the scale.
+        // The pre-attempt value of a person never measured on the scale.
         $progress = progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid, (object) []);
         $progress->capture_preattempt_abilities([5 => 0.55]);
         $progress->save();
 
         $this->assertTrue(attempt_finalizer::finalize($adaptiveattemptid, $now + 5, 'reason'));
 
-        // The table is appended to, so the current value is the newest valid row, not the only one.
-        $snapshot = catquiz::get_current_person_param($userid, $contextid, 5);
-
-        $this->assertEquals(0.55, (float) $snapshot->ability);
-        $this->assertEquals(
-            'prior',
-            $snapshot->resultsource,
-            'A carried-over value must say that it was not measured in this attempt.'
+        $this->assertFalse(
+            $DB->record_exists('local_catquiz_personparams', ['userid' => $userid, 'resultsource' => 'prior']),
+            'No start value is carried over as a result.'
         );
+        $this->assertNull(catquiz::get_current_person_param($userid, $contextid, 5));
+        $this->assertNull(\local_catquiz\local\result\personparam_repository::get_latest_valid($userid, $contextid, 5));
     }
 
     /**

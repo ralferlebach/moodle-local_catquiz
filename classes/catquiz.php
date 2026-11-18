@@ -909,6 +909,8 @@ class catquiz {
         if ($joinability) {
             $selectability = ", lcp.ability ability";
             $abilityparams = ['scaleability' => $joinability, 'scalecontext' => $contextid];
+            // Issue #164: a reference value, not an intermediate estimate of an attempt.
+            $reference = \local_catquiz\local\result\personparam_repository::reference_sql('lcp2');
             /* Issue #104: personparams keeps the history of every estimate. Joined as it is, each step came
                once per history row - all with the same key, so one arbitrary row survived, an invalid one
                too. Joined is the newest valid row per person, as in get_person_abilities(). */
@@ -925,6 +927,7 @@ class catquiz {
                            AND lcp2.catscaleid = lcp.catscaleid
                            AND lcp2.contextid = lcp.contextid
                            AND lcp2.isvalid = 1
+                           AND {$reference}
                     )
             SQL;
         }
@@ -2283,9 +2286,12 @@ class catquiz {
     public static function get_current_person_param(int $userid, int $contextid, int $catscaleid): ?\stdClass {
         global $DB;
 
-        $records = $DB->get_records(
+        // Issue #164: a reference value, not an intermediate estimate of an attempt.
+        $records = $DB->get_records_select(
             'local_catquiz_personparams',
-            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => $catscaleid, 'isvalid' => 1],
+            'userid = :userid AND contextid = :contextid AND catscaleid = :catscaleid AND isvalid = 1 AND '
+                . \local_catquiz\local\result\personparam_repository::reference_sql(),
+            ['userid' => $userid, 'contextid' => $contextid, 'catscaleid' => $catscaleid],
             'id DESC',
             '*',
             0,
@@ -2362,6 +2368,8 @@ class catquiz {
         /* The newest valid row per person and scale, not every row: the table keeps the history of
            what was estimated. Rows without an attempt count too - a recalibration produces the best
            available value and must not fall behind an older attempt result. */
+        // Issue #164: reference values only - an intermediate estimate of an attempt is no one's ability.
+        $reference = \local_catquiz\local\result\personparam_repository::reference_sql('pp2');
         $sql = "
             SELECT pp.*
             FROM {local_catquiz_personparams} pp
@@ -2374,6 +2382,7 @@ class catquiz {
                      AND pp2.contextid = pp.contextid
                      AND pp2.catscaleid = pp.catscaleid
                      AND pp2.isvalid = 1
+                     AND $reference
               )";
 
         if ($userids) {

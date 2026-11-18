@@ -248,6 +248,37 @@ final class strategy_test extends advanced_testcase {
     }
 
     /**
+     * The ability the running attempt is at: its own intermediate estimate (issue #164: provisional, under the CAT
+     * attempt, updated with every answer), or - before the first estimate and after the end - the newest valid row.
+     *
+     * @param int $userid
+     * @return \stdClass|null
+     */
+    private function running_ability(int $userid): ?\stdClass {
+        global $DB;
+        $provisional = $DB->get_records(
+            'local_catquiz_personparams',
+            ['userid' => $userid, 'catscaleid' => $this->catscaleid,
+                'validationstatus' => \local_catquiz\local\result\personparam_repository::PROVISIONAL],
+            'timemodified DESC, id DESC',
+            'id, ability',
+            0,
+            1
+        );
+        if ($provisional) {
+            return reset($provisional);
+        }
+        return current($DB->get_records(
+            'local_catquiz_personparams',
+            ['userid' => $userid, 'catscaleid' => $this->catscaleid, 'isvalid' => 1],
+            'id DESC',
+            'id, ability',
+            0,
+            1
+        )) ?: null;
+    }
+
+    /**
      * Asserts the invariants a finished CAT attempt must satisfy.
      *
      * The reference sequences in the provider were recorded before the estimator
@@ -406,28 +437,14 @@ final class strategy_test extends advanced_testcase {
             /* The newest valid row, not the first one the database happens to return: since the
                per-attempt results were merged in, local_catquiz_personparams keeps one row per
                estimate. get_record() would return the oldest and the trajectory would stand still. */
-            $abilityrecord = current($DB->get_records(
-                'local_catquiz_personparams',
-                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid, 'isvalid' => 1],
-                'id DESC',
-                'id, ability',
-                0,
-                1
-            )) ?: null;
+            $abilityrecord = $this->running_ability((int) $USER->id);
             $ability = $abilityrecord ? $abilityrecord->ability : ($initialability ?: 0);
 
             [$nextquestionid, $message] = catquiz_handler::fetch_question_id('1', 'mod_adaptivequiz', $attemptdata);
             /* The newest valid row, not the first one the database happens to return: since the
                per-attempt results were merged in, local_catquiz_personparams keeps one row per
                estimate. get_record() would return the oldest and the trajectory would stand still. */
-            $abilityrecord = current($DB->get_records(
-                'local_catquiz_personparams',
-                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid, 'isvalid' => 1],
-                'id DESC',
-                'id, ability',
-                0,
-                1
-            )) ?: null;
+            $abilityrecord = $this->running_ability((int) $USER->id);
             $ability = $abilityrecord ? $abilityrecord->ability : ($initialability ?: 0);
             $abilities[] = (float) $ability;
             if ($expectedquestion['label'] === 'FINISH' || $nextquestionid == 0) {
@@ -530,14 +547,7 @@ final class strategy_test extends advanced_testcase {
             /* The newest valid row, not the first one the database happens to return: since the
                per-attempt results were merged in, local_catquiz_personparams keeps one row per
                estimate. get_record() would return the oldest and the trajectory would stand still. */
-            $abilityrecord = current($DB->get_records(
-                'local_catquiz_personparams',
-                ['userid' => $USER->id, 'catscaleid' => $this->catscaleid, 'isvalid' => 1],
-                'id DESC',
-                'id, ability',
-                0,
-                1
-            )) ?: null;
+            $abilityrecord = $this->running_ability((int) $USER->id);
             $abilities[] = $abilityrecord ? (float) $abilityrecord->ability : 0.0;
 
             if ($nextquestionid == 0) {

@@ -2,6 +2,26 @@
 
 ## 1.2.1 (in Arbeit)
 
+- 2026111704: `doc/abnahme-11-164.md` ohne CatQuizLab (nicht beauftragt); Code unverändert gegenüber 2026111703.
+- CI-Nacharbeitsauftrag #11/#164 vom 17.11.2026 (2026111703):
+  - **#164 Ergebnisvertrag** (`doc/ergebnisvertrag-164.md`): Zwischenschätzungen eines laufenden Versuchs werden als
+    `validationstatus = provisional`, `isvalid = 0` mit der CAT-Versuchs-ID gespeichert – eine Zeile je Versuch und
+    Skala, im Ort aktualisiert (`personparam_repository::save_provisional()`), nur vom eigenen laufenden Versuch gelesen
+    (`get_provisional()`), bei der Finalisierung übernommen bzw. verworfen (`discard_provisional()`).
+  - **Eine Definition für Carry-over und Peer-Population** (`personparam_repository::admissible_sql()`): gültige Messung
+    (auch `not_primary`) und Referenzwert. Kein Referenzwert sind Zwischenschätzungen (neu markiert, und Altdaten:
+    `current` ohne Versuch oder ohne SE) sowie `prior`-Zeilen ohne früheren gemessenen Wert (Default-Startwert; das
+    CLARA-Muster der 10.129 Paare). Regel nur beim Lesen, **keine Datenänderung**; historisch verwaiste Endergebnisse
+    mit SE bleiben Werte.
+  - **Finalizer:** schreibt `prior` nur noch, wenn vorher ein gemessener Wert besteht, und nicht für eine Skala, die im
+    Versuch gültig gemessen, aber nicht berichtet wurde.
+  - Tests: `tests/local/result/reference_value_contract_test.php` (Vertragsmatrix PHP = SQL, laufender Versuch, RED mit
+    Altdaten, Wachstum, Prior, Legacy/Recalibration, Peer mit Midrank/Ties/Sättigung/Kontext, Carry-over = Peer);
+    `attempt_finalizer_test` (kein Default-Prior); Fixtures von fünf Tests auf finale Ergebnisse mit SE gebracht.
+    Behat: `catquiz_feedback_validity.feature` prüft Zwischenwerte im laufenden Versuch und nach gültigem/ungültigem Ende.
+  - **CI:** PHPUnit-Dev-Matrix jetzt Moodle 4.5 × PHP 8.2, 8.3 × MariaDB/PostgreSQL (4 Zellen; Moodle × PHP × MariaDB/PostgreSQL, s. Workflow); SHA-Protokoll und
+    Warten auf Host/Adapter wie bisher.
+
 - Re-Audit 17.11.2026, Betriebsabnahme (2026111702):
   - **Betreiberprüfungen BP-01 bis BP-07** als nur lesendes CLI `cli/operator_checks.php` mit dem Rückgabevertrag des
     Re-Audits (check_id, System, Zeit, Versionen und SHAs, PASS|FAIL|NOT_RUN|INCONCLUSIVE, Datensätze, Werte,
