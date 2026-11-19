@@ -112,15 +112,26 @@ $definitions = [
             ],
     ],
     // Issue #146: the runtime item pool of a CAT test - the same for everybody, without the statistics of a
-    // person. Invalidated with the items, their parameters and the scales. The usage numbers in it
-    // (answers in the CAT context, for piloting and balancing) are at most ten minutes old; changes in
-    // the question bank (a question hidden or made a draft) are taken in after the same time.
+    // person. Its key carries the revision of the pool (runtimepoolrevision): a change of items, parameters or
+    // scales sets a new revision for the pools it touches, and only those are built anew - nothing is purged. The
+    // usage numbers in it (answers in the CAT context, for piloting and balancing) are at most ten minutes old;
+    // changes in the question bank without an event (a question hidden or made a draft) are taken in after the same
+    // time.
     'runtimepool' => [
         'mode' => cache_store::MODE_APPLICATION,
         'simplekeys' => true,
         'staticacceleration' => true,
         'staticaccelerationsize' => 2,
         'ttl' => 600,
+    ],
+    // Issue #146: the revisions of the runtime pools (local_catquiz\local\pool_revision) - a few short tokens per
+    // context and root scale. The plugin's own changes set new tokens for what they touch; the events still clear
+    // them all, for whoever triggers only those.
+    'runtimepoolrevision' => [
+        'mode' => cache_store::MODE_APPLICATION,
+        'simplekeys' => true,
+        'staticacceleration' => true,
+        'staticaccelerationsize' => 64,
         'invalidationevents' => [
             'changesincatscales',
             'changesintestitems',

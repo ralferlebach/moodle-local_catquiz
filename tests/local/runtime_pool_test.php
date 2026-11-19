@@ -109,6 +109,15 @@ final class runtime_pool_test extends advanced_testcase {
     }
 
     /**
+     * The key of the pool now - with its revision (issue #146): a change gives a new key.
+     *
+     * @return string
+     */
+    private function key(): string {
+        return catscale::pool_key($this->contextid, false, $this->scaleid, []);
+    }
+
+    /**
      * The current user is shown a question - step 0 of a question attempt, as the activity writes it.
      *
      * @param \stdClass $question
@@ -254,13 +263,15 @@ final class runtime_pool_test extends advanced_testcase {
      * selected subscales, in any order.
      */
     public function test_changes_invalidate_the_pool(): void {
-        $key = catscale::pool_key($this->contextid, false, $this->scaleid, []);
         $poolcache = cache::make('local_catquiz', 'runtimepool');
         foreach (['changesintestitems', 'changesinitemparams', 'changesincatscales'] as $event) {
             $this->pool();
+            $key = $this->key();
             $this->assertNotFalse($poolcache->get($key));
+            // Issue #146: the event gives every pool a new revision - the key changes, the old pool is not read again.
             cache_helper::purge_by_event($event);
-            $this->assertFalse($poolcache->get($key), $event);
+            $this->assertNotSame($key, $this->key(), $event);
+            $this->assertFalse($poolcache->get($this->key()), $event);
         }
 
         $this->assertSame(
@@ -289,7 +300,6 @@ final class runtime_pool_test extends advanced_testcase {
      */
     public function test_question_bank_changes_invalidate_the_pool(): void {
         global $DB;
-        $key = catscale::pool_key($this->contextid, false, $this->scaleid, []);
         $poolcache = cache::make('local_catquiz', 'runtimepool');
         $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
 
@@ -305,15 +315,19 @@ final class runtime_pool_test extends advanced_testcase {
 
         // A new version of an item's question: the event names the new question, the item the old one.
         $this->pool();
+        $key = $this->key();
         $this->assertNotFalse($poolcache->get($key));
         $newversion = $generator->update_question($this->questions[1]);
         \core\event\question_created::create_from_question_instance($newversion, \context_system::instance())->trigger();
-        $this->assertFalse($poolcache->get($key), 'A new version of a CAT item.');
+        $this->assertNotSame($key, $this->key(), 'A new version of a CAT item.');
+        $this->assertFalse($poolcache->get($this->key()), 'A new version of a CAT item.');
 
         // Any other question: the pool stays.
         $this->pool();
+        $key = $this->key();
         $other = $generator->create_question('truefalse', null, ['category' => $generator->create_question_category()->id]);
         \core\event\question_updated::create_from_question_instance($other, \context_system::instance())->trigger();
+        $this->assertSame($key, $this->key(), 'Not a CAT item.');
         $this->assertNotFalse($poolcache->get($key), 'Not a CAT item.');
     }
 

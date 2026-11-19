@@ -46,6 +46,14 @@ use local_catquiz\local\itemparam_validity;
  */
 class catquiz {
     /**
+     * The peer comparisons this request computed (issue #166): read by the benchmark and the tests, which check that
+     * none runs with an answer.
+     *
+     * @var int
+     */
+    public static int $peercomparisons = 0;
+
+    /**
      * Entities constructor.
      */
     public function __construct() {
@@ -1339,23 +1347,32 @@ class catquiz {
     /**
      * Return sql to render quiz attempts.
      *
+     * Issue #175: test, course and attempt may each be a set - an attempt of any of the tests, any of the courses and
+     * any of the attempts. A set of attempts is listed in full: the number of records does not cut it.
+     *
      * @param int $numberofrecords
-     * @param int $instanceid
-     * @param int $courseid
-     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
+     * @param int|int[] $instanceid adaptivequiz.id, one or several; 0 for any.
+     * @param int|int[] $courseid One course or several; 0 for any.
+     * @param int|int[] $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not
+     *        local_catquiz_attempts.id. One or several; 0 for any.
      * @param int $userid
      * @param array|null $userids Only attempts of these people (the group rule), null for everybody.
+     * @param array|null $visibility Who may be listed, per part of the scope (issue #175), instead of $userid and
+     *        $userids: ['me' => userid, 'clauses' => [[column 'instanceid'|'courseid'|null, id|null, userids|null], ...]].
+     *        An attempt is listed when it is the viewer's own or matches a clause: the column holds the id (null: any)
+     *        and the person is among the userids (null: anyone).
      *
      * @return mixed
      *
      */
     public static function return_data_from_attemptstable(
         int $numberofrecords = 1,
-        int $instanceid = 0,
-        int $courseid = 0,
-        int $adaptiveattemptid = 0,
+        int|array $instanceid = 0,
+        int|array $courseid = 0,
+        int|array $adaptiveattemptid = 0,
         int $userid = -1,
-        ?array $userids = null
+        ?array $userids = null,
+        ?array $visibility = null
     ) {
 
         global $DB;
@@ -1366,7 +1383,8 @@ class catquiz {
             $courseid,
             $adaptiveattemptid,
             $userid,
-            $userids
+            $userids,
+            $visibility
         );
 
         $recordsarray = $DB->get_records_sql($sqlarray[0], $sqlarray[1], 0, $sqlarray[2]);
@@ -1377,20 +1395,23 @@ class catquiz {
     /**
      * Summary of return_sql_for_attemptid_contextid_json
      * @param int $numberofrecords
-     * @param int $instanceid
-     * @param int $courseid
-     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
+     * @param int|int[] $instanceid
+     * @param int|int[] $courseid
+     * @param int|int[] $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not
+     *        local_catquiz_attempts.id.
      * @param int $userid
      * @param array|null $userids Only attempts of these people, null for everybody; empty selects nothing.
+     * @param array|null $visibility See return_data_from_attemptstable().
      * @return array [sql, params, the number of rows, 0 for all]
      */
     private static function return_sql_for_attemptid_contextid_json(
         int $numberofrecords = 1,
-        int $instanceid = 0,
-        int $courseid = 0,
-        int $adaptiveattemptid = 0,
+        int|array $instanceid = 0,
+        int|array $courseid = 0,
+        int|array $adaptiveattemptid = 0,
         int $userid = -1,
-        ?array $userids = null
+        ?array $userids = null,
+        ?array $visibility = null
     ): array {
         global $DB;
 
@@ -1407,16 +1428,46 @@ class catquiz {
         $wherearray = [];
         $params = [];
 
-        if (!empty($instanceid)) {
-            $wherearray[] = ' instanceid = :instanceid ';
-            $params['instanceid'] = $instanceid;
+        // Issue #175: sets of tests, courses and attempts - OR within a set, AND between them.
+        $instanceids = \local_catquiz\local\statistics\id_list::normalise($instanceid);
+        if ($instanceids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($instanceids, SQL_PARAMS_NAMED, 'fbinst');
+            $wherearray[] = " instanceid $insql ";
+            $params += $inparams;
         }
 
-        if (!empty($courseid)) {
-            $wherearray[] = ' courseid = :courseid ';
-            $params['courseid'] = $courseid;
+        $courseids = \local_catquiz\local\statistics\id_list::normalise($courseid);
+        if ($courseids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'fbcourse');
+            $wherearray[] = " courseid $insql ";
+            $params += $inparams;
         }
-        if ($userid != -1) {
+        if ($visibility !== null) {
+            // Issue #175: the viewer's own attempts, and those of the people they may see in each part of the scope.
+            $own = ' userid = :fbme ';
+            $params['fbme'] = (int) ($visibility['me'] ?? 0);
+            $alternatives = [$own];
+            foreach ($visibility['clauses'] ?? [] as $i => [$column, $id, $users]) {
+                $parts = [];
+                if ($column !== null) {
+                    if (!in_array($column, ['instanceid', 'courseid'], true)) {
+                        throw new \coding_exception('Unknown column of a visibility clause: ' . $column);
+                    }
+                    $parts[] = "$column = :fbvis{$i}id";
+                    $params["fbvis{$i}id"] = (int) $id;
+                }
+                if ($users !== null) {
+                    if (!$users) {
+                        continue;
+                    }
+                    [$insql, $inparams] = $DB->get_in_or_equal(array_map('intval', $users), SQL_PARAMS_NAMED, "fbvis{$i}u");
+                    $parts[] = "userid $insql";
+                    $params += $inparams;
+                }
+                $alternatives[] = $parts ? '(' . implode(' AND ', $parts) . ')' : '1 = 1';
+            }
+            $wherearray[] = ' (' . implode(' OR ', $alternatives) . ') ';
+        } else if ($userid != -1) {
             $wherearray[] = ' userid = :userid ';
             $params['userid'] = $userid;
         }
@@ -1431,9 +1482,11 @@ class catquiz {
             }
         }
 
-        if ($adaptiveattemptid !== 0) {
-            $wherearray[] = ' attemptid = :attemptid ';
-            $params['attemptid'] = $adaptiveattemptid;
+        $attemptids = \local_catquiz\local\statistics\id_list::normalise($adaptiveattemptid);
+        if ($attemptids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($attemptids, SQL_PARAMS_NAMED, 'fbattempt');
+            $wherearray[] = " attemptid $insql ";
+            $params += $inparams;
         }
 
         // Only completed attempts have a result to show (issues #101, #88). The status did not tell: a
@@ -1452,6 +1505,10 @@ class catquiz {
         // We treat both INF as 0 as infinite value here, because intval(INF) is
         // converted to 0. The limit goes to the database layer, not as LIMIT into the SQL (issue #104).
         $limit = (!is_infinite($numberofrecords) && $numberofrecords > 0) ? $numberofrecords : 0;
+        if ($attemptids) {
+            // Issue #175: attempts asked for by their ids are listed in full; the number of records does not cut them.
+            $limit = 0;
+        }
 
         return [$sql, $params, $limit];
     }
@@ -2455,6 +2512,7 @@ class catquiz {
         int $excludeuserid
     ): \stdClass {
         global $DB;
+        self::$peercomparisons++;
         // Compare at the stored precision (4 decimals) so ties are detected.
         $score = round($score, 4);
         // Issue #15 + #10: only valid results count as peers. Invalid results
@@ -2850,15 +2908,35 @@ class catquiz {
         unset($attemptdata['progress']);
         $data->json = json_encode($attemptdata);
 
-        // Ensure there is only one row per attempt.
-        $existingrecord = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attemptdata['attemptid']]);
+        // Ensure there is only one row per attempt. Issue #168: the id and the end time only - the stored data and the
+        // debug information grow with every answer, and were read back whole before every write.
+        $existingrecord = $DB->get_record(
+            'local_catquiz_attempts',
+            ['attemptid' => $attemptdata['attemptid']],
+            'id, endtime'
+        );
         if ($existingrecord) {
-            // The enrolment message written at finalisation (issue #129) belongs to the attempt, not to
-            // the feedback data being saved; a save after finalisation must not drop it.
-            $previous = json_decode((string) ($existingrecord->json ?? ''), true);
-            if (is_array($previous) && isset($previous['enrolmentmessage']) && !isset($attemptdata['enrolmentmessage'])) {
-                $attemptdata['enrolmentmessage'] = $previous['enrolmentmessage'];
-                $data->json = json_encode($attemptdata);
+            if (!empty($existingrecord->endtime)) {
+                // What the end of the attempt added belongs to the attempt, not to the feedback data being saved; a save
+                // after finalisation must not drop it: the enrolment message (issue #129), the comparison (issue #166).
+                $previous = json_decode(
+                    (string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $existingrecord->id]),
+                    true
+                );
+                $keep = array_merge(
+                    ['enrolmentmessage'],
+                    \local_catquiz\teststrategy\feedbackgenerator\comparetotestaverage::PEER_KEYS
+                );
+                $kept = false;
+                foreach ($keep as $key) {
+                    if (is_array($previous) && array_key_exists($key, $previous) && !array_key_exists($key, $attemptdata)) {
+                        $attemptdata[$key] = $previous[$key];
+                        $kept = true;
+                    }
+                }
+                if ($kept) {
+                    $data->json = json_encode($attemptdata);
+                }
             }
             $data->id = $existingrecord->id;
             // Preserve the original creation time and never touch the
@@ -3748,6 +3826,8 @@ class catquiz {
      * @param ?int $starttime
      * @param ?int $endtime
      * @param bool $enrolled
+     * @param \local_catquiz\local\statistics\attempt_population|null $population The attempts of a statistics: with it,
+     *        scale, course, test and period come from the population (issue #175) and the other filters are unused.
      *
      * @return array
      */
@@ -3758,8 +3838,34 @@ class catquiz {
         ?int $testid,
         ?int $starttime,
         ?int $endtime,
-        bool $enrolled = true
+        bool $enrolled = true,
+        ?\local_catquiz\local\statistics\attempt_population $population = null
     ): array {
+        if ($population !== null) {
+            // Issue #175: the attempts of a statistics population - the charts' attempts, sets of courses and tests,
+            // first or last attempts. Course and test of a row decide whose group rule applies.
+            [$where, $params] = $population->where('a', 'csvx');
+            $sql = "SELECT a.attemptid,
+                a.userid,
+                u.username,
+                u.firstname,
+                u.lastname,
+                u.email,
+                a.starttime,
+                a.endtime,
+                a.teststrategy,
+                a.status,
+                a.number_of_testitems_used,
+                a.personability_after_attempt,
+                a.json,
+                a.courseid,
+                a.instanceid
+                FROM {local_catquiz_attempts} a
+                JOIN {user} u ON a.userid = u.id
+                WHERE $where
+                ORDER BY a.attemptid DESC, a.id DESC";
+            return [$sql, $params];
+        }
         $params = [
             'scaleid' => $scaleid,
             'courseid' => $courseid,
@@ -4191,8 +4297,11 @@ SQL;
         } catch (\Throwable $e) {
             $transaction->rollback($e);
         }
-        \cache_helper::purge_by_event('changesintestitems');
-        \cache_helper::purge_by_event('changesinitemparams');
+        // Issue #146: the pools of the new context (and of the old one), no others.
+        \local_catquiz\local\pool_revision::purge_others('changesintestitems');
+        \local_catquiz\local\pool_revision::purge_others('changesinitemparams');
+        \local_catquiz\local\pool_revision::context_changed($newcontextid);
+        \local_catquiz\local\pool_revision::context_changed((int) $oldcontextid);
     }
 
     /**

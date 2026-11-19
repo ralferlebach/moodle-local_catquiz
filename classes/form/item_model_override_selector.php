@@ -519,6 +519,12 @@ class item_model_override_selector extends dynamic_form {
             ],
         ]);
         $event->trigger();
-        cache_helper::purge_by_event('changesintestitems');
+        // Issue #146: the pools of the item's scales in the context of the parameter, no others.
+        \local_catquiz\local\pool_revision::purge_others('changesintestitems');
+        if ($param->get_contextid()) {
+            \local_catquiz\local\pool_revision::params_of_items_changed((int) $param->get_contextid(), [$param->get_itemid()]);
+        } else {
+            \local_catquiz\local\pool_revision::all_changed();
+        }
     }
 }

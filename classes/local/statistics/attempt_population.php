@@ -30,10 +30,13 @@ use local_catquiz\local\result\scale_result;
  *   none. The status column is no criterion - a running attempt is saved with status "OK" after every
  *   answer, and the stop reasons share their numbers with the attempt states,
  * - it lies in the scope: course, test (adaptivequiz.id), CAT context, and a period of end times with
- *   both bounds included (starttime <= endtime <= endtime of the period),
+ *   both bounds included (starttime <= endtime <= endtime of the period). Course and test may each be a set
+ *   (issue #175): an attempt in any of the courses and any of the tests - OR within a set, AND between them,
+ *   so an attempt counts once however the sets overlap,
  * - optionally, it is the first or the last completed attempt of its person in the scope. First and
  *   last are decided over the whole history of the scope, the period filters afterwards: a person whose
- *   first attempt lies before the period has no first attempt in it.
+ *   first attempt lies before the period has no first attempt in it. With several tests or courses, the
+ *   scope is all of them: one first and one last attempt per person over the set, not per test (issue #175).
  *
  * A completed attempt without an answer (aborted) belongs to the population: it took place. It has no
  * result. The result of an attempt for a scale is the value stored at finalisation
@@ -80,11 +83,11 @@ final class attempt_population {
     /** @var int The root scale of the requested one: attempts are selected by it. */
     private int $rootscaleid;
 
-    /** @var int|null */
-    private ?int $courseid;
+    /** @var int[]|null Courses, null for every course (issue #175: one or several). */
+    private ?array $courseids;
 
-    /** @var int|null adaptivequiz.id */
-    private ?int $testid;
+    /** @var int[]|null Tests, adaptivequiz.id; null for every test of the scale (issue #175: one or several). */
+    private ?array $testids;
 
     /** @var int|null */
     private ?int $contextid;
@@ -105,8 +108,8 @@ final class attempt_population {
      * Constructor.
      *
      * @param int $scaleid The requested scale; a subscale selects through its root scale.
-     * @param int|null $courseid
-     * @param int|null $testid adaptivequiz.id
+     * @param int|int[]|null $courseid One course or several (issue #175: OR within the set); null or 0 for every one.
+     * @param int|int[]|null $testid One test or several, adaptivequiz.id; null or 0 for every test of the scale.
      * @param int|null $contextid CAT context, or null for every context of the scale.
      * @param int|null $starttime Lower bound of the end time (included), or null.
      * @param int|null $endtime Upper bound of the end time (included), or null.
@@ -114,8 +117,8 @@ final class attempt_population {
      */
     public function __construct(
         int $scaleid,
-        ?int $courseid = null,
-        ?int $testid = null,
+        int|array|null $courseid = null,
+        int|array|null $testid = null,
         ?int $contextid = null,
         ?int $starttime = null,
         ?int $endtime = null,
@@ -126,8 +129,8 @@ final class attempt_population {
         }
         $this->scaleid = $scaleid;
         $this->rootscaleid = self::root_of($scaleid);
-        $this->courseid = $courseid ?: null;
-        $this->testid = $testid ?: null;
+        $this->courseids = id_list::normalise($courseid);
+        $this->testids = id_list::normalise($testid);
         $this->contextid = $contextid ?: null;
         $this->starttime = $starttime;
         $this->endtime = $endtime;
@@ -176,6 +179,24 @@ final class attempt_population {
      */
     public function get_rootscaleid(): int {
         return $this->rootscaleid;
+    }
+
+    /**
+     * The courses of the scope, null for every course (issue #175).
+     *
+     * @return int[]|null
+     */
+    public function get_courseids(): ?array {
+        return $this->courseids;
+    }
+
+    /**
+     * The tests of the scope (adaptivequiz.id), null for every test of the scale (issue #175).
+     *
+     * @return int[]|null
+     */
+    public function get_testids(): ?array {
+        return $this->testids;
     }
 
     /**
@@ -235,15 +256,19 @@ final class attempt_population {
      * @return array [sql, params]
      */
     private function scope_where(string $alias, string $prefix, bool $withperiod): array {
+        global $DB;
         $sql = "$alias.scaleid = :{$prefix}root AND " . self::completed_sql($alias);
         $params = [$prefix . 'root' => $this->rootscaleid];
-        if ($this->courseid) {
-            $sql .= " AND $alias.courseid = :{$prefix}course";
-            $params[$prefix . 'course'] = $this->courseid;
+        // Issue #175: a set of courses and a set of tests - OR within a set, AND between them.
+        if ($this->courseids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($this->courseids, SQL_PARAMS_NAMED, $prefix . 'course');
+            $sql .= " AND $alias.courseid $insql";
+            $params += $inparams;
         }
-        if ($this->testid) {
-            $sql .= " AND $alias.instanceid = :{$prefix}test";
-            $params[$prefix . 'test'] = $this->testid;
+        if ($this->testids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($this->testids, SQL_PARAMS_NAMED, $prefix . 'test');
+            $sql .= " AND $alias.instanceid $insql";
+            $params += $inparams;
         }
         if ($this->contextid) {
             $sql .= " AND $alias.contextid = :{$prefix}context";

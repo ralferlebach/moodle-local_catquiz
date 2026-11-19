@@ -50,6 +50,21 @@ final class attempt_debug_export {
     ];
 
     /**
+     * The fields of the activity's attempt the export shows (issue #173): how the host ended it and what it recorded
+     * as the result - read from the database, never from the stored data of the CAT attempt.
+     */
+    public const HOST_FIELDS = [
+        'id', 'instance', 'userid', 'attemptstate', 'attemptstopcriteria', 'stopcode', 'questionsattempted',
+        'timefinished', 'resultstatus', 'resultvalid', 'resultreason', 'resultscore', 'resulttime', 'timemodified',
+    ];
+
+    /**
+     * The version of the export (issue #173). Exports without it - before local_catquiz 1.3 2026111707 / 1.2 2026111706 -
+     * did not check that the attempt and the person belong together and are not reliable.
+     */
+    public const SCHEMA = 2;
+
+    /**
      * Collects the export of an attempt of the component.
      *
      * @param int $hostattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
@@ -95,10 +110,21 @@ final class attempt_debug_export {
             $lifecycle[$field] = $catattempt->$field ?? null;
         }
 
+        // Issue #173: the end and the result as the host recorded them - the authoritative row, its own fields.
+        $hostcolumns = $DB->get_columns('adaptivequiz_attempt');
+        $hostfields = array_values(array_filter(self::HOST_FIELDS, fn($field) => isset($hostcolumns[$field])));
+        $hostrow = $DB->get_record('adaptivequiz_attempt', ['id' => $hostattemptid], implode(', ', $hostfields), MUST_EXIST);
+        $host = [];
+        foreach (self::HOST_FIELDS as $field) {
+            $host[$field] = isset($hostcolumns[$field]) ? ($hostrow->$field ?? null) : null;
+        }
+
         return (object) [
             'hostattemptid' => $hostattemptid,
             'catattemptid' => $catattemptid,
             'lifecycle' => $lifecycle,
+            'host' => $host,
+            'schema' => self::SCHEMA,
             'snapshot' => self::decode($catattempt->json ?? null),
             'snapshottime' => (int) $catattempt->timemodified,
             'debuginfo' => self::decode($catattempt->debug_info ?? null),
@@ -124,9 +150,21 @@ final class attempt_debug_export {
         foreach ($data->lifecycle as $field => $value) {
             $rows .= '<tr><td>' . s($field) . '</td><td>' . ($value === null ? '-' : s((string) $value)) . '</td></tr>';
         }
+        // Issue #173: the end and the result as the host recorded them, beside the CAT attempt.
+        $hostrows = '';
+        foreach ($data->host ?? [] as $field => $value) {
+            $shown = $value === null ? '-' : s((string) $value);
+            if (in_array($field, ['timefinished', 'resulttime', 'timemodified'], true) && !empty($value)) {
+                $shown .= ' (' . s(userdate((int) $value, '%Y-%m-%d %H:%M:%S')) . ')';
+            }
+            $hostrows .= '<tr><td>' . s($field) . '</td><td>' . $shown . '</td></tr>';
+        }
         $pages[get_string('debugexport:lifecycle', 'local_catquiz', $a)] =
             '<p>' . s(get_string('debugexport:ids', 'local_catquiz', $a)) . '</p>'
-            . '<table border="1" cellpadding="2">' . $rows . '</table>';
+            . '<p>' . s(get_string('debugexport:schema', 'local_catquiz', (int) ($data->schema ?? self::SCHEMA))) . '</p>'
+            . '<table border="1" cellpadding="2">' . $rows . '</table>'
+            . '<p>' . s(get_string('debugexport:host', 'local_catquiz', $a)) . '</p>'
+            . '<table border="1" cellpadding="2">' . $hostrows . '</table>';
 
         $pages[get_string('debugexport:debuginfo', 'local_catquiz', $a)] = self::dump($data->debuginfo);
 

@@ -237,7 +237,55 @@ final class cold_warm_selection_test extends advanced_testcase {
         return [
             'FASTEST' => [LOCAL_CATQUIZ_STRATEGY_FASTEST],
             'CLASSIC' => [LOCAL_CATQUIZ_STRATEGY_CLASSIC],
+            // Issue #162: the strategies of the subscales, with B(i,s)^n_s and the penalty of HIGHESTSUB.
+            'HIGHESTSUB' => [LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB],
+            'LOWESTSUB' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB],
+            'RELSUBS' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS],
         ];
+    }
+
+    /**
+     * The questions of a run by their labels (idnumber of the question bank entry): the same on every database.
+     *
+     * @param int[] $ids
+     * @return string[]
+     */
+    private static function labels(array $ids): array {
+        global $DB;
+        $labels = [];
+        foreach ($ids as $id) {
+            $labels[] = (string) $DB->get_field_sql(
+                'SELECT qbe.idnumber FROM {question_bank_entries} qbe
+                   JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
+                  WHERE qv.questionid = ?',
+                [$id]
+            );
+        }
+        return $labels;
+    }
+
+    /**
+     * Golden item sequences (issue #162, re-audit 18.11.2026): the questions each strategy selects for the fixed answer
+     * pattern on the simulation pool - recorded once in tests/fixtures/golden_sequences.json, compared by label.
+     * A change of the selection shows here, with the new sequence in the message.
+     *
+     * @dataProvider strategies
+     * @param int $strategy
+     */
+    public function test_golden_sequences(int $strategy): void {
+        $this->settings($strategy);
+        [$ids, $status] = $this->play(false);
+        $labels = self::labels($ids);
+        $file = __DIR__ . '/../fixtures/golden_sequences.json';
+        $golden = json_decode((string) file_get_contents($file), true) ?: [];
+        if (getenv('CATQUIZ_WRITE_GOLDEN')) {
+            $golden[(string) $strategy] = ['labels' => $labels, 'status' => $status];
+            ksort($golden);
+            file_put_contents($file, json_encode($golden, JSON_PRETTY_PRINT) . "\n");
+        }
+        $this->assertArrayHasKey((string) $strategy, $golden, 'No golden sequence: ' . json_encode($labels));
+        $this->assertSame($golden[(string) $strategy]['labels'], $labels, 'Sequence: ' . json_encode($labels));
+        $this->assertSame($golden[(string) $strategy]['status'], $status);
     }
 
     /**

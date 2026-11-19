@@ -472,8 +472,8 @@ abstract class strategy {
      * The runtime pool is cached and leaves out what the question bank hides - but the bank can hide a
      * question without any event (question_delete_question() on a question in use only sets the status), so
      * a cached pool may still hold it. One query for the question at hand closes that gap. When it is out,
-     * every candidate is checked in one go and the unavailable ones are dropped, and the pool is invalidated,
-     * so the next request reads it anew.
+     * every candidate is checked in one go and the unavailable ones are dropped, and the pools holding them get a
+     * new revision, so the next request reads them anew (issue #146: those pools only).
      *
      * @param \stdClass $question
      * @return bool
@@ -484,10 +484,13 @@ abstract class strategy {
         }
         $candidates = array_keys($this->context['questions'] ?? []);
         $candidates[] = (int) $question->id;
-        foreach (catscale::unavailable_question_ids($candidates) as $questionid) {
+        $unavailable = catscale::unavailable_question_ids($candidates);
+        foreach ($unavailable as $questionid) {
             unset($this->context['questions'][$questionid]);
         }
-        \cache_helper::purge_by_event('changesintestitems');
+        // Issue #146: a new revision for the pools of the scales of these questions - no purge of all pools in the
+        // middle of an attempt.
+        \local_catquiz\local\pool_revision::questions_changed($unavailable);
         return false;
     }
 

@@ -1543,6 +1543,13 @@ class progress implements JsonSerializable {
      * @return self
      */
     public function set_ability(float $ability, int $catscaleid): self {
+        /* Issue #174: a non-finite estimate is no estimate. Stored, it broke the JSON of the whole progress -
+           json_encode() fails on INF and NAN, and the next save wrote no progress at all. It is not written: the
+           previous value stays, as updatepersonability does it since #106, and a missing one stays missing, which
+           the result validator reports as such. */
+        if (!is_finite($ability)) {
+            return $this;
+        }
         // The empty array initialisation used to be pointless - the very
         // next line replaced it with a scalar, so abilities only ever held the last
         // estimate per scale and no trajectory could be reconstructed.

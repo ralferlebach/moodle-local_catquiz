@@ -69,6 +69,8 @@ final class personparam_readers_test extends \advanced_testcase {
         'classes/privacy/provider.php' => [self::ALL],
         'classes/teststrategy/context/loader/personability_loader.php' => [self::VALUE],
         'classes/teststrategy/feedbackgenerator/comparetotestaverage.php' => [self::VALUE],
+        // Issue #161: deletes the rows of the attempts of its own benchmark test before a run.
+        'cli/benchmark_attempts.php' => [self::WRITER],
         'cli/measure_attempt.php' => [self::WRITER],
         'db/upgrade.php' => [self::SCHEMA],
         'db/upgradelib.php' => [self::SCHEMA],

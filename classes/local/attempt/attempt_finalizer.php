@@ -236,6 +236,13 @@ final class attempt_finalizer {
         // second finalize() return early, so an attempt is announced once.
         self::announce_completion($catattempt, $adaptiveattemptid, $finishedat, $result->is_valid());
 
+        // Issue #166: the comparison with the other people of the test, once, with the result - not with every answer.
+        try {
+            \local_catquiz\output\attemptfeedback::peer_comparison_of($adaptiveattemptid, true);
+        } catch (\Throwable $e) {
+            debugging('Comparison with the other people of the test failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
         // Issue #129: enrolment on every way a test ends, once - not when the result page is built,
         // which may never happen. Only scales that route (valid, measured, selected) enrol anyone;
         // an invalid result enrols nobody.

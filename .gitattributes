@@ -10,6 +10,7 @@
 /erpnext.yml              export-ignore
 # Werkzeuge fuer Betrieb und Support werden ausgeliefert (u. a. cli/revalidate_attempts.php,
 # cli/export_trace.php, cli/diagnose_*.php). Nur Entwicklungs-, Last- und Experimentskripte nicht.
+/cli/benchmark_attempts.php        export-ignore
 /cli/compare_runs.php              export-ignore
 /cli/compare_versions.php          export-ignore
 /cli/edgecase_emit_fixtures.php    export-ignore
@@ -21,6 +22,7 @@
 /cli/measure_ability_fit.php       export-ignore
 /cli/measure_attempt.php           export-ignore
 /cli/measure_feedback_cache.php    export-ignore
+/cli/measure_pool_invalidation.php export-ignore
 /cli/measure_runtime_pool.php      export-ignore
 /cli/measure_screens.php           export-ignore
 /cli/measure_session_pool.php      export-ignore

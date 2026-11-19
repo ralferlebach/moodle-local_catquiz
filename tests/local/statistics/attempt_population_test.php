@@ -504,9 +504,9 @@ final class attempt_population_test extends advanced_testcase {
         $method->setAccessible(true);
         $cm = get_coursemodule_from_instance('adaptivequiz', $this->quizid);
 
-        // The matching course is no conflict.
+        // The matching course is no conflict. Issue #175: one block per root scale, with sets of IDs.
         $result = $method->invoke(null, ['testid' => $cm->id, 'course' => $this->course->id]);
-        $this->assertSame((int) $this->course->id, (int) $result['course']);
+        $this->assertSame([(int) $this->course->id], $result[0]['courseids']);
         try {
             $method->invoke(null, ['testid' => $cm->id, 'course' => $this->course->id + 1000]);
             $this->fail('Another course is a conflict.');
@@ -516,10 +516,10 @@ final class attempt_population_test extends advanced_testcase {
 
         // Scope "all" leaves the course out; without it, the course stays.
         $COURSE = $this->course;
-        $this->assertNull($method->invoke(null, ['globalscale' => $this->root, 'scope' => 'all'])['course']);
+        $this->assertNull($method->invoke(null, ['globalscale' => $this->root, 'scope' => 'all'])[0]['courseids']);
         $this->assertSame(
-            (int) $this->course->id,
-            (int) $method->invoke(null, ['globalscale' => $this->root])['course']
+            [(int) $this->course->id],
+            $method->invoke(null, ['globalscale' => $this->root])[0]['courseids']
         );
     }
 

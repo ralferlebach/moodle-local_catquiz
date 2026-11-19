@@ -81,21 +81,45 @@ Shortcodes can be added in any text area and label via editor, e.g. in the cours
 
 1. To display feedbacks of the past quiz attempts use [catquizfeedback].
 
-Additionally, the following parameter can be added, like e.g. [catquizfeedback numberofattempts=3]
+Additionally, the following parameters can be added, like e.g. [catquizfeedback numberofattempts=3]
 
     * numberofattempts=3 // Defined the number of feedbacks displayed in collapsables. Starting with the newest.
+    * courseid=12,13     // Only attempts in these courses (one ID or several, separated by commas).
+    * instanceid=4,5     // Only attempts of these CAT tests: the instance id (adaptivequiz.id), not the course module id.
+    * attemptid=81,82    // Only these attempts (ids of the activity's attempts). Listed in full: numberofattempts
+                         // does not cut a list of attempts.
+
+Participants see their own attempts; teachers additionally the attempts of the people they may see in each course or
+test of the list (in separate groups: their groups).
 
 2. To display an overview table of all scales use [catscalesoverview].
 
 3. To display statistics for a group of attempts, use [catquizstatistics]
 
-Also, the following parameters can be defined, like e.g. [catquizfeedback testid=73 starttime=1723569996]:
+Also, the following parameters can be defined, like e.g. [catquizstatistics testid=73,74 starttime=1723569996]:
 
-    * globalscale // Display only attempts for this scale.
-    * testid      // Display only attempts of the given test.
-    * courseid    // Display only attempts of tests in the given course.
-    * starttime   // Display only attempts that were started after this timestamp. Should be a unix timestamp.
-    * endtime     // Display only attempts that were started before this timestamp. Should be a unix timestamp.
+    * testid      // Only attempts of these tests: the course module id (cmid) as in the address of the test,
+                  // view.php?id=73 - one or several, separated by commas.
+    * courseid    // Only attempts of tests in these courses (also: course). One or several, separated by commas.
+    * globalscale // The scales of the statistics. One or several, separated by commas.
+    * attempts    // all (default), first or last: the first or last completed attempt of each person in the whole
+                  // selection - over all tests and courses of the lists, not per test.
+    * scope=all   // Without a test: every course, not only the current one.
+    * starttime   // Display only attempts completed at or after this timestamp. Should be a unix timestamp.
+    * endtime     // Display only attempts completed at or before this timestamp. Should be a unix timestamp.
+
+Lists (issue #175): within one parameter the IDs are alternatives (an attempt of any of the tests), between parameters
+they narrow the selection (an attempt of one of the tests and in one of the courses) - an attempt counts once, however
+the lists overlap. Whitespace around an ID is ignored, a repeated ID counts once; anything that is no ID (12a, -3, 1.5,
+an empty entry as in 12,,13) is refused with the entry named - nothing is cut to a number. At most 100 IDs per
+parameter. Write a list with spaces in quotes (testid="73, 74") or without spaces (testid=73,74).
+
+Root scales are never mixed: every root scale of the selection gets its own block with its own charts and export.
+With tests and globalscale, globalscale names the root scales of the tests, and every test has to be covered; with
+tests and courses, every test has to lie in one of the courses. The charts loaded with a tab, the CSV export and a
+second shortcode on the same page use exactly the same selection. The statistics show other people's results: the
+viewer needs the right to see them in every test or course of the selection - one without it shows nothing at all.
+Details: doc/shortcode-id-lists.md.
 
 ## Installing via uploaded ZIP file ##
 

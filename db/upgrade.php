@@ -1596,6 +1596,14 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026102407, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026111706) {
+        /* Issue #166: the comparison with the other people of a test is computed when an attempt ends, no longer with
+           every answer. An attempt that ended before keeps the comparison of its last answer, or none: nothing is
+           computed for it afterwards (issue #159: no result made up after the fact). No data change. */
+        set_config('peercomparisonatendsince', time(), 'local_catquiz');
+        upgrade_plugin_savepoint(true, 2026111706, 'local', 'catquiz');
+    }
+
     return true;
 }
 

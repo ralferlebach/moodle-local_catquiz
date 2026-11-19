@@ -18,12 +18,14 @@ namespace local_catquiz\external;
 
 use core_external\external_api;
 use core_external\external_function_parameters;
+use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_catquiz\catquiz;
 use local_catquiz\local\access\context_resolver;
 use local_catquiz\local\access\feedback_access;
 use local_catquiz\local\statistics\attempt_population;
+use local_catquiz\local\statistics\id_list;
 use local_catquiz\output\catquizstatistics;
 use local_catquiz\shortcodes;
 
@@ -34,6 +36,10 @@ use local_catquiz\shortcodes;
  * viewer needs to see other users' results in the context of the scope (feedback_access with
  * context_resolver::for_statistics). The scope of a test is the test's own: its course and scale.
  * Read only and without the session lock - the charts of one page load side by side.
+ *
+ * Issue #175: the scope may hold several courses and tests (courseids, testids; courseid and testid stay for one).
+ * The request comes from the browser: every test is checked against the scale and the courses, and the viewer
+ * needs the right in every test or course of the scope - one without it refuses the chart.
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -50,6 +56,18 @@ class render_statistics_chart extends external_api {
             'scope' => new external_single_structure([
                 'courseid' => new external_value(PARAM_INT, 'Course, 0 for every course', VALUE_DEFAULT, 0),
                 'testid' => new external_value(PARAM_INT, 'Test: adaptivequiz.id, 0 for every test', VALUE_DEFAULT, 0),
+                'courseids' => new external_multiple_structure(
+                    new external_value(PARAM_INT, 'Course'),
+                    'Courses (issue #175), with courseid',
+                    VALUE_DEFAULT,
+                    []
+                ),
+                'testids' => new external_multiple_structure(
+                    new external_value(PARAM_INT, 'Test: adaptivequiz.id'),
+                    'Tests (issue #175), with testid',
+                    VALUE_DEFAULT,
+                    []
+                ),
                 'scaleid' => new external_value(PARAM_INT, 'Scale'),
                 'starttime' => new external_value(PARAM_INT, 'Lower bound of the end time, 0 for none', VALUE_DEFAULT, 0),
                 'endtime' => new external_value(PARAM_INT, 'Upper bound of the end time, 0 for now', VALUE_DEFAULT, 0),
@@ -67,7 +85,7 @@ class render_statistics_chart extends external_api {
      * @return array
      */
     public static function execute(array $scope, string $chart): array {
-        global $OUTPUT, $PAGE;
+        global $DB, $OUTPUT, $PAGE;
 
         ['scope' => $scope, 'chart' => $chart] = self::validate_parameters(
             self::execute_parameters(),
@@ -80,37 +98,75 @@ class render_statistics_chart extends external_api {
             throw new \invalid_parameter_exception('attempts');
         }
 
-        $courseid = $scope['courseid'] ?: null;
-        $testid = $scope['testid'] ?: null;
+        try {
+            $courseids = id_list::parse(
+                array_merge($scope['courseid'] ? [$scope['courseid']] : [], $scope['courseids']),
+                'courseids'
+            );
+            $testids = id_list::parse(array_merge($scope['testid'] ? [$scope['testid']] : [], $scope['testids']), 'testids');
+        } catch (\moodle_exception $e) {
+            throw new \invalid_parameter_exception($e->getMessage());
+        }
         $scaleid = (int) $scope['scaleid'];
-        if ($testid) {
+        if ($testids) {
             // A test brings its course and scale; anything else would mix scopes the page never showed.
-            $test = catquiz::get_test_by_component_id($testid);
-            if (!$test) {
-                throw new \invalid_parameter_exception('testid');
+            $tests = [];
+            foreach ($DB->get_records_list('local_catquiz_tests', 'componentid', $testids) as $record) {
+                if (isset($tests[(int) $record->componentid])) {
+                    throw new \invalid_parameter_exception('testids');
+                }
+                $tests[(int) $record->componentid] = $record;
             }
-            if ($courseid && (int) $courseid !== (int) $test->courseid) {
-                throw new \invalid_parameter_exception('courseid');
+            $root = attempt_population::root_of($scaleid);
+            $coursesoftests = [];
+            foreach ($testids as $testid) {
+                $test = $tests[$testid] ?? null;
+                if (!$test) {
+                    throw new \invalid_parameter_exception('testid');
+                }
+                if ($courseids && !in_array((int) $test->courseid, $courseids, true)) {
+                    throw new \invalid_parameter_exception('courseid');
+                }
+                if ($root !== (int) $test->catscaleid) {
+                    throw new \invalid_parameter_exception('scaleid');
+                }
+                $coursesoftests[(int) $test->courseid] = (int) $test->courseid;
             }
-            $courseid = (int) $test->courseid;
-            if (attempt_population::root_of($scaleid) !== (int) $test->catscaleid) {
-                throw new \invalid_parameter_exception('scaleid');
-            }
+            $courseids = id_list::normalise(array_values($coursesoftests));
         }
+        $courseids = id_list::normalise($courseids);
+        $testids = id_list::normalise($testids);
 
-        $context = context_resolver::for_statistics($courseid, $testid);
+        $contexts = context_resolver::for_statistics_scope($courseids, $testids);
+        $context = reset($contexts);
         // Logged in to the course, not the activity: a hidden test still has its statistics for those who
-        // may see them, as on the page with the shortcode.
-        $logincontext = $context->get_course_context(false) ?: \context_system::instance();
+        // may see them, as on the page with the shortcode. Several courses: the site.
+        $logincontext = count($contexts) === 1 ? ($context->get_course_context(false) ?: \context_system::instance())
+            : \context_system::instance();
         self::validate_context($logincontext);
-        if (!feedback_access::can_view_other_users($context)) {
-            throw new \required_capability_exception($context, 'local/catquiz:view_users_feedback', 'nopermissions', '');
+        if (count($contexts) > 1) {
+            // Several courses: logged in to the site, and each course has to be one the viewer may enter.
+            foreach ($courseids ?? [] as $courseid) {
+                if (!can_access_course(get_course($courseid))) {
+                    throw new \require_login_exception('Course ' . $courseid);
+                }
+            }
         }
-        $PAGE->set_context($context);
+        foreach ($contexts as $scopecontext) {
+            if (!feedback_access::can_view_other_users($scopecontext)) {
+                throw new \required_capability_exception(
+                    $scopecontext,
+                    'local/catquiz:view_users_feedback',
+                    'nopermissions',
+                    ''
+                );
+            }
+        }
+        $PAGE->set_context(count($contexts) === 1 ? $context : \context_system::instance());
 
         $statistics = new catquizstatistics(
-            $courseid,
-            $testid,
+            $courseids,
+            $testids,
             $scaleid,
             $scope['endtime'] ?: null,
             $scope['starttime'] ?: null,

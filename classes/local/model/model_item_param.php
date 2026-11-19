@@ -265,6 +265,15 @@ class model_item_param {
     }
 
     /**
+     * The CAT context of the parameters, if set.
+     *
+     * @return int|null
+     */
+    public function get_contextid(): ?int {
+        return $this->contextid;
+    }
+
+    /**
      * Returns the component ID (e.g. question id).
      *
      * @return string
@@ -402,7 +411,13 @@ class model_item_param {
         } else {
             $this->id = catquiz::save_item_param($record);
         }
-        cache_helper::purge_by_event('changesintestitems');
+        // Issue #146: the pools of the item's scales in this context, no others.
+        \local_catquiz\local\pool_revision::purge_others('changesintestitems');
+        if ($this->contextid) {
+            \local_catquiz\local\pool_revision::params_of_items_changed((int) $this->contextid, [(int) $this->itemid]);
+        } else {
+            \local_catquiz\local\pool_revision::all_changed();
+        }
         return $this;
     }
 
