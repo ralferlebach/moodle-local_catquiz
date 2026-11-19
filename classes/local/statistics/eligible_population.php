@@ -49,15 +49,17 @@ final class eligible_population {
      * The people who could take a test of the scale in the scope.
      *
      * @param int $scaleid The scale; a subscale stands for its root scale.
-     * @param int|null $courseid Only tests in this course, or null for all courses.
-     * @param int|null $testid Only this test (adaptivequiz.id), or null for all tests of the scale.
+     * @param int|int[]|null $courseid Only tests in this course or these courses (issue #175), or null for all.
+     * @param int|int[]|null $testid Only this test or these tests (adaptivequiz.id), or null for all tests of the scale.
      * @return int[] User ids, sorted.
      */
-    public static function userids(int $scaleid, ?int $courseid, ?int $testid): array {
-        $key = implode('/', [$scaleid, (int) $courseid, (int) $testid]);
+    public static function userids(int $scaleid, int|array|null $courseid, int|array|null $testid): array {
+        $courseids = id_list::normalise($courseid);
+        $testids = id_list::normalise($testid);
+        $key = implode('/', [$scaleid, id_list::to_string($courseids), id_list::to_string($testids)]);
         if (!array_key_exists($key, self::$cache)) {
             $users = [];
-            foreach (self::instances($scaleid, $courseid, $testid) as $instanceid) {
+            foreach (self::instances($scaleid, $courseids, $testids) as $instanceid) {
                 $users += array_flip(self::for_instance($instanceid));
             }
             $users = array_keys($users);
@@ -78,11 +80,11 @@ final class eligible_population {
      * The test instances of the scale in the scope.
      *
      * @param int $scaleid
-     * @param int|null $courseid
-     * @param int|null $testid
+     * @param int[]|null $courseids
+     * @param int[]|null $testids
      * @return int[] adaptivequiz ids
      */
-    private static function instances(int $scaleid, ?int $courseid, ?int $testid): array {
+    private static function instances(int $scaleid, ?array $courseids, ?array $testids): array {
         global $DB;
 
         $parentid = $DB->get_field('local_catquiz_catscales', 'parentid', ['id' => $scaleid]);
@@ -90,13 +92,15 @@ final class eligible_population {
 
         $where = "t.component = :component AND t.componentid > 0 AND t.catscaleid = :rootid";
         $params = ['component' => 'mod_adaptivequiz', 'rootid' => $rootid];
-        if ($courseid) {
-            $where .= ' AND q.course = :courseid';
-            $params['courseid'] = $courseid;
+        if ($courseids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'epc');
+            $where .= " AND q.course $insql";
+            $params += $inparams;
         }
-        if ($testid) {
-            $where .= ' AND t.componentid = :testid';
-            $params['testid'] = $testid;
+        if ($testids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($testids, SQL_PARAMS_NAMED, 'ept');
+            $where .= " AND t.componentid $insql";
+            $params += $inparams;
         }
         // Joined with the activity: a test whose activity was deleted has nobody who could take it.
         return array_map('intval', $DB->get_fieldset_sql(

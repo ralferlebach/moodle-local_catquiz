@@ -138,4 +138,57 @@ final class personparam_latest_batch_test extends advanced_testcase {
         }
         $this->assertSame($queries[1], $queries[80], 'The queries do not grow with the scales.');
     }
+
+    /**
+     * Golden (issue #165, re-audit 18.11.2026): per scale exactly the admissible row the rule of #164 names - the
+     * highest id, also between rows of the same time; no intermediate estimate, nothing of another person or context,
+     * no default prior; a legacy value counts; and the batch gives what the single query gives.
+     */
+    public function test_golden_admissible_rows(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $file = function (int $scaleid, array $fields) use ($DB): int {
+            return (int) $DB->insert_record('local_catquiz_personparams', (object) ($fields + [
+                'userid' => self::USERID, 'contextid' => self::CONTEXTID, 'catscaleid' => $scaleid,
+                'attemptid' => 77, 'ability' => 0.5, 'isvalid' => 1, 'resultsource' => 'current',
+                'validationstatus' => null, 'standarderror' => 0.3, 'n' => 10, 'status' => 0,
+                'timecreated' => 1000, 'timemodified' => 1000,
+            ]));
+        };
+        $expected = [];
+        // A: two results - the later one.
+        $file(4001, ['ability' => 0.1]);
+        $expected[4001] = $file(4001, ['ability' => 0.2, 'timecreated' => 2000]);
+        // B: a result, then the intermediate estimate of a running attempt - the result.
+        $expected[4002] = $file(4002, ['ability' => 0.3]);
+        $file(4002, ['ability' => 2.0, 'isvalid' => 0, 'validationstatus' => personparam_repository::PROVISIONAL,
+            'standarderror' => null, 'n' => null, 'attemptid' => 78]);
+        // C: only other people and other contexts - none.
+        $file(4003, ['userid' => self::USERID + 1]);
+        $file(4003, ['contextid' => self::CONTEXTID + 1]);
+        // D: an invalid result and a prior without a measured value before it - none; a result not reported - it.
+        $file(4004, ['isvalid' => 0, 'validationstatus' => 'se_max']);
+        $file(4004, ['resultsource' => 'prior', 'standarderror' => null, 'n' => null]);
+        $expected[4004] = $file(4004, ['isvalid' => 0, 'validationstatus' => 'not_primary', 'ability' => -0.4]);
+        // E: two results of the same time - the higher id.
+        $file(4005, ['ability' => 1.1, 'timecreated' => 3000]);
+        $expected[4005] = $file(4005, ['ability' => 1.2, 'timecreated' => 3000]);
+        // F: an old intermediate estimate (current without SE), a legacy value - the legacy value.
+        $expected[4006] = $file(4006, ['resultsource' => 'legacy', 'attemptid' => null, 'standarderror' => null,
+            'n' => null, 'ability' => 0.7]);
+        $file(4006, ['standarderror' => null, 'ability' => 1.9]);
+        // G: a prior after a measured value counts - the prior, the newer row.
+        $file(4007, ['ability' => 0.15]);
+        $expected[4007] = $file(4007, ['resultsource' => 'prior', 'standarderror' => null, 'n' => null, 'ability' => 0.15]);
+
+        $scales = range(4001, 4007);
+        $reads = $DB->perf_get_reads();
+        $batch = personparam_repository::get_latest_valid_by_scale(self::USERID, self::CONTEXTID, $scales);
+        $this->assertSame(1, $DB->perf_get_reads() - $reads, 'One query.');
+        $this->assertSame($expected, array_map(fn($row) => (int) $row->id, $batch));
+        foreach ($scales as $scaleid) {
+            $single = personparam_repository::get_latest_valid(self::USERID, self::CONTEXTID, $scaleid);
+            $this->assertSame($expected[$scaleid] ?? null, $single ? (int) $single->id : null, "scale $scaleid");
+        }
+    }
 }

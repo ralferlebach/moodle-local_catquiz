@@ -119,6 +119,9 @@ final class attempt_result_validator {
             if (isset($error['rootonly'])) {
                 $reasons[] = scale_result::REASON_ROOTONLY;
             }
+            if (isset($error['globalnotestimated'])) {
+                $reasons[] = scale_result::REASON_GLOBAL_NOT_ESTIMATED;
+            }
 
             // Measured in the current attempt (vs. carry-over only).
             $n = array_key_exists($scaleid, $nbyscale) ? (int) $nbyscale[$scaleid] : null;
@@ -187,7 +190,8 @@ final class attempt_result_validator {
             // Result validity for completion (decision 8.1: reporting excluded).
             $valid = $primary && $statisticallyvalid && $measured;
 
-            $score = isset($entry['value']) ? (float) $entry['value'] : null;
+            // Issue #174: a value that is no number is no estimate - not 0.
+            $score = isset($entry['value']) && is_numeric($entry['value']) ? (float) $entry['value'] : null;
             $se = array_key_exists($scaleid, $sebyscale) ? (float) $sebyscale[$scaleid] : null;
 
             $results[$scaleid] = new scale_result(
@@ -353,15 +357,28 @@ final class attempt_result_validator {
                 $abilities[(int) $scaleid] = (float) $ability;
             }
         }
-        if ($abilities === []) {
-            return $projection;
-        }
         $settings = $progress->get_quiz_settings();
         $segroup = (array) ($settings->catquiz_standarderrorgroup ?? []);
         $semax = isset($segroup['catquiz_standarderror_max']) && is_numeric($segroup['catquiz_standarderror_max'])
             ? (float) $segroup['catquiz_standarderror_max'] : null;
         $scalegroup = (array) ($settings->maxquestionsscalegroup ?? []);
         $nminscale = (int) ($scalegroup['catquiz_minquestionspersubscale'] ?? 0);
+
+        // The global scale answered but not estimated - an estimate missing or not finite: diagnosed, not invented
+        // (issue #174). Its row says why and holds no value; it is no admissible value of anybody.
+        if ($rootid > 0 && !isset($abilities[$rootid]) && !(isset($projection[$rootid]) && is_array($projection[$rootid]))) {
+            try {
+                $answered = $progress->get_num_answered_productive_questions($rootid);
+            } catch (\Throwable $e) {
+                $answered = 0;
+            }
+            if ($answered > 0) {
+                $projection[$rootid] = [
+                    'value' => null, 'toreport' => false, 'measurementstate' => true, 'excluded' => true,
+                    'error' => ['globalnotestimated' => ['nproductive' => $answered]],
+                ];
+            }
+        }
 
         foreach ($abilities as $scaleid => $ability) {
             if (isset($projection[$scaleid]) && is_array($projection[$scaleid])) {

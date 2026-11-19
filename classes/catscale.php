@@ -341,7 +341,9 @@ class catscale {
                 ]);
             $event->trigger();
         }
-        cache_helper::purge_by_event('changesintestitems');
+        // Issue #146: the pools of this scale's root, no others.
+        \local_catquiz\local\pool_revision::purge_others('changesintestitems');
+        \local_catquiz\local\pool_revision::scale_changed($catscaleid);
         return result::ok($id);
     }
 
@@ -437,7 +439,9 @@ class catscale {
         ]);
         $event->trigger();
 
-        cache_helper::purge_by_event('changesintestitems');
+        // Issue #146: the pools of this scale's root, no others.
+        \local_catquiz\local\pool_revision::purge_others('changesintestitems');
+        \local_catquiz\local\pool_revision::scale_changed($catscaleid);
     }
 
     /**
@@ -470,6 +474,7 @@ class catscale {
            start purged it - with the progress and feedback of any other open attempt of the session. */
         $poolkey = self::pool_key($contextid, $includesubscales, (int) $this->catscale->id, $selectedsubscales);
         $poolcache = cache::make('local_catquiz', 'runtimepool');
+        $lastkey = 'last_' . self::pool_base_key($contextid, $includesubscales, (int) $this->catscale->id, $selectedsubscales);
         // Issue #136: whether the pool came from the cache, and what a miss costs.
         timeline::start('pool:cache_lookup');
         $testitems = $poolcache->get($poolkey);
@@ -485,6 +490,13 @@ class catscale {
             $testitems = $this->load_pool($contextid, $includesubscales, null, $selectedsubscales);
             ksort($testitems, SORT_NUMERIC);
             timeline::span('pool:cache_write', fn() => $poolcache->set($poolkey, $testitems), ['pool_items' => count($testitems)]);
+            // Issue #146: the pool of the revision before is not read again - dropped, so that a store holds the current
+            // pool and at most the one it replaces, per pool key.
+            $previous = $poolcache->get($lastkey);
+            if (is_string($previous) && $previous !== $poolkey) {
+                $poolcache->delete($previous);
+            }
+            $poolcache->set($lastkey, $poolkey);
         }
         $testitems = self::order_pool($testitems, $orderby);
 
@@ -536,9 +548,13 @@ class catscale {
     }
 
     /**
-     * The key of a runtime pool (issue #146): CAT context, scale, whether with subscales, which subscales.
+     * The key of a runtime pool (issue #146): CAT context, scale, whether with subscales, which subscales - and the
+     * revision of the pool.
      *
-     * Nothing of a person or a session is part of the pool - it is the same for everybody who plays it.
+     * Nothing of a person or a session is part of the pool - it is the same for everybody who plays it. The revision
+     * (pool_revision::of()) changes with the items, parameters and scales the pool is built from, and only with
+     * those; the scales of the pool tree are part of it, so a scale moved or deleted changes the key of every pool
+     * it left or joined.
      *
      * @param int $contextid
      * @param bool $includesubscales
@@ -547,6 +563,40 @@ class catscale {
      * @return string
      */
     public static function pool_key(int $contextid, bool $includesubscales, int $catscaleid, array $selectedsubscales): string {
+        $tree = [$catscaleid];
+        if ($includesubscales) {
+            $tree = array_merge($tree, $selectedsubscales ?: self::get_subscale_ids($catscaleid));
+        }
+        $tree = array_map('intval', $tree);
+        sort($tree);
+        $parents = self::hierarchy()['parent'];
+        $root = $catscaleid;
+        for ($guard = 0; !empty($parents[$root]) && $guard < 1000; $guard++) {
+            $root = (int) $parents[$root];
+        }
+        return sprintf(
+            '%s_%s_%s',
+            self::pool_base_key($contextid, $includesubscales, $catscaleid, $selectedsubscales),
+            hash('crc32b', implode('_', $tree)),
+            substr(sha1(\local_catquiz\local\pool_revision::of($contextid, $root)), 0, 16)
+        );
+    }
+
+    /**
+     * The part of a pool key without the revision: which pool, whatever its revision.
+     *
+     * @param int $contextid
+     * @param bool $includesubscales
+     * @param int $catscaleid
+     * @param array $selectedsubscales
+     * @return string
+     */
+    public static function pool_base_key(
+        int $contextid,
+        bool $includesubscales,
+        int $catscaleid,
+        array $selectedsubscales
+    ): string {
         $selected = array_map('intval', $selectedsubscales);
         sort($selected);
         return sprintf(

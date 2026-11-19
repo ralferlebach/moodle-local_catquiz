@@ -2,6 +2,46 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Re-Audit 18.11.2026, Abschluss und Restarbeiten (2026111707):
+  - **#175 ID-Listen in Shortcodes:** `courseid`/`testid` (und Aliase) in `catquizstatistics` und `catquizfeedback`
+    nehmen kommagetrennte Listen (strenger Parser `local\statistics\id_list`, höchstens 100 IDs, Fehler statt stiller
+    Korrektur). ODER innerhalb eines Parameters, UND zwischen Kurs und Test; `testid` bleibt die Kursmodul-ID. Ein Block
+    je Globalskala – unterschiedliche Globalskalen werden nie zusammengerechnet. Rechte je gewähltem Test/Kurs
+    (`context_resolver::for_statistics_scope`, schließt im Zweifel), dieselbe Menge im Lazy-AJAX und im CSV-Export
+    (Endpunkt prüft neu). Tests `shortcode_id_lists_test` (45), Behat `catquiz_statistics_id_lists` (4); Doku
+    `doc/shortcode-id-lists.md`.
+  - **#146 Pool-/Attempt-Cache:** Itempools tragen eine Revision im Schlüssel (`local\pool_revision`: global, Kontext,
+    Skala, Kontext×Skala). Änderungen an Items, Parametern, Skalen, Fragen und Testeinstellungen erhöhen nur die
+    betroffenen Revisionen; kein globaler Purge mehr (auch nicht in `strategy::is_deliverable()` und beim
+    Versuchsstart). Der ersetzte Pool wird gelöscht (Zeiger `last_<schlüssel>`). Cache `runtimepool` ohne
+    Ereignisse, neu `runtimepoolrevision`. Messung `cli/measure_pool_invalidation.php`: 6 Pools × 600 Items, 20
+    Änderungen – vorher 120 Neuaufbauten / 4.729 ms / 960 Abfragen / 60.263 KB, jetzt 20 / 876 / 160 / 10.046.
+    Tests `pool_revision_test` (8), `runtime_pool_test` (Schlüssel neu); Adapter `two_attempts_one_session_test`.
+  - **#166 / #168 Peer-Vergleich und Feedback-Schreiblast:** Der Vergleich mit anderen Personen
+    (`comparetotestaverage::PEER_KEYS`) wird nicht mehr bei jeder Antwort berechnet, sondern einmal am Ende
+    (`attemptfeedback::peer_comparison_of()` aus dem Finalizer) und mit dem Versuch gespeichert; die Ergebnisseite liest
+    ihn oder berechnet ihn für einen beendeten Versuch nach. Für Versuche, die vor dem Upgrade endeten
+    (`peercomparisonatendsince`), wird nichts nachträglich gespeichert (#159). `save_attempt_to_db()` liest nur noch
+    `id, endtime`. Die Feedback-Generatoren nutzen den Progress der Auswahl, statt ihn je Generator neu zu laden
+    (300 Antworten: Feedback p95 385 → 329 ms); ein Span je Generator (`feedback:<name>`, `feedback:save`). Messung
+    `cli/benchmark_attempts.php` (siehe `doc/restarbeiten-2026-11-19.md` §5). Tests `peer_comparison_lifecycle_test`
+    (3), `feedbackgenerator_progress_test`. Testeinstellungen ohne Inhalt (`[]`) gelten als „keine Strategie“: keine
+    PHP-Warnung im Konstruktor von `attemptfeedback`, kein Peer-Vergleich (gefunden mit den Adapter-Tests, die solche
+    Tests anlegen). Mit verzögert geladenen Feedback-Reitern (`lazyfeedbacktabs`) wird der Reiter des Vergleichs aus
+    denselben Daten angeboten wie sein Inhalt (`comparetotestaverage::has_data_for()`, gespeicherter Vergleich) – sonst
+    fehlte er auf der Ergebnisseite direkt nach dem Versuch (Behat `catquiz_feedback_after_cleanup`, lazy 1).
+  - **#174:** Die Globalskala mit beantworteten Fragen, aber ohne endliche Schätzung, bekommt eine Ergebniszeile ohne
+    Wert mit dem Grund `global_scale_not_estimated` – kein erfundener Wert, kein zulässiger Wert für irgendwen.
+    `progress::set_ability()` verwirft nicht-endliche Schätzungen (vorher ließen sie `json_encode()` des ganzen
+    Progress scheitern). Tests in `global_scale_invariant_test` (21 Fälle).
+  - **#173:** Der Debug-Export zeigt die Host-Felder (Stoppcode, Ende, Ergebnisstatus/-gültigkeit/-grund/-wert) aus
+    dem Datensatz von `adaptivequiz_attempt`, getrennt vom CAT-Versuch, und eine Schema-Version (2); ältere Exporte
+    sind daran als unzuverlässig erkennbar. Test `test_the_host_fields_from_the_database`.
+  - **Nachweise #162/#165/#167/#170:** Golden-Fragenfolgen je Strategie (`cold_warm_selection_test`, Fixture
+    `golden_sequences.json`, auf 4.5 und 5.1 identisch); Golden der zulässigen Vorwerte; ein Snapshot je
+    Selektionsschritt aus der Datenbank; gecachte Liste bleibt unverändert.
+  - **Adapter #2:** Behat `catquiz_feedback_single_scale` – eine Skala: ihre Editoren, keine Navigation.
+  - Abhängigkeiten: mod_adaptivequiz 2026111703, adaptivequizcatmodel_catquiz 2026111707 (Tripel dieser Auslieferung).
 - Re-Audit Restarbeiten 18.11.2026 (2026111706):
   - **CI-Fix Behat:** Die Testdaten-Schritte „earlier participants have the valid CAT result“ und „the following CAT
     results … exist“ legen frühere Ergebnisse wie der Finalizer an – mit Standardfehler und Itemzahl. Ohne SE galten sie

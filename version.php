@@ -31,7 +31,7 @@ $plugin->component = 'local_catquiz';
 // the public webroot - is not verified yet; narrow this again if that work stalls.
 $plugin->supported = [501, 503];
 $plugin->release = '1.3.0';
-$plugin->version = 2026111706;
+$plugin->version = 2026111707;
 $plugin->requires = 2025100600;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [
@@ -39,6 +39,8 @@ $plugin->dependencies = [
     // Issue #31: what this line needs and is delivered with. Since 17.11.2026 the host with the stop codes
     // scalescomplete and noeligiblebeforeminimum (#172, host #23) and the adapter that hands them over (adapter #12).
     // The CI waits for these versions on the branches of host and adapter (.github/scripts/await_dependencies.sh).
-    'mod_adaptivequiz' => 2026111701,
-    'adaptivequizcatmodel_catquiz' => 2026111701,
+    // Since 19.11.2026 the triple of this delivery: host with the switch of the request timing (host #17),
+    // adapter with its callback, the stop matrix and the link-function goldens (adapter #12, host #25).
+    'mod_adaptivequiz' => 2026111703,
+    'adaptivequizcatmodel_catquiz' => 2026111707,
 ];

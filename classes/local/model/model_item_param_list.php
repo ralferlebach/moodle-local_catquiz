@@ -450,7 +450,9 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
             itemparam_validity::stamp($r);
             $DB->update_record('local_catquiz_itemparams', $r, true);
         }
-        cache_helper::purge_by_event('changesinitemparams');
+        // Issue #146: the pools of these scales in this context, no others.
+        \local_catquiz\local\pool_revision::purge_others('changesinitemparams');
+        \local_catquiz\local\pool_revision::params_changed($contextid, $catscaleids);
     }
 
     /**
@@ -616,7 +618,16 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
         $itemparam->save();
         // Ensure that the item points to the itemparam with the highest status.
         catquiz::set_active_itemparam($itemparam->get_itemid());
-        cache_helper::purge_by_event('changesinitemparams');
+        // Issue #146: the pools of the item's scales in the context of the parameters, no others.
+        \local_catquiz\local\pool_revision::purge_others('changesinitemparams');
+        if ($itemparam->get_contextid()) {
+            \local_catquiz\local\pool_revision::params_of_items_changed(
+                (int) $itemparam->get_contextid(),
+                [$itemparam->get_itemid()]
+            );
+        } else {
+            \local_catquiz\local\pool_revision::all_changed();
+        }
         if (!empty($newrecord['warning'])) {
             return [
                 'success' => 2, // Update successfull with warning.

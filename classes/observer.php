@@ -63,7 +63,9 @@ class local_catquiz_observer {
         $catscale = catscale::return_catscale_object($catscaleid);
 
         messages::catscale_updated($catscale, $userid);
-        cache_helper::purge_by_event('changesincatscales');
+        // Issue #146: the scales for everybody, the pools of this scale's root only.
+        \local_catquiz\local\pool_revision::purge_others('changesincatscales');
+        \local_catquiz\local\pool_revision::scale_changed((int) $catscaleid);
     }
 
     /**
@@ -80,9 +82,11 @@ class local_catquiz_observer {
         $data = [
             'componentid' => $questionid,
         ];
+        // Issue #146: the pools of the scales the question was an item of - found before the items go.
+        \local_catquiz\local\pool_revision::questions_changed([(int) $questionid]);
         $DB->delete_records('local_catquiz_items', $data);
 
-        cache_helper::purge_by_event('changesintestitems');
+        \local_catquiz\local\pool_revision::purge_others('changesintestitems');
     }
 
     /**
@@ -102,16 +106,21 @@ class local_catquiz_observer {
         if ($questionid <= 0) {
             return;
         }
-        $isitem = $DB->record_exists_sql(
-            "SELECT 1
+        // Issue #146: the items among the versions of the question - the pools of their scales, no others.
+        $itemquestions = array_map('intval', $DB->get_fieldset_sql(
+            "SELECT DISTINCT i.componentid
                FROM {question_versions} qv
                JOIN {question_versions} qvall ON qvall.questionbankentryid = qv.questionbankentryid
                JOIN {local_catquiz_items} i ON i.componentid = qvall.questionid AND i.componentname = 'question'
               WHERE qv.questionid = :questionid",
             ['questionid' => $questionid]
-        ) || $DB->record_exists('local_catquiz_items', ['componentid' => $questionid, 'componentname' => 'question']);
-        if ($isitem) {
-            cache_helper::purge_by_event('changesintestitems');
+        ));
+        if ($DB->record_exists('local_catquiz_items', ['componentid' => $questionid, 'componentname' => 'question'])) {
+            $itemquestions[] = $questionid;
+        }
+        if ($itemquestions) {
+            \local_catquiz\local\pool_revision::questions_changed($itemquestions);
+            \local_catquiz\local\pool_revision::purge_others('changesintestitems');
         }
     }
 

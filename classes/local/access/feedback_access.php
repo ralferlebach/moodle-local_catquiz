@@ -175,6 +175,16 @@ class feedback_access {
             return null;
         }
 
+        // Issue #175: from the cached course information - no query per activity when a scope lists many tests.
+        $coursecontext = $context->get_course_context(false);
+        if ($coursecontext) {
+            try {
+                return get_fast_modinfo((int) $coursecontext->instanceid)->get_cm((int) $context->instanceid);
+            } catch (\moodle_exception $e) {
+                // Not in the course information (being deleted, say): read it as before.
+                unset($e);
+            }
+        }
         return get_coursemodule_from_id('', $context->instanceid, 0, false, IGNORE_MISSING) ?: null;
     }
 }

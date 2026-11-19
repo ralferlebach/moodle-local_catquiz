@@ -28,6 +28,7 @@ use local_catquiz\local\access\context_resolver;
 use local_catquiz\local\access\feedback_access;
 use local_catquiz\local\statistics\attempt_population;
 use local_catquiz\local\statistics\chart_output;
+use local_catquiz\local\statistics\id_list;
 use local_catquiz\local\statistics\learning_progress_series;
 use local_catquiz\teststrategy\feedback_helper;
 use local_catquiz\teststrategy\info;
@@ -131,21 +132,25 @@ class catquizstatistics {
     const MIN_PEOPLE_FOR_PROGRESS = 3;
 
     /**
-     * @var ?int $courseid
-     */
-    private ?int $courseid;
-
-    /**
-     * @var ?int $testid
-     */
-    private ?int $testid;
-
-    /**
-     * Resolved context these statistics refer to (issue #18).
+     * The courses of the scope, null for every course (issue #175: one or several).
      *
-     * @var ?\context
+     * @var int[]|null
      */
-    private ?\context $statisticscontext = null;
+    private ?array $courseids;
+
+    /**
+     * The tests of the scope, adaptivequiz.id; null for every test of the scale (issue #175: one or several).
+     *
+     * @var int[]|null
+     */
+    private ?array $testids;
+
+    /**
+     * Resolved contexts these statistics refer to (issue #18; issue #175: one per test or course of the scope).
+     *
+     * @var \context[]|null
+     */
+    private ?array $statisticscontexts = null;
 
     /**
      * @var ?int $scaleid
@@ -228,8 +233,8 @@ class catquizstatistics {
     /**
      * Create a new catquizstatistics object
      *
-     * @param ?int $courseid
-     * @param ?int $testid
+     * @param int|int[]|null $courseid One course or several (issue #175), null or 0 for every course.
+     * @param int|int[]|null $testid One test or several (adaptivequiz.id), null or 0 for every test of the scale.
      * @param int $scaleid
      * @param ?int $endtime
      * @param ?int $starttime
@@ -239,8 +244,8 @@ class catquizstatistics {
      * @return self
      */
     public function __construct(
-        ?int $courseid,
-        ?int $testid,
+        int|array|null $courseid,
+        int|array|null $testid,
         int $scaleid,
         ?int $endtime = null,
         ?int $starttime = null,
@@ -248,8 +253,8 @@ class catquizstatistics {
     ) {
         global $DB;
 
-        $this->courseid = $courseid;
-        $this->testid = $testid;
+        $this->courseids = id_list::normalise($courseid);
+        $this->testids = id_list::normalise($testid);
         $this->endtime = $endtime ?? time();
         $this->starttime = $starttime;
         $this->scaleid = $scaleid;
@@ -260,23 +265,27 @@ class catquizstatistics {
         // the export, which never filtered by it; issue #88).
         $this->population = new attempt_population(
             $this->scaleid,
-            $courseid,
-            $testid,
+            $this->courseids,
+            $this->testids,
             null,
             $starttime,
             $this->endtime,
             $selection
         );
 
-        if ($testid) {
-            $tests = $DB->get_records('local_catquiz_tests', ['componentid' => $testid]);
+        if ($this->testids) {
+            // Issue #175: the tests of the set - in one query, as the single test before.
+            $tests = $DB->get_records_list('local_catquiz_tests', 'componentid', $this->testids);
         } else {
             // If a subscale is given as scaleid, we still need the root scale to get the associated tests.
+            $where = 'catscaleid = :catscaleid';
             $params = ['catscaleid' => $this->rootscaleid];
-            if ($courseid) {
-                $params['courseid'] = $courseid;
+            if ($this->courseids) {
+                [$insql, $inparams] = $DB->get_in_or_equal($this->courseids, SQL_PARAMS_NAMED, 'cqsc');
+                $where .= " AND courseid $insql";
+                $params += $inparams;
             }
-            $tests = $DB->get_records('local_catquiz_tests', $params);
+            $tests = $DB->get_records_select('local_catquiz_tests', $where, $params);
         }
         if (count($tests) === 0) {
             throw new \Exception('catquizstatistics shortcode: no tests can be found for the given arguments');
@@ -326,12 +335,12 @@ class catquizstatistics {
      * than one, nothing is guessed - the scale has to be chosen.
      *
      * @param int $scaleid The scale asked for, 0 for none.
-     * @param int|null $courseid
-     * @param int|null $testid Instance id of the test (local_catquiz_tests.componentid).
+     * @param int|int[]|null $courseid One course or several (issue #175).
+     * @param int|int[]|null $testid Instance id of the test (local_catquiz_tests.componentid), one or several.
      * @return int
      * @throws \moodle_exception When the scale asked for does not exist or none can be determined.
      */
-    public static function resolve_scale_id(int $scaleid, ?int $courseid, ?int $testid): int {
+    public static function resolve_scale_id(int $scaleid, int|array|null $courseid, int|array|null $testid): int {
         global $DB;
 
         if ($scaleid > 0) {
@@ -341,14 +350,18 @@ class catquizstatistics {
             return $scaleid;
         }
 
+        $courseids = id_list::normalise($courseid);
+        $testids = id_list::normalise($testid);
         $params = ['component' => 'mod_adaptivequiz'];
         $where = 'component = :component AND catscaleid IS NOT NULL AND catscaleid > 0';
-        if ($testid) {
-            $where .= ' AND componentid = :testid';
-            $params['testid'] = $testid;
-        } else if ($courseid) {
-            $where .= ' AND courseid = :courseid';
-            $params['courseid'] = $courseid;
+        if ($testids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($testids, SQL_PARAMS_NAMED, 'rst');
+            $where .= " AND componentid $insql";
+            $params += $inparams;
+        } else if ($courseids) {
+            [$insql, $inparams] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'rsc');
+            $where .= " AND courseid $insql";
+            $params += $inparams;
         } else {
             throw new \moodle_exception('error:exportscaleunresolved', 'local_catquiz');
         }
@@ -357,6 +370,38 @@ class catquizstatistics {
             throw new \moodle_exception('error:exportscaleunresolved', 'local_catquiz');
         }
         return (int) reset($scaleids);
+    }
+
+    /**
+     * The scope of a CSV export request (issue #175): the IDs as the statistics page wrote them into the link.
+     *
+     * courseid and testid are lists - one ID or several, comma-separated, read by id_list (testid is the
+     * adaptivequiz.id here, as in the scope of the page). cid is the course the export was opened from; without
+     * courseid it is the course of the scope, as before. attempts is all, first or last.
+     *
+     * @return array [courseids, testids, starttime, endtime, selection]
+     * @throws \moodle_exception For a list that is no list of IDs, or an unknown selection.
+     */
+    public static function export_scope_from_request(): array {
+        $cid = required_param('cid', PARAM_INT);
+        $courseids = id_list::parse(optional_param('courseid', '', PARAM_RAW_TRIMMED), 'courseid');
+        $testids = id_list::parse(optional_param('testid', '', PARAM_RAW_TRIMMED), 'testid');
+        $selection = optional_param('attempts', attempt_population::ALL, PARAM_ALPHA);
+        if (!in_array($selection, [attempt_population::ALL, attempt_population::FIRST, attempt_population::LAST], true)) {
+            throw new \moodle_exception('catquizstatistics_invalidattempts', 'local_catquiz', '', implode(', ', [
+                attempt_population::ALL, attempt_population::FIRST, attempt_population::LAST,
+            ]));
+        }
+        if (!$courseids && $cid > SITEID) {
+            $courseids = [$cid];
+        }
+        return [
+            $courseids ?: null,
+            $testids ?: null,
+            optional_param('starttime', 0, PARAM_INT) ?: null,
+            optional_param('endtime', 0, PARAM_INT) ?: null,
+            $selection,
+        ];
     }
 
     /**
@@ -369,11 +414,41 @@ class catquizstatistics {
      * @return \context
      */
     public function get_statistics_context(): \context {
-        if ($this->statisticscontext === null) {
-            $this->statisticscontext = context_resolver::for_statistics($this->courseid, $this->testid);
+        $contexts = $this->get_statistics_contexts();
+        // Several tests or courses (issue #175) have no single context; the course of them all, else the system.
+        if (count($contexts) === 1) {
+            return reset($contexts);
         }
+        return context_resolver::for_courseid((int) id_list::single($this->courseids));
+    }
 
-        return $this->statisticscontext;
+    /**
+     * The contexts of the scope: one per test, or one per course without tests, or the system (issue #175).
+     *
+     * @return \context[]
+     */
+    public function get_statistics_contexts(): array {
+        if ($this->statisticscontexts === null) {
+            $this->statisticscontexts = context_resolver::for_statistics_scope($this->courseids, $this->testids);
+        }
+        return $this->statisticscontexts;
+    }
+
+    /**
+     * Whether the viewer may see the results of other people in every part of the scope (issue #175: fail closed).
+     *
+     * One test or course of the set without the right refuses the whole statistics: an aggregate over the set
+     * would show what the viewer may not see.
+     *
+     * @return bool
+     */
+    public function can_view_other_users(): bool {
+        foreach ($this->get_statistics_contexts() as $context) {
+            if (!feedback_access::can_view_other_users($context)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -706,12 +781,24 @@ class catquizstatistics {
      * @return string
      */
     private function scope_description(): string {
-        if ($this->testid) {
-            $name = $this->testnames[$this->testid] ?? '';
-            $tests = get_string('abilityprofilescopetest', 'local_catquiz', $name !== '' ? $name : (string) $this->testid);
+        $testid = id_list::single($this->testids);
+        if ($testid) {
+            $name = $this->testnames[$testid] ?? '';
+            $tests = get_string('abilityprofilescopetest', 'local_catquiz', $name !== '' ? $name : (string) $testid);
+        } else if ($this->testids) {
+            // Issue #175: the tests chosen, by name.
+            $names = array_map(
+                fn($id) => ($this->testnames[$id] ?? '') !== '' ? $this->testnames[$id] : (string) $id,
+                $this->testids
+            );
+            $tests = get_string('abilityprofilescopetests', 'local_catquiz', implode(', ', $names));
+        } else if ($this->courseids && count($this->courseids) > 1) {
+            $tests = get_string('abilityprofilescopetestscourses', 'local_catquiz', (object) [
+                'tests' => count($this->quizsettings), 'courses' => count($this->courseids),
+            ]);
         } else {
             $tests = get_string(
-                $this->courseid ? 'abilityprofilescopetestscourse' : 'abilityprofilescopetestssite',
+                $this->courseids ? 'abilityprofilescopetestscourse' : 'abilityprofilescopetestssite',
                 'local_catquiz',
                 count($this->quizsettings)
             );
@@ -740,7 +827,7 @@ class catquizstatistics {
         // Teachers and CAT managers can see the test information in addition to the ability.
         // Judged in the context these statistics refer to (the quiz module
         // or the course), never in the system context alone.
-        $canviewall = feedback_access::can_view_other_users($this->get_statistics_context());
+        $canviewall = $this->can_view_other_users();
 
         // Who the bars are (re-audit 27.10.2026): persons, one value each, out of how many attempts; where the values
         // come from, and the scope (re-audit 28.10.2026).
@@ -1138,12 +1225,16 @@ class catquizstatistics {
         // person just to count them made memory and runtime grow with the cohort.
         // Both the maximum and the classification now happen in the database, and
         // only the finished counts come back. Test and period reach the query (issue #88).
+        // This chart takes one course and one test at most (issue #175): a set would be read as "all".
+        if (($this->courseids && count($this->courseids) > 1) || ($this->testids && count($this->testids) > 1)) {
+            throw new \coding_exception('The chart of responses per user takes one course and one test at most.');
+        }
         $maxattempts = catquiz::get_max_questions_answered_per_person(
             $this->contextid,
             $this->scaleid,
-            $this->courseid,
+            id_list::single($this->courseids),
             $this->get_allowed_userids_for_charts(),
-            $this->testid,
+            id_list::single($this->testids),
             $this->starttime,
             $this->endtime
         );
@@ -1162,11 +1253,11 @@ class catquizstatistics {
         $counts = catquiz::get_answers_per_person_histogram(
             $this->contextid,
             $this->scaleid,
-            $this->courseid,
+            id_list::single($this->courseids),
             $classwidth,
             $qs ? feedback_helper::get_feedback_range_bounds($qs, $this->scaleid) : [],
             $this->get_allowed_userids_for_charts(),
-            $this->testid,
+            id_list::single($this->testids),
             $this->starttime,
             $this->endtime
         );
@@ -1354,36 +1445,47 @@ class catquizstatistics {
             $startkey = sprintf("feedback_scaleid_limit_lower_%d_%d", $this->scaleid, $r);
             $endkey = sprintf("feedback_scaleid_limit_upper_%d_%d", $this->scaleid, $r);
             $textkey = sprintf('feedbacklegend_scaleid_%d_%d', $this->scaleid, $r);
+            $first = true;
             foreach ($this->quizsettings as $testid => $qs) {
+                // Issue #175: a setting a test does not have (a legend never written, say) is empty, not a warning that
+                // takes the chart with it - several tests of a set are compared here.
+                $start = isset($qs->$startkey) ? (float) feedback_helper::parse_range_limit($qs->$startkey) : null;
+                $end = isset($qs->$endkey) ? (float) feedback_helper::parse_range_limit($qs->$endkey) : null;
+                $text = trim((string) ($qs->$textkey ?? ''));
                 // Check if we are in the first iteration of the loop.
-                if ($rangestart === null) {
-                    $rangestart = $qs->$startkey;
-                    $rangeend = $qs->$endkey;
-                    $rangetext = $qs->$textkey;
+                if ($first) {
+                    $first = false;
+                    $rangestart = $start;
+                    $rangeend = $end;
+                    $rangetext = $text;
                     $basetestid = $testid;
                 }
 
                 if (
-                    round($qs->$startkey, 3) !== round($rangestart, 3) || round($qs->$endkey, 3) !== round($rangeend, 3)
-                    || ($level === self::COMPATIBILITY_LEVEL_DESCRIPTION && trim($qs->$textkey) !== trim($rangetext))
+                    $start === null || $end === null || $rangestart === null || $rangeend === null
+                    || round($start, 3) !== round($rangestart, 3) || round($end, 3) !== round($rangeend, 3)
+                    || ($level === self::COMPATIBILITY_LEVEL_DESCRIPTION && $text !== $rangetext)
                 ) {
                     $this->quizsettingcompatibility[$level] = false;
                     if (
-                        $CFG->debug > 0 && feedback_access::can_view_other_users($this->get_statistics_context())
+                        $CFG->debug > 0 && $this->can_view_other_users()
                     ) {
-                        if (round($qs->$startkey, 3) !== round($rangestart, 3) || round($qs->$endkey, 3) !== round($rangeend, 3)) {
+                        if (
+                            round((float) $start, 3) !== round((float) $rangestart, 3)
+                                || round((float) $end, 3) !== round((float) $rangeend, 3)
+                        ) {
                             echo sprintf(
                                 '<div class="alert alert-warning" role="alert">Quiz settings are not compatible:
                                 different range values [%f, %f] for test %d and range values [%f, %f] for test %d.</div>',
-                                $rangestart,
-                                $rangeend,
+                                (float) $rangestart,
+                                (float) $rangeend,
                                 $basetestid,
-                                $qs->$startkey,
-                                $qs->$endkey,
+                                (float) $start,
+                                (float) $end,
                                 $testid
                             );
                         }
-                        if (trim($qs->$textkey) !== trim($rangetext)) {
+                        if ($text !== $rangetext) {
                             echo sprintf(
                                 '<div class="alert alert-warning" role="alert">Quiz settings are not compatible:
                                 different range descriptions for test %d and test %d in scale %d and range %d.</div>',
@@ -1467,8 +1569,8 @@ class catquizstatistics {
         // Who could have taken a test of the scope and has no attempt in it (issue #132).
         $eligible = \local_catquiz\local\statistics\eligible_population::userids(
             $this->scaleid,
-            $this->courseid ?: null,
-            $this->testid ?: null
+            $this->courseids,
+            $this->testids
         );
         if ($allowed !== null) {
             $eligible = array_intersect($eligible, array_map('intval', $allowed));
@@ -1669,21 +1771,25 @@ class catquizstatistics {
      * @return string
      */
     public function render_export_button(): string {
-        if (!feedback_access::can_view_other_users($this->get_statistics_context())) {
+        if (!$this->can_view_other_users()) {
             return sprintf(
                 '<div class="alert alert-primary mt-1" role="alert">%s</div>',
                 get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback')
             );
         }
 
+        // Issue #175: the export takes the scope of the page - every course and test of the set, and the selection
+        // of first or last attempts. cid is the course the export is opened in: the first one, or the site.
         $params = [
-            'cid' => $this->courseid,
+            'cid' => $this->courseids ? (int) reset($this->courseids) : SITEID,
             'scaleid' => $this->scaleid,
-            'courseid' => $this->courseid,
-            'testid' => $this->testid,
+            'courseid' => id_list::to_string($this->courseids),
+            'testid' => id_list::to_string($this->testids),
             'starttime' => $this->starttime,
             'endtime' => $this->endtime,
+            'attempts' => $this->population->get_selection(),
         ];
+        $params = array_filter($params, fn($value) => $value !== '' && $value !== null);
 
         $url = (new moodle_url('/local/catquiz/export_statistics_csv.php', $params))->out(false);
         return sprintf(
@@ -1705,28 +1811,41 @@ class catquizstatistics {
         // unconditionally, which threw as soon as the statistics were not scoped to a
         // course (site wide shortcode). The resolver degrades to the system context
         // instead, and the rule itself now lives in one place.
-        if (!feedback_access::can_view_other_users($this->get_statistics_context())) {
+        if (!$this->can_view_other_users()) {
             return [];
         }
 
-         [$sql, $params] = catquiz::get_sql_for_csv_export(
-             $this->contextid,
-             $this->scaleid,
-             $this->courseid,
-             $this->testid,
-             $this->starttime,
-             $this->endtime,
-             // The export must use the same cohort rule as the charts
-             // (historical participation), so unenrolment does not diverge them.
-             false
-         );
+        // Issue #175: the attempts of the population - the same attempts as the charts, with the selection of first
+        // or last attempts, every course and test of the set, and completed attempts only.
+        [$sql, $params] = catquiz::get_sql_for_csv_export(
+            $this->contextid,
+            $this->scaleid,
+            null,
+            null,
+            $this->starttime,
+            $this->endtime,
+            // The export must use the same cohort rule as the charts
+            // (historical participation), so unenrolment does not diverge them.
+            false,
+            $this->population
+        );
 
         $data = [];
         // In separate groups mode a teacher without accessallgroups may
         // only export members of their own groups. Null means "no restriction", so
-        // the common case costs nothing.
-        $alloweduserids = feedback_access::get_allowed_userids($this->get_statistics_context());
-        foreach ($DB->get_recordset_sql($sql, $params) as $r) {
+        // the common case costs nothing. Issue #175: by the test or course of the row - each has its groups.
+        $allowedbyscope = [];
+        foreach ($this->get_statistics_contexts() as $key => $context) {
+            $allowedbyscope[$key] = feedback_access::get_allowed_userids($context);
+        }
+        $recordset = $DB->get_recordset_sql($sql, $params);
+        foreach ($recordset as $r) {
+            $scopekey = $this->testids ? 't' . (int) $r->instanceid : ($this->courseids ? 'c' . (int) $r->courseid : 's');
+            if (!array_key_exists($scopekey, $allowedbyscope)) {
+                // Not in the scope the access was checked for: never exported.
+                continue;
+            }
+            $alloweduserids = $allowedbyscope[$scopekey];
             if ($alloweduserids !== null && !in_array((int) $r->userid, $alloweduserids, true)) {
                 continue;
             }
@@ -1775,8 +1894,10 @@ class catquizstatistics {
 
             // TODO: Process all results.
 
+            unset($r->courseid, $r->instanceid);
             $data[] = $r;
         }
+        $recordset->close();
         return $data;
     }
 

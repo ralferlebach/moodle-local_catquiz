@@ -172,4 +172,62 @@ final class updatepersonability_population_test extends advanced_testcase {
         $this->assertSame($expectedmean, $mean);
         $this->assertSame(sqrt($sum / count($abilities)), $sd);
     }
+
+    /**
+     * The population of one step is one snapshot of the database (issue #167, re-audit 18.11.2026): a result written
+     * between mean and spread - a parallel attempt ending - does not enter the spread of this step; the next step reads
+     * it. Intermediate estimates of running attempts are no part of it (#164), at 49, 50 and 51 people.
+     */
+    public function test_one_snapshot_per_step_from_the_database(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $contextid = 4711;
+        $scaleid = 7;
+        $file = function (int $userid, float $ability, string $status = '') use ($DB, $contextid, $scaleid): void {
+            $DB->insert_record('local_catquiz_personparams', (object) [
+                'userid' => $userid, 'catscaleid' => $scaleid, 'contextid' => $contextid, 'attemptid' => 1000 + $userid,
+                'ability' => $ability, 'isvalid' => $status === '' ? 1 : 0, 'resultsource' => 'current',
+                'validationstatus' => $status === '' ? null : $status, 'standarderror' => 0.3, 'n' => 10,
+                'status' => 0, 'timecreated' => time(), 'timemodified' => time(),
+            ]);
+        };
+        $task = new updatepersonability();
+        $task->set_context(['contextid' => $contextid, 'catscaleid' => $scaleid]);
+        foreach ([49 => null, 50 => true, 51 => true] as $n => $enough) {
+            $DB->delete_records('local_catquiz_personparams', ['contextid' => $contextid]);
+            for ($i = 1; $i <= $n; $i++) {
+                $file($i, ($i % 7) * 0.25 - 0.5);
+            }
+            // A running attempt's intermediate estimate: never part of the population.
+            $file(900, 3.0, \local_catquiz\local\result\personparam_repository::PROVISIONAL);
+            $reset = new \ReflectionProperty(updatepersonability::class, 'pastabilities');
+            $reset->setAccessible(true);
+            $reset->setValue($task, null);
+            $mean = self::call($task, 'calculate_mean_from_past_attempts');
+            if ($enough === null) {
+                $this->assertNull($mean, "$n people: below the threshold.");
+                continue;
+            }
+            $this->assertNotNull($mean, "$n people.");
+            $population = $reset->getValue($task);
+            $this->assertCount($n, $population, "$n people: one value each, no intermediate estimate.");
+
+            // A parallel attempt ends between the two figures of this step: not in this step.
+            $file(901, 100.0);
+            $sd = self::call($task, 'calculate_sd_from_past_attempts');
+            $this->assertSame($population, $reset->getValue($task), 'The same snapshot for mean and spread.');
+            $sum = 0.0;
+            foreach ($population as $a) {
+                $sum += ($a - $mean) ** 2;
+            }
+            $this->assertSame(sqrt($sum / $n), $sd, "$n people: the spread of the snapshot.");
+
+            // The next step reads anew and finds it.
+            $reset->setValue($task, null);
+            $this->assertCount($n + 1, (array) (function () use ($task, $reset) {
+                self::call($task, 'calculate_mean_from_past_attempts');
+                return $reset->getValue($task);
+            })());
+        }
+    }
 }

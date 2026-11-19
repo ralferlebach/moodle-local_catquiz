@@ -76,6 +76,12 @@ final class scale_result {
     public const REASON_MAX_QUESTIONS_EXCEEDED = 'max_questions_exceeded';
 
     /**
+     * @var string Rejection: the attempt answered items of the global scale but holds no estimate of it - no value is
+     *      invented for it (issue #174).
+     */
+    public const REASON_GLOBAL_NOT_ESTIMATED = 'global_scale_not_estimated';
+
+    /**
      * Constructor.
      *
      * @param int $scaleid

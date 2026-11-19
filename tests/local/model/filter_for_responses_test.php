@@ -16,7 +16,6 @@
 
 namespace local_catquiz\local\model;
 
-use basic_testcase;
 
 /**
  * filter_for_responses() keeps the same items in the same order, with a set of answered ids (issue #170).
@@ -28,7 +27,7 @@ use basic_testcase;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\model\model_item_param_list::class)]
-final class filter_for_responses_test extends basic_testcase {
+final class filter_for_responses_test extends \advanced_testcase {
     /**
      * A list of items with the given question ids.
      *
@@ -99,5 +98,29 @@ final class filter_for_responses_test extends basic_testcase {
             1 => ['fraction' => 1.0], 2 => ['fraction' => 0.0], 3 => ['fraction' => 0.5],
         ]]]));
         $this->assertSame([1, 2, 3], array_keys($all->as_array()));
+    }
+
+    /**
+     * The filter changes the list it is given - never the cached list (issue #170, re-audit 18.11.2026: mutable
+     * caches). Two filters of the same cached list in one request, and a read after them, each see the whole list.
+     */
+    public function test_the_cached_list_is_not_changed(): void {
+        $this->resetAfterTest();
+        $ids = range(500001, 500050);
+        $scales = [71, 72];
+        $cache = \cache::make('local_catquiz', 'catquiz_item_params');
+        $cache->set(sprintf('itemparams_%s_%s_%s', 33, '', hash('crc32', implode('_', $scales))), self::items($ids));
+
+        $first = model_item_param_list::get(33, null, $scales)->filter_for_responses(
+            model_responses::create_from_array([1 => ['component' => [500001 => ['fraction' => 1.0]]]])
+        );
+        $this->assertSame([500001], array_keys($first->as_array()));
+        $second = model_item_param_list::get(33, null, $scales)->filter_for_responses(
+            model_responses::create_from_array(
+                [1 => ['component' => [500002 => ['fraction' => 0.0], 500003 => ['fraction' => 1.0]]]]
+            )
+        );
+        $this->assertSame([500002, 500003], array_keys($second->as_array()), 'Not the remains of the first filter.');
+        $this->assertSame($ids, array_keys(model_item_param_list::get(33, null, $scales)->as_array()), 'The cache holds all.');
     }
 }

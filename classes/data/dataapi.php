@@ -421,7 +421,7 @@ class dataapi {
             ]);
         $event->trigger();
 
-        self::invalidate_catscale_caches();
+        self::invalidate_catscale_caches((int) $id);
         return $id;
     }
 
@@ -443,7 +443,7 @@ class dataapi {
             ];
         }
         $result = $DB->delete_records('local_catquiz_catscales', ['id' => $catscaleid]);
-        self::invalidate_catscale_caches();
+        self::invalidate_catscale_caches($catscaleid);
 
         return $result ? ['success' => true] : [
             'success' => false,
@@ -459,11 +459,21 @@ class dataapi {
      * issue #146 in a cache of their own, invalidated by the same events. The state of the running
      * attempts in the sessions is left alone: it holds no pool any more.
      *
+     * Issue #146: with the scale given, only the pools of its root scale are built anew (and, through the scales of
+     * their trees, those of a root the scale left); without it, all.
+     *
+     * @param int|null $catscaleid The scale created, changed or deleted.
      * @return void
      */
-    public static function invalidate_catscale_caches(): void {
-        cache_helper::purge_by_event('changesincatscales');
-        cache_helper::purge_by_event('changesintestitems');
+    public static function invalidate_catscale_caches(?int $catscaleid = null): void {
+        if (!$catscaleid) {
+            cache_helper::purge_by_event('changesincatscales');
+            cache_helper::purge_by_event('changesintestitems');
+            return;
+        }
+        \local_catquiz\local\pool_revision::purge_others('changesincatscales');
+        \local_catquiz\local\pool_revision::purge_others('changesintestitems');
+        \local_catquiz\local\pool_revision::scale_changed($catscaleid);
     }
 
     /**
@@ -544,7 +554,7 @@ class dataapi {
         ]);
         $event->trigger();
 
-        self::invalidate_catscale_caches();
+        self::invalidate_catscale_caches((int) $catscale->id);
 
         // Issue #86: the feedback ranges of the tests of a global scale end at its limits.
         $limitsgiven = property_exists($catscale, 'minscalevalue') || property_exists($catscale, 'maxscalevalue');

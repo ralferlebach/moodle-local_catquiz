@@ -31,39 +31,50 @@ use local_catquiz\output\catquizstatistics;
 
 require_once(__DIR__ . '/../../config.php');
 
-$cid = required_param('cid', PARAM_INT);
-
-$courseid = optional_param('courseid', 0, PARAM_INT) ?: null;
-$testid = optional_param('testid', 0, PARAM_INT) ?: null;
-$starttime = optional_param('starttime', 0, PARAM_INT) ?: null;
-$endtime = optional_param('endtime', 0, PARAM_INT) ?: null;
-
 require_login();
 
-// Issue #18: resolve the context these statistics actually belong to (the quiz
-// module if the export is scoped to one test, otherwise the course) and apply the
-// same access rule the rendered statistics page uses, so that the export can never
-// hand out more than the page shows.
-$exportcontext = context_resolver::for_statistics($courseid ?: $cid, $testid);
-$PAGE->set_context($exportcontext);
+// Issue #175: courseid and testid are lists - one ID or several - read strictly; the selection of first or last
+// attempts comes along. A list that is no list of IDs is refused, nothing is cut to a number.
+try {
+    [$courseids, $testids, $starttime, $endtime, $selection] = catquizstatistics::export_scope_from_request();
+} catch (moodle_exception $e) {
+    $PAGE->set_context(context_system::instance());
+    die(s($e->getMessage()));
+}
 
-if (!feedback_access::can_view_other_users($exportcontext)) {
-    die(get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback'));
+// Issue #18: resolve the contexts these statistics actually belong to (the quiz
+// module of every test of the scope, otherwise every course) and apply the
+// same access rule the rendered statistics page uses, so that the export can never
+// hand out more than the page shows. Issue #175: one test or course without the right refuses the export.
+$scopecontexts = context_resolver::for_statistics_scope($courseids, $testids);
+$PAGE->set_context(count($scopecontexts) === 1 ? reset($scopecontexts) : context_system::instance());
+foreach ($scopecontexts as $exportcontext) {
+    if (!feedback_access::can_view_other_users($exportcontext)) {
+        die(get_string('error:permissionforcsvdownload', 'local_catquiz', 'local/catquiz:view_users_feedback'));
+    }
 }
 
 require_once($CFG->dirroot . '/local/catquiz/lib.php');
 require_once($CFG->libdir . '/csvlib.class.php');
 
 // Issue #141: without a scale the export takes the one of the test or course, if there is exactly one.
-$scaleid = catquizstatistics::resolve_scale_id(optional_param('scaleid', 0, PARAM_INT), $courseid ?: $cid, $testid);
-$catquizstatistics = new catquizstatistics($courseid, $testid, $scaleid, $endtime, $starttime);
+$scaleid = catquizstatistics::resolve_scale_id(optional_param('scaleid', 0, PARAM_INT), $courseids, $testids);
+$catquizstatistics = new catquizstatistics($courseids, $testids, $scaleid, $endtime, $starttime, $selection);
+$courseid = local_catquiz\local\statistics\id_list::to_string($courseids);
+$testid = local_catquiz\local\statistics\id_list::to_string($testids);
+if (count($courseids ?? []) > 5) {
+    $courseid = count($courseids) . 'courses';
+}
+if (count($testids ?? []) > 5) {
+    $testid = count($testids) . 'tests';
+}
 
 $filename = "export_testresults_scale_$scaleid";
-if ($courseid != 0) {
-    $filename .= "_course_$courseid";
+if ($courseid !== '') {
+    $filename .= "_course_" . str_replace(',', '-', $courseid);
 }
-if ($testid != 0) {
-    $filename .= "_test_$testid";
+if ($testid !== '') {
+    $filename .= "_test_" . str_replace(',', '-', $testid);
 }
 if ($starttime != 0) {
     $filename .= "_from_" . userdate($starttime, get_string('strftimedatetime', 'core_langconfig'));

@@ -230,9 +230,27 @@ class comparetotestaverage extends feedbackgenerator {
 
 
     /**
-     * Load data.
+     * The fields of the comparison that depend on other people (issue #166).
      *
-     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
+     * They are computed once, when the attempt has ended (peer_data(), from attempt_finalizer) - never with every
+     * answer: the peer population is not needed to go on with the attempt. A stored attempt that has them keeps them.
+     */
+    public const PEER_KEYS = [
+        'testaverageability',
+        'testaverageposition',
+        'comparisontext',
+        'comparetotestaverage_has_worse',
+        'comparetotestaverage_has_enough_peers',
+    ];
+
+    /**
+     * Loads the data of the comparison that do not depend on other people - with every answer.
+     *
+     * Issue #166: the peer comparison (get_peer_comparison_stats(), the text and the position of the average) left
+     * this path; peer_data() adds it at the end of the attempt. What stays is what the attempt itself decides: its
+     * ability on the scale, the colour bar, the legend, the abilities per scale (personabilities_abilities).
+     *
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id.
      * @param array $existingdata
      * @param array $newdata
      *
@@ -240,20 +258,61 @@ class comparetotestaverage extends feedbackgenerator {
      *
      */
     public function load_data(int $adaptiveattemptid, array $existingdata, array $newdata): ?array {
+        $state = $this->scale_state();
+        if ($state === null) {
+            return [];
+        }
+        [$catscaleid, $ability, $abilityrange, $quizsettings] = $state;
+        $catscale = catscale::return_catscale_object($catscaleid);
+        $abilityinrange = feedbacksettings::sanitize_range_min_max(
+            $ability,
+            $abilityrange['minscalevalue'],
+            $abilityrange['maxscalevalue']
+        );
+        if (!($abilityrange['minscalevalue'] < $abilityrange['maxscalevalue'])) {
+            throw new \moodle_exception('error:minmaxrangeequal', 'local_catquiz');
+        }
+        $scalingfactor = 1 / ((float) $abilityrange['maxscalevalue'] - (float) $abilityrange['minscalevalue']) * 100;
+        $userabilityposition = $scalingfactor * (-(float) $abilityrange['minscalevalue'] + $abilityinrange);
+
+        return [
+            'contextid' => $existingdata['contextid'],
+            'userability' => sprintf('%.2f', $abilityinrange),
+            'userabilityposition' => $userabilityposition,
+            'colorbar' => [
+                'colorgradestring' => $this->get_colorgradientstring((object) $quizsettings, $catscaleid),
+            ],
+            'colorbarlegend' => [
+                'feedbackbarlegend' => feedback_helper::get_colorbarlegend((object) $quizsettings, $catscaleid),
+            ],
+            'currentability' => get_string('currentability', 'local_catquiz', $catscale->name),
+            'currentabilityfellowstudents' => get_string('currentabilityfellowstudents', 'local_catquiz', $catscale->name),
+            'lowerscalelimit' => $abilityrange['minscalevalue'],
+            'upperscalelimit' => $abilityrange['maxscalevalue'],
+            'middle' => ($abilityrange['minscalevalue'] + $abilityrange['maxscalevalue']) / 2,
+            'personabilities_abilities' => $this->get_restructured_abilities($existingdata, $newdata),
+        ];
+    }
+
+    /**
+     * The comparison with the other people of the test: computed once, at the end of the attempt (issue #166).
+     *
+     * The same rule as before: the latest admissible value of every other person in the CAT context and on the
+     * scale (catquiz::get_peer_comparison_stats(), issue #164), midrank percentile, mean in the range of the scale -
+     * at the ability the attempt ended with.
+     *
+     * @param int $adaptiveattemptid adaptivequiz_attempt.id
+     * @param array $data The stored data of the attempt: contextid, se.
+     * @return array|null PEER_KEYS with their values; null without an ability on the scale.
+     */
+    public function peer_data(int $adaptiveattemptid, array $data): ?array {
         global $DB;
-        $progress = $this->get_progress();
-        $quizsettings = $progress->get_quiz_settings();
-
-        if (!$progress->get_playedquestions()) {
-            return [];
+        $this->set_attempt($adaptiveattemptid, (int) ($data['contextid'] ?? 0));
+        $state = $this->scale_state();
+        if ($state === null) {
+            return null;
         }
-
-        $catscaleid = $quizsettings->catquiz_catscales;
-        $abilities = $progress->get_abilities();
-        if (!array_key_exists($catscaleid, $abilities)) {
-            return [];
-        }
-        $ability = $abilities[$catscaleid];
+        [$catscaleid, $ability, $abilityrange] = $state;
 
         // Compute the peer comparison against a context-true reference
         // group via SQL aggregates: same context and scale, exactly one value per
@@ -262,7 +321,7 @@ class comparetotestaverage extends feedbackgenerator {
         // percentile that ignored ties.
         $attemptuserid = (int) $DB->get_field('adaptivequiz_attempt', 'userid', ['id' => $adaptiveattemptid]);
         $stats = catquiz::get_peer_comparison_stats(
-            (int) $existingdata['contextid'],
+            (int) $data['contextid'],
             (int) $catscaleid,
             round($ability, 4),
             $attemptuserid
@@ -279,34 +338,32 @@ class comparetotestaverage extends feedbackgenerator {
 
         $testaverage = $npeers > 0 ? (float) $stats->meanvalue : 0;
 
-        $catscaleclass = new catscale($catscaleid);
-        $abilityrange = $catscaleclass->get_ability_range();
-        $middle = ($abilityrange['minscalevalue'] + $abilityrange['maxscalevalue']) / 2;
-
         $testaverageinrange = feedbacksettings::sanitize_range_min_max(
             $testaverage,
             $abilityrange['minscalevalue'],
             $abilityrange['maxscalevalue']
         );
-
         $abilityinrange = feedbacksettings::sanitize_range_min_max(
             $ability,
             $abilityrange['minscalevalue'],
             $abilityrange['maxscalevalue']
         );
-
         if (!($abilityrange['minscalevalue'] < $abilityrange['maxscalevalue'])) {
             throw new \moodle_exception('error:minmaxrangeequal', 'local_catquiz');
         }
         $scalingfactor = 1 / ((float) $abilityrange['maxscalevalue'] - (float) $abilityrange['minscalevalue']) * 100;
         $testaverageposition = $scalingfactor * (-(float) $abilityrange['minscalevalue'] + $testaverageinrange);
-        $userabilityposition = $scalingfactor * (-(float) $abilityrange['minscalevalue'] + $abilityinrange);
         $betterthan = '';
         if (round($quantile, 0) >= self::MIN_BETTER_THAN_LIMIT) {
             $betterthan = get_string('feedbackcomparison_betterthan', 'local_catquiz', ['quantile' => round($quantile, 0)]);
         }
 
         $hasenoughpeers = $npeers >= self::get_min_peers();
+        // The standard error the attempt ended with; stored, an infinite one is -1 (catquiz::replace_inf_with_minusone()).
+        $se = (float) ($data['se'][$catscaleid] ?? INF);
+        if ($se == -1.0) {
+            $se = INF;
+        }
         $text = get_string(
             $hasenoughpeers ? 'feedbackcomparetoaverage' : 'feedbackcomparetoaverage_nopeers',
             'local_catquiz',
@@ -314,7 +371,7 @@ class comparetotestaverage extends feedbackgenerator {
                 'betterthan' => $betterthan,
                 'quotedscale' => $catscale->name,
                 'ability_global' => feedback_helper::localize_float($abilityinrange),
-                'se_global' => feedback_helper::localize_float($newdata['se'][$catscaleid]),
+                'se_global' => feedback_helper::localize_float($se),
                 'average_ability' => feedback_helper::localize_float($testaverageinrange),
                 'scale_min' => feedback_helper::localize_float($abilityrange['minscalevalue']),
                 'scale_max' => feedback_helper::localize_float($abilityrange['maxscalevalue']),
@@ -322,27 +379,73 @@ class comparetotestaverage extends feedbackgenerator {
         );
 
         return [
-            'contextid' => $existingdata['contextid'],
             'testaverageability' => sprintf('%.2f', $testaverageinrange),
-            'userability' => sprintf('%.2f', $abilityinrange),
             'testaverageposition' => $testaverageposition,
-            'userabilityposition' => $userabilityposition,
             'comparisontext' => $text,
-            'colorbar' => [
-                'colorgradestring' => $this->get_colorgradientstring((object) $quizsettings, $catscaleid),
-            ],
-            'colorbarlegend' => [
-                'feedbackbarlegend' => feedback_helper::get_colorbarlegend((object) $quizsettings, $catscaleid),
-            ],
-            'currentability' => get_string('currentability', 'local_catquiz', $catscale->name),
-            'currentabilityfellowstudents' => get_string('currentabilityfellowstudents', 'local_catquiz', $catscale->name),
-            'lowerscalelimit' => $abilityrange['minscalevalue'],
-            'upperscalelimit' => $abilityrange['maxscalevalue'],
-            'middle' => $middle,
             'comparetotestaverage_has_worse' => (int) $stats->lowercount > 0,
             'comparetotestaverage_has_enough_peers' => $hasenoughpeers,
-            'personabilities_abilities' => $this->get_restructured_abilities($existingdata, $newdata),
         ];
+    }
+
+    /**
+     * The scale of the comparison, the ability on it and the range of the scale; null when there is nothing to compare.
+     *
+     * @return array|null [scaleid, ability, ability range, quiz settings]
+     */
+    private function scale_state(): ?array {
+        $progress = $this->get_progress();
+        $quizsettings = $progress->get_quiz_settings();
+        if (!$progress->get_playedquestions()) {
+            return null;
+        }
+        $catscaleid = $quizsettings->catquiz_catscales;
+        $abilities = $progress->get_abilities();
+        if (!array_key_exists($catscaleid, $abilities)) {
+            return null;
+        }
+        $abilityrange = (new catscale($catscaleid))->get_ability_range();
+        return [(int) $catscaleid, (float) $abilities[$catscaleid], $abilityrange, $quizsettings];
+    }
+
+    /**
+     * The feedback, with the comparison of the attempt (issue #166).
+     *
+     * Data without the comparison - the snapshot of a session written before the end, or an attempt whose end added
+     * none - take it from the stored attempt; an ended attempt without one gets it now, stored once.
+     *
+     * @param array $feedbackdata
+     * @return array
+     */
+    public function get_feedback(array $feedbackdata): array {
+        return parent::get_feedback($this->with_comparison($feedbackdata));
+    }
+
+    /**
+     * Whether the data carry what the comparison needs - the comparison taken as get_feedback() takes it, so a lazy tab
+     * is offered exactly when its content will be there (issue #166).
+     *
+     * @param array $feedbackdata
+     * @return bool
+     */
+    public function has_data_for(array $feedbackdata): bool {
+        return parent::has_data_for($this->with_comparison($feedbackdata));
+    }
+
+    /**
+     * The data with the comparison: as they are, or with the one stored with the attempt (computed once for an ended
+     * attempt without one).
+     *
+     * @param array $feedbackdata
+     * @return array
+     */
+    private function with_comparison(array $feedbackdata): array {
+        if (!array_key_exists('testaverageability', $feedbackdata) && !empty($feedbackdata['attemptid'])) {
+            $peer = \local_catquiz\output\attemptfeedback::peer_comparison_of((int) $feedbackdata['attemptid']);
+            if ($peer) {
+                $feedbackdata = array_merge($feedbackdata, $peer);
+            }
+        }
+        return $feedbackdata;
     }
 
     /**

@@ -260,6 +260,73 @@ class context_resolver {
     }
 
     /**
+     * The contexts of a statistics scope with sets of courses and tests (issue #175).
+     *
+     * One context per test (as for_statistics() with that test), keyed "t<adaptivequiz.id>"; without tests one per
+     * course, keyed "c<courseid>"; without either the system context, keyed "s". A test without its activity falls
+     * back to the course when the scope has exactly one, otherwise to the system context: the check fails closed.
+     *
+     * @param int[]|null $courseids
+     * @param int[]|null $testids adaptivequiz.id
+     * @return context[]
+     */
+    public static function for_statistics_scope(?array $courseids, ?array $testids): array {
+        global $DB;
+
+        $onecourse = ($courseids && count($courseids) === 1) ? (int) reset($courseids) : null;
+        $contexts = [];
+        if ($testids) {
+            // One query for the activities and their contexts, whatever the number of tests: no query per test.
+            [$insql, $params] = $DB->get_in_or_equal(array_map('intval', $testids), SQL_PARAMS_NAMED, 'fssi');
+            $params['modname'] = 'adaptivequiz';
+            $params['level'] = CONTEXT_MODULE;
+            $ctxfields = \context_helper::get_preload_record_columns_sql('ctx');
+            $rows = $DB->get_recordset_sql(
+                "SELECT cm.instance AS fssinstance, cm.id AS fsscmid, $ctxfields
+                   FROM {course_modules} cm
+                   JOIN {modules} m ON m.id = cm.module AND m.name = :modname
+                   JOIN {context} ctx ON ctx.instanceid = cm.id AND ctx.contextlevel = :level
+                  WHERE cm.instance $insql",
+                $params
+            );
+            $cmids = [];
+            foreach ($rows as $row) {
+                $instance = (int) $row->fssinstance;
+                // Two activities for one instance cannot be told apart: no module context, the check below falls back.
+                $cmids[$instance] = isset($cmids[$instance]) ? 0 : (int) $row->fsscmid;
+                \context_helper::preload_from_record($row);
+            }
+            $rows->close();
+            foreach ($testids as $testid) {
+                $cmid = $cmids[(int) $testid] ?? 0;
+                $context = $cmid ? context_module::instance($cmid, IGNORE_MISSING) : false;
+                $contexts['t' . (int) $testid] = $context ?: self::for_courseid((int) $onecourse);
+            }
+            return $contexts;
+        }
+        if ($courseids) {
+            if (count($courseids) > 1) {
+                [$insql, $params] = $DB->get_in_or_equal(array_map('intval', $courseids), SQL_PARAMS_NAMED, 'fssc');
+                $params['level'] = CONTEXT_COURSE;
+                $ctxfields = \context_helper::get_preload_record_columns_sql('ctx');
+                $rows = $DB->get_recordset_sql(
+                    "SELECT $ctxfields FROM {context} ctx WHERE ctx.contextlevel = :level AND ctx.instanceid $insql",
+                    $params
+                );
+                foreach ($rows as $row) {
+                    \context_helper::preload_from_record($row);
+                }
+                $rows->close();
+            }
+            foreach ($courseids as $courseid) {
+                $contexts['c' . (int) $courseid] = self::for_courseid((int) $courseid);
+            }
+            return $contexts;
+        }
+        return ['s' => context_system::instance()];
+    }
+
+    /**
      * Clears the request level cache.
      *
      * Only needed in tests, where several attempts are created within one request.

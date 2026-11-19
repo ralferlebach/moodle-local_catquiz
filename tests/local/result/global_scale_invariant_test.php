@@ -379,6 +379,124 @@ final class global_scale_invariant_test extends \advanced_testcase {
     }
 
     /**
+     * The global scale answered but without an estimate - missing, or not finite: a clear diagnosis, no value made up
+     * (issue #174, re-audit 18.11.2026). Its row holds the reason and no ability, and is nobody's admissible value.
+     *
+     * @return array
+     */
+    public static function missing_estimates(): array {
+        return [
+            'not in the estimates' => [null],
+            'not finite' => [INF],
+            'not a number' => [NAN],
+        ];
+    }
+
+    /**
+     * The diagnosis of a global scale without an estimate.
+     *
+     * @dataProvider missing_estimates
+     * @param float|null $estimate
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('missing_estimates')]
+    public function test_a_global_scale_without_an_estimate_is_diagnosed(?float $estimate): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->preventResetByRollback();
+        [$abilities, $se] = self::estimates();
+        unset($abilities[self::ROOT]);
+        if ($estimate !== null) {
+            $abilities[self::ROOT] = $estimate;
+        }
+        $json = ['personabilities_abilities' => [12 => ['value' => -0.44, 'toreport' => true, 'primary' => true]],
+            'se' => $se, 'primaryscale' => ['id' => 12]];
+        [$hostid, $catid] = $this->attempt([12 => self::mixed(5), 13 => self::mixed(8)], $abilities, $json);
+        // A non-finite estimate is not written, and does not break the progress (its JSON could not be encoded).
+        $stored = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catid]), true);
+        $this->assertIsArray($stored, 'The progress is kept.');
+        $this->assertArrayNotHasKey(self::ROOT, $stored['abilities']);
+        $this->assertSame(-0.44, $stored['abilities'][12]);
+
+        $root = attempt_result_validator::validate($hostid)->get_scale_result(self::ROOT);
+        $this->assertNotNull($root, 'The global scale is in the result, with its diagnosis.');
+        $this->assertNull($root->score, 'No value is made up.');
+        $this->assertSame(13, $root->n);
+        $this->assertFalse($root->statisticallyvalid);
+        $this->assertFalse($root->valid);
+        $this->assertContains(scale_result::REASON_GLOBAL_NOT_ESTIMATED, $root->rejectionreasons);
+
+        attempt_finalizer::finalize($hostid, time(), 'reason');
+        $row = $DB->get_record('local_catquiz_personparams', ['attemptid' => $catid, 'catscaleid' => self::ROOT], '*', MUST_EXIST);
+        $this->assertNull($row->ability);
+        $this->assertSame(0, (int) $row->isvalid);
+        $this->assertStringContainsString(scale_result::REASON_GLOBAL_NOT_ESTIMATED, (string) $row->validationstatus);
+        $this->assertNull(personparam_repository::get_latest_valid(2, 9, self::ROOT), 'No admissible value.');
+        // The subscale reported keeps its result.
+        $this->assertTrue($DB->record_exists('local_catquiz_personparams', ['attemptid' => $catid, 'catscaleid' => 12]));
+    }
+
+    /**
+     * Without an answer there is nothing to diagnose: no row for the global scale (issue #174).
+     */
+    public function test_a_global_scale_without_answers_has_no_row(): void {
+        $this->resetAfterTest();
+        [$abilities, $se] = self::estimates();
+        [$hostid] = $this->attempt([], [], ['personabilities_abilities' => [], 'se' => $se]);
+        $this->assertNull(attempt_result_validator::validate($hostid)->get_scale_result(self::ROOT));
+    }
+
+    /**
+     * An incomplete map of standard errors: a scale without one has an infinite standard error - above any maximum -,
+     * the others keep theirs (issue #174).
+     */
+    public function test_an_incomplete_map_of_standard_errors(): void {
+        $this->resetAfterTest();
+        [$abilities, $se] = self::estimates();
+        unset($se[13], $se[11]);
+        $json = ['personabilities_abilities' => [12 => ['value' => -0.44, 'toreport' => true, 'primary' => true]],
+            'se' => $se, 'primaryscale' => ['id' => 12]];
+        [$hostid] = $this->attempt([12 => self::mixed(5), 13 => self::mixed(8)], $abilities, $json);
+        $result = attempt_result_validator::validate($hostid);
+        $this->assertTrue($result->get_scale_result(self::ROOT)->statisticallyvalid, 'The global scale has its SE.');
+        $this->assertSame(0.31, $result->get_scale_result(self::ROOT)->standarderror);
+        foreach ([11, 13] as $scaleid) {
+            $this->assertContains(scale_result::REASON_SE_MAX, $result->get_scale_result($scaleid)->rejectionreasons, "$scaleid");
+            $this->assertNull($result->get_scale_result($scaleid)->standarderror, "$scaleid: no SE made up.");
+        }
+        // Without a map at all: every added scale above the maximum, nothing invented.
+        [$hostid] = $this->attempt([12 => self::mixed(5), 13 => self::mixed(8)], $abilities, [
+            'personabilities_abilities' => [12 => ['value' => -0.44, 'toreport' => true, 'primary' => true]],
+            'primaryscale' => ['id' => 12],
+        ]);
+        $root = attempt_result_validator::validate($hostid)->get_scale_result(self::ROOT);
+        $this->assertContains(scale_result::REASON_SE_MAX, $root->rejectionreasons);
+        $this->assertSame(0.37, $root->score);
+    }
+
+    /**
+     * N of the global scale counts every question once - also a question that is an item of two of its subscales
+     * (issue #174: N_root without duplicates).
+     */
+    public function test_n_of_the_global_scale_counts_each_question_once(): void {
+        $this->resetAfterTest();
+        [$abilities, $se] = self::estimates();
+        $json = ['personabilities_abilities' => [12 => ['value' => -0.44, 'toreport' => true, 'primary' => true]],
+            'se' => $se, 'primaryscale' => ['id' => 12]];
+        [$hostid, $catid] = $this->attempt([12 => self::mixed(5), 13 => self::mixed(8)], $abilities, $json);
+        // The first question of scale 12 is an item of scale 13 as well.
+        $progress = \local_catquiz\teststrategy\progress::load_for_reading($catid);
+        $property = new \ReflectionProperty($progress, 'playedquestionsbyscale');
+        $property->setAccessible(true);
+        $byscale = $property->getValue($progress);
+        $first = reset($byscale[12]);
+        $byscale[13][$first->id] = $first;
+        $byscale[self::ROOT][$first->id] = $first;
+        $property->setValue($progress, $byscale);
+        $this->assertSame(13, $progress->get_num_answered_productive_questions(self::ROOT));
+        $this->assertSame(9, $progress->get_num_answered_productive_questions(13));
+    }
+
+    /**
      * Without a progress there is no measurement state: the projection alone, as before (retention).
      */
     public function test_without_progress_the_projection_stays_alone(): void {

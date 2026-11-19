@@ -233,6 +233,20 @@ abstract class feedbackgenerator {
     }
 
     /**
+     * The attempt and the CAT context the generator reads (issue #166: the comparison computed outside update_data()).
+     *
+     * @param int $adaptiveattemptid adaptivequiz_attempt.id
+     * @param int $contextid
+     */
+    protected function set_attempt(int $adaptiveattemptid, int $contextid): void {
+        if (!isset($this->attemptid) || $this->attemptid !== $adaptiveattemptid) {
+            $this->progress = null;
+        }
+        $this->attemptid = $adaptiveattemptid;
+        $this->contextid = $contextid;
+    }
+
+    /**
      * Update the feedback data that is stored in the DB to render the feedback
      *
      * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
@@ -241,8 +255,18 @@ abstract class feedbackgenerator {
      * @return null|array
      */
     public function update_data(int $adaptiveattemptid, array $existingdata, array $newdata): ?array {
+        if (isset($this->attemptid) && (int) $this->attemptid !== $adaptiveattemptid) {
+            // Another attempt: never the progress of the one before.
+            $this->progress = null;
+        }
         $this->attemptid = $adaptiveattemptid;
         $this->contextid = $newdata['contextid'];
+        /* Issue #168: the progress the selection has just saved is in hand - every generator loaded it again from
+           the cache (with 300 answers some 15 % of the feedback time per answer). Only the one of this attempt. */
+        $progress = $newdata['progress'] ?? null;
+        if ($progress instanceof progress && (int) $progress->get_attemptid() === $adaptiveattemptid) {
+            $this->progress = $progress;
+        }
         return $this->load_data($adaptiveattemptid, $existingdata, $newdata);
     }
 

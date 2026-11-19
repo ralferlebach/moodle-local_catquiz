@@ -36,6 +36,7 @@ use local_catquiz\teststrategy\progress;
 use templatable;
 use renderable;
 use stdClass;
+use local_catquiz\local\monitoring\timeline;
 
 /**
  * Renderable class for the catscalemanagers
@@ -137,8 +138,9 @@ class attemptfeedback implements renderable, templatable {
             return;
         }
 
-        $settings = json_decode($testenvironment->json);
-        $this->teststrategy = intval($settings->catquiz_selectteststrategy);
+        $settings = json_decode((string) $testenvironment->json);
+        // Settings stored as an empty list (json "[]") are no settings: no strategy, and no warning about it.
+        $this->teststrategy = is_object($settings) ? intval($settings->catquiz_selectteststrategy ?? 0) : 0;
 
         if (!isset($feedbacksettings)) {
             $this->feedbacksettings = new feedbacksettings($this->teststrategy);
@@ -227,7 +229,7 @@ class attemptfeedback implements renderable, templatable {
 
         $this->save_to_cache($updateddata);
 
-        catquiz::save_attempt_to_db($updateddata);
+        timeline::span('feedback:save', fn() => catquiz::save_attempt_to_db($updateddata));
     }
 
     /**
@@ -323,6 +325,74 @@ class attemptfeedback implements renderable, templatable {
     }
 
     /**
+     * The comparison of an attempt with the other people of the test (issue #166): stored with the attempt, or
+     * computed now - once, at the end of the attempt (attempt_finalizer) - and stored when the attempt has ended.
+     *
+     * Before, the comparison was computed with every answer, in the selection of the next question; its values were
+     * those of the last answer. Now they are those of the end - the same ability, the population of that moment.
+     *
+     * An attempt that ended before the comparison moved to the end (config peercomparisonatendsince, set by the
+     * upgrade) gets none afterwards: it keeps what its last answer stored, or nothing (issue #159).
+     *
+     * @param int $adaptiveattemptid adaptivequiz_attempt.id
+     * @param bool $atend True at the end of the attempt (attempt_finalizer).
+     * @return array|null The fields of comparetotestaverage::PEER_KEYS; null when the attempt has nothing to compare.
+     */
+    public static function peer_comparison_of(int $adaptiveattemptid, bool $atend = false): ?array {
+        global $DB;
+        $row = $DB->get_record(
+            'local_catquiz_attempts',
+            ['attemptid' => $adaptiveattemptid],
+            'id, json, contextid, endtime',
+            IGNORE_MULTIPLE
+        );
+        if (!$row) {
+            return null;
+        }
+        $data = json_decode((string) $row->json, true);
+        if (!is_array($data)) {
+            return null;
+        }
+        $keys = \local_catquiz\teststrategy\feedbackgenerator\comparetotestaverage::PEER_KEYS;
+        $stored = array_intersect_key($data, array_flip($keys));
+        if (count($stored) === count($keys)) {
+            return $stored;
+        }
+        $since = (int) get_config('local_catquiz', 'peercomparisonatendsince');
+        if (!$atend && !empty($row->endtime) && (int) $row->endtime < $since) {
+            // Ended before: nothing computed afterwards, with the people of today.
+            return null;
+        }
+        $feedback = new self($adaptiveattemptid, (int) $row->contextid);
+        if ($feedback->teststrategy === 0) {
+            // A test without a strategy has no feedback generators - and nothing to compare.
+            return null;
+        }
+        $generator = null;
+        foreach ($feedback->get_feedback_generators() as $candidate) {
+            if ($candidate instanceof \local_catquiz\teststrategy\feedbackgenerator\comparetotestaverage) {
+                $generator = $candidate;
+            }
+        }
+        if (!$generator) {
+            return null;
+        }
+        $peer = $generator->peer_data($adaptiveattemptid, ['contextid' => (int) $row->contextid] + $data);
+        if ($peer === null) {
+            return null;
+        }
+        if (!empty($row->endtime)) {
+            // Stored once with the ended attempt; decoded as objects, so the rest of the data keeps its form.
+            $object = json_decode((string) $row->json);
+            foreach ($peer as $key => $value) {
+                $object->$key = $value;
+            }
+            $DB->set_field('local_catquiz_attempts', 'json', json_encode($object), ['id' => $row->id]);
+        }
+        return $peer;
+    }
+
+    /**
      * Get feedback generators of teststrategy
      *
      * @return array
@@ -390,7 +460,11 @@ class attemptfeedback implements renderable, templatable {
         $newdata = $this->add_default_data($newdata);
         foreach ($generators as $generator) {
             try {
-                $generatordata = $generator->update_data($this->attemptid, $feedbackdata, $newdata);
+                // Issue #168: one span per generator, beside the save below (no cost while the trace is off).
+                $generatordata = timeline::span(
+                    'feedback:' . $generator->get_generatorname(),
+                    fn() => $generator->update_data($this->attemptid, $feedbackdata, $newdata)
+                );
             } catch (\moodle_exception $e) {
                 /* This runs with every answer, inside the selection of the next question. A feedback
                    area that cannot be built - the colour bar of a scale without feedback ranges, say -

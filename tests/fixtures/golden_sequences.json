@@ -1,0 +1,86 @@
+{
+    "1": {
+        "labels": [
+            "SIMB01-18",
+            "SIMC09-11",
+            "SIMB03-06",
+            "SIMB02-07",
+            "SIMC10-01",
+            "SIMC10-09",
+            "SIMC10-00",
+            "SIMC10-12",
+            "SIMB04-08",
+            "SIMC05-17",
+            "SIMC07-15"
+        ],
+        "status": "stoptargetprecision"
+    },
+    "4": {
+        "labels": [
+            "SIMB01-18",
+            "SIMC09-11",
+            "SIMC03-13",
+            "SIMC04-03",
+            "SIMC04-17",
+            "SIMC04-01",
+            "SIMC04-04",
+            "SIMC04-00",
+            "SIMC05-17",
+            "SIMC05-03",
+            "SIMC09-13",
+            "SIMC10-12"
+        ],
+        "status": "reachedmaximumquestions"
+    },
+    "5": {
+        "labels": [
+            "SIMB01-18",
+            "SIMC09-11",
+            "SIMC03-13",
+            "SIMC04-03",
+            "SIMC04-17",
+            "SIMC04-01",
+            "SIMC04-04",
+            "SIMC04-00",
+            "SIMC06-17",
+            "SIMC06-04",
+            "SIMC09-13",
+            "SIMC06-10"
+        ],
+        "status": "reachedmaximumquestions"
+    },
+    "7": {
+        "labels": [
+            "SIMA01-00",
+            "SIMA01-01",
+            "SIMA01-02",
+            "SIMA01-03",
+            "SIMA01-04",
+            "SIMA01-05",
+            "SIMA01-06",
+            "SIMA01-07",
+            "SIMA01-08",
+            "SIMA01-09",
+            "SIMA01-10",
+            "SIMA01-11"
+        ],
+        "status": "reachedmaximumquestions"
+    },
+    "8": {
+        "labels": [
+            "SIMB01-18",
+            "SIMC09-11",
+            "SIMC03-13",
+            "SIMC04-03",
+            "SIMC04-17",
+            "SIMC04-01",
+            "SIMC04-04",
+            "SIMC04-00",
+            "SIMC06-14",
+            "SIMC06-17",
+            "SIMC06-04",
+            "SIMC09-13"
+        ],
+        "status": "reachedmaximumquestions"
+    }
+}

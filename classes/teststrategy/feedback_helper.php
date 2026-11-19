@@ -441,28 +441,52 @@ class feedback_helper {
         if (isset($COURSE) && !empty($COURSE->id) && $COURSE->id > 1) {
             $currentcourseid = $COURSE->id;
         }
-        $courseid = (int) ($args['courseid'] ?? $currentcourseid);
-        $instanceid = (int) ($args['instanceid'] ?? 0);
-        $attemptid = $args['attemptid'] ?? 0;
+        // Issue #175: courseid, instanceid (adaptivequiz.id) and attemptid (the attempt of the activity) take one ID
+        // or a comma-separated list, read strictly - nothing is cut to a number.
+        try {
+            $courseids = \local_catquiz\local\statistics\id_list::parse($args['courseid'] ?? null, 'courseid');
+            $instanceids = \local_catquiz\local\statistics\id_list::parse($args['instanceid'] ?? null, 'instanceid');
+            $attemptids = \local_catquiz\local\statistics\id_list::parse($args['attemptid'] ?? null, 'attemptid');
+        } catch (\moodle_exception $e) {
+            // The message names the entry as given: escaped, the shortcode prints the error as it is.
+            return ['error' => s($e->getMessage())];
+        }
+        if (!$courseids && !array_key_exists('courseid', $args) && $currentcourseid) {
+            $courseids = [(int) $currentcourseid];
+        }
 
-        // Judged in the scope that is listed: the test, the course asked for, otherwise the page's course.
-        $scopecontext = ($instanceid || $courseid)
-            ? \local_catquiz\local\access\context_resolver::for_statistics($courseid ?: null, $instanceid ?: null)
-            : $context;
-        $canviewothers = \local_catquiz\local\access\feedback_access::can_view_other_users($scopecontext);
-        $userid = $canviewothers ? -1 : (int) $USER->id;
-        $alloweduserids = $canviewothers
-            ? \local_catquiz\local\access\feedback_access::get_allowed_userids($scopecontext)
-            : null;
+        // Judged in the scope that is listed: each test, else each course asked for, otherwise the page's course.
+        // Issue #175: per part of the scope - the viewer's own attempts always, those of others where they may see
+        // them, in separate groups the members of their groups there.
+        $parts = [];
+        if ($instanceids || $courseids) {
+            $scope = \local_catquiz\local\access\context_resolver::for_statistics_scope($courseids ?: null, $instanceids ?: null);
+            foreach ($scope as $key => $scopecontext) {
+                $parts[] = [$key[0] === 't' ? 'instanceid' : 'courseid', (int) substr($key, 1), $scopecontext];
+            }
+        } else {
+            $parts[] = [null, null, $context];
+        }
+        $clauses = [];
+        foreach ($parts as [$column, $id, $scopecontext]) {
+            if (\local_catquiz\local\access\feedback_access::can_view_other_users($scopecontext)) {
+                $clauses[] = [
+                    $column,
+                    $id,
+                    \local_catquiz\local\access\feedback_access::get_allowed_userids($scopecontext),
+                ];
+            }
+        }
 
         // Get attempt records.
         $records = catquiz::return_data_from_attemptstable(
             intval($args['numberofattempts'] ?? 1),
-            $instanceid,
-            $courseid,
-            intval($attemptid),
-            $userid,
-            $alloweduserids
+            $instanceids,
+            $courseids,
+            $attemptids,
+            -1,
+            null,
+            ['me' => (int) $USER->id, 'clauses' => $clauses]
         );
 
         if (!$records) {

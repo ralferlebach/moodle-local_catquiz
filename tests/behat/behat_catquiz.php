@@ -464,6 +464,83 @@ class behat_catquiz extends behat_base {
     }
 
     /**
+     * Writes a shortcode with the IDs of the fixture into a page (issue #175).
+     *
+     * Placeholders: #cm:IDNUMBER# (course module id of an activity), #instance:IDNUMBER# (its instance id),
+     * #course:SHORTNAME# (course id), #attempts:USERNAME# (the attempt ids of the activity, adaptivequiz_attempt.id as
+     * the CAT results of a person carry them, comma-separated).
+     *
+     * @Given /^the page "([^"]*)" shows "([^"]*)"$/
+     *
+     * @param string $idnumber The page activity.
+     * @param string $content
+     * @return void
+     */
+    public function the_page_shows(string $idnumber, string $content): void {
+        global $DB;
+        $content = preg_replace_callback('/#(cm|instance|course|attempts):([^#]+)#/', function (array $m) use ($DB): string {
+            switch ($m[1]) {
+                case 'cm':
+                    return (string) $DB->get_field('course_modules', 'id', ['idnumber' => $m[2]], MUST_EXIST);
+                case 'instance':
+                    return (string) $DB->get_field('course_modules', 'instance', ['idnumber' => $m[2]], MUST_EXIST);
+                case 'course':
+                    return (string) $DB->get_field('course', 'id', ['shortname' => $m[2]], MUST_EXIST);
+                default:
+                    $userid = $DB->get_field('user', 'id', ['username' => $m[2]], MUST_EXIST);
+                    return implode(',', $DB->get_fieldset_select(
+                        'local_catquiz_attempts',
+                        'attemptid',
+                        'userid = :userid',
+                        ['userid' => $userid]
+                    ));
+            }
+        }, $content);
+        $cm = $DB->get_record('course_modules', ['idnumber' => $idnumber], '*', MUST_EXIST);
+        $DB->set_field('page', 'content', $content, ['id' => $cm->instance]);
+        rebuild_course_cache($cm->course, true);
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * The CSV export of a statistics block lists the attempts of these people - the same scope as its charts (#175).
+     *
+     * Downloads the export the nth "Download" link of the page points to, with the session of the browser.
+     *
+     * @Then /^the CSV export of the statistics number (\d+) lists the attempts of "([^"]*)"$/
+     *
+     * @param int $number 1 for the first statistics block of the page.
+     * @param string $usernames Comma-separated, one entry per attempt.
+     * @return void
+     */
+    public function the_csv_export_of_the_statistics_lists(int $number, string $usernames): void {
+        global $CFG;
+        require_once($CFG->libdir . '/filelib.php');
+        $xpath = "(//a[contains(@href, '/local/catquiz/export_statistics_csv.php')])[$number]";
+        $link = $this->getSession()->getPage()->find('xpath', $xpath);
+        if (!$link) {
+            throw new \Behat\Mink\Exception\ExpectationException("No export link $number", $this->getSession());
+        }
+        $url = html_entity_decode($link->getAttribute('href'));
+        $content = download_file_content($url, ['Cookie' => 'MoodleSession=' . $this->getSession()->getCookie('MoodleSession')]);
+        if ($content === false) {
+            throw new \Behat\Mink\Exception\ExpectationException("Download failed: $url", $this->getSession());
+        }
+        $rows = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) $content))));
+        array_shift($rows);
+        $listed = array_map(fn($row) => str_getcsv($row, ';')[1] ?? '', $rows);
+        sort($listed);
+        $expected = array_map('trim', explode(',', $usernames));
+        sort($expected);
+        if ($listed !== $expected) {
+            throw new \Behat\Mink\Exception\ExpectationException(
+                'The export lists ' . json_encode($listed) . ', expected ' . json_encode($expected) . ' (' . $url . ')',
+                $this->getSession()
+            );
+        }
+    }
+
+    /**
      * Limits the time of an attempt in the stored CAT settings of a test (issue #141, stop reasons).
      *
      * @Given /^the CAT settings of "([^"]*)" limit an attempt to (\d+) minutes$/

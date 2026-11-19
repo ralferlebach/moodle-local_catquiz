@@ -30,7 +30,10 @@ use Exception;
 use context_course;
 use dml_missing_record_exception;
 use local_catquiz\data\dataapi;
+use local_catquiz\local\access\context_resolver;
+use local_catquiz\local\access\feedback_access;
 use local_catquiz\local\statistics\attempt_population;
+use local_catquiz\local\statistics\id_list;
 use local_catquiz\output\catquizstatistics;
 use local_catquiz\output\catscalemanager\quizattempts\quizattemptsdisplay;
 use local_catquiz\teststrategy\feedback_helper;
@@ -116,6 +119,10 @@ class shortcodes {
     /**
      * Prints catquiz statistics.
      *
+     * Issue #175: testid (course module ids), courseid/course and globalscale take one ID or a comma-separated
+     * list. Within an argument the IDs are alternatives, between arguments they narrow the scope. Root scales are
+     * never mixed: every root scale of the scope gets its own block with its own charts and export.
+     *
      * @param string $shortcode
      * @param array $args
      * @param string|null $content
@@ -124,30 +131,65 @@ class shortcodes {
      * @return string
      */
     public static function catquizstatistics($shortcode, $args, $content, $env, $next) {
-        global $CFG, $OUTPUT;
+        global $DB, $OUTPUT;
 
+        $args = is_array($args) ? $args : [];
         try {
-            $populated = self::populate_arguments($args);
+            $groups = self::populate_arguments($args);
+            $selection = self::attempt_selection($args);
         } catch (\Exception $e) {
-            $data = [
-                'error' => $e->getMessage(),
-            ];
-            return $OUTPUT->render_from_template('local_catquiz/catscaleshortcodes/catscalestatistics', $data);
+            return $OUTPUT->render_from_template(
+                'local_catquiz/catscaleshortcodes/catscalestatistics',
+                ['error' => $e->getMessage()]
+            );
         }
-        $courseid = $populated['course'];
-        $globalscale = $populated['globalscale'];
-        $testid = $populated['testid'];
-        // The statistics show the results of other people: the rule of the statistics export applies (#17).
-        $statisticscontext = \local_catquiz\local\access\context_resolver::for_statistics($courseid, $testid);
-        if (!\local_catquiz\local\access\feedback_access::can_view_other_users($statisticscontext)) {
-            return '';
+        // The statistics show the results of other people: the rule of the statistics export applies (#17). Issue
+        // #175: every test and every course of every block - one without the right shows nothing at all.
+        foreach ($groups as $group) {
+            foreach (context_resolver::for_statistics_scope($group['courseids'], $group['testids']) as $context) {
+                if (!feedback_access::can_view_other_users($context)) {
+                    return '';
+                }
+            }
+        }
+        // A scale that does not exist is named - to those who may see the statistics, after the check above.
+        $scaleids = array_values(array_unique(array_column($groups, 'scaleid')));
+        $known = $DB->get_records_list('local_catquiz_catscales', 'id', $scaleids, '', 'id');
+        foreach ($scaleids as $scaleid) {
+            if (!isset($known[$scaleid])) {
+                return $OUTPUT->render_from_template(
+                    'local_catquiz/catscaleshortcodes/catscalestatistics',
+                    ['error' => get_string('catquizstatistics_unknownscale', 'local_catquiz', $scaleid)]
+                );
+            }
         }
         $endtime = isset($args['endtime']) ? (int) $args['endtime'] : null;
         $starttime = isset($args['starttime']) ? (int) $args['starttime'] : null;
 
+        $html = '';
+        foreach ($groups as $group) {
+            $html .= self::render_statistics_group($group, $starttime, $endtime, $selection);
+        }
+        return $html;
+    }
+
+    /**
+     * The statistics of one root scale of the scope (issue #175: one block per root scale).
+     *
+     * @param array $group One entry of populate_arguments().
+     * @param int|null $starttime
+     * @param int|null $endtime
+     * @param string $selection
+     * @return string
+     */
+    private static function render_statistics_group(array $group, ?int $starttime, ?int $endtime, string $selection): string {
+        global $CFG, $OUTPUT;
+
+        $courseids = $group['courseids'];
+        $testids = $group['testids'];
+        $globalscale = $group['scaleid'];
         try {
-            $selection = self::attempt_selection($args);
-            $heading = self::get_heading($courseid, $globalscale, $testid, $starttime, $endtime);
+            $heading = self::get_heading($courseids, $globalscale, $testids, $starttime, $endtime);
         } catch (\Exception $e) {
             return $OUTPUT->render_from_template(
                 'local_catquiz/catscaleshortcodes/catscalestatistics',
@@ -156,7 +198,7 @@ class shortcodes {
         }
 
         try {
-            $catquizstatistics = new catquizstatistics($courseid, $testid, $globalscale, $endtime, $starttime, $selection);
+            $catquizstatistics = new catquizstatistics($courseids, $testids, $globalscale, $endtime, $starttime, $selection);
         } catch (dml_missing_record_exception $e) {
             return $OUTPUT->render_from_template(
                 'local_catquiz/catscaleshortcodes/catscalestatistics',
@@ -183,28 +225,31 @@ class shortcodes {
             );
         }
 
+        // The scope of the block: the charts loaded later and the export read exactly this (issue #175).
+        $scope = [
+            'courseid' => (int) id_list::single($courseids),
+            'testid' => (int) id_list::single($testids),
+            'courseids' => $courseids ?? [],
+            'testids' => $testids ?? [],
+            'scaleid' => (int) $globalscale,
+            'starttime' => (int) $starttime,
+            'endtime' => (int) $endtime,
+            'attempts' => $selection,
+        ];
         $data = [
             'heading' => $heading,
             'exportbutton' => $catquizstatistics->render_export_button() ?: false,
-            // This ID will be appended to the navigation tab links, so that
-            // those links are unique for shortcodes with different arguments.
-            'shortcodeid' => implode('-', $args),
+            // An ID of the block for themes: the same scope gives the same ID.
+            'shortcodeid' => 'cqs-' . substr(sha1(json_encode($scope)), 0, 12),
         ];
         // Issue #85: with lazy loading, the page carries one empty region per chart; each chart is built
         // when its tab is shown, through local_catquiz_render_statistics_chart - one chart that fails
         // leaves the others standing. Without it, every chart is built with the page, as before.
         $lazy = (bool) get_config('local_catquiz', 'lazyfeedbacktabs');
-        $scope = json_encode([
-            'courseid' => (int) $courseid,
-            'testid' => (int) $testid,
-            'scaleid' => (int) $globalscale,
-            'starttime' => (int) $starttime,
-            'endtime' => (int) $endtime,
-            'attempts' => $selection,
-        ]);
+        $scopejson = json_encode($scope);
         foreach (catquizstatistics::CHARTS as $chart => $templatekey) {
             $data[$templatekey] = $lazy
-                ? ['lazy' => true, 'chartname' => $chart, 'scope' => $scope]
+                ? ['lazy' => true, 'chartname' => $chart, 'scope' => $scopejson]
                 : self::render_statistics_chart($catquizstatistics, $chart);
         }
 
@@ -235,52 +280,128 @@ class shortcodes {
     }
 
     /**
-     * Populate shortcode arguments
+     * The blocks of the statistics shortcode: one per root scale of the scope (issues #88, #175).
+     *
+     * Arguments, each one ID or a comma-separated list (id_list):
+     * - testid: course module ids (cmid) of CAT tests - never adaptivequiz.id. Every cmid has to be a CAT test.
+     * - courseid, or course: courses. With tests, every test has to lie in one of them; without tests, the tests of
+     *   the scale in these courses count (without either, the current course; scope="all" drops the course).
+     * - globalscale: scales. With tests, the root scales of the tests, every test covered; without tests, the
+     *   scales of the blocks. Without globalscale, the root scales of the tests or courses, one block each.
      *
      * @param array $args
-     * @return array
-     * @throws Exception
+     * @return array[] Blocks: ['scaleid' => int, 'courseids' => int[]|null, 'testids' => int[]|null (adaptivequiz.id),
+     *                 'cmids' => int[]|null].
+     * @throws Exception For an invalid list, an unknown test or scale, or arguments that contradict each other.
      */
     private static function populate_arguments(array $args): array {
-        global $COURSE;
-        if ($args['testid'] ?? null) {
-            $cmid = $args['testid'];
-            // The 'testid' is actually the cmid. But we want the id of our test instance.
-            $testid = self::get_test_id($cmid);
-            $test = catquiz::get_test_by_component_id($testid);
-            $courseid = $test->courseid;
-            // Issue #88: "$args['course'] ?? null && ..." bound as "?? (null && ...)" - any course given
-            // was a conflict, the matching one included. Both spellings of the argument are accepted.
-            $askedcourse = $args['courseid'] ?? $args['course'] ?? null;
-            if (!empty($askedcourse) && (int) $askedcourse !== (int) $courseid) {
-                throw new Exception(get_string('catquizstatistics_scale_course_conflict', 'local_catquiz'));
+        global $COURSE, $DB;
+
+        $cmids = id_list::parse($args['testid'] ?? null, 'testid');
+        $courseids = id_list::parse_alias($args, ['courseid', 'course']);
+        $scales = id_list::parse($args['globalscale'] ?? null, 'globalscale');
+
+        if ($cmids) {
+            $tests = self::tests_of_cmids($cmids);
+            $byroot = [];
+            foreach ($tests as $cmid => $test) {
+                // Issue #88: any course given has to be the course of the test - now: one of the courses.
+                if ($courseids && !in_array((int) $test->courseid, $courseids, true)) {
+                    throw new Exception(get_string('catquizstatistics_scale_course_conflict', 'local_catquiz'));
+                }
+                $byroot[(int) $test->catscaleid][$cmid] = $test;
             }
-            $globalscale = $test->catscaleid;
-            if ($globalscale && array_key_exists('globalscale', $args) && $args['globalscale'] != $globalscale) {
-                throw new Exception(get_string('catquizstatistics_scale_testid_conflict', 'local_catquiz'));
+            if ($scales) {
+                // The scales given are the scales of the tests: each names the scale of some test, every test is named.
+                foreach ($scales as $scaleid) {
+                    if (!isset($byroot[$scaleid])) {
+                        throw new Exception(get_string('catquizstatistics_scale_testid_conflict', 'local_catquiz'));
+                    }
+                }
+                if (array_diff(array_keys($byroot), $scales)) {
+                    throw new Exception(get_string('catquizstatistics_scale_testid_conflict', 'local_catquiz'));
+                }
+                $order = $scales;
+            } else {
+                $order = array_keys($byroot);
             }
-            return ['course' => $courseid, 'globalscale' => $globalscale, 'testid' => $testid];
+            $groups = [];
+            foreach ($order as $root) {
+                $grouptests = $byroot[$root];
+                $groups[] = [
+                    'scaleid' => (int) $root,
+                    'courseids' => id_list::normalise(array_map(fn($t) => (int) $t->courseid, array_values($grouptests))),
+                    'testids' => id_list::normalise(array_map(fn($t) => (int) $t->instance, array_values($grouptests))),
+                    'cmids' => array_map('intval', array_keys($grouptests)),
+                ];
+            }
+            return $groups;
         }
 
-        $globalscale = $args['globalscale'] ?? null;
         $currentcourseid = 0;
         if (isset($COURSE) && !empty($COURSE->id) && $COURSE->id > 1) {
-            $currentcourseid = $COURSE->id;
+            $currentcourseid = (int) $COURSE->id;
         }
-        $courseid = $args['courseid'] ?? $currentcourseid;
-        if (!$globalscale) {
-            if ($courseid == 0) {
+        $scopecourses = $courseids ?: ($currentcourseid ? [$currentcourseid] : []);
+        if (!$scales) {
+            if (!$scopecourses) {
                 throw new Exception(get_string('catquizstatistics_askforparams', 'local_catquiz'));
             }
-            $globalscale = self::get_global_scale($courseid);
+            $scales = self::get_global_scales($scopecourses);
         }
 
         // Issue #88: "$args['scope'] ?? null != 'all'" bound as "?? (null != 'all')" - scope="all" kept
         // the course, and only a missing scope compared at all.
-        if ($courseid && ($args['scope'] ?? '') !== 'all') {
-            return ['course' => $courseid, 'globalscale' => $globalscale, 'testid' => null];
+        $filtercourses = ($scopecourses && ($args['scope'] ?? '') !== 'all') ? id_list::normalise($scopecourses) : null;
+        return array_map(fn($scaleid) => [
+            'scaleid' => (int) $scaleid,
+            'courseids' => $filtercourses,
+            'testids' => null,
+            'cmids' => null,
+        ], $scales);
+    }
+
+    /**
+     * The CAT tests of course module ids, in one query (issue #175).
+     *
+     * @param int[] $cmids
+     * @return \stdClass[] By cmid, in the order given: instance, courseid, catscaleid, json.
+     * @throws Exception For a cmid that is no CAT test: unknown, another module, or without CAT settings.
+     */
+    private static function tests_of_cmids(array $cmids): array {
+        global $DB;
+
+        [$insql, $params] = $DB->get_in_or_equal($cmids, SQL_PARAMS_NAMED, 'scm');
+        $params['modname'] = 'adaptivequiz';
+        $rows = $DB->get_recordset_sql(
+            "SELECT cm.id AS cmid, cm.instance, cm.course, t.id AS testrecordid, t.courseid, t.catscaleid, t.json
+               FROM {course_modules} cm
+               JOIN {modules} m ON m.id = cm.module AND m.name = :modname
+               JOIN {local_catquiz_tests} t ON t.componentid = cm.instance
+              WHERE cm.id $insql
+           ORDER BY cm.id, t.id",
+            $params
+        );
+        $found = [];
+        $duplicate = [];
+        foreach ($rows as $row) {
+            $cmid = (int) $row->cmid;
+            if (isset($found[$cmid])) {
+                $duplicate[$cmid] = true;
+                continue;
+            }
+            $row->courseid = (int) ($row->courseid ?: $row->course);
+            $found[$cmid] = $row;
         }
-        return ['course' => null, 'globalscale' => $globalscale, 'testid' => null];
+        $rows->close();
+        $tests = [];
+        foreach ($cmids as $cmid) {
+            if (!isset($found[$cmid]) || isset($duplicate[$cmid]) || empty($found[$cmid]->catscaleid)) {
+                throw new Exception(get_string('catquizstatistics_testid_unknown', 'local_catquiz', $cmid));
+            }
+            $tests[$cmid] = $found[$cmid];
+        }
+        return $tests;
     }
 
     /**
@@ -302,78 +423,42 @@ class shortcodes {
     }
 
     /**
-     * Returns the global scale for the tests in a course
+     * The root scales of the tests in the courses (issue #175: every one, not the first).
      *
-     * @param int $courseid
-     * @return int
-     * @throws Exception
+     * @param int[] $courseids
+     * @return int[] Ascending.
+     * @throws Exception Without a CAT test in the courses.
      */
-    private static function get_global_scale(int $courseid) {
-        // The cmid comes from the course_modules table.
-        // In this table:
-        // - The course matches the given courseid.
-        // - The module matches the module number of adaptivequiz.
-        // - The instance matches the id in the adaptivequiz table.
+    private static function get_global_scales(array $courseids): array {
+        global $DB;
 
-        // If there is only one CAT in that course, use the cmid of that course.
-        if (!$cats = catquiz::get_tests_for_course($courseid)) {
+        [$insql, $params] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'sgc');
+        $scales = array_map('intval', $DB->get_fieldset_sql(
+            "SELECT DISTINCT catscaleid
+               FROM {local_catquiz_tests}
+              WHERE courseid $insql AND catscaleid IS NOT NULL AND catscaleid > 0
+           ORDER BY catscaleid",
+            $params
+        ));
+        if (!$scales) {
             throw new Exception(get_string('catquizstatistics_nodataforcourse', 'local_catquiz'));
         }
-
-        if (count($cats) === 1) {
-            // Just one course. We use the global scale of this one.
-            $cat = reset($cats);
-            $globalscale = json_decode($cat->json)->catquiz_catscales;
-            return $globalscale;
-        }
-
-        foreach ($cats as $cat) {
-            $globalscale = json_decode($cat->json)->catquiz_catscales;
-            $globalscales[$globalscale] = true;
-        }
-
-        if (count($globalscales) === 1) {
-            // All courses use the same global scale, so no problem.
-            $first = reset($cats);
-            $globalscale = json_decode($first->json)->catquiz_catscales;
-            return $globalscale;
-        }
-
-        // Now there are multiple courses with different global scales. Throw exception to indicate that the user should
-        // explicitely set a scale.
-        throw new Exception(
-            sprintf(
-                'please select one of the following global scales: %s',
-                implode(', ', array_keys($globalscales))
-            )
-        );
-    }
-
-    /**
-     * Returns the CAT test id for the given cmid
-     *
-     * @param ?int $cmid
-     * @return ?int
-     */
-    private static function get_test_id(?int $cmid) {
-        if (!$cmid) {
-            return null;
-        }
-        [$course, $cm] = get_course_and_cm_from_cmid($cmid, 'adaptivequiz');
-        return $cm->instance;
+        return $scales;
     }
 
     /**
      * Returns an array with strings for the shortcode heading
      *
-     * @param ?int $courseid
+     * @param int[]|null $courseids One course or several (issue #175).
      * @param ?int $scaleid
-     * @param ?int $testid
+     * @param int[]|null $testids adaptivequiz.id, one or several.
      * @param ?int $starttime
      * @param ?int $endtime
      * @return array
      */
-    private static function get_heading(?int $courseid, ?int $scaleid, ?int $testid, ?int $starttime, ?int $endtime) {
+    private static function get_heading(?array $courseids, ?int $scaleid, ?array $testids, ?int $starttime, ?int $endtime) {
+        $courseid = id_list::single($courseids);
+        $testid = id_list::single($testids);
         $test = null;
         if ($starttime && $endtime) {
             $start = userdate($starttime, get_string('strftimedatetime', 'core_langconfig'));
@@ -391,6 +476,10 @@ class shortcodes {
             $timerangeaddition = get_string('catquizstatistics_timerange_end', 'local_catquiz', (object) ['endtime' => $end]);
         } else {
             $timerangeaddition = "";
+        }
+        if (($testids && count($testids) > 1) || ($courseids && count($courseids) > 1)) {
+            // Issue #175: several tests or courses.
+            return self::get_heading_of_sets($courseids, (int) $scaleid, $testids, $timerangeaddition);
         }
         if ($testid) {
             $test = catquiz::get_test_by_component_id($testid);
@@ -465,6 +554,83 @@ class shortcodes {
         return [
             'title' => $h1,
             'description' => $h2,
+        ];
+    }
+
+    /**
+     * The heading of a scope with several tests or courses (issue #175): the tests linked, the courses named.
+     *
+     * Two queries whatever the number of tests: the tests, their course modules, and the names of the courses.
+     *
+     * @param int[]|null $courseids
+     * @param int $scaleid
+     * @param int[]|null $testids adaptivequiz.id
+     * @param string $timerangeaddition
+     * @return array
+     */
+    private static function get_heading_of_sets(
+        ?array $courseids,
+        int $scaleid,
+        ?array $testids,
+        string $timerangeaddition
+    ): array {
+        global $DB;
+
+        $scale = catscale::return_catscale_object($scaleid);
+        $scalename = format_string($scale->name);
+        if ($testids) {
+            $tests = $DB->get_records_list('local_catquiz_tests', 'componentid', $testids, 'componentid');
+        } else {
+            [$insql, $params] = $DB->get_in_or_equal($courseids, SQL_PARAMS_NAMED, 'shc');
+            $params['root'] = attempt_population::root_of($scaleid);
+            $tests = $DB->get_records_select(
+                'local_catquiz_tests',
+                "courseid $insql AND catscaleid = :root",
+                $params,
+                'courseid, componentid'
+            );
+        }
+        $instances = array_values(array_unique(array_map(fn($t) => (int) $t->componentid, $tests)));
+        $cmids = [];
+        if ($instances) {
+            [$insql, $params] = $DB->get_in_or_equal($instances, SQL_PARAMS_NAMED, 'shi');
+            $params['modname'] = 'adaptivequiz';
+            $cmids = $DB->get_records_sql_menu(
+                "SELECT cm.instance, cm.id
+                   FROM {course_modules} cm
+                   JOIN {modules} m ON m.id = cm.module AND m.name = :modname
+                  WHERE cm.instance $insql",
+                $params
+            );
+        }
+        $links = [];
+        $coursesoftests = [];
+        foreach ($tests as $test) {
+            $name = format_string((string) (json_decode((string) $test->json)->name ?? $test->name ?? ''));
+            $coursesoftests[(int) $test->courseid] = (int) $test->courseid;
+            $cmid = $cmids[(int) $test->componentid] ?? null;
+            $link = $cmid ? \html_writer::link(new moodle_url('/mod/adaptivequiz/view.php', ['id' => $cmid]), $name) : s($name);
+            $links[] = feedback_helper::add_quotes($link);
+        }
+        $courses = $DB->get_records_list('course', 'id', $courseids ?: array_values($coursesoftests), 'id', 'id, fullname');
+        $coursenames = implode(', ', array_map(fn($c) => format_string($c->fullname), $courses));
+        $a = (object) [
+            'scale' => $scalename,
+            'scalename' => $scalename,
+            'count' => count($tests),
+            'links' => implode(', ', $links),
+            'linkedcourses' => implode(', ', $links),
+            'coursenames' => $coursenames,
+        ];
+        if ($testids) {
+            return [
+                'title' => get_string('catquizstatistics_h1_tests', 'local_catquiz', $a),
+                'description' => trim(get_string('catquizstatistics_h2_tests', 'local_catquiz', $a) . ' ' . $timerangeaddition),
+            ];
+        }
+        return [
+            'title' => get_string('catquizstatistics_h1_scale_courses', 'local_catquiz', $a),
+            'description' => trim(get_string('catquizstatistics_h2_scale_courses', 'local_catquiz', $a) . ' ' . $timerangeaddition),
         ];
     }
 }

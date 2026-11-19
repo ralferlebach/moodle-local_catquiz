@@ -155,6 +155,45 @@ final class attempt_debug_export_test extends advanced_testcase {
     }
 
     /**
+     * The export shows the end and the result as the host recorded them - stop code, end time, result status and
+     * validity - from the row of the activity's attempt, each attempt its own; and its version (issue #173).
+     */
+    public function test_the_host_fields_from_the_database(): void {
+        global $DB;
+        $this->crossed();
+        $DB->update_record('adaptivequiz_attempt', (object) [
+            'id' => self::A_HOST, 'stopcode' => 'stop-code-of-A', 'timefinished' => 1700000111,
+            'resultstatus' => 'valid', 'resultvalid' => 1,
+        ]);
+        $DB->update_record('adaptivequiz_attempt', (object) [
+            'id' => self::B_HOST, 'stopcode' => 'stop-code-of-B', 'timefinished' => 1700000222,
+            'resultstatus' => 'invalid', 'resultvalid' => 0,
+        ]);
+
+        $data = attempt_debug_export::collect(self::A_HOST);
+        $this->assertSame('stop-code-of-A', $data->host['stopcode']);
+        $this->assertSame(1700000111, (int) $data->host['timefinished']);
+        $this->assertSame('valid', $data->host['resultstatus']);
+        $this->assertSame(1, (int) $data->host['resultvalid']);
+        $this->assertSame(attempt_debug_export::SCHEMA, $data->schema);
+        // Not from the stored data of the CAT attempt: changing them changes nothing here.
+        $json = json_encode(['stopcode' => 'from-the-json']);
+        $DB->set_field('local_catquiz_attempts', 'json', $json, ['attemptid' => self::A_HOST]);
+        $this->assertSame('stop-code-of-A', attempt_debug_export::collect(self::A_HOST)->host['stopcode']);
+
+        $cases = [[self::A_HOST, 'stop-code-of-A', 'stop-code-of-B'], [self::B_HOST, 'stop-code-of-B', 'stop-code-of-A']];
+        foreach ($cases as $case) {
+            [$host, $own, $foreign] = $case;
+            $document = attempt_debug_export::pdf(attempt_debug_export::collect($host), false, 'helvetica');
+            foreach (['stopcode', 'timefinished', 'resultstatus', 'resultvalid', $own] as $text) {
+                $this->assertStringContainsString($text, $document, "$host: $text in the PDF.");
+            }
+            $this->assertStringNotContainsString($foreign, $document, "$host: nothing of the other attempt.");
+            $this->assertStringContainsString('Export version ' . attempt_debug_export::SCHEMA, $document);
+        }
+    }
+
+    /**
      * No progress: said plainly, without a PHP notice.
      */
     public function test_missing_progress_is_reported_as_absent(): void {
