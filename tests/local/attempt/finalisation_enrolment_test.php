@@ -105,6 +105,30 @@ final class finalisation_enrolment_test extends advanced_testcase {
     }
 
     /**
+     * Host #23 AK4 (decision 19.11.2026): an attempt that a technical error ended after the minimum, with a valid result,
+     * enrols as a regular end does - the enrolment reads the validity of the result, not why the attempt ended - and the
+     * stop code stays error.
+     */
+    public function test_a_technical_end_with_a_valid_result_enrols(): void {
+        global $DB;
+        $this->resetAfterTest();
+        [$attemptid, $owner, $target] = $this->attempt_routing_into_a_course(
+            ['value' => 0.4, 'toreport' => true, 'primary' => true]
+        );
+        $DB->update_record('adaptivequiz_attempt', (object) [
+            'id' => $attemptid, 'stopcode' => 'error', 'attemptstopcriteria' => 'An error occured',
+        ]);
+
+        $this->setAdminUser();
+        $this->redirectMessages();
+        $this->assertTrue(attempt_finalizer::finalize($attemptid, time(), 'An error occured'));
+
+        $this->assertTrue(is_enrolled(\context_course::instance($target->id), $owner->id), 'A valid result enrols.');
+        $this->assertStringContainsString('Target course', attempt_enrolment::stored_message($attemptid));
+        $this->assertSame('error', $DB->get_field('adaptivequiz_attempt', 'stopcode', ['id' => $attemptid]));
+    }
+
+    /**
      * An invalid result enrols nobody.
      */
     public function test_an_invalid_result_enrols_nobody(): void {

@@ -26,6 +26,9 @@
 use local_catquiz\local\attempt\attempt_debug_export;
 
 require_once(__DIR__ . '/../../config.php');
+// The function send_file() lives in filelib.php, which a page does not load by itself (found in the browser, re-audit
+// 19.11.2026).
+require_once($CFG->libdir . '/filelib.php');
 
 // The attempt of the activity (adaptivequiz_attempt.id), not the CAT attempt.
 $attemptid = required_param('attemptid', PARAM_INT);

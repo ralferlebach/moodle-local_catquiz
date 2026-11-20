@@ -94,7 +94,13 @@ final class feedback_area_failure_test extends advanced_testcase {
         }
 
         $this->assertCount(3, array_unique($ids));
-        // The area that could not be built is named for the developer, with every answer.
+        // Issue #168: the area is built when the attempt ends, not with every answer - none of it so far.
+        $this->assertSame([], array_map(fn($debug) => $debug->message, $this->getDebuggingMessages()));
+        // The request after the last answer ends the test (maximum 3): every area is built - the failing one is left
+        // out, named for the developer - and the attempt ends regularly, not as a technical problem.
+        $attempt = new attempt($adaptivequiz, $DB->get_field('adaptivequiz_attempt', 'userid', ['id' => $attemptid]));
+        $result = catquiz_handler::fetch_question_id($module->id, 'mod_adaptivequiz', $attempt->get_attempt());
+        $this->assertEmpty($result[0], 'The test ended after its maximum.');
         $messages = array_map(fn($debug) => $debug->message, $this->getDebuggingMessages());
         $this->assertNotEmpty($messages);
         foreach ($messages as $message) {

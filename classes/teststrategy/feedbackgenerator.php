@@ -185,6 +185,20 @@ abstract class feedbackgenerator {
     abstract public function get_generatorname(): string;
 
     /**
+     * Whether this feedback is recorded with every answer (issue #168).
+     *
+     * Only a feedback that holds a history of the attempt - one entry per answer, which cannot be rebuilt
+     * afterwards - is recorded with every answer. Every other one describes the state at a moment and is
+     * built once at the end of the attempt (attemptfeedback::complete_at_end()), or on demand when a running
+     * attempt is looked at (attemptfeedback::completed()). Decision of 19.11.2026.
+     *
+     * @return bool
+     */
+    public function records_every_answer(): bool {
+        return false;
+    }
+
+    /**
      * What this feedback depends on (issue #120).
      *
      * An attempt without a valid result shows no feedback that reads the result - but what the

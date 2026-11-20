@@ -331,6 +331,15 @@ class debuginfo extends feedbackgenerator {
     }
 
     /**
+     * Recorded with every answer: one entry per answer, which cannot be rebuilt afterwards (issue #168).
+     *
+     * @return bool
+     */
+    public function records_every_answer(): bool {
+        return true;
+    }
+
+    /**
      * Get required context keys.
      *
      * @return array

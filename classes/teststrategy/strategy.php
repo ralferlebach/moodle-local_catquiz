@@ -506,7 +506,8 @@ abstract class strategy {
         // Issue #64: the end of the selection travels with the feedback data of the attempt as well.
         $this->endstatus = (string) $result->get_status();
         $this->context['selectiondiagnosis'] = $this->diagnosis();
-        $this->update_attemptfeedback($this->context);
+        // Issue #168: the selection ends the attempt - every feedback of the strategy is built now, once.
+        $this->update_attemptfeedback($this->context, true);
         $this->cache->set('endtime', time());
         $this->cache->set('catquizerror', $result->get_status());
         $this->cache->set('catquizerrorattempt', (int) ($this->context['attemptid'] ?? 0));
@@ -538,6 +539,7 @@ abstract class strategy {
      * Helper method to update attempt feedback data
      *
      * @param mixed $context
+     * @param bool $atend The selection ends the attempt (issue #168): every feedback, not only the history.
      *
      * @return void
      *
@@ -545,7 +547,7 @@ abstract class strategy {
      * @throws Exception
      * @throws dml_exception
      */
-    private function update_attemptfeedback($context) {
+    private function update_attemptfeedback($context, bool $atend = false) {
         if (getenv('CATQUIZ_TESTING_SKIP_FEEDBACK')) {
             return;
         }
@@ -563,7 +565,7 @@ abstract class strategy {
 
         $attemptfeedback = new attemptfeedback($context['attemptid'], $context['contextid']);
 
-        $attemptfeedback->update_feedbackdata($context);
+        $attemptfeedback->update_feedbackdata($context, $atend);
     }
 
     /**

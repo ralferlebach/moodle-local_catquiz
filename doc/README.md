@@ -40,6 +40,17 @@ Zwei Arten von Dokumenten:
   Reihenfolge, was aus Sitzung 104 bereits einzahlt, und die Werkzeuge dafür.
 - **session-start-prompt.md** – Kopierfertiger Prompt für den Start neuer
   Sitzungen (Projekt, Pfade, Prüf-Ablauf, verbindliche Disziplinen, Auslieferung).
+- **re-audit-2026-11-19-nachweise.md** – Re-Audit 19.11.2026: CI-Nachweis je Zelle,
+  Playwright-Strecke, Longrun, k6-Last, #168-Messung, axe, Stand je Issue (#146–#175, Host
+  #17/#23/#25, Adapter #12). Versioniert.
+- **entscheidungen-2026-11-19.md** – Fachentscheidungen vom 19.11.2026 (#162, #164, #168 AK2,
+  Host #23). Versioniert.
+- **restarbeiten-2026-11-19.md** – Nachweise je AK/DoD der Runde vom 18./19.11.2026 (Benchmark
+  #161/#166/#168). Versioniert.
+- **ergebnisvertrag-164.md** – Referenzwerte, Carry-over und Peer-Population (#164), §3 bestätigt
+  am 19.11.2026. Versioniert.
+- **issue-161-27-162.md** – Laufzeit #161, Abgrenzung #27, Strategieformel #162 (freigegeben am
+  19.11.2026). Versioniert.
 
 ## Historisch (Änderungshistorie je Durchgang)
 
