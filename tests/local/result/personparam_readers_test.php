@@ -56,6 +56,8 @@ final class personparam_readers_test extends \advanced_testcase {
      */
     private const READERS = [
         'classes/catquiz.php' => [self::VALUE, self::WRITER],
+        // Re-audit "ab #147" (#163): compares every stored result row of a context with the definition, read-only.
+        'classes/local/integrity/standard_error_audit.php' => [self::ALL],
         'classes/local/model/model_person_param_list.php' => [self::WRITER],
         'classes/local/operator/operator_checks.php' => [self::ALL],
         'classes/local/result/global_scale_validity.php' => [self::COMMENT],
@@ -71,6 +73,7 @@ final class personparam_readers_test extends \advanced_testcase {
         'classes/teststrategy/feedbackgenerator/comparetotestaverage.php' => [self::VALUE],
         // Issue #161: deletes the rows of the attempts of its own benchmark test before a run.
         'cli/benchmark_attempts.php' => [self::WRITER],
+        'cli/diagnose_standarderror.php' => [self::COMMENT],
         'cli/measure_attempt.php' => [self::WRITER],
         'db/upgrade.php' => [self::SCHEMA],
         'db/upgradelib.php' => [self::SCHEMA],

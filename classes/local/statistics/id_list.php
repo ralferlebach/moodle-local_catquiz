@@ -27,7 +27,7 @@ namespace local_catquiz\local\statistics;
  *   empty entry as in "12,,13" or "12," - is refused with the entry named. Nothing is cut to a number: before,
  *   (int) "12a" became 12 and "12,13" became 12.
  * - A repeated ID counts once; the order of first appearance is kept.
- * - At most MAX distinct IDs (the limit is documented in doc/shortcode-id-lists.md).
+ * - At most MAX distinct IDs (the limit is documented in the README, section of the shortcodes).
  * - Not given, an empty string, 0 or "0" alone: no list (the earlier meaning of 0 - "no test", "this course").
  *
  * @package    local_catquiz

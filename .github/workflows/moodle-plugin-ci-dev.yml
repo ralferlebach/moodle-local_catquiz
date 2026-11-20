@@ -1096,10 +1096,15 @@ jobs:
           dest="$RUNNER_TEMP/playwright-failures"
           rm -rf "$dest"; mkdir -p "$dest"
           found=0
-          while IFS= read -r ctx; do
-            cp -a "$(dirname "$ctx")" "$dest/"
+          # A directory of a failed test: Playwright 1.49 (package-lock) keeps its
+          # screenshot test-failed-*.png and its trace.zip for failures only; newer
+          # versions add error-context.md. CI 20.11.2026: only error-context.md was
+          # looked for, so the bundle held the server log alone.
+          while IFS= read -r dir; do
+            cp -a "$dir" "$dest/"
             found=1
-          done < <(find "$src" -name error-context.md 2>/dev/null)
+          done < <(find "$src" \( -name error-context.md -o -name 'test-failed-*.png' -o -name trace.zip \) \
+              -printf '%h\n' 2>/dev/null | sort -u)
           if [ "$found" = "1" ]; then
             find "$dest" -name '*.webm' -delete
             ls -1 "$dest"

@@ -40,17 +40,21 @@ Zwei Arten von Dokumenten:
   Reihenfolge, was aus Sitzung 104 bereits einzahlt, und die Werkzeuge dafür.
 - **session-start-prompt.md** – Kopierfertiger Prompt für den Start neuer
   Sitzungen (Projekt, Pfade, Prüf-Ablauf, verbindliche Disziplinen, Auslieferung).
+- **re-audit-ab-147-nachweise.md** – Re-Audit „ab #147“ (19.11.2026), Antwort vom 20.11.2026: Funde F1 (#163
+  Kategorie politomer Antworten), F2 (#163 SE einer Teilskala), F3 (#175 README), Fisher-Referenz aller Modelle,
+  Ende/Resume/Stopp, lesende Prüfwerkzeuge, k6 Pool 2.500/5.000 mit Teilspannen, #168-Kurven, Browser #150/#159/
+  #160/#166. Im ZIP; `doc/` steht in der `.gitignore`.
 - **re-audit-2026-11-19-nachweise.md** – Re-Audit 19.11.2026: CI-Nachweis je Zelle,
   Playwright-Strecke, Longrun, k6-Last, #168-Messung, axe, Stand je Issue (#146–#175, Host
-  #17/#23/#25, Adapter #12). Versioniert.
+  #17/#23/#25, Adapter #12). Im ZIP; `doc/` steht in der `.gitignore`.
 - **entscheidungen-2026-11-19.md** – Fachentscheidungen vom 19.11.2026 (#162, #164, #168 AK2,
-  Host #23). Versioniert.
+  Host #23). Im ZIP; `doc/` steht in der `.gitignore`.
 - **restarbeiten-2026-11-19.md** – Nachweise je AK/DoD der Runde vom 18./19.11.2026 (Benchmark
-  #161/#166/#168). Versioniert.
+  #161/#166/#168). Im ZIP; `doc/` steht in der `.gitignore`.
 - **ergebnisvertrag-164.md** – Referenzwerte, Carry-over und Peer-Population (#164), §3 bestätigt
-  am 19.11.2026. Versioniert.
+  am 19.11.2026. Im ZIP; `doc/` steht in der `.gitignore`.
 - **issue-161-27-162.md** – Laufzeit #161, Abgrenzung #27, Strategieformel #162 (freigegeben am
-  19.11.2026). Versioniert.
+  19.11.2026). Im ZIP; `doc/` steht in der `.gitignore`.
 
 ## Historisch (Änderungshistorie je Durchgang)
 

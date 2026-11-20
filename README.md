@@ -118,8 +118,14 @@ Root scales are never mixed: every root scale of the selection gets its own bloc
 With tests and globalscale, globalscale names the root scales of the tests, and every test has to be covered; with
 tests and courses, every test has to lie in one of the courses. The charts loaded with a tab, the CSV export and a
 second shortcode on the same page use exactly the same selection. The statistics show other people's results: the
-viewer needs the right to see them in every test or course of the selection - one without it shows nothing at all.
-Details: doc/shortcode-id-lists.md.
+viewer needs the right to see them in every test or course of the selection - one without it shows nothing at all,
+not a part (the charts loaded later and the export check the same).
+
+`course` is another name for `courseid` in [catquizstatistics]; both may be given only if they name the same IDs. An
+empty value, 0 or "0" alone means no list, as before (no test, this course). In [catquizfeedback] an unknown course,
+instance or attempt ID filters (no feedback yet); in [catquizstatistics] an ID that is not the course module id of a CAT
+test is an error that names the ID. Within one shortcode the IDs are resolved in a fixed number of queries, however
+long the lists are.
 
 ## Installing via uploaded ZIP file ##
 

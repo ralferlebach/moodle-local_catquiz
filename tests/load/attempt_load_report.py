@@ -71,6 +71,30 @@ def p(values, key):
     return (values or {}).get(key)
 
 
+# The parts of a request (re-audit "ab #147", #161: DB, MUC and lock as sub-spans, #166: the peer comparison on its
+# own). The server traces every span with its time and its queries; the report shows the p95 of each, per stage the
+# mean over the repetitions.
+SUBSPANS = [
+    ('host:lock_wait', 'Lock: session/attempt before the request'),
+    ('host:answer_lock_wait', 'Lock: answer of the attempt'),
+    ('pool:cache_lookup', 'MUC: pool from the cache'),
+    ('context:progress', 'DB/MUC: progress of the attempt'),
+    ('context:person_ability', 'DB: person parameters'),
+    ('context:questions', 'CPU: candidates of the pool'),
+    ('strategy:update_personability', 'CPU+DB: ability estimate'),
+    ('strategy:add_scale_standarderror', 'CPU: standard error (#163)'),
+    ('strategy:fisherinformation', 'CPU: information of the candidates'),
+    ('strategy:select_question', 'CPU: selection'),
+    ('strategy:progress_save', 'DB+MUC: progress saved'),
+    ('feedback:graphicalsummary', 'Feedback per answer: history (#168)'),
+    ('feedback:save', 'DB: attempt row (#168)'),
+    ('host:quba_save', 'DB: question usage (host)'),
+    ('adapter:attempt_finalizer', 'End: finalisation'),
+    ('finalizer:peer_comparison', 'End: peer comparison (#166)'),
+]
+SUBSPANNAMES = [name for name, _ in SUBSPANS]
+
+
 def row(name, vus, items, temp, k6, server):
     k6 = k6 or {}
     server = server or {}
@@ -78,6 +102,8 @@ def row(name, vus, items, temp, k6, server):
     spans = server.get('spans', {})
     lock = max([p(spans.get(s, {}).get('ms'), 'p95') or 0 for s in ('host:lock_wait', 'host:answer_lock_wait')] or [0])
     answer = k6.get('bykind', {}).get('answer', {})
+    subspans = {name: {'ms': p(spans.get(name, {}).get('ms'), 'p95'), 'n': p(spans.get(name, {}).get('ms'), 'n'),
+                       'db': p(spans.get(name, {}).get('dbqueries'), 'p95')} for name in SUBSPANNAMES}
     return {
         'run': name, 'vus': vus, 'items': items, 'temp': temp,
         'completed': count(k6.get('completed')), 'answers': count(k6.get('answers')),
@@ -90,6 +116,7 @@ def row(name, vus, items, temp, k6, server):
         'lock_wait_p95_ms': lock,
         'session_kb_max': p(server.get('sessionkb'), 'max'),
         'cold_first': (server.get('cold') or {}).get('ms'),
+        'subspans': subspans,
     }
 
 
@@ -137,6 +164,8 @@ def main():
             'next_item_p95': series(lambda r: r['next_item_ms']['p95']),
             'next_item_p99': series(lambda r: r['next_item_ms']['p99']),
             'lock_wait_p95': series(lambda r: r['lock_wait_p95_ms']),
+            'subspans': {name: {'ms': series(lambda r, n=name: r['subspans'][n]['ms']),
+                                'db': series(lambda r, n=name: r['subspans'][n]['db'])} for name in SUBSPANNAMES},
         })
 
     md = ['## Attempt load (k6) – re-audit 19.11.2026', '',
@@ -161,6 +190,15 @@ def main():
         md.append(f'| {a["stage"]} ({a["vus"]} × {a["items"]}) | {a["runs"]} | {cell(a["ttfb_p95"])} | '
                   f'{cell(a["roundtrip_p95"])} | {cell(a["next_item_p95"])} | {cell(a["next_item_p99"])} | '
                   f'{cell(a["lock_wait_p95"])} |')
+    md += ['', '### Sub-spans of the requests (p95 ms, mean over the repetitions; DB queries p95 in brackets)', '',
+           '| Span | ' + ' | '.join(f'{a["stage"]}' for a in agg) + ' |',
+           '|---|' + '---:|' * len(agg)]
+    for name, label in SUBSPANS:
+        cells = []
+        for a in agg:
+            ms, db = a['subspans'][name]['ms'], a['subspans'][name]['db']
+            cells.append('–' if ms[0] is None else f'{ms[0]:.0f}' + ('' if db[0] is None else f' ({db[0]:.0f})'))
+        md.append(f'| {label} (`{name}`) | ' + ' | '.join(cells) + ' |')
     if os.path.exists(os.path.join(out, 'burst-skipped.txt')):
         md += ['', 'Burst (25 VUs) left out: a run before it was not correct.']
     md += ['', '### Correctness', '']

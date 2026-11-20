@@ -4,7 +4,7 @@
 # after it finds them filled. Per run: the k6 summary (client) and analyse_attempt_load.php (server: traces,
 # question usages, integrity, sessions). attempt_load_report.py turns the runs into the report and the verdict.
 #
-#   run_attempt_load.sh <moodle dir> <out dir> [plan]      plan: full (default) | quick
+#   run_attempt_load.sh <moodle dir> <out dir> [plan]      plan: full (default) | quick | pool
 #
 # Environment: what the seed printed (LOAD_BASE_URL, LOAD_USERS, LOAD_PASSWORD, LOAD_CMID_26, LOAD_IDNUMBER_26,
 # LOAD_CMID_150, LOAD_IDNUMBER_150); K6 (default: k6 on the PATH).
@@ -12,6 +12,8 @@
 # full:  3 repetitions x (cold, warm) x {1 x 26, 12 x 26, 1 x 150, 12 x 150}, then - only if every run so far is
 #        correct - 3 x 25 VUs x 26 (burst).
 # quick: 1 repetition x (cold, warm) x {1 x 26, 12 x 26}, then 1 x 25 x 26 under the same condition.
+# pool:  3 repetitions x (cold, warm) x {12 x 26, 1 x 150, 12 x 150}, no burst - for comparing pool sizes (re-audit
+#        "ab #147", #161: the same plan on a site seeded with --pool=2500 and one with --pool=5000).
 set -euo pipefail
 moodle=$1
 out=$2
@@ -24,6 +26,10 @@ if [ "$plan" = quick ]; then
     reps=1
     stages="s1:1:26 s12:12:26"
     bursts=1
+elif [ "$plan" = pool ]; then
+    reps=3
+    stages="s12:12:26 l1:1:150 l12:12:150"
+    bursts=0
 else
     reps=3
     stages="s1:1:26 s12:12:26 l1:1:150 l12:12:150"
@@ -65,7 +71,9 @@ for rep in $(seq 1 "$reps"); do
 done
 
 # The burst only after stable correctness.
-if python3 "$here/attempt_load_report.py" "$out" --check-only; then
+if [ "$bursts" -eq 0 ]; then
+    :
+elif python3 "$here/attempt_load_report.py" "$out" --check-only; then
     for rep in $(seq 1 "$bursts"); do
         run "b25-warm-r${rep}" 25 26 warm
     done

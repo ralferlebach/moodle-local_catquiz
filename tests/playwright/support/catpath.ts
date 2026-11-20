@@ -81,21 +81,53 @@ export const attemptState = (cmid: string, username: string): AttemptState =>
 
 /**
  * Collects what the browser reports as wrong: console errors, uncaught page errors, HTTP 5xx and 4xx responses of
- * the site (a favicon or a missing optional asset aside).
+ * the site (a favicon or a missing optional asset aside; resources of other hosts aside).
+ *
+ * One pair of console errors is Moodle's own and no fault: a request of core/ajax that is still running when the page
+ * is left - core_message_get_unsent_message and core_courseformat_get_state run on every page - is cut off by the
+ * navigation, and core/ajax logs "Page unloaded." and then the error of the cut-off request ("TypeError: Failed to
+ * fetch"). Both are left out; any other console error counts (CI 20.11.2026: the story of HIGHESTSUB failed on that
+ * pair alone).
  *
  * @param page
  */
 export const watchErrors = (page: Page): string[] => {
     const errors: string[] = [];
-    page.on('console', (msg) => {
-        if (msg.type() === 'error') {
-            errors.push(`console: ${msg.text()}`);
+    let unloading = false;
+    // The site under test; what other hosts serve (Moodle 4.5 loads MathJax from cdn.jsdelivr.net) is not the plugin's
+    // to answer for - a CDN that is slow, blocked or answers without CORP header must not fail a story (local 4.5,
+    // 20.11.2026: "Failed to load resource: net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin" for MathJax).
+    const site = new URL(process.env.CATQUIZ_BASE_URL || 'http://127.0.0.1:8000').host;
+    const foreign = (url: string | undefined): boolean => {
+        try {
+            return !!url && /^https?:/.test(url) && new URL(url).host !== site;
+        } catch (e) {
+            return false;
         }
+    };
+    page.on('console', (msg) => {
+        if (msg.type() !== 'error') {
+            return;
+        }
+        const text = msg.text();
+        if (/^Failed to load resource/.test(text) && foreign(msg.location()?.url)) {
+            return;
+        }
+        if (text === 'Page unloaded.') {
+            unloading = true;
+            return;
+        }
+        if (unloading && /^$|Failed to fetch|NetworkError|Load failed|abort|^error$/i.test(text)) {
+            unloading = false;
+            return;
+        }
+        unloading = false;
+        errors.push(`console: ${text}`);
     });
     page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
     page.on('response', (response) => {
         const status = response.status();
-        if (status >= 400 && !/favicon|\.map$/.test(response.url())) {
+        if (status >= 400 && !/favicon|\.map$/.test(response.url()) && !foreign(response.url())) {
             errors.push(`HTTP ${status}: ${response.url()}`);
         }
     });
@@ -129,6 +161,10 @@ export const loginAdmin = async(page: Page): Promise<void> =>
  * @param password
  */
 export const loginOverHttp = async(page: Page, username: string, password: string): Promise<void> => {
+    // The page of the person before is left first: its scripts (core/courseformat, core/ajax) would otherwise send
+    // their requests with the session key of that person into the session of the next one - "invalidsesskey",
+    // "EXCEPTION RAISED WHILE INIT COURSE EDITOR" in the console (4.5, 20.11.2026).
+    await page.goto('about:blank');
     await page.context().clearCookies();
     const api = page.context().request;
     const form = await api.get('/login/index.php', {timeout: 60_000});
@@ -145,6 +181,36 @@ export const shownSlot = async(page: Page): Promise<string | null> => {
     return (await slots.count()) ? await slots.first().getAttribute('value') : null;
 };
 
+/**
+ * What the page shows at this moment: the next question, the end of the attempt, or nothing yet (wait).
+ *
+ * While the browser navigates - after a click on "Submit answer", twice after a double click - the document of the
+ * moment can be gone between two calls ("Execution context was destroyed", CI 20.11.2026) or not be built yet: that
+ * is waiting, never the end. The end is a loaded page that is not the attempt page: the host always redirects to
+ * attemptfinished.php (or to view.php) when an attempt ends.
+ *
+ * @param page
+ * @param before The slot before the click.
+ */
+const nextState = async(page: Page, before: string | null): Promise<'next' | 'end' | 'wait'> => {
+    try {
+        const ready = await page.evaluate(() => document.readyState);
+        if (ready === 'loading') {
+            return 'wait';
+        }
+        const slot = await shownSlot(page);
+        if (slot === null) {
+            return /\/mod\/adaptivequiz\/attempt\.php/.test(page.url()) ? 'wait' : 'end';
+        }
+        return slot !== before && await page.locator('#responseform .qtext').first().isVisible() ? 'next' : 'wait';
+    } catch (e) {
+        if (/Execution context was destroyed|navigat|Target page, context or browser has been closed/i.test(String(e))) {
+            return 'wait';
+        }
+        throw e;
+    }
+};
+
 /** Times from the click to the question a person can read, in ms, per step. */
 export interface Timing {
     step: number;
@@ -159,14 +225,13 @@ export interface Timing {
  * @returns The slot shown now, or null at the end.
  */
 export const nextQuestionOrEnd = async(page: Page, before: string | null): Promise<string | null> => {
+    const seen: {state: 'next' | 'end' | 'wait'} = {state: 'wait'};
     await expect.poll(async() => {
-        const slot = await shownSlot(page);
-        if (slot === null) {
-            return 'end';
-        }
-        return slot !== before && await page.locator('#responseform .qtext').first().isVisible() ? 'next' : 'wait';
+        seen.state = await nextState(page, before);
+        return seen.state;
     }, {timeout: 90_000, intervals: [100, 200, 500]}).not.toBe('wait');
-    return shownSlot(page);
+    await page.waitForLoadState('domcontentloaded');
+    return seen.state === 'end' ? null : shownSlot(page);
 };
 
 /**
