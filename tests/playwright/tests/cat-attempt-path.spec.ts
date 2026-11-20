@@ -39,8 +39,12 @@ import {
     nextQuestionOrEnd, percentiles, playToTheEnd, shownSlot, startAttempt, watchErrors,
 } from '../support/catpath';
 
-// One attempt after the other: the population of the scale is part of what the selection reads.
-test.describe.configure({mode: 'serial'});
+// One attempt after the other: the population of the scale is part of what the selection reads. No retry: a retry
+// of a serial group plays it again from its first story, on a population the first pass has changed and with people
+// who have their attempt already - the replays of #172 then end after 14 questions instead of 17 and hide the failure
+// that caused the retry (CI 20.11.2026). The causes of flakiness are handled where they are (watchErrors,
+// nextQuestionOrEnd); a failure is reported as it is.
+test.describe.configure({mode: 'serial', retries: 0});
 
 const STRATEGIES = ['fastest', 'allsubs', 'lowestsub', 'highestsub', 'classic', 'relsubs'];
 

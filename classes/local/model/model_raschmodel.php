@@ -387,7 +387,13 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
     }
 
     /**
-     * Helper class that gets the key of an ip-array by given fraction
+     * The category of a response: the index of the first key of the ip-array that is not below the fraction.
+     *
+     * Fraction and keys are compared on the precision of the keys (re-audit "ab #147", #163): the keys are
+     * sanitised to PRECISION decimals, Moodle stores a response with a third of the marks as 0.3333333. Compared
+     * as they were, 0.333 < 0.3333333 put the response in the next category - the response of 1/3 counted as one of
+     * 2/3, and the probabilities of the categories of an item no longer added up to 1 (GRM, GGRM, PCM, GPCM; also
+     * 5/6, 4/7 and every fraction whose rounding to PRECISION decimals is below it).
      *
      * @param float $frac
      * @param array $array (e.g. $ip['difficulties'])
@@ -396,9 +402,10 @@ abstract class model_raschmodel extends model_model implements catcalc_ability_e
      *
      */
     protected static function get_key_by_fractions(float $frac, array $array): int {
+        $frac = round($frac, self::PRECISION);
         $n = 0;
         foreach ($array as $key => $val) {
-            if ((float) $key < $frac) {
+            if (round((float) $key, self::PRECISION) < $frac) {
                 $n++;
             } else {
                 return $n;

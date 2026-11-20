@@ -20,7 +20,10 @@ personparam_readers_test             # #164
 strategy_itemterm_test               # #162
 strategy_semantics_test              # #172
 end_without_question_test            # #172
-addscalestandarderror_test           # #163
+addscalestandarderror_test           # #163 (closed form of all seven models)
+standard_error_contract_test         # #163 end, resume and stop; the read-only audit of stored results
+polytomous_category_test             # #163 the category of a response (GRM, GGRM, PCM, GPCM)
+category_fraction_check_test         # #163 read-only check of the items the old mapping touched
 attempt_debug_export_test            # #173
 context_item_pool_test               # #157
 usage_chart_semantics_test           # #160

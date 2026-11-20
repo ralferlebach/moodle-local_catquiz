@@ -345,6 +345,12 @@ class updatepersonability extends preselect_task {
                 );
 
                 $this->progress->set_ability($ability, $scale);
+                /* Re-audit "ab #147" (#163, end of an attempt): the running estimate of the step as well. Without it,
+                   the standard error of this subscale was computed later in the step at its earlier ability, while
+                   the progress - and with it the result of the attempt - kept the new one: a standard error that
+                   did not belong to the reported ability (1.73 instead of 1.57 for one answer). The next step read
+                   the new ability anyway, from the person parameters below. */
+                $context['person_ability'][$scale] = $ability;
                 $this->update_person_param($scale, $ability);
             }
         }

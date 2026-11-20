@@ -23,9 +23,9 @@
  * the 2PL model with a true ability drawn per attempt from a fixed seed, so two runs give the same answers as long as
  * the engine selects the same questions.
  *
- * Measured per step: wall time, CPU time (getrusage), SQL time and number of queries, waiting time (wall - CPU - SQL:
- * locks, I/O, scheduling - the queue of the request), peak memory, the size of the stored attempt data (json,
- * debug_info) and the bytes written with it, and the spans of the engine (timeline: select_question,
+ * Measured per step: wall time, CPU time (getrusage), SQL time, number of queries and of writes (DML), waiting time
+ * (wall - CPU - SQL: locks, I/O, scheduling - the queue of the request), peak memory, the size of the stored attempt
+ * data (json, debug_info) and the bytes written with it, and the spans of the engine (timeline: select_question,
  * update_attemptfeedback, progress_save, ...). Reported as p50/p95/p99/max, separately for the first and the following
  * questions, cold (every cache emptied before each step) or warm, and by length of the attempt (25/100/250/625).
  *
@@ -345,6 +345,7 @@ if ($options['worker'] >= 0) {
             $record = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
             $attemptobject = new attempt($quiz, $record->userid);
             $queries = $DB->perf_get_queries();
+            $writes = $DB->perf_get_writes();
             $peer = local_catquiz_benchmark_peers();
             $sqltime = $DB->perf_get_queries_time();
             $usage = getrusage();
@@ -371,7 +372,7 @@ if ($options['worker'] >= 0) {
             $step = [
                 'attempt' => $number, 'n' => $i + 1, 'wallms' => round($wall, 2), 'cpums' => round($cpu, 2),
                 'sqlms' => round($sql, 2), 'waitms' => round(max(0, $wall - $cpu - $sql), 2),
-                'queries' => $DB->perf_get_queries() - $queries,
+                'queries' => $DB->perf_get_queries() - $queries, 'writes' => $DB->perf_get_writes() - $writes,
                 'peerqueries' => local_catquiz_benchmark_peers() - $peer,
                 'peakkb' => (int) (memory_get_peak_usage() / 1024), 'jsonbytes' => $row ? (int) $row->jsonbytes : 0,
                 'storedbytes' => $bytes, 'writtenbytes' => $bytes > 0 && $bytes !== $previousbytes ? $bytes : 0,
@@ -387,6 +388,12 @@ if ($options['worker'] >= 0) {
                 attempt_finalizer::finalize($attemptid, time(), (string) $step['stop']);
                 $step['finalisems'] = round((microtime(true) - $finishstart) * 1000, 2);
                 $step['finalisepeerqueries'] = local_catquiz_benchmark_peers() - $peer;
+                // The comparison with the other people of the test on its own (#166): its span in the finalisation.
+                foreach (timeline::get_spans() as $span) {
+                    if ($span['name'] === 'finalizer:peer_comparison' && $span['ms'] !== null) {
+                        $step['peerms'] = round((float) $span['ms'], 2);
+                    }
+                }
                 $steps[] = $step;
                 break;
             }
@@ -493,30 +500,35 @@ foreach (array_keys($spannames) as $span) {
 }
 // The data of the attempt by its length (issue #168): at the step closest to each mark.
 cli_writeln("\nStored attempt data by answers (issue #168):");
-$header = ['answers', 'json bytes', 'stored bytes', 'written so far', 'step ms', 'peak KB'];
-cli_writeln(sprintf('%8s %12s %14s %16s %12s %10s', ...$header));
+$header = ['answers', 'json bytes', 'stored bytes', 'written so far', 'DML step', 'DML so far', 'step ms', 'peak KB'];
+cli_writeln(sprintf('%8s %12s %14s %16s %10s %12s %12s %10s', ...$header));
 foreach ([25, 100, 250, 625] as $mark) {
     $rows = array_values(array_filter($steps, fn($s) => $s['n'] === $mark + 1));
     if (!$rows) {
         continue;
     }
     $written = 0;
+    $dml = 0;
     foreach ($steps as $step) {
         if ($step['attempt'] === $rows[0]['attempt'] && $step['n'] <= $mark + 1) {
             $written += $step['writtenbytes'];
+            $dml += $step['writes'] ?? 0;
         }
     }
     $report['byanswers'][$mark] = [
         'jsonbytes' => $rows[0]['jsonbytes'], 'storedbytes' => $rows[0]['storedbytes'], 'writtenbytes' => $written,
+        'writes' => $rows[0]['writes'] ?? null, 'writessofar' => $dml,
         'wallms' => $rows[0]['wallms'], 'peakkb' => $rows[0]['peakkb'], 'sqlms' => $rows[0]['sqlms'],
         'feedbackms' => $rows[0]['spans']['strategy:update_attemptfeedback'] ?? null,
     ];
     cli_writeln(sprintf(
-        '%8d %12d %14d %16d %12.1f %10d',
+        '%8d %12d %14d %16d %10d %12d %12.1f %10d',
         $mark,
         $rows[0]['jsonbytes'],
         $rows[0]['storedbytes'],
         $written,
+        $rows[0]['writes'] ?? 0,
+        $dml,
         $rows[0]['wallms'],
         $rows[0]['peakkb']
     ));
@@ -526,6 +538,28 @@ cli_writeln(sprintf(
     array_sum(array_column($steps, 'peerqueries')),
     array_sum(array_map(fn($s) => $s['finalisepeerqueries'] ?? 0, $steps))
 ));
+$peerms = array_values(array_filter(array_map(fn($s) => $s['peerms'] ?? null, $steps), fn($v) => $v !== null));
+$finalisems = array_values(array_filter(array_map(fn($s) => $s['finalisems'] ?? null, $steps), fn($v) => $v !== null));
+if ($finalisems) {
+    $report['end'] = [
+        'n' => count($finalisems),
+        'finalise_p50' => local_catquiz_benchmark_percentile($finalisems, 0.5),
+        'finalise_p95' => local_catquiz_benchmark_percentile($finalisems, 0.95),
+        'peer_n' => count($peerms),
+        'peer_p50' => $peerms ? local_catquiz_benchmark_percentile($peerms, 0.5) : null,
+        'peer_p95' => $peerms ? local_catquiz_benchmark_percentile($peerms, 0.95) : null,
+        'peer_max' => $peerms ? max($peerms) : null,
+    ];
+    cli_writeln(sprintf(
+        'End of the attempts: %d finalised, p50 %.1f ms, p95 %.1f ms; peer comparison (span) %d, p50 %s ms, p95 %s ms.',
+        $report['end']['n'],
+        $report['end']['finalise_p50'],
+        $report['end']['finalise_p95'],
+        $report['end']['peer_n'],
+        json_encode($report['end']['peer_p50']),
+        json_encode($report['end']['peer_p95'])
+    ));
+}
 $stops = array_count_values(array_map(fn($s) => $s['stop'], array_filter($steps, fn($s) => isset($s['stop']))));
 cli_writeln("\nStops: " . json_encode($stops));
 if ($options['json'] !== '') {

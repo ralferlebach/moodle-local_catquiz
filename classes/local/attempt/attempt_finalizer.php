@@ -253,7 +253,11 @@ final class attempt_finalizer {
 
         // Issue #166: the comparison with the other people of the test, once, with the result - not with every answer.
         try {
-            \local_catquiz\output\attemptfeedback::peer_comparison_of($adaptiveattemptid, true);
+            // A span of its own (re-audit "ab #147"): the cost of the comparison under load, apart from the rest of the end.
+            \local_catquiz\local\monitoring\timeline::span(
+                'finalizer:peer_comparison',
+                fn() => \local_catquiz\output\attemptfeedback::peer_comparison_of($adaptiveattemptid, true)
+            );
         } catch (\Throwable $e) {
             debugging('Comparison with the other people of the test failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }

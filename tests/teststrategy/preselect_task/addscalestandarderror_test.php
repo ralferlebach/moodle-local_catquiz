@@ -77,6 +77,7 @@ final class addscalestandarderror_test extends advanced_testcase {
      * @param string $model
      * @param float $guessing
      * @param bool $active Whether the item gets active parameters at all.
+     * @param string $json The JSON column: the category parameters of a polytomous model.
      * @return int The question id.
      */
     private function item(
@@ -87,7 +88,8 @@ final class addscalestandarderror_test extends advanced_testcase {
         ?int $questionid = null,
         string $model = 'raschbirnbaum',
         float $guessing = 0.0,
-        bool $active = true
+        bool $active = true,
+        string $json = '{}'
     ): int {
         global $DB;
         $questionid = $questionid ?? $this->nextquestion++;
@@ -98,7 +100,7 @@ final class addscalestandarderror_test extends advanced_testcase {
         $paramid = (int) $DB->insert_record('local_catquiz_itemparams', (object) [
             'itemid' => $itemid, 'componentid' => $questionid, 'componentname' => 'question', 'contextid' => $contextid,
             'model' => $model, 'difficulty' => $difficulty, 'discrimination' => $discrimination,
-            'guessing' => $guessing, 'json' => '{}', 'status' => 4, 'timecreated' => 0, 'timemodified' => 0,
+            'guessing' => $guessing, 'json' => $json, 'status' => 4, 'timecreated' => 0, 'timemodified' => 0,
         ]);
         if ($active) {
             $DB->set_field('local_catquiz_items', 'activeparamid', $paramid, ['id' => $itemid]);
@@ -333,5 +335,145 @@ final class addscalestandarderror_test extends advanced_testcase {
             $se[$this->root],
             1e-9
         );
+    }
+
+    /**
+     * The Fisher information of one polytomous item in closed form, written down from the textbook definitions and
+     * independently of the engine's models (re-audit "ab #147", 19.11.2026, #163: a reference for every model).
+     *
+     * Categories k = 0..m in the order of their fractions; the first category has no parameter of its own.
+     * Graded response (Samejima), GRM with a = 1, GGRM with a: P*_0 = 1, P*_k = 1 / (1 + exp(-a (t - b_k))),
+     * P*_(m+1) = 0, P_k = P*_k - P*_(k+1), dP*_k/dt = a P*_k (1 - P*_k), I = sum_k (dP_k/dt)^2 / P_k.
+     * Partial credit (Masters), PCM with a = 1, GPCM (Muraki) with a: z_k = a sum_(j<=k) (t - d_j), z_0 = 0,
+     * P_k = exp(z_k) / sum_j exp(z_j), I = a^2 (sum_k k^2 P_k - (sum_k k P_k)^2).
+     *
+     * @param string $model grm, grmgeneralized, pcm or pcmgeneralized
+     * @param float $t
+     * @param float[] $parameters b_1..b_m or d_1..d_m, in the order of the categories
+     * @param float $a
+     * @return float
+     */
+    private static function closed_form_polytomous(string $model, float $t, array $parameters, float $a): float {
+        $m = count($parameters);
+        if (str_starts_with($model, 'grm')) {
+            $cumulative = [1.0];
+            $slope = [0.0];
+            foreach ($parameters as $b) {
+                $p = 1 / (1 + exp(-$a * ($t - $b)));
+                $cumulative[] = $p;
+                $slope[] = $a * $p * (1 - $p);
+            }
+            $cumulative[] = 0.0;
+            $slope[] = 0.0;
+            $information = 0.0;
+            for ($k = 0; $k <= $m; $k++) {
+                $pk = $cumulative[$k] - $cumulative[$k + 1];
+                $information += ($slope[$k] - $slope[$k + 1]) ** 2 / $pk;
+            }
+            return $information;
+        }
+        $z = [0.0];
+        foreach ($parameters as $d) {
+            $z[] = end($z) + $a * ($t - $d);
+        }
+        $max = max($z);
+        $weights = array_map(fn($zk) => exp($zk - $max), $z);
+        $sum = array_sum($weights);
+        $mean = 0.0;
+        $square = 0.0;
+        foreach ($weights as $k => $w) {
+            $mean += $k * $w / $sum;
+            $square += $k * $k * $w / $sum;
+        }
+        return $a ** 2 * ($square - $mean ** 2);
+    }
+
+    /**
+     * Every model of the engine at an ability inside the scale and at both ends of it.
+     *
+     * @return array
+     */
+    public static function every_model(): array {
+        $cases = [];
+        $models = [
+            '1PL' => 'rasch', '2PL' => 'raschbirnbaum', '3PL' => 'mixedraschbirnbaum', 'GRM' => 'grm',
+            'GGRM' => 'grmgeneralized', 'PCM' => 'pcm', 'GPCM' => 'pcmgeneralized',
+        ];
+        foreach ($models as $label => $model) {
+            foreach (['low' => -3.2, 'inside' => 0.35, 'high' => 2.7] as $where => $ability) {
+                $cases["$label $where"] = [$model, $ability];
+            }
+        }
+        return $cases;
+    }
+
+    /**
+     * The standard error of every scale for every model against the closed form, at three abilities: answered
+     * items of the scale and its subscales with full and partial credit, a pilot, an item without active parameters
+     * and unanswered candidates left out (#163, re-audit "ab #147": a reference for all models).
+     *
+     * @param string $model
+     * @param float $ability
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('every_model')]
+    public function test_standard_error_of_every_model_against_the_closed_form(string $model, float $ability): void {
+        $polytomous = in_array($model, ['grm', 'grmgeneralized', 'pcm', 'pcmgeneralized']);
+        $key = str_starts_with($model, 'grm') ? 'difficulties' : 'intercepts';
+        // Scale, discrimination, guessing, category parameters (a dichotomous item uses the first as difficulty).
+        $items = [
+            [$this->root, 1.3, 0.2, [-0.7, 0.6]],
+            [$this->root, 0.8, 0.1, [0.4, 1.5]],
+            [$this->sub, 1.6, 0.25, [-1.4, -0.2, 1.1]],
+            [$this->sub, 0.6, 0.0, [-1.9, 0.3]],
+        ];
+        $create = function (
+            int $scale,
+            float $a,
+            float $c,
+            array $parameters,
+            bool $active = true
+        ) use (
+            $model,
+            $polytomous,
+            $key
+): int {
+            $json = '{}';
+            if ($polytomous) {
+                $fractions = [];
+                $m = count($parameters);
+                foreach ($parameters as $k => $value) {
+                    $fractions[sprintf('%.4F', ($k + 1) / $m)] = $value;
+                }
+                $json = json_encode([$key => ['0.0000' => 0.0] + $fractions]);
+            }
+            $difficulty = $polytomous ? array_sum($parameters) / count($parameters) : $parameters[0];
+            return $this->item($scale, $difficulty, $a, self::CONTEXTID, null, $model, $c, $active, $json);
+        };
+        $ids = [];
+        foreach ($items as [$scale, $a, $c, $parameters]) {
+            $ids[] = $create($scale, $a, $c, $parameters);
+        }
+        $pilot = $create($this->sub, 1.0, 0.1, [0.0, 0.5]);
+        $inactive = $create($this->sub, 1.0, 0.1, [0.3, 0.9], false);
+        $this->candidates(5);
+
+        // Full, no and partial credit: the information does not depend on the answer.
+        $fractions = [1.0, 0.0, $polytomous ? 0.5 : 1.0, 0.0];
+        $responses = array_combine($ids, $fractions) + [$pilot => 1.0, $inactive => 1.0];
+        $se = $this->se($responses, [$pilot], $ability);
+
+        $info = fn(array $subset) => array_sum(array_map(function ($i) use ($items, $model, $ability, $polytomous) {
+            [, $a, $c, $parameters] = $items[$i];
+            if ($polytomous) {
+                $slope = in_array($model, ['grmgeneralized', 'pcmgeneralized']) ? $a : 1.0;
+                return self::closed_form_polytomous($model, $ability, $parameters, $slope);
+            }
+            return self::closed_form($model, $ability, $parameters[0], $a, $c);
+        }, $subset));
+        foreach ([[$this->root, [0, 1, 2, 3]], [$this->sub, [2, 3]]] as [$scale, $subset]) {
+            $expected = 1 / sqrt(max(10 ** -6, $info($subset)));
+            $this->assertTrue(is_finite($se[$scale]), "$model at $ability: finite");
+            $this->assertEqualsWithDelta($expected, $se[$scale], 1e-9 * max(1.0, $expected), "$model at $ability");
+        }
     }
 }

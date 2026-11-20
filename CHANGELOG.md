@@ -2,6 +2,90 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Re-Audit „ab #147“ vom 19.11.2026 (2026111710; Nachweise `doc/re-audit-ab-147-nachweise.md`, nur im ZIP –
+  `doc/` steht in der `.gitignore`, deshalb das Wesentliche hier):
+  - **#163, Fund F1 – Kategorie einer Antwort (GRM, GGRM, PCM, GPCM):** `model_raschmodel::get_key_by_fractions()`
+    verglich den Bruch mit den auf 3 Stellen sanierten Kategorie-Schlüsseln, wie sie vorlagen. Moodle speichert einen
+    Drittel-Punkt als 0.3333333, also galt `0.333 < 0.3333333`, und die Antwort fiel in die nächste Kategorie (1/3 zählte
+    wie 2/3). Die Kategorienwahrscheinlichkeiten eines Items summierten sich dann nicht zu 1. Betroffen sind alle Brüche,
+    die auf 3 Stellen abrunden (1/3, 5/6, 4/7 …). Die Wirkung trat in der Iteminformation auf (Auswahl, SE), sobald die
+    Schlüssel mehr Stellen tragen, und überall, wo Antworten ungerundet aus `model_responses` kommen (Kalibrierung,
+    Nachberechnung). Der Antwortpfad eines laufenden Versuchs rundet auf 3 Stellen und war für die Fähigkeit nicht
+    betroffen. Jetzt werden Bruch und Schlüssel auf der Genauigkeit der Schlüssel verglichen.
+    - Test: `tests/local/model/polytomous_category_test.php` (64 Fälle gegen die geschlossene Form). Ohne Fix sind
+      36 von 64 rot.
+    - Lesend für den Betrieb: `cli/check_category_fractions.php` zählt betroffene Parameterzeilen und Antworten, ohne
+      Personen. Historische Ergebnisse bleiben unverändert.
+  - **#163, Fund F2 – SE einer Teilskala am Ende:** `updatepersonability` schätzte eine Teilskala ohne Antworten
+    beider Art mit dem Prior der Elternskala neu, setzte den Wert aber nicht in den laufenden Kontext. Die SE dieser
+    Teilskala galt daher einer früheren Fähigkeit als der gemeldeten (z. B. 1,73 statt 1,57). Behoben; die
+    Golden-Folgen aller fünf Strategien sind unverändert.
+  - **#163, Referenz und Vertrag:**
+    - `addscalestandarderror_test`: geschlossene Form für alle sieben Modelle, je bei drei Fähigkeiten.
+    - Neu `tests/teststrategy/standard_error_contract_test.php`, zum Vertrag:
+      - **Ende:** Schnappschuss und Ergebniszeile entsprechen der Neuberechnung aus der Datenbank.
+      - **Resume:** Mit leeren Caches nach jeder Antwort ist das Ergebnis bitgleich.
+      - **Stopp:** `stoptargetprecision` nur bei SE ≤ se_min; `se_max` genau dann ein Grund, wenn SE > se_max.
+    - Lesend für Altresultate: `cli/diagnose_standarderror.php` (`standard_error_audit`) vergleicht gespeicherte SE
+      mit der Definition.
+  - **#161/#166/#168, Messwerkzeuge:**
+    - k6-Plan `pool` (`run_attempt_load.sh`, Workflow-Eingabe) für den Vergleich Pool 2.500/5.000.
+    - Der k6-Bericht zeigt Teilspannen: Lock, MUC, DB, Auswahl, Feedback, Finalisierung und den Peer-Vergleich.
+    - Der Peer-Vergleich am Ende hat eine eigene Span (`finalizer:peer_comparison`).
+    - `cli/benchmark_attempts.php` zählt DML je Schritt und zeigt die Peer-Span am Ende.
+  - **Messungen (lokal, 2 CPUs; Befund, keine Bewertung):**
+    - k6-Plan `pool` auf 5.1, Pool 5.000 gegen 2.500, je 18 Läufe (150 Versuche, 13.572 Antworten), alle korrekt.
+      Zeit bis zur nächsten Frage, p95: einzeln 948 → 644 ms, 12 parallel 4.916 → 3.141 ms. Teilspannen: Pool,
+      Kandidaten, Information, Auswahl und SE wachsen mit dem Pool; Verlauf, Speichern und Sperren nicht.
+      Peer-Vergleich am Ende 12–14 ms einzeln, 53–82 ms bei 12 gleichzeitigen Enden.
+    - Befund #163/#161: Die SE-Spanne wächst mit dem Pool, weil `model_responses::get_items_for_scale()` die ganze
+      Parameterliste mit `in_array()` filtert. Nicht geändert; Vorschlag für #161.
+    - #168-Benchmark auf 4.5/MariaDB, 625 Antworten, alter Modus gegen Verlauf je Antwort: gleiche Fragenfolge,
+      gleicher Endschnappschuss. Schritt p50 1.074 → 741 ms, p95 2.275 → 1.393 ms.
+    - Befund #168: Die Schreibmenge bleibt fast gleich (86 statt 89 MB nach 625 Antworten), denn der Verlauf je
+      Antwort ist der Großteil des Schnappschusses, und der Schnappschuss wird je Antwort neu geschrieben.
+  - **Browser (Playwright), neue Geschichten:**
+    - `view-results` #166: 20 und 100 Antworten bis zum Ergebnis; der Vergleich ist im Verlauf, für die Lehrperson
+      und nach dem Verbergen der Aktivität derselbe.
+    - `view-results` #159: sechs gespeicherte Altzustände vor und nach dem echten Retention-Task, für die Person, die
+      Lehrperson und eine fremde Person.
+    - `chart-series` #150: Diagramme bei vollem, leerem, halbem und wieder vollem Pool.
+    - `usage-chart-test20` #160: Test 20 mit 17 grauen Versuchen.
+    - Helfer `tests/playwright/results_helper.php` und `support/results.ts`. Die Strecke ist auf 5.1 und 4.5 je 37/37
+      grün, ohne Retry.
+  - **Zur Entscheidung, nicht umgesetzt (Nachweise §7.2, §7.3):**
+    - #159: Ein Ergebnis, dessen Schnappschuss keinen Antwortverlauf oder keine Fähigkeiten trägt, verliert nach der
+      Retention seine Ergebnisreiter. Es erscheint keine erfundene Zahl. Eine lesende Zählung für die Produktion liegt
+      bei.
+    - Ist die Ausgabe aller Skalen abgeschaltet, verweist der Hinweis auf den Reiter „Overview“, den es dann nicht
+      gibt, und nennt „kein gültiges Ergebnis“ als Grund.
+  - **#175:** Die README trägt die Einzelheiten der ID-Listen selbst; der Verweis auf `doc/shortcode-id-lists.md` ist
+    entfernt, denn die Datei ist nicht auf GitHub.
+  - Pflichtliste der CI: 31 Tests (neu `standard_error_contract_test`, `polytomous_category_test`,
+    `category_fraction_check_test`).
+  - `personparam_readers_test` (#164) führt die neuen lesenden Werkzeuge: `standard_error_audit.php` als
+    Betreiberprüfung über alle Zeilen, `diagnose_standarderror.php` nur im Text. Ohne die Einträge war der Test rot.
+
+- Playwright in der CI (2026111709; Läufe vom 20.11.2026 auf 1.3 und 1.2, rot in „Playwright (CAT manager UI)“):
+  - `support/catpath.ts` `watchErrors()` übergeht nur das Paar „Page unloaded.“ + Abbruchfehler („TypeError: Failed
+    to fetch“). Es stammt aus Moodles `core/ajax`, wenn eine Anfrage jeder Seite (z. B.
+    `core_message_get_unsent_message`) beim Seitenwechsel abgebrochen wird; jede andere Konsolenmeldung zählt weiter.
+    Daran allein scheiterte HIGHESTSUB auf 1.3. Ebenso ausgenommen sind fehlgeschlagene Ressourcen anderer Hosts (Moodle
+    4.5 lädt MathJax von cdn.jsdelivr.net; ein langsames oder blockiertes CDN ist kein Fehler des Plugins).
+  - `nextQuestionOrEnd()` wartet während der Navigation, statt im Dokument des Augenblicks zu zählen (1.2,
+    Doppelklick: „Execution context was destroyed“). „Ende“ ist nur eine geladene Seite, die nicht `attempt.php` ist –
+    der Host leitet am Ende immer auf `attemptfinished.php` oder `view.php` um.
+  - `loginOverHttp()` verlässt zuerst die offene Seite (`about:blank`). Sonst schickten deren Skripte
+    (`core/courseformat`, `core/ajax`) ihre Anfragen mit dem Sitzungsschlüssel der vorigen Person in die Sitzung der
+    nächsten („invalidsesskey“, „EXCEPTION RAISED WHILE INIT COURSE EDITOR“; lokal auf 4.5 beobachtet).
+  - `cat-attempt-path.spec.ts` läuft ohne Retry. Der Retry einer seriellen Gruppe spielt sie von vorn, auf einer
+    Population, die der erste Durchgang verändert hat, und mit Personen, die ihren Versuch schon haben. Die Replays
+    endeten dann nach 14 statt 17 Fragen und verdeckten den eigentlichen Fehler.
+  - Fehler-Artefakt (`playwright.yml`, `moodle-plugin-ci-dev.yml`): Gesammelt werden die Verzeichnisse mit
+    `test-failed-*.png` oder `trace.zip`, nicht nur mit `error-context.md`, das Playwright 1.49 (Lockfile) nicht schreibt.
+    Bisher enthielt das Artefakt nur das Serverlog.
+  - Lokal mit dem CI-Ablauf (`CI=1`, frische Seite, Seed, ganze Suite): 5.1 und 4.5 grün.
+
 - Re-Audit 19.11.2026, Issues, CI und Lasttests (2026111708; Nachweise `doc/re-audit-2026-11-19-nachweise.md`,
   Entscheidungen `doc/entscheidungen-2026-11-19.md`):
   - **#168 AK2 (Fachentscheidung 19.11.2026: nur der Verlauf je Antwort):** Je Antwort rechnen nur die Generatoren mit

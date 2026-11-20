@@ -12,6 +12,9 @@
 #               12 x 150}; then, only if every run so far was correct,
 #               3 x 25 VUs x 26 (burst)
 #   plan quick  1 repetition x (cold, warm) x {1 x 26, 12 x 26}, 1 burst
+#   plan pool   3 repetitions x (cold, warm) x {12 x 26, 1 x 150, 12 x 150},
+#               no burst - run once with pool 2500 and once with 5000 to
+#               compare pool sizes (#161)
 #
 # Per run: the client (k6: TTFB, the whole question-answer roundtrip, 5xx,
 # pages with an exception, request ids) and the server of the same run
@@ -41,12 +44,13 @@ on:
           - MOODLE_503_STABLE
         default: MOODLE_501_STABLE
       plan:
-        description: 'full: 3 x cold/warm x {1x26, 12x26, 1x150, 12x150} + 3 x 25x26; quick: 1 x cold/warm x {1x26, 12x26} + 1 x 25x26'
+        description: 'full: 3 x cold/warm x {1x26, 12x26, 1x150, 12x150} + 3 x 25x26; quick: 1 x cold/warm x {1x26, 12x26} + 1 x 25x26; pool: 3 x cold/warm x {12x26, 1x150, 12x150}'
         type: choice
         default: full
         options:
           - full
           - quick
+          - pool
       pool:
         description: Candidates in the pool
         default: '2500'
