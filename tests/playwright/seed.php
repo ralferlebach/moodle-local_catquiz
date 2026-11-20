@@ -29,8 +29,13 @@
 
 define('CLI_SCRIPT', true);
 require(__DIR__ . '/../../../../config.php');
+require_once($CFG->libdir . '/clilib.php');
+require_once(__DIR__ . '/seed_lib.php');
 
 global $CFG, $DB;
+
+// Moodle 5.x: the question bank migration before anything is created (seed_lib.php).
+local_catquiz_seed_run_qbank_migration();
 
 // The search terms are deliberately nonsense words. A real word could occur in
 // Moodle's own sample content, and the test would then pass or fail depending on
@@ -140,17 +145,8 @@ $scaleid = (int) $DB->insert_record('local_catquiz_catscales', (object) [
     'timemodified' => $now,
 ]);
 
-// A question category is needed so the question bank joins resolve.
-$systemcontext = context_system::instance();
-$categoryid = (int) $DB->insert_record('question_categories', (object) [
-    'name' => 'Playwright category',
-    'contextid' => $systemcontext->id,
-    'info' => '',
-    'infoformat' => FORMAT_HTML,
-    'stamp' => make_unique_id_code(),
-    'parent' => 0,
-    'sortorder' => 0,
-]);
+// A question category is needed so the question bank joins resolve - where the version of Moodle keeps questions.
+$categoryid = local_catquiz_seed_question_category('Playwright category');
 
 /**
  * Creates a question with its bank entry, version and CAT item.

@@ -1,29 +1,19 @@
 import {Page, expect} from '@playwright/test';
 import {adminPass, adminUser, contextId, scaleId} from './env';
+import {loginOverHttp} from './catpath';
 
 /**
- * Logs in through the normal login form.
+ * Logs in as the administrator over HTTP (support/catpath.ts), not through the form.
+ *
+ * The form flaked: the login page re-renders between filling and submitting often enough that Moodle receives an
+ * empty password or a stale login token ("Your session has timed out") - on Moodle 4.5 in the re-audit run of
+ * 20.11.2026 in two of the CAT manager and statistics stories, as before in local_adele. The request API shares its
+ * cookies with the page, so the page is logged in afterwards; the generous timeout covers the cold caches of the
+ * first request against a fresh site.
  *
  * @param page The Playwright page.
  */
-export const login = async(page: Page): Promise<void> => {
-    await page.goto('/login/index.php', {waitUntil: 'domcontentloaded'});
-    // Wait for the form explicitly instead of relying on the default action
-    // timeout: on a cold Moodle the login page can take considerably longer than a
-    // single action is normally allowed.
-    await page.waitForSelector('#username', {timeout: 60_000});
-    await page.fill('#username', adminUser());
-    await page.fill('#password', adminPass());
-    await page.click('#loginbtn');
-    // The login form re-renders itself on failure, so waiting for it to disappear
-    // is what actually proves the login worked.
-    //
-    // The generous timeout is for the very first request against a freshly started
-    // site: Moodle builds its caches on demand, and that first login POST can take
-    // far longer than a warm one. Without it the first test of a run failed while
-    // every later one passed - which looks like flakiness but is a cold cache.
-    await expect(page.locator('#loginbtn')).toHaveCount(0, {timeout: 60_000});
-};
+export const login = async(page: Page): Promise<void> => loginOverHttp(page, adminUser(), adminPass());
 
 /**
  * Opens the CAT manager on the seeded scale and switches to the questions tab.

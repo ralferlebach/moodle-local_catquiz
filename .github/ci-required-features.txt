@@ -1,0 +1,11 @@
+# Behat features the issues of local_catquiz name; each must exist, carry @local_catquiz and no skip tag.
+catquiz_statistics_id_lists          # #175
+catquiz_feedback_single_scale        # adapter #2
+catquiz_feedback_after_cleanup       # #159, #166
+catquiz_strategy_routing_matrix      # #171, #172, #162
+catquiz_routing                      # #171
+catquiz_written_feedback             # #171
+catquiz_debug_export_access          # #173
+catquiz_ability_histogram            # #150
+catquiz_fastest_subscales            # #162
+catquiz_feedback_lazy                # adapter #2 (editors of a scale switched in without a reload)

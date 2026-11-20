@@ -195,17 +195,44 @@ class attemptfeedback implements renderable, templatable {
     }
 
     /**
+     * Where a snapshot of the feedback data stands (issue #168): built with an answer, or complete at the end.
+     *
+     * Snapshots stored before 19.11.2026 carry no scope; they were built in full with every answer and count as
+     * complete.
+     */
+    public const SCOPE_KEY = 'feedbackscope';
+
+    /** Built with an answer: only what records every answer (feedbackgenerator::records_every_answer()). */
+    public const SCOPE_ANSWER = 'answer';
+
+    /** Complete: every feedback of the strategy, at the end of the attempt. */
+    public const SCOPE_END = 'end';
+
+    /**
+     * Test seam (issue #168): build every feedback with every answer, as before 19.11.2026. Only the test that shows
+     * the feedback at the end to be the same as before sets it; nothing else does.
+     *
+     * @var bool
+     */
+    public static bool $everyanswer = false;
+
+    /**
      * Updates the data that is used to render the feedback
      *
-     * This is called after each response of a user.
+     * Called by the selection with every answer and once more when the selection ends the attempt. Issue #168
+     * (decision of 19.11.2026): with an answer only the feedback that records every answer is built - the history
+     * of the graphical summary and the debug information. The rest describes the state at a moment; it is built
+     * when the attempt ends ($atend, or complete_at_end() from the finalisation) and, for a running attempt, when
+     * somebody looks at it (completed()).
      *
      * @param array $newdata
+     * @param bool $atend The selection ended the attempt: build every feedback of the strategy.
      * @return void
      * @throws coding_exception
      * @throws Exception
      * @throws dml_exception
      */
-    public function update_feedbackdata(array $newdata = []) {
+    public function update_feedbackdata(array $newdata = [], bool $atend = false) {
         $progress = $newdata['progress'];
         if (
             $progress->get_ignore_last_response()
@@ -225,11 +252,105 @@ class attemptfeedback implements renderable, templatable {
             $existingdata['progress'] = $progress;
         }
         $generators = $this->get_feedback_generators();
+        $atend = $atend || self::$everyanswer;
+        if (!$atend) {
+            $generators = array_filter($generators, fn(feedbackgenerator $g) => $g->records_every_answer());
+        }
         $updateddata = $this->load_data_from_generators($generators, $existingdata, $newdata);
+        $updateddata[self::SCOPE_KEY] = $atend ? self::SCOPE_END : self::SCOPE_ANSWER;
 
         $this->save_to_cache($updateddata);
 
         timeline::span('feedback:save', fn() => catquiz::save_attempt_to_db($updateddata));
+    }
+
+    /**
+     * Builds the feedback that is not recorded with every answer, once, when the attempt ends (issue #168).
+     *
+     * Called by the finalisation before it validates the result: the validator reads the projection of the
+     * feedback (personabilities_abilities, primaryscale). An attempt the selection ended has been completed
+     * already (update_feedbackdata() with $atend); one ended by the activity - time limit, maximum of the
+     * activity, closed later - is completed here, from its progress and the last snapshot. Idempotent: a complete
+     * snapshot, or one stored before issue #168, is left as it is.
+     *
+     * @return bool Whether the snapshot was completed and stored.
+     */
+    public function complete_at_end(): bool {
+        global $DB;
+        // The stored row decides; only a snapshot built with an answer is loaded in full.
+        $row = $DB->get_record('local_catquiz_attempts', ['attemptid' => $this->attemptid], 'id, json, status');
+        $scope = $row ? (json_decode((string) $row->json, true)[self::SCOPE_KEY] ?? null) : null;
+        if ($scope !== self::SCOPE_ANSWER) {
+            return false;
+        }
+        $stored = $this->load_feedbackdata((string) $row->json, null, false);
+        $completed = $this->complete($stored);
+        $this->save_to_cache($completed);
+        timeline::span('feedback:save', fn() => catquiz::save_attempt_to_db($completed));
+        // The status of the CAT attempt is not the snapshot's: the end of the selection set it
+        // (catquiz::set_final_attempt_status(), e.g. error) after the last snapshot was written, and
+        // save_attempt_to_db() writes the status of a running attempt. Found by the adapter's stop matrix.
+        if ((int) $DB->get_field('local_catquiz_attempts', 'status', ['id' => $row->id]) !== (int) $row->status) {
+            $DB->set_field('local_catquiz_attempts', 'status', $row->status, ['id' => $row->id]);
+        }
+        return true;
+    }
+
+    /**
+     * The feedback data of the attempt, complete (issue #168).
+     *
+     * A snapshot built with an answer holds only what records every answer; what describes the state of the
+     * attempt is built here, for the view, from the progress and the snapshot - and not stored: the attempt is
+     * running, and its end builds it once (complete_at_end()). Anything else is returned as it is.
+     *
+     * @param array $feedbackdata Loaded with load_feedbackdata().
+     * @return array
+     */
+    public function completed(array $feedbackdata): array {
+        if (($feedbackdata[self::SCOPE_KEY] ?? null) !== self::SCOPE_ANSWER) {
+            return $feedbackdata;
+        }
+        try {
+            return $this->complete($feedbackdata);
+        } catch (\Throwable $e) {
+            debugging('Feedback of the running attempt could not be completed: ' . $e->getMessage(), DEBUG_DEVELOPER);
+            return $feedbackdata;
+        }
+    }
+
+    /**
+     * Runs the feedback that is not recorded with every answer over a snapshot (issue #168).
+     *
+     * The context is what the last selection left in the snapshot (abilities, standard errors, strategy) with the
+     * progress of the attempt; add_default_data() adds the scales fresh from the database.
+     *
+     * @param array $snapshot
+     * @return array The snapshot with that feedback, marked complete.
+     */
+    private function complete(array $snapshot): array {
+        $progress = $this->get_progress();
+        $existingdata = $snapshot;
+        $existingdata['attemptid'] = $progress->get_attemptid();
+        if (!isset($existingdata['quizsettings'])) {
+            $existingdata['quizsettings'] = $progress->get_quiz_settings();
+        }
+        $existingdata['progress'] = $progress;
+        $newdata = $snapshot;
+        unset($newdata[self::SCOPE_KEY]);
+        $newdata['progress'] = $progress;
+        $newdata['contextid'] = $snapshot['contextid'] ?? $this->contextid;
+        $newdata['attemptid'] = $progress->get_attemptid();
+        $generators = array_filter(
+            $this->get_feedback_generators(),
+            fn(feedbackgenerator $g) => !$g->records_every_answer()
+        );
+        $completed = $this->load_data_from_generators($generators, $existingdata, $newdata);
+        $completed[self::SCOPE_KEY] = self::SCOPE_END;
+        if (get_config('local_catquiz', 'store_debug_info') && !array_key_exists('debuginfo', $completed)) {
+            // Stored in its own column; an empty one stays empty (catquiz::save_attempt_to_db() writes the key).
+            $completed['debuginfo'] = [];
+        }
+        return $completed;
     }
 
     /**
@@ -458,6 +579,10 @@ class attemptfeedback implements renderable, templatable {
         $excludekeys = ['questions', 'original_questions', 'questionsperscale'];
         $newdata = array_filter($newdata, fn ($k) => !in_array($k, $excludekeys), ARRAY_FILTER_USE_KEY);
         $newdata = $this->add_default_data($newdata);
+        // Issue #168: the context of the selection (abilities, standard errors) belongs to the snapshot even when no
+        // generator adds anything - the feedback built at the end, or for a view, reads it from there. With at least
+        // one generator answering this is what the merge below did already.
+        $feedbackdata = array_merge($feedbackdata, $newdata);
         foreach ($generators as $generator) {
             try {
                 // Issue #168: one span per generator, beside the save below (no cost while the trace is off).
@@ -544,7 +669,7 @@ class attemptfeedback implements renderable, templatable {
      *
      */
     public function get_feedback_for_attempt(?string $feedbackdata = null, ?string $debuginfo = null): array {
-        $feedbackdata = $this->load_feedbackdata($feedbackdata, $debuginfo);
+        $feedbackdata = $this->completed($this->load_feedbackdata($feedbackdata, $debuginfo));
         $generators = $this->get_feedback_generators_for_teststrategy($feedbackdata['teststrategy']);
         // Issue #85: the tabs beyond the main feedback load when they are opened, unless switched off.
         return $this->generate_feedback($generators, $feedbackdata, (bool) get_config('local_catquiz', 'lazyfeedbacktabs'));
@@ -1053,7 +1178,7 @@ class attemptfeedback implements renderable, templatable {
         // (issue #120): the check of the result dependency below covers it.
         // A read-only request: the session is not written (issue #85). The endpoint holds no session
         // lock, and with read-only sessions a write would be lost or refused.
-        $feedbackdata = $this->load_feedbackdata(null, null, false);
+        $feedbackdata = $this->completed($this->load_feedbackdata(null, null, false));
         $generators = $this->get_feedback_generators_for_teststrategy((int) ($feedbackdata['teststrategy'] ?? $this->teststrategy));
         foreach ($generators as $generator) {
             if ($generator->get_generatorname() !== $generatorname) {

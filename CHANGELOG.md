@@ -2,6 +2,71 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Re-Audit 19.11.2026, Issues, CI und Lasttests (2026111707; Nachweise `doc/re-audit-2026-11-19-nachweise.md`,
+  Entscheidungen `doc/entscheidungen-2026-11-19.md`):
+  - **#168 AK2 (Fachentscheidung 19.11.2026: nur der Verlauf je Antwort):** Je Antwort rechnen nur die Generatoren mit
+    Verlaufsanteil (`graphicalsummary`, `debuginfo`; `feedbackgenerator::records_every_answer()`). Die übrigen rechnen
+    einmal am Ende – in der Auswahl, wenn sie endet (`strategy::after_error()`), im Finalizer vor der Validierung
+    (`attemptfeedback::complete_at_end()`; der Validator liest Fähigkeiten, Primärskala und SE aus dem Schnappschuss)
+    und, ohne zu speichern, wenn eine Seite einen noch nicht vervollständigten Schnappschuss anzeigt. Der Schnappschuss
+    trägt `feedbackscope` (`answer`/`end`); ältere ohne den Schlüssel gelten als vollständig. Laufende Versuche zeigen
+    Fähigkeit und SE aus dem Progress. Test `tests/teststrategy/feedback_scope_test.php` (4: Fähigkeiten, SE, Primärskala,
+    Ergebnis gleich dem alten Modus über die Naht `attemptfeedback::$everyanswer`; Anzeige speichert nichts; zweite
+    Finalisierung ändert nichts); `feedback_area_failure_test` an die Entscheidung angepasst; Messung mit
+    `cli/benchmark_attempts.php --everyanswer` (alter Modus) gegen den neuen auf demselben Code (4.5, MariaDB, 2.500
+    Items): dieselbe Fragenfolge und derselbe Schnappschuss am Ende; Schritt p95 869 → 602 ms (250 Fragen) bzw.
+    361 → 287 ms (26 Fragen), Feedback-Span p95 352 → 139 ms. Die Vervollständigung im Finalizer behält den Status des
+    CAT-Versuchs, den das Ende der Auswahl gesetzt hat (`set_final_attempt_status()`, z. B. `error`) –
+    `save_attempt_to_db()` schreibt den Status eines laufenden Versuchs; gefunden mit Adapter `stop_matrix_test` und
+    `scale_set_complete_replay_test` (Fehlerfälle), Zahntest in `feedback_scope_test`.
+  - **#173 Fund im Browser:** `export_debuginfo_pdf.php` rief `send_file()` ohne `filelib.php` – jede Anfrage endete
+    in einer Fehlerseite. Behoben; Playwright lädt das PDF (Manager) und prüft die Ablehnung (Lehrperson ohne Recht).
+  - **Host #23 AK4 (Freigabe 19.11.2026):** Einschreibung nach einem technischen Ende mit gültigem Ergebnis wie nach
+    einem regulären (`finalisation_enrolment_test::test_a_technical_end_with_a_valid_result_enrols`); im Browser
+    zeigen CSV des Versuchs (`stopreason`, `resultvalid`, `lifecycle`), Debug-PDF und Versuchsverlauf das technische
+    Ende und die Gültigkeit nebeneinander.
+  - **CI-Nachweis (P0):** `.github/scripts/ci_evidence.py` schreibt je Zelle (PHPUnit, Behat, Playwright, Last) die
+    eingebauten Commits und Versionen von Host, Adapter und Engine, Moodle, PHP und Datenbank in die Zusammenfassung
+    des Laufs und prüft gegen `.github/ci-required-tests.txt` (28 Tests) und `.github/ci-required-features.txt` (10
+    Features), dass jeder genannte Test lief, bestand und nicht übersprungen wurde – sonst ist die Zelle rot. JUnit
+    und Zusammenfassung als Artefakt.
+  - **Playwright P0 – integrierte Browserstrecke** (`tests/playwright/seed_cat_path.php`,
+    `tests/cat-attempt-path.spec.ts`, `tests/shortcode-id-lists.spec.ts`): Host, Adapter und Engine zusammen –
+    Start, Antworten, Ende für sechs Strategien mit Note und Abschluss; Reload/Zurück; Doppelklick; zweiter Tab;
+    verborgene Aktivität; Produktionslängen 13 und 17 (#174); Replays RELSUBS 17 und LOWESTSUB 16 mit
+    `scalescomplete` (#172); technischer Fehler vor und nach dem Minimum (Host #23); Zeit vom Klick bis zur lesbaren
+    Frage (Host #17) als JSON; Dialog bei `error`/`scalescomplete` mit Fokus, Beschreibung, Tastaturbestätigung und axe
+    (P1); Shortcodes über 1/3/25/100 Tests, zwei Kurse, gemischte Rechte (schließt im Zweifel), Lazy-Charts, CSV,
+    axe am Statistikblock (#175, #150); Debug-PDF (#173); keine Konsolen-/HTTP-Fehler; Smartphone-Projekt.
+  - **Testdaten Moodle 5.x:** Die Seeds (`seed.php`, `seed_cat_path.php`, `tests/load/seed_attempt_load.php`) führen
+    die Fragenbank-Migration (Ad-hoc-Aufgaben von `mod_qbank`) aus, bevor sie etwas anlegen, und legen Fragen in einer
+    Unterkategorie der Systembank an (`tests/playwright/seed_lib.php`). Vorher legte `seed.php` eine Top-Kategorie im
+    Systemkontext an, die die Migration löschte – der CAT-Manager fand auf 5.1 keine Fragen mehr (Fehler der Testdaten,
+    nicht des Plugins). `seed_attempt_load.php --pool` lädt den Composer-Autoloader der Site (der Fragen-Generator
+    braucht PHPUnit-Klassen; auf 5.x brach der Seed sonst ab). Die älteren Playwright-Geschichten melden sich wie die
+    neue Strecke über HTTP an (das Formular kam auf 4.5 mit „session has timed out“ zurück).
+  - **Last P0/P1 (k6):** `tests/load/catquiz-attempts.js`, `run_attempt_load.sh`, `attempt_load_report.py`, Workflow
+    `load-k6-attempts.yml` (manuell): eigene Testinstanz mit synthetischen Daten, Pool 2.500, Aktivitäten mit 26 und
+    150 Fragen; Plan „full“ 3 × (kalt, warm) × {1×26, 12×26, 1×150, 12×150}, danach – nur bei korrekten Läufen – 3 ×
+    25 VUs. Je Lauf Client (TTFB, Roundtrip, 5xx, Ausnahmeseiten) und Server desselben Laufs (`next_item`,
+    Lock-Wartezeit, Abfragen, Speicher, Fremdzuordnung, doppelte Slots, genau eine Finalisierung und ein
+    Abschluss-Ereignis). `seed_attempt_load.php --items=26,150 --pool=2500`; `analyse_attempt_load.php` prüft auch
+    Abschluss, Finalisierung und Ereignis.
+  - **Farbwahl im Feedback-Editor (P1 Barrierefreiheit):** Die Farbe eines Bereichs wählt wieder das sichtbare,
+    beschriftete Auswahlfeld – mit Tastatur und Screenreader bedienbar; die Farbkreise daneben sind eine Abkürzung für
+    die Maus, folgen dem Auswahlfeld und sind für assistive Technik verborgen (`amd/src/colourpicker.js`,
+    `colour_picker.mustache`, `colour_pick_circle.mustache`). Vorher war das Auswahlfeld versteckt und die Kreise
+    (`span` mit Klick, `aria-label` ohne Rolle) die einzige Bedienung – ohne Tastatur nicht erreichbar. Gefunden mit
+    axe auf den per Lazy-Wechsel geladenen Editoren einer Skala; Playwright `scale-feedback-editor.spec.ts`
+    (Tastatur, Klick, axe; die Moodle-eigenen Befunde von TinyMCE und Autocomplete sind dort benannt ausgenommen).
+  - **Lokale Läufe 20.11.2026** (5.1 und 4.5, PostgreSQL; Einzelheiten im Nachweisdokument): PHPUnit local_catquiz
+    1.548 bzw. 1.543, Adapter je 172, Host 453 bzw. 357 – grün, Pflichtlisten vollständig; Playwright 31/31 je Linie
+    plus `scale-feedback-editor`; k6 Plan „full“ 27 Läufe korrekt; Adapter-Longrun 250 und 12 × 150 OK; Behat siehe
+    Nachweisdokument §3.
+  - Doku: `doc/ergebnisvertrag-164.md` §3 bestätigt (#164 DoD5); #162 freigegeben (`doc/issue-161-27-162.md`);
+    `doc/re-audit-2026-11-19-nachweise.md`, `doc/entscheidungen-2026-11-19.md`, `doc/restarbeiten-2026-11-19.md`,
+    `doc/ergebnisvertrag-164.md` und `doc/issue-161-27-162.md` sind jetzt versioniert (an den Branch-Köpfen lesbar;
+    nicht im Release-ZIP).
 - Re-Audit 18.11.2026, Abschluss und Restarbeiten (2026111706):
   - **#175 ID-Listen in Shortcodes:** `courseid`/`testid` (und Aliase) in `catquizstatistics` und `catquizfeedback`
     nehmen kommagetrennte Listen (strenger Parser `local\statistics\id_list`, höchstens 100 IDs, Fehler statt stiller

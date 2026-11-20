@@ -97,6 +97,21 @@ final class attempt_finalizer {
             return false;
         }
 
+        /* Issue #168: the feedback that is not recorded with every answer is built once, now - before the
+           validation below, which reads its projection (primary scale, reported scales). An attempt the selection
+           ended is complete already; this completes one the activity ended (time limit, its own maximum). A
+           failure leaves the snapshot as it is: the validator then decides from the measurement state alone. */
+        try {
+            $completed = (new \local_catquiz\output\attemptfeedback($adaptiveattemptid, (int) ($catattempt->contextid ?? 0)))
+                ->complete_at_end();
+            if ($completed) {
+                // The row is written back whole below: read it again, or the old snapshot would overwrite the new one.
+                $catattempt = $DB->get_record('local_catquiz_attempts', ['id' => $catattempt->id], '*', MUST_EXIST);
+            }
+        } catch (\Throwable $e) {
+            debugging('Feedback of the attempt could not be completed at its end: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+
         $transaction = $DB->start_delegated_transaction();
 
         // The authoritative end time is stamped exactly once here; timecreated

@@ -40,3 +40,8 @@ catquizcentralhub/client/ export-ignore
 .gitignore                export-ignore
 .gitattributes            export-ignore
 /Makefile export-ignore
+
+# Re-audit 19.11.2026: browser and load tooling - seeds that create courses, people and attempts, a helper that
+# removes item parameters - belongs to the CI of the repository, never to a site.
+/tests/playwright export-ignore
+/tests/load       export-ignore

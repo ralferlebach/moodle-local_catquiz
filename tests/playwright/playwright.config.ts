@@ -27,6 +27,8 @@ export default defineConfig({
         screenshot: 'only-on-failure',
     },
     projects: [
-        {name: 'chromium', use: {...devices['Desktop Chrome']}},
+        {name: 'chromium', use: {...devices['Desktop Chrome']}, grepInvert: /@responsive/},
+        // Re-audit 19.11.2026 (Playwright P0): the stories marked @responsive once more on a phone.
+        {name: 'mobile', use: {...devices['Pixel 7']}, grep: /@responsive/},
     ],
 });

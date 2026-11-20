@@ -33,7 +33,7 @@
  *     php local/catquiz/cli/benchmark_attempts.php --setup --confirm [--items=2500] [--users=40]
  *   Run:
  *     php local/catquiz/cli/benchmark_attempts.php --run --strategy=4 --attempts=3 --questions=26 \
- *        [--cold] [--workers=1] [--seed=4] [--json=FILE]
+ *        [--cold] [--workers=1] [--seed=4] [--json=FILE] [--everyanswer]
  *
  * The run deletes the earlier attempts of the benchmark test only (the activity the setup created), never others.
  *
@@ -67,7 +67,12 @@ use mod_adaptivequiz\local\attempt;
     'help' => false, 'setup' => false, 'confirm' => false, 'run' => false, 'items' => 2500, 'users' => 40,
     'strategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'attempts' => 3, 'questions' => 26, 'minquestions' => 20,
     'semin' => 0.05, 'cold' => false, 'workers' => 1, 'worker' => -1, 'seed' => 4, 'json' => '',
+    'everyanswer' => false,
 ], ['h' => 'help']);
+
+// Issue #168 AK2 (decision 19.11.2026): per answer only the generators with a history part; --everyanswer runs every
+// generator per answer as before - the comparison on the same code.
+\local_catquiz\output\attemptfeedback::$everyanswer = (bool) $options['everyanswer'];
 
 /** @var string Config of local_catquiz with the course, the tests and the pool of the setup. */
 const LOCAL_CATQUIZ_BENCHMARK_STATE = 'benchmarkstate';
@@ -77,6 +82,7 @@ if ($options['help'] || (!$options['setup'] && !$options['run'])) {
     cli_writeln('  --setup --confirm      Course, people, pool (--items, default 2500) and one test per strategy.');
     cli_writeln('  --run                  Plays --attempts attempts of --strategy (default 4, LOWESTSUB),');
     cli_writeln('                         --questions at most (default 26), --cold, --workers=N, --seed, --json=FILE.');
+    cli_writeln('  --everyanswer          Every feedback generator per answer, as before #168 AK2 (comparison).');
     exit(0);
 }
 
@@ -298,7 +304,8 @@ if ($options['worker'] < 0) {
                 . ' --workers=' . $workers . ' --strategy=' . $strategy . ' --attempts=' . (int) $options['attempts']
                 . ' --questions=' . (int) $options['questions'] . ' --minquestions=' . (int) $options['minquestions']
                 . ' --semin=' . (float) $options['semin'] . ' --seed=' . (int) $options['seed']
-                . ($options['cold'] ? ' --cold' : '') . ' --json=' . escapeshellarg($out);
+                . ($options['cold'] ? ' --cold' : '') . ($options['everyanswer'] ? ' --everyanswer' : '')
+                . ' --json=' . escapeshellarg($out);
             $processes[] = [proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes), $pipes, $out];
         }
         foreach ($processes as [$process, $pipes, $out]) {
@@ -424,6 +431,7 @@ $report = [
     'meta' => [
         'strategy' => $strategy, 'attempts' => (int) $options['attempts'] * $workers, 'workers' => $workers,
         'questions' => (int) $options['questions'], 'cold' => (bool) $options['cold'], 'seed' => (int) $options['seed'],
+        'everyanswer' => (bool) $options['everyanswer'],
         'items' => $DB->count_records('local_catquiz_items', ['contextid' => catscale::get_context_id((int) $state['root'])]),
         'catquiz' => get_config('local_catquiz', 'version'), 'php' => PHP_VERSION, 'db' => $DB->get_dbfamily(),
     ],

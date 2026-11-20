@@ -225,6 +225,16 @@ jobs:
           sed -n "s/^export \([A-Z_][A-Z_]*\)='\(.*\)'$/\1=\2/p" \
             /tmp/catquiz-seed.env >> "$GITHUB_ENV"
 
+      # Re-audit 19.11.2026 (Playwright P0): the integrated attempt path - courses, the six strategies, the replays
+      # of engine #172, the cases of host #23, 100 CAT tests for the statistics shortcodes (engine #175).
+      - name: Seed the CAT attempt path
+        run: |
+          cd moodle
+          php local/catquiz/tests/playwright/seed_cat_path.php > /tmp/catpath-seed.env
+          sed -n "s/^export \([A-Z_0-9]*\)=.*/  \1/p" /tmp/catpath-seed.env
+          echo "::add-mask::$(sed -n "s/^export CATPATH_PASSWORD='\(.*\)'$/\1/p" /tmp/catpath-seed.env)"
+          sed -n "s/^export \([A-Z_0-9]*\)='\(.*\)'$/\1=\2/p" /tmp/catpath-seed.env >> "$GITHUB_ENV"
+
       - name: Install Playwright and browsers
         run: |
           cd moodle/local/catquiz/tests/playwright
@@ -260,7 +270,40 @@ jobs:
             tail -50 /tmp/moodle-server.log
             exit 1
           fi
+          export CATPATH_OUT="$RUNNER_TEMP/catpath"
           npm test
+
+      # Re-audit 19.11.2026 (Playwright P0, host #17): the time from a click to the next readable question, per
+      # story, with the state of every attempt - in the job summary and as an artefact kept 90 days.
+      - name: Attempt path timings and states
+        if: always()
+        run: |
+          python3 - "$RUNNER_TEMP/catpath" <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import glob, json, os, sys
+          rows = []
+          for f in sorted(glob.glob(os.path.join(sys.argv[1], '*.json'))):
+              d = json.load(open(f))
+              ms = sorted(([d['first']] if 'first' in d else []) + [t['ms'] for t in d.get('timings', [])])
+              rank = lambda p: ms[max(0, -(-int(p * len(ms) * 100) // 100) - 1)] if ms else None
+              st = d.get('state', {})
+              rows.append((os.path.basename(f)[:-5], len(ms), rank(0.5), rank(0.95), ms[-1] if ms else None,
+                           st.get('slots'), st.get('stopcode'), st.get('resultvalid'), st.get('grade'), st.get('completion')))
+          print('## CAT attempt path (Playwright) - time to the next readable question')
+          print()
+          print('| Story | Steps | p50 ms | p95 ms | max ms | Questions | Stop | Valid | Grade | Completion |')
+          print('|---|---:|---:|---:|---:|---:|---|---:|---:|---:|')
+          for r in rows:
+              print('| ' + ' | '.join('–' if v is None else str(v) for v in r) + ' |')
+          PY
+
+      - name: Upload attempt path evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catpath-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/catpath
+          retention-days: 90
+          if-no-files-found: warn
 
       - name: Show the tail of the server log on failure
         if: failure()

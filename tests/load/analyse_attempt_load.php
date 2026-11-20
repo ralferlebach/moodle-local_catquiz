@@ -158,7 +158,10 @@ foreach ($attempts as $attempt) {
 
 // Integrity of the CAT attempts and progress (issue #149): nothing created twice, nothing of another person.
 $integrity = ['catattempts' => 0, 'withoutcatattempt' => 0, 'morethanonecatattempt' => 0, 'catattemptofanother' => 0,
-    'progress' => 0, 'morethanoneprogress' => 0, 'progressofanother' => 0, 'progresswithoutcatattempt' => 0];
+    'progress' => 0, 'morethanoneprogress' => 0, 'progressofanother' => 0, 'progresswithoutcatattempt' => 0,
+    // Re-audit 19.11.2026 (load P0): a completed attempt is finalised exactly once - one end time, one event.
+    'completed' => 0, 'notfinalised' => 0, 'completionevents' => 0, 'notannouncedonce' => 0];
+$standardlog = $DB->get_manager()->table_exists('logstore_standard_log');
 foreach ($attempts as $attempt) {
     [$compsql, $compparams] = $DB->get_in_or_equal(\local_catquiz\catquiz::component_names('mod_adaptivequiz'));
     $cats = $DB->get_records_select(
@@ -175,6 +178,22 @@ foreach ($attempts as $attempt) {
     }
     if (count($cats) > 1) {
         $integrity['morethanonecatattempt']++;
+    }
+    if ($attempt->attemptstate === 'complete') {
+        $integrity['completed']++;
+        $cat = reset($cats);
+        if (empty($DB->get_field('local_catquiz_attempts', 'endtime', ['id' => $cat->id]))) {
+            $integrity['notfinalised']++;
+        }
+        if ($standardlog) {
+            $events = $DB->count_records('logstore_standard_log', [
+                'eventname' => '\\local_catquiz\\event\\attempt_completed', 'objectid' => $cat->id,
+            ]);
+            $integrity['completionevents'] += $events;
+            if ($events !== 1) {
+                $integrity['notannouncedonce']++;
+            }
+        }
     }
     foreach ($cats as $cat) {
         if ((int) $cat->userid !== (int) $attempt->userid) {

@@ -1,0 +1,174 @@
+##############################################################################
+# Attempt load test with k6 - local_catquiz (re-audit 19.11.2026, load P0)
+#
+# CAT attempts over HTTP, as a browser plays them, against a site built and
+# seeded in this job - a separate test instance with synthetic people and
+# attempts only, never a production site (LTI/CLARA are no load target).
+#
+#   pool        2,500 candidates (the Simulation scale, 422 items, grown with
+#               synthetic true/false items with 2PL parameters)
+#   activities  26 and 150 questions per attempt, the same pool
+#   plan full   3 repetitions x (cold, warm) x {1 x 26, 12 x 26, 1 x 150,
+#               12 x 150}; then, only if every run so far was correct,
+#               3 x 25 VUs x 26 (burst)
+#   plan quick  1 repetition x (cold, warm) x {1 x 26, 12 x 26}, 1 burst
+#
+# Per run: the client (k6: TTFB, the whole question-answer roundtrip, 5xx,
+# pages with an exception, request ids) and the server of the same run
+# (traces: next_item, lock waits, queries, memory; question usages; CAT
+# attempts and progress of each person; finalisation and its event; session
+# files). Correctness decides the job: no attempt short of its result page,
+# no 5xx, no question twice, no slot processed twice, nothing of one person
+# in the attempt of another, every completed attempt finalised and announced
+# exactly once. Latency is reported (p50/p95/p99, mean and standard deviation
+# over the repetitions), not judged: targets hold for a comparable
+# environment only. Same tool as load-k6.yml - no second load framework.
+#
+# Manual only (Actions tab -> "Load test (k6, CAT attempts)").
+##############################################################################
+
+name: Load test (k6, CAT attempts)
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan:
+        description: 'full: 3 x cold/warm x {1x26, 12x26, 1x150, 12x150} + 3 x 25x26; quick: 1 x cold/warm x {1x26, 12x26} + 1 x 25x26'
+        type: choice
+        default: full
+        options:
+          - full
+          - quick
+      pool:
+        description: Candidates in the pool
+        default: '2500'
+
+concurrency:
+  group: load-k6-attempts-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  attempts:
+    name: k6 attempts (MOODLE_405_STABLE, ${{ inputs.plan || 'full' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:17
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+
+    env:
+      MOODLE_BRANCH: MOODLE_405_STABLE
+      MOODLE_DIR: ${{ github.workspace }}/moodle
+      PLAN: ${{ inputs.plan || 'full' }}
+      POOL: ${{ inputs.pool || '2500' }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pgsql, gd, intl, zip, soap, mbstring, curl, xml, exif
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+
+      - name: Build Moodle, dependencies and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-adaptivequizcatmodel_catquiz
+          bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
+            mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ALiSe-v-1.2.0-legacy "" \
+            adaptivequizcatmodel_catquiz ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz ALiSe-v-1.2.0-legacy ""
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          for placeholder in $(find ./plugin/catquizcentralhub -mindepth 1 -maxdepth 1 -type d -empty 2>/dev/null); do
+            rmdir "$placeholder"
+          done
+          moodle-plugin-ci install --plugin ./plugin --moodle="$MOODLE_DIR" --db-host=127.0.0.1 --no-init
+
+      - name: Commits under test
+        run: >-
+          python3 plugin/.github/scripts/ci_evidence.py
+          --title "Attempt load (k6) / ${{ env.MOODLE_BRANCH }} / PHP 8.3 / PostgreSQL / plan ${{ env.PLAN }}"
+          --moodle moodle --db pgsql
+          --component local_catquiz=plugin
+          --component mod_adaptivequiz=moodle-plugin-ci-plugins/moodle-mod_adaptivequiz
+          --component adaptivequizcatmodel_catquiz=moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz
+          --out load-out/evidence
+
+      - name: Install a clean live site
+        run: |
+          rm -f "$MOODLE_DIR/config.php"
+          dropdb --if-exists --host=127.0.0.1 --username=postgres moodle
+          createdb --host=127.0.0.1 --username=postgres moodle
+          php "$MOODLE_DIR/admin/cli/install.php" --non-interactive --agree-license \
+            --wwwroot='http://127.0.0.1:8000' --dataroot='${{ github.workspace }}/moodledata-live' \
+            --dbtype=pgsql --dbhost=127.0.0.1 --dbport=5432 --dbname=moodle --dbuser=postgres --prefix=mdl_ \
+            --fullname='CATquiz attempt load' --shortname='CATquiz attempts' --adminuser=admin \
+            --adminpass='Admin!23' --adminemail='admin@example.com'
+
+      - name: Seed people, pool and activities
+        run: |
+          php "$MOODLE_DIR/local/catquiz/tests/load/seed_attempt_load.php" \
+            --users=160 --items=26,150 --pool="$POOL" --shortname=catquiz-load > seed.env
+          sed 's/PASSWORD=.*/PASSWORD=***/' seed.env
+          grep -q "^export LOAD_CMID_150=" seed.env || { echo "::error::The seed did not create both activities."; exit 1; }
+          sed -n "s/^export \([A-Z_0-9]*\)='\(.*\)'$/\1=\2/p" seed.env >> "$GITHUB_ENV"
+          echo "::add-mask::$(sed -n "s/^export LOAD_PASSWORD='\(.*\)'$/\1/p" seed.env)"
+
+      - name: Serve the site
+        run: |
+          # One worker stalls as soon as a page pulls its subresources in parallel; eight carry twelve and more VUs.
+          PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$MOODLE_DIR" > /tmp/moodle-server.log 2>&1 &
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /tmp/login.html -w '%{http_code}' --max-time 20 http://127.0.0.1:8000/login/index.php || true)
+            [ "$code" = "200" ] && grep -q 'name="logintoken"' /tmp/login.html && exit 0
+            sleep 3
+          done
+          echo "::error::The site did not come up."; tail -40 /tmp/moodle-server.log; exit 1
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run the load plan
+        run: |
+          # The copy inside Moodle: its analysis reads the config.php of the site.
+          bash "$MOODLE_DIR/local/catquiz/tests/load/run_attempt_load.sh" "$MOODLE_DIR" "$GITHUB_WORKSPACE/load-out" "$PLAN"
+
+      - name: Server log
+        if: always()
+        run: tail -80 /tmp/moodle-server.log || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-k6-attempts-${{ env.MOODLE_BRANCH }}-${{ env.PLAN }}-${{ github.run_id }}
+          path: load-out
+          retention-days: 90
+          if-no-files-found: warn

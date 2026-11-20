@@ -1,0 +1,30 @@
+# Tests the issues of local_catquiz name (re-audit 19.11.2026, CI matrix P0). Each must run, pass and not be skipped
+# in every PHPUnit cell; .github/scripts/ci_evidence.py checks it against the JUnit log.
+global_scale_invariant_test          # #174
+shortcode_id_lists_test              # #175
+pool_revision_test                   # #146
+runtime_pool_test                    # #146
+parallel_attempts_test               # #146, #168
+peer_comparison_lifecycle_test       # #166
+feedbackgenerator_progress_test      # #168
+feedback_scope_test                  # #168 AK2 (decision 19.11.2026)
+historical_feedback_cleanup_test     # #159, #168
+progress_compact_json_test           # #143, #168
+cold_warm_selection_test             # #169, #170, #162, #172 golden sequences
+catscale_hierarchy_index_test        # #169
+filter_for_responses_test            # #170
+updatepersonability_population_test  # #167
+personparam_latest_batch_test        # #165
+reference_value_contract_test        # #164, #165, #166
+personparam_readers_test             # #164
+strategy_itemterm_test               # #162
+strategy_semantics_test              # #172
+end_without_question_test            # #172
+addscalestandarderror_test           # #163
+attempt_debug_export_test            # #173
+context_item_pool_test               # #157
+usage_chart_semantics_test           # #160
+chart_input_test                     # #150
+ability_histogram_test               # #150
+learning_progress_chart_test         # #160
+finalisation_enrolment_test          # host #23 AK4 (a technical end with a valid result enrols)

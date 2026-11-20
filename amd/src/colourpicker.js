@@ -14,7 +14,13 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * JavaScript for mod_form to reload when a CAT model has been chosen.
+ * Colour circles beside the colour select of a feedback range: a quick pick with the mouse.
+ *
+ * The select stays the control (re-audit 19.11.2026, P1 accessibility): visible, labelled by the form, reachable and
+ * operable with the keyboard and announced by screen readers. The circles repeat it for the eye and the mouse only -
+ * hidden from assistive technology - and follow the select when it changes. Before, the select was hidden and the
+ * circles, spans with a click handler, were the only way to choose: not with the keyboard, not with a screen reader
+ * (axe: aria-label on a span without a role).
  *
  * @module     local_catquiz/colourpicker
  * @copyright  2023 Georg Maißer <info@wunderbyte.at>
@@ -82,21 +88,27 @@ async function addClickListener(selectcolor) {
 
     Templates.renderForPromise('local_catquiz/colour_picker', data).then(({html}) => {
 
-        selectcolor.classList.add('hidden');
         selectcolor.insertAdjacentHTML('afterend', html);
         const colourpicker = document.querySelector('span[data-id=wb_colourpick_id_' + selectcolor.name + ']');
         const colourselectnotify = document.querySelector('span[data-id=wb_colourselectnotify_id_' + selectcolor.name + ']');
         const colours = colourpicker.querySelectorAll(SELECTORS.COLOUR);
 
+        // The circles show what the select holds.
+        const show = () => {
+            colours.forEach(el => el.classList.toggle('selected', el.dataset.colour == selectcolor.value));
+            const chosen = [...colours].find(el => el.dataset.colour == selectcolor.value);
+            colourselectnotify.textContent = chosen ? chosen.dataset.colourname : '';
+        };
+
         colours.forEach(el => {
             el.addEventListener('click', e => {
-                colourselectnotify.innerHTML = e.target.dataset.colourname;
-
-                colours.forEach(el => el.classList.remove('selected'));
-                e.target.classList.add('selected');
                 selectcolor.value = e.target.dataset.colour;
+                // As if chosen in the select: the form and everything listening learn of it.
+                selectcolor.dispatchEvent(new Event('change', {bubbles: true}));
             });
         });
+        selectcolor.addEventListener('change', show);
+        show();
         return true;
       }).catch((e) => {
           // eslint-disable-next-line no-console
