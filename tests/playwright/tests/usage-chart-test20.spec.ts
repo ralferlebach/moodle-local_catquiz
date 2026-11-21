@@ -27,7 +27,7 @@
 
 import {expect, test} from '@playwright/test';
 import {keep, loginAdmin, watchErrors} from '../support/catpath';
-import {results} from '../support/results';
+import {results, scriptsReady} from '../support/results';
 
 /**
  * The data table of every chart in a pane: series name => sum of its values. core/chart_output_htmltable builds the
@@ -60,6 +60,8 @@ test.describe('Usage charts of test 20 (#160) @statistics', () => {
         await loginAdmin(page);
         await page.goto(`/mod/page/view.php?id=${data.page}`);
         const block = page.locator('[data-catpath="test20"]');
+        // The tab loads its charts once the scripts of the page have bound it (see scriptsReady).
+        await scriptsReady(page);
         await block.locator('a[id$="-testusage-tab"]').first().click();
         const pane = block.locator('div.tab-pane[id$="-testusage"]').first();
         await expect(pane).toBeVisible({timeout: 30_000});

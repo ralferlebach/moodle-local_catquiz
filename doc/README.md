@@ -44,6 +44,8 @@ Zwei Arten von Dokumenten:
   Kategorie politomer Antworten), F2 (#163 SE einer Teilskala), F3 (#175 README), Fisher-Referenz aller Modelle,
   Ende/Resume/Stopp, lesende Prüfwerkzeuge, k6 Pool 2.500/5.000 mit Teilspannen, #168-Kurven, Browser #150/#159/
   #160/#166. Im ZIP; `doc/` steht in der `.gitignore`.
+- **evidence/ci-playwright-2026-11-21/** – Playwright-CI vom 20.11.2026 (`chart-series`, Klick vor den Seitenskripten):
+  Strecke 5.1/4.5 je 37/37 und Zahntest von `scriptsReady()`; Beschreibung im CHANGELOG.
 - **re-audit-2026-11-19-nachweise.md** – Re-Audit 19.11.2026: CI-Nachweis je Zelle,
   Playwright-Strecke, Longrun, k6-Last, #168-Messung, axe, Stand je Issue (#146–#175, Host
   #17/#23/#25, Adapter #12). Im ZIP; `doc/` steht in der `.gitignore`.

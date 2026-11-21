@@ -48,6 +48,21 @@ export const normalise = (text: string): string =>
     text.replace(/\b(?:[a-z_]*)?[0-9a-f]{13,}\b/gi, '#').replace(/\s+/g, ' ').trim();
 
 /**
+ * Waits until Moodle's scripts on the page are done (M.util.pending_js, the condition Behat waits for). The lazy tabs
+ * of the feedback and of the statistics load their content when they are shown - once their module has bound its
+ * handler. A click before that shows an empty pane that never loads; on the slower CI runners this happens.
+ *
+ * @param page
+ */
+export const scriptsReady = async(page: Page): Promise<void> => {
+    await page.waitForFunction(
+        () => !!(window as any).M?.util?.pending_js && (window as any).M.util.pending_js.length === 0,
+        undefined,
+        {timeout: 60_000}
+    );
+};
+
+/**
  * Opens every tab of the feedback of an attempt and returns its text, after its lazy part has loaded: the key is the
  * generator and the audience (student or teacher).
  *
@@ -55,14 +70,7 @@ export const normalise = (text: string): string =>
  */
 export const feedbackTabs = async(page: Page): Promise<Record<string, string>> => {
     const texts: Record<string, string> = {};
-    // The tabs load their content when they are shown - once local_catquiz/feedback has bound its handler. A click
-    // before that shows an empty pane that never loads: first wait until Moodle's scripts are done (M.util.pending_js,
-    // the condition Behat waits for).
-    await page.waitForFunction(
-        () => !!(window as any).M?.util?.pending_js && (window as any).M.util.pending_js.length === 0,
-        undefined,
-        {timeout: 60_000}
-    );
+    await scriptsReady(page);
     const tabs = page.locator('a.feedbacktab');
     const count = await tabs.count();
     for (let i = 0; i < count; i++) {
