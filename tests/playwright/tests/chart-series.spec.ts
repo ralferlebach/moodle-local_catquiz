@@ -32,7 +32,7 @@
 
 import {expect, Locator, Page, test} from '@playwright/test';
 import {catpath, helper, keep, loginAdmin, watchErrors} from '../support/catpath';
-import {openFeedback, results} from '../support/results';
+import {openFeedback, results, scriptsReady} from '../support/results';
 
 test.describe.configure({mode: 'serial'});
 
@@ -97,6 +97,9 @@ const expectDrawn = async(scope: Locator): Promise<{drawn: number; message: numb
 /** Opens every tab of a statistics block or a feedback page and checks its charts. */
 const everyTab = async(page: Page, scope: Locator): Promise<Record<string, any>> => {
     const out: Record<string, any> = {};
+    // Not before the scripts of the page have bound the tabs (CI, 20.11.2026: the first feedback tab clicked too early
+    // stayed empty for good).
+    await scriptsReady(page);
     const tabs = scope.locator('a[role="tab"]');
     for (let i = 0; i < await tabs.count(); i++) {
         const tab = tabs.nth(i);

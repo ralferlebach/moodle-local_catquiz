@@ -2,6 +2,20 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Playwright in der CI (2026111710; Läufe vom 20.11.2026 auf 1.3 `54ffbea` und 1.2 `f2a7471`, rot in „Playwright
+  (CAT manager UI)“, je 36 von 37 grün):
+  - `chart-series` (#150) klickte auf der Feedbackseite den ersten Reiter, bevor `local_catquiz/feedback` seinen
+    Klick-Handler gebunden hatte. Bootstrap öffnete den Reiter trotzdem, sein Inhalt wurde aber nie angefordert
+    („Your Progress: loaded“, 60 s). Das Trace zeigt den Klick vor dem Start der Seitenskripte. Der CI-Runner ist
+    langsamer als die lokale Umgebung, deshalb war der Fehler dort nicht aufgefallen.
+  - Neu `support/results.ts` `scriptsReady()`: wartet auf `M.util.pending_js`, die Bedingung, auf die auch Behat
+    wartet. Genutzt in `feedbackTabs()`, in der Reiterschleife von `chart-series` und vor dem Reiter von
+    `usage-chart-test20`.
+  - Zahntest: Feedbackseite schon bei `domcontentloaded` geöffnet, wie der Runner sie erlebt. Ohne
+    `scriptsReady()` dreimal rot mit genau dem Fehler der CI, mit ihm dreimal grün. Strecke lokal auf frisch
+    aufgebauten Seiten: 5.1 und 4.5 je 37/37.
+  - Kein Produktfehler: Beim Laden ist kein Reiter aktiv, und ein Klick nach dem Laden der Skripte lädt den Inhalt.
+
 - Re-Audit „ab #147“ vom 19.11.2026 (2026111709; Nachweise `doc/re-audit-ab-147-nachweise.md`, nur im ZIP –
   `doc/` steht in der `.gitignore`, deshalb das Wesentliche hier):
   - **#163, Fund F1 – Kategorie einer Antwort (GRM, GGRM, PCM, GPCM):** `model_raschmodel::get_key_by_fractions()`
