@@ -429,6 +429,7 @@ $string['feedback_table_answerpartlycorrect'] = 'Teilweise richtig';
 $string['feedback_table_correctness'] = 'Ergebnis';
 $string['feedback_table_givenanswer'] = 'Gegebene Antwort:';
 $string['feedback_table_pilot'] = 'Pilotfrage, nicht gewertet';
+$string['feedback_table_notrecorded'] = 'Nicht erhoben: Die Fähigkeit nach dieser Antwort wurde mit dem Versuch nicht gespeichert';
 $string['feedback_table_questionnumber'] = 'Nr.';
 $string['feedback_uncertainty_factor_desc'] = 'Wenn groesser als 0, wird ein Feedbackbereich nur angezeigt, wenn das Konfidenzintervall Faehigkeit +/- k*SE vollstaendig in einem Bereich liegt. 0 deaktiviert dies.';
 $string['feedback_uncertainty_factor_name'] = 'Feedback-Unsicherheitsfaktor (k)';

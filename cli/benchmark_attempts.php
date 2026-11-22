@@ -359,7 +359,9 @@ if ($options['worker'] >= 0) {
             $sql = ($DB->perf_get_queries_time() - $sqltime) * 1000;
             $spans = [];
             foreach (timeline::get_spans() as $span) {
-                if (($span['depth'] ?? 0) <= 2 && $span['ms'] !== null) {
+                // The encodings of the stored data lie deeper; they are taken by name (issue #168, re-audit 22.11.2026).
+                $deep = in_array($span['name'], ['progress:json_encode', 'feedback:json_encode'], true);
+                if ((($span['depth'] ?? 0) <= 2 || $deep) && $span['ms'] !== null) {
                     $spans[$span['name']] = ($spans[$span['name']] ?? 0) + (float) $span['ms'];
                 }
             }
@@ -545,6 +547,50 @@ foreach ([25, 100, 250, 625] as $mark) {
         $rows[0]['peakkb'],
         $rows[0]['progressbytes'] ?? 0,
         $progresswritten
+    ));
+}
+// Issue #168 (re-audit of 22.11.2026): the cost of a step by the number of answers before it - over the ten steps up
+// to the mark, so that one slow step does not stand for the length: wall, CPU, SQL, queries, DML, memory and the spans
+// of the feedback and of the encoding of the stored data and the progress.
+cli_writeln("\nCost of a step by answers (issue #168; the ten steps up to the mark, all attempts):");
+$header = ['answers', 'wall p50', 'wall p95', 'cpu p95', 'sql p95', 'queries', 'DML', 'peak KB', 'feedback p95',
+    'fb json p95', 'prog json p95', 'prog save p95'];
+cli_writeln(sprintf('%8s %9s %9s %9s %9s %8s %6s %9s %13s %12s %14s %14s', ...$header));
+foreach ([25, 100, 250, 625] as $mark) {
+    $window = array_values(array_filter($steps, fn($s) => $s['n'] > $mark - 9 && $s['n'] <= $mark + 1));
+    if (count($window) < 10 || !array_filter($steps, fn($s) => $s['n'] === $mark + 1)) {
+        continue;
+    }
+    $col = fn($key) => array_map(fn($s) => (float) ($s[$key] ?? 0), $window);
+    $span = fn($name) => array_map(fn($s) => (float) ($s['spans'][$name] ?? 0), $window);
+    $row = [
+        'wall_p50' => local_catquiz_benchmark_percentile($col('wallms'), 0.5),
+        'wall_p95' => local_catquiz_benchmark_percentile($col('wallms'), 0.95),
+        'cpu_p95' => local_catquiz_benchmark_percentile($col('cpums'), 0.95),
+        'sql_p95' => local_catquiz_benchmark_percentile($col('sqlms'), 0.95),
+        'queries_p50' => local_catquiz_benchmark_percentile($col('queries'), 0.5),
+        'writes_p50' => local_catquiz_benchmark_percentile($col('writes'), 0.5),
+        'peakkb_max' => max($col('peakkb')),
+        'feedback_p95' => local_catquiz_benchmark_percentile($span('strategy:update_attemptfeedback'), 0.95),
+        'feedbackjson_p95' => local_catquiz_benchmark_percentile($span('feedback:json_encode'), 0.95),
+        'progressjson_p95' => local_catquiz_benchmark_percentile($span('progress:json_encode'), 0.95),
+        'progresssave_p95' => local_catquiz_benchmark_percentile($span('strategy:progress_save'), 0.95),
+    ];
+    $report['stepcost'][$mark] = $row;
+    cli_writeln(sprintf(
+        '%8d %9.1f %9.1f %9.1f %9.1f %8d %6d %9d %13.1f %12.2f %14.2f %14.1f',
+        $mark,
+        $row['wall_p50'],
+        $row['wall_p95'],
+        $row['cpu_p95'],
+        $row['sql_p95'],
+        $row['queries_p50'],
+        $row['writes_p50'],
+        $row['peakkb_max'],
+        $row['feedback_p95'],
+        $row['feedbackjson_p95'],
+        $row['progressjson_p95'],
+        $row['progresssave_p95']
     ));
 }
 cli_writeln(sprintf(

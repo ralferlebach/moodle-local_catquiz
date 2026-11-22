@@ -2,6 +2,44 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Re-Audit vom 22.11.2026 („CATquiz_ReAudit_2026-11-22_Auslieferung_CI_Issues_Nacharbeit“) (2026111713; Nachweise
+  `doc/re-audit-2026-11-22-nacharbeit.md`, nur im ZIP; Entscheidung 22.11.: Nachweise werden nicht versioniert):
+  - **#159 – Altdaten des Verlaufs:** Die Software geht mit Verläufen um, denen Antworten fehlen oder die ganz fehlen.
+    - Ursache im laufenden Code: Eine Antwort, die ein Reload nach abgelaufener Zeit als falsch wertet
+      (`catquiz::mark_last_question_failed()`), stand im Progress und in QUBA, bekam aber nie eine Zeile im Verlauf, auch
+      vor #168 nicht. `progress::record_answer_state()` nimmt jetzt jede noch nicht erfasste Antwort auf: vor der
+      nächsten, ohne Fähigkeit, denn dazwischen wurde keine geschätzt. Zahntest rot.
+    - Anzeige beendeter Versuche (`local\attempt\history_completion`, nur lesend): Fehlende Zeilen kommen aus dem
+      Progress, solange er da ist, sonst aus den von der Retention gesicherten Zeilen, sonst aus QUBA und dem Item des
+      CAT-Kontexts (Frage, Skala, Schwierigkeit, Antwort). Sortiert wird nach Slot. Fähigkeit und Information werden nicht
+      neu geschätzt; die Tabelle zeigt „Nicht erhoben“. Ergänzte Zeilen gelten nur bei bestätigten, nutzbaren Parametern
+      als produktiv, sonst als Pilotfrage (nur für Lehrende). Gelesen wird nur, wenn Zeilen fehlen
+      (`number_of_testitems_used`).
+    - Retention (`cleanup_attempt_progress`): Sichern und Löschen laufen je Zeile in einer Transaktion. Scheitert ein
+      Schreibvorgang, wird beides zurückgerollt; der Progress bleibt, die Aufgabe nennt nur die ID und versucht es im
+      nächsten Lauf erneut. Bei einem Teilverlauf werden die fehlenden Zeilen gesichert. Ein unlesbarer Progress (vor #174
+      speicherte ein nicht endlicher Schätzwert ihn leer) wird gelöscht und mit ID protokolliert.
+    - Tests: Teilverlauf vor und nach dem Task gleich; Ergänzung aus QUBA in Slot-Reihenfolge, nur lesend; unlesbarer
+      Progress; Fehler zwischen Sichern und Löschen mit Wiederholung; Reload-Antwort im Verlauf.
+  - **#168 – Messmatrix:** Teilspannen `progress:json_encode` und `feedback:json_encode`. `cli/benchmark_attempts.php`
+    gibt je Länge (25/100/250/625, über die zehn Schritte bis zur Marke) Zeit p50/p95, CPU, SQL, Queries, DML, Speicher
+    und die Spannen von Feedback und JSON aus. Alt gegen neu auf 4.5/MariaDB, Strategie 4, je Länge ein Versuch: gleiche Ergebnisse; bei 625
+    Antworten 4,3 statt 86,2 MB Feedbackdaten, Schritt p50 867 statt 1.401 ms; den Verlauf baut jetzt der Schlussschritt
+    einmal (2,2 s bei 625). Nachweise §3.
+  - **#176 – Randfälle (DoD3):** `ci_evidence.py` zählt „gelaufen“ an den Szenarien der Datei, nicht an den Datensätzen.
+    Eine aufgezeichnete Zeile, die in diesem Stand der Datei kein Szenario ist, macht das Feature rot: Die Aufzeichnung
+    stammt dann von einem anderen Stand. Selbsttest um Abbruch, übersprungenes Pflichtszenario, gleichnamige Szenarien und
+    fremden Stand ergänzt (15 Fälle; zwei davon gegen das alte Skript rot). Der übersprungene Behat-Fall
+    (`catquiz_question_modal.feature:189`, STACK) überspringt sich selbst, wenn qtype_stack oder Maxima fehlt, und ist
+    kein Pflichtfeature.
+  - **CI – ein Lauf, eine Auslieferung:** Die Läufe vom 22.11. installierten teils die Partnerstände der vorigen
+    Auslieferung (Engine-Lauf 205 mit Adapter 9a07cca und Host 8488f74). Neu ist `.github/ci-partner-versions.txt`:
+    Darin stehen die Stände von Host und Adapter, mit denen diese Auslieferung geprüft wurde. `await_dependencies.sh`
+    wartet darauf wie auf eine Abhängigkeit (`AWAIT_PARTNERS`); festgelegte Stände eines manuellen Laufs sind
+    ausgenommen. `version.php` bleibt unverändert.
+  - **CI – Install-Matrix:** Der Upgrade-Job wartet bis zu 15 Minuten, bis Linie 1.3 über Linie 1.2 liegt
+    (`await_line_order.sh`). Lauf 44 vom 22.11. war rot, weil 1.2 vor 1.3 gepusht wurde. Selbsttests beider Skripte im
+    Lint-Job.
 - Re-Audit vom 20.11.2026 („CATquiz_GitHub_ReAudit_AKs_DoDs_CI_2026-11-20“), Entscheidungen vom 21.11.2026
   (2026111711; Nachweise `doc/re-audit-2026-11-20-nachweise.md`, nur im ZIP):
   - **#168 – Verlauf erst am Ende (Entscheidung 21.11.):** Der Antwortverlauf (`graphicalsummary_data`) wird nicht

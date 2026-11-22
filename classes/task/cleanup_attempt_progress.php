@@ -85,20 +85,28 @@ class cleanup_attempt_progress extends scheduled_task {
                    AND a.endtime < :cutoff";
 
         $removed = 0;
+        // Re-audit of 22.11.2026 (#159): rows whose removal failed in this run are not selected again in it - they wait
+        // for the next run, and the loop does not turn on them.
+        $held = [];
         while (true) {
-            $rows = $DB->get_records_sql($sql, ['cutoff' => $cutoff]);
+            $select = $sql;
+            $params = ['cutoff' => $cutoff];
+            if ($held) {
+                [$notin, $heldparams] = $DB->get_in_or_equal(array_keys($held), SQL_PARAMS_NAMED, 'held', false);
+                $select .= " AND a.id $notin";
+                $params += $heldparams;
+            }
+            $rows = $DB->get_records_sql($select, $params, 0, self::BATCH + 1);
             if (empty($rows)) {
                 break;
             }
 
             foreach (array_slice($rows, 0, self::BATCH) as $row) {
-                // Issue #159: what the page of the result reads from the progress, and the stored data lack, is kept
-                // first - afterwards the result is shown from the stored data alone.
-                progress_retention::preserve_for_display((int) $row->catattemptid);
-                // Through progress::delete() so the cache is cleared as well; a row
-                // removed behind the cache's back would come back on the next read.
-                progress::delete((int) $row->componentattemptid, $row->component);
-                $removed++;
+                if ($this->remove_one($row)) {
+                    $removed++;
+                } else {
+                    $held[(int) $row->catattemptid] = true;
+                }
             }
 
             if (count($rows) <= self::BATCH) {
@@ -106,8 +114,59 @@ class cleanup_attempt_progress extends scheduled_task {
             }
         }
 
+        if ($held) {
+            // The ids and nothing else: no answer, no person.
+            mtrace('local_catquiz: kept ' . count($held) . ' attempt progress row(s) after a failed removal, retried on the next '
+                . 'run: CAT attempts ' . implode(', ', array_keys($held)) . '.');
+        }
         if ($removed > 0) {
             mtrace("local_catquiz: removed $removed expired attempt progress row(s).");
         }
+    }
+
+    /**
+     * Keeps what the page of the result needs from the progress, and removes it - both or neither (issue #159,
+     * re-audit of 22.11.2026).
+     *
+     * One transaction: the progress goes only once what it held for the page is stored with the attempt. A failure
+     * rolls both back; the progress stays and the next run tries again. A progress that cannot be read holds nothing
+     * the page could read, and is removed (with its id in the log).
+     *
+     * @param \stdClass $row catattemptid, componentattemptid, component
+     * @return bool Whether the progress was removed.
+     */
+    protected function remove_one(\stdClass $row): bool {
+        global $DB;
+        $transaction = $DB->start_delegated_transaction();
+        try {
+            $kept = progress_retention::preserve_for_display((int) $row->catattemptid);
+            if ($kept === [progress_retention::UNREADABLE]) {
+                mtrace("local_catquiz: the progress of CAT attempt {$row->catattemptid} could not be read; removed.");
+            }
+            // Through progress::delete() so the cache is cleared as well; a row removed behind the cache's back would
+            // come back on the next read.
+            $this->delete_progress($row);
+            $transaction->allow_commit();
+            return true;
+        } catch (\Throwable $e) {
+            try {
+                $transaction->rollback($e);
+            } catch (\Throwable $rolledback) {
+                // The rollback rethrows what it was given; it is reported below.
+                unset($rolledback);
+            }
+            mtrace("local_catquiz: the progress of CAT attempt {$row->catattemptid} was kept, its removal failed ("
+                . get_class($e) . ').');
+            return false;
+        }
+    }
+
+    /**
+     * Removes the progress of the row.
+     *
+     * @param \stdClass $row catattemptid, componentattemptid, component
+     */
+    protected function delete_progress(\stdClass $row): void {
+        progress::delete((int) $row->componentattemptid, $row->component);
     }
 }

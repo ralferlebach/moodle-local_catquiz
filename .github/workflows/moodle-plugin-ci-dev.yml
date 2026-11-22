@@ -91,6 +91,11 @@ jobs:
         if: ${{ always() }}
         run: set -o pipefail; bash plugin/.github/scripts/await_dependencies_selftest.sh 2>&1 | tee ci-logs/await-selftest.log
 
+      # Re-audit of 22.11.2026: the install matrix waits for line 1.3 above line 1.2 (await_line_order.sh).
+      - name: Selbsttest der Zeilenfolge 1.3 vor 1.2
+        if: ${{ always() }}
+        run: set -o pipefail; bash plugin/.github/scripts/await_line_order_selftest.sh 2>&1 | tee ci-logs/line-order-selftest.log
+
       # Issue #176: the evidence must fail for a required Behat feature the run did not execute (RED/GREEN self-test).
       - name: Selbsttest der CI-Evidenz
         if: ${{ always() }}
@@ -230,7 +235,7 @@ jobs:
           pin ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz "${{ github.event.inputs.host_ref }}"
           pin ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz "${{ github.event.inputs.adapter_ref }}"
           # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires.
-          bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
+          AWAIT_PARTNERS=./plugin/.github/ci-partner-versions.txt bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
             mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ALiSe-v-1.2.0-legacy "${{ github.event.inputs.host_ref }}" \
             adaptivequizcatmodel_catquiz ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz ALiSe-v-1.2.0-legacy \
             "${{ github.event.inputs.adapter_ref }}"
@@ -413,7 +418,7 @@ jobs:
           pin ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz "${{ github.event.inputs.host_ref }}"
           pin ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz "${{ github.event.inputs.adapter_ref }}"
           # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires.
-          bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
+          AWAIT_PARTNERS=./plugin/.github/ci-partner-versions.txt bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
             mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ALiSe-v-1.2.0-legacy "${{ github.event.inputs.host_ref }}" \
             adaptivequizcatmodel_catquiz ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz ALiSe-v-1.2.0-legacy \
             "${{ github.event.inputs.adapter_ref }}"
@@ -554,7 +559,7 @@ jobs:
           pin ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz "${{ github.event.inputs.host_ref }}"
           pin ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz "${{ github.event.inputs.adapter_ref }}"
           # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires.
-          bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
+          AWAIT_PARTNERS=./plugin/.github/ci-partner-versions.txt bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
             mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ALiSe-v-1.2.0-legacy "${{ github.event.inputs.host_ref }}" \
             adaptivequizcatmodel_catquiz ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz ALiSe-v-1.2.0-legacy \
             "${{ github.event.inputs.adapter_ref }}"
@@ -724,7 +729,7 @@ jobs:
           pin ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz "${{ github.event.inputs.host_ref }}"
           pin ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz "${{ github.event.inputs.adapter_ref }}"
           # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires.
-          bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
+          AWAIT_PARTNERS=./plugin/.github/ci-partner-versions.txt bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
             mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ALiSe-v-1.2.0-legacy "${{ github.event.inputs.host_ref }}" \
             adaptivequizcatmodel_catquiz ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz ALiSe-v-1.2.0-legacy \
             "${{ github.event.inputs.adapter_ref }}"
@@ -940,7 +945,7 @@ jobs:
             moodle/mod/adaptivequiz/catmodel/catquiz
           # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires
           # (before the .git directories are removed below).
-          bash plugin/.github/scripts/await_dependencies.sh plugin/version.php \
+          AWAIT_PARTNERS=plugin/.github/ci-partner-versions.txt bash plugin/.github/scripts/await_dependencies.sh plugin/version.php \
             mod_adaptivequiz moodle/mod/adaptivequiz "$DEP_REF" "" \
             adaptivequizcatmodel_catquiz moodle/mod/adaptivequiz/catmodel/catquiz "$DEP_REF" ""
           git clone --depth 1 --branch main \

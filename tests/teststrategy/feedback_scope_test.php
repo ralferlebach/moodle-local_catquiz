@@ -404,4 +404,57 @@ final class feedback_scope_test extends advanced_testcase {
             'Nothing left for the finalisation.'
         );
     }
+
+    /**
+     * Issue #159 (re-audit of 22.11.2026): the answer a reload gave as wrong gets its entry in the history.
+     *
+     * A reload after the time for a question ran out marks it as failed: the strategy stores the response in the
+     * progress (add_playedquestion(), mark_lastquestion_failed(), save()) and redirects - there is no selection, and
+     * nothing records the answer. The next answer is recorded by the selection that processes it. Before, only that
+     * last answer got an entry; the failed one never had a row in the history, nor before #168. It is recorded now,
+     * before the next one and without an ability (none was estimated between them); the history shows it.
+     * RED before: four entries and the next one - the failed answer missing.
+     */
+    public function test_the_answer_a_reload_gave_gets_its_entry(): void {
+        global $DB;
+        $run = $this->play($this->getDataGenerator()->create_and_enrol($this->course, 'student'), 0, 4);
+        $this->assertFalse($run['ended']);
+        $this->assertCount(4, $this->answer_history($run['attemptid']));
+
+        // The reload: the shown question is marked as failed, as check_break() does it.
+        $progress = \local_catquiz\teststrategy\progress::load($run['attemptid'], 'mod_adaptivequiz', $this->contextid);
+        $failed = $progress->get_last_question();
+        $this->assertIsObject($failed, 'A question is shown.');
+        $progress->add_playedquestion($failed)->mark_lastquestion_failed()->save();
+
+        // The next answer, as the selection processes it: another question of the pool, answered right.
+        $progress = \local_catquiz\teststrategy\progress::load($run['attemptid'], 'mod_adaptivequiz', $this->contextid);
+        $played = $progress->get_playedquestions();
+        $nextid = (int) $DB->get_field_sql(
+            'SELECT MIN(componentid) FROM {local_catquiz_items} WHERE contextid = ? AND componentid NOT IN ('
+                . implode(',', array_map('intval', array_keys($played))) . ')',
+            [$this->contextid]
+        );
+        $next = clone $failed;
+        $next->id = $nextid;
+        $reflection = new \ReflectionClass($progress);
+        $playedproperty = $reflection->getProperty('playedquestions');
+        $playedproperty->setAccessible(true);
+        $playedproperty->setValue($progress, $played + [$nextid => $next]);
+        $responses = $reflection->getProperty('responses');
+        $responses->setAccessible(true);
+        $answer = [$nextid => ['questionid' => $nextid, 'fraction' => 1.0]];
+        $responses->setValue($progress, $responses->getValue($progress) + $answer);
+
+        $this->assertTrue($progress->record_answer_state(0.4242));
+        $history = $progress->get_answer_history();
+        $this->assertCount(6, $history, 'The failed answer and the next one.');
+        $this->assertSame((string) $failed->id, (string) $history[4]['q'], 'The failed answer, in its place.');
+        $this->assertNull($history[4]['a'], 'Without an ability: none was estimated.');
+        $this->assertSame(array_keys($history[5]['s']), array_keys($history[4]['s']), 'The series of the scales stay aligned.');
+        $this->assertSame([null], array_values(array_unique($history[4]['s'], SORT_REGULAR)));
+        $this->assertSame((string) $nextid, (string) $history[5]['q']);
+        $this->assertSame(0.42, $history[5]['a']);
+        $this->assertFalse($progress->record_answer_state(0.1), 'Recorded once.');
+    }
 }

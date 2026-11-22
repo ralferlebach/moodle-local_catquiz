@@ -97,7 +97,7 @@ jobs:
             moodle/mod/adaptivequiz/catmodel/catquiz
           # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires
           # (before the .git directories are removed below).
-          bash plugin/.github/scripts/await_dependencies.sh plugin/version.php \
+          AWAIT_PARTNERS=plugin/.github/ci-partner-versions.txt bash plugin/.github/scripts/await_dependencies.sh plugin/version.php \
             mod_adaptivequiz moodle/mod/adaptivequiz "$DEP_REF" "" \
             adaptivequizcatmodel_catquiz moodle/mod/adaptivequiz/catmodel/catquiz "$DEP_REF" ""
           git clone --depth 1 --branch main \

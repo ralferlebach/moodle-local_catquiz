@@ -105,7 +105,7 @@ jobs:
           moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
           moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-adaptivequizcatmodel_catquiz
-          bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
+          AWAIT_PARTNERS=./plugin/.github/ci-partner-versions.txt bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
             mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ALiSe-v-1.2.0-legacy "" \
             adaptivequizcatmodel_catquiz ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz ALiSe-v-1.2.0-legacy ""
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
