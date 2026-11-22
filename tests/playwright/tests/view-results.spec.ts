@@ -22,8 +22,9 @@
  *
  * Engine #159: results stored as older versions left them - without the scope of #168, without the comparison of
  * #166, without the history of the answers, without the standard error of the subscales, without abilities - before
- * and after the real retention task, for the participant, the teacher and another participant: the same where the
- * result is complete, never a number the attempt did not have (no invented zero), nothing for another person.
+ * and after the real retention task, for the participant, the teacher and another participant: the same page after
+ * the task as before (decision of 21.11.2026: what the stored result lacks is kept from the progress before it is
+ * removed), never a number the attempt did not have (no invented zero), nothing for another person.
  *
  * Runs after cat-attempt-path.spec.ts (the files run in their order, one worker): the attempts of results_helper.php
  * change the population of the Simulation scale those stories start from.
@@ -171,10 +172,9 @@ test.describe('Result views (re-audit "ab #147") @results', () => {
                         expect(added, `${state}/${audience}/${section}: no new numbers after the task`).toEqual([]);
                         expect(text, `${state}/${audience}/${section}`).not.toMatch(/±\s*0[.,]00\b/);
                     }
-                    if (state === 'current' || state === 'pre168') {
-                        // A complete snapshot: the same values and labels after the task.
-                        expect(is, `${state}/${audience}: the same after the task`).toEqual(was);
-                    }
+                    // Every state, the incomplete ones as well (decision of 21.11.2026): the same values and labels after
+                    // the task - what the stored result lacked was kept from the progress before it was removed.
+                    expect(is, `${state}/${audience}: the same after the task`).toEqual(was);
                 }
             }
             // The full result: the root scale with its value, the comparison with the group.

@@ -138,4 +138,71 @@ class progress_retention {
 
         return in_array($value, self::levels(), true) ? $value : self::MINIMAL;
     }
+    /**
+     * Before the progress of a finished attempt is removed: what the page of its result needs and its stored data do
+     * not hold is kept from the progress (issue #159, decision of 21.11.2026).
+     *
+     * After the removal the result is shown from the stored data alone (progress::load_historical()). Data stored
+     * before the history and the abilities were kept with the result lack them - the page read them from the
+     * progress, and lost its result tabs once it was gone. Copied, not computed: the answered questions in their
+     * order with answer, scale, difficulty and Fisher information (retention_history), and the abilities
+     * (retention_abilities), as the progress holds them. Data that hold both are left as they are; nothing is
+     * written for them.
+     *
+     * @param int $catattemptid Id in local_catquiz_attempts.
+     * @return string[] What was kept: 'history', 'abilities'.
+     */
+    public static function preserve_for_display(int $catattemptid): array {
+        global $DB;
+        $attempt = $DB->get_record('local_catquiz_attempts', ['id' => $catattemptid], 'id, json, scaleid');
+        $progressjson = $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]);
+        if (!$attempt || !$progressjson) {
+            return [];
+        }
+        $stored = json_decode((string) $attempt->json, true);
+        $progress = json_decode((string) $progressjson, true);
+        if (!is_array($stored) || !is_array($progress)) {
+            return [];
+        }
+        $kept = [];
+        if (empty($stored['graphicalsummary_data']) && empty($stored['retention_history'])) {
+            $root = (string) ($stored['catscaleid'] ?? $attempt->scaleid);
+            $played = (array) ($progress['playedquestions'] ?? []);
+            $rows = [];
+            // The responses in the order they were given - the order of the history.
+            foreach ((array) ($progress['responses'] ?? []) as $qid => $response) {
+                $question = $played[$qid] ?? null;
+                if (!is_array($question) || !is_array($response) || !isset($response['fraction'])) {
+                    continue;
+                }
+                $pilot = !empty($question['is_pilot']);
+                $information = $question['fisherinformation'] ?? null;
+                $rows[] = [
+                    'id' => (string) $qid,
+                    'questionname' => (string) ($question['label'] ?? ''),
+                    'questionscale' => (string) ($question['catscaleid'] ?? ''),
+                    'difficulty' => $question['difficulty'] ?? null,
+                    'pilot' => $pilot,
+                    'fisherinformation' => $pilot || !is_array($information) || !isset($information[$root])
+                        ? null : round((float) $information[$root], 2),
+                    'lastresponse' => round((float) $response['fraction'], 2),
+                ];
+            }
+            if ($rows) {
+                $stored['retention_history'] = $rows;
+                $kept[] = 'history';
+            }
+        }
+        if (empty($stored['personabilities']) && empty($stored['retention_abilities'])) {
+            $abilities = array_filter((array) ($progress['abilities'] ?? []), 'is_numeric');
+            if ($abilities) {
+                $stored['retention_abilities'] = $abilities;
+                $kept[] = 'abilities';
+            }
+        }
+        if ($kept) {
+            $DB->set_field('local_catquiz_attempts', 'json', json_encode($stored), ['id' => $catattemptid]);
+        }
+        return $kept;
+    }
 }

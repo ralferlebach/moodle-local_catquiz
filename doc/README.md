@@ -46,6 +46,11 @@ Zwei Arten von Dokumenten:
   #160/#166. Im ZIP; `doc/` steht in der `.gitignore`.
 - **evidence/ci-playwright-2026-11-21/** – Playwright-CI vom 20.11.2026 (`chart-series`, Klick vor den Seitenskripten):
   Strecke 5.1/4.5 je 37/37 und Zahntest von `scriptsReady()`; Beschreibung im CHANGELOG.
+- **re-audit-2026-11-20-nachweise.md** – Re-Audit vom 20.11.2026, Antwort vom 21./22.11.2026: #168 Verlauf am Ende
+  (alt/neu gleich, Feedbackdaten 87 → 4,1 MB), #159 vor der Retention sichern, kein Hinweis bei abgeschalteter Ausgabe,
+  #161 SE-Filter, #174 Root-Schätzung je Antwort (Adapter-Test), #176 Behat-Ausführungsnachweis, Host #25 Matrix;
+  Rohdaten unter `evidence/re-audit-2026-11-20/`.
+- **entscheidungen-2026-11-21.md** – Entscheidungen vom 21./22.11.2026 (Re-Audit und Issue #177).
 - **re-audit-2026-11-19-nachweise.md** – Re-Audit 19.11.2026: CI-Nachweis je Zelle,
   Playwright-Strecke, Longrun, k6-Last, #168-Messung, axe, Stand je Issue (#146–#175, Host
   #17/#23/#25, Adapter #12). Im ZIP; `doc/` steht in der `.gitignore`.

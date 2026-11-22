@@ -54,11 +54,13 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @covers \local_catquiz\external\render_feedback_tab
  * @covers \local_catquiz\teststrategy\feedbackgenerator
  * @covers \local_catquiz\task\cleanup_attempt_progress
+ * @covers \local_catquiz\local\progress_retention
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(attemptfeedback::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(render_feedback_tab::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\teststrategy\feedbackgenerator::class)]
 #[\PHPUnit\Framework\Attributes\CoversClass(cleanup_attempt_progress::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(\local_catquiz\local\progress_retention::class)]
 final class historical_feedback_cleanup_test extends advanced_testcase {
     /** @var \stdClass The activity. */
     private \stdClass $adaptivequiz;
@@ -348,6 +350,78 @@ final class historical_feedback_cleanup_test extends advanced_testcase {
         // Read only: no progress created again, no attempt row added.
         $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid]));
         $this->assertSame($attemptsbefore, $DB->count_records('local_catquiz_attempts'));
+    }
+
+    /**
+     * Stored data without a part the page of the result reads from the progress: the history of the answers, or the
+     * abilities (data stored before they were kept with the result).
+     *
+     * @return array
+     */
+    public static function incomplete_data(): array {
+        return [
+            'without the history of the answers' => [['graphicalsummary_data'], 'history'],
+            'without the abilities' => [
+                ['personabilities', 'customscalefeedback_abilities', 'updated_personabilities'], 'abilities',
+            ],
+        ];
+    }
+
+    /**
+     * Issue #159, decision of 21.11.2026: before the progress of such an attempt is removed, the retention task keeps
+     * what the page needs from it - copied, not computed. RED before: the page lost its result sections.
+     *
+     * @param array $removed Keys of the stored data the attempt is without.
+     * @param string $kept What the task keeps from the progress.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('incomplete_data')]
+    public function test_incomplete_stored_data_keeps_its_result_after_the_cleanup(array $removed, string $kept): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, 50);
+        $attemptid = $this->play_and_finish();
+        $catattemptid = (int) catquiz::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
+        $json = json_decode((string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), true);
+        foreach ($removed as $key) {
+            $this->assertArrayHasKey($key, $json);
+            unset($json[$key]);
+        }
+        $DB->set_field('local_catquiz_attempts', 'json', json_encode($json), ['id' => $catattemptid]);
+        $this->purge_caches();
+        $before = $this->result_page($attemptid);
+        if ($kept === 'history') {
+            // The result with its standard error - its number of answers comes from the progress.
+            $this->assertMatchesRegularExpression(
+                '~You reached a score of -?\d+\.\d\d \(with a standard error of ± \d+\.\d\d\)~u',
+                $before['student/comparetotestaverage']
+            );
+        }
+
+        set_config('progressretention', 'minimal', 'local_catquiz');
+        ob_start();
+        (new cleanup_attempt_progress())->execute();
+        ob_end_clean();
+        $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid]));
+        $this->purge_caches();
+
+        $this->assertSame($before, $this->result_page($attemptid), 'The same values and labels after the cleanup.');
+        $stored = json_decode((string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), true);
+        $this->assertArrayHasKey('retention_' . $kept, $stored, 'Kept from the progress before it was removed.');
+        foreach ($removed as $key) {
+            $this->assertArrayNotHasKey($key, $stored, "Nothing is added under the keys of the result: $key.");
+        }
+    }
+
+    /**
+     * Complete stored data are left as they are: the task writes nothing for them.
+     */
+    public function test_complete_stored_data_are_not_written(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, 15);
+        $attemptid = $this->play_and_finish();
+        $catattemptid = (int) catquiz::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
+        $json = $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]);
+        $this->assertSame([], \local_catquiz\local\progress_retention::preserve_for_display($catattemptid));
+        $this->assertSame($json, $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]));
     }
 
     /**

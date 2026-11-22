@@ -166,6 +166,17 @@ class progress implements JsonSerializable {
     private array $scalestatetrace = [];
 
     /**
+     * The state after each answer that the history of the attempt needs and nothing else keeps (issue #168): per
+     * answered question, in order, the ability of the root scale and of every scale after the answer, rounded as the
+     * history shows them. The history itself (graphicalsummary) is built from this, the played questions and the
+     * responses when the attempt ends - it is no longer written into the feedback data with every answer.
+     *
+     * Entries: ['q' => question id, 'a' => ability of the root scale or null, 's' => [scaleid => ability]].
+     * @var array
+     */
+    private array $answerhistory = [];
+
+    /**
      * @var array Holds the person abilities as they were BEFORE this attempt,
      * indexed by catscale. Captured once at the first question from the loaded
      * priors, so a scale not validly measured in this attempt can be restored to
@@ -435,7 +446,18 @@ class progress implements JsonSerializable {
             return null;
         }
         $stored = json_decode((string) $attempt->json);
-        if (!is_object($stored) || empty($stored->personabilities)) {
+        if (!is_object($stored)) {
+            return null;
+        }
+        // Issue #159 (21.11.2026): data stored without them got the history and the abilities from the progress
+        // before it was removed (progress_retention::preserve_for_display()).
+        if (empty($stored->personabilities) && !empty($stored->retention_abilities)) {
+            $stored->personabilities = $stored->retention_abilities;
+        }
+        if (empty($stored->graphicalsummary_data) && !empty($stored->retention_history)) {
+            $stored->graphicalsummary_data = $stored->retention_history;
+        }
+        if (empty($stored->personabilities)) {
             return null;
         }
         $root = (int) ($stored->catscaleid ?? $attempt->scaleid);
@@ -701,6 +723,14 @@ class progress implements JsonSerializable {
         $instance->scalestatetrace = property_exists($data, 'scalestatetrace')
             ? array_values(array_map([static::class, 'to_array'], (array) $data->scalestatetrace))
             : [];
+        // Issue #168: a progress written before the history was recorded here has none; its answers so far are in
+        // the history of the feedback data.
+        $instance->answerhistory = property_exists($data, 'answerhistory')
+            ? array_values(array_map(fn($entry) => self::to_array($entry), (array) $data->answerhistory))
+            : [];
+        foreach ($instance->answerhistory as $i => $entry) {
+            $instance->answerhistory[$i]['s'] = self::to_array($entry['s'] ?? []);
+        }
         $instance->responses = (array) $data->responses;
         foreach ($instance->responses as $id => $val) {
             $instance->responses[$id] = (array) $val;
@@ -845,6 +875,10 @@ class progress implements JsonSerializable {
         // Issue #133: outside trace mode the stored JSON stays exactly as it was - not even an empty key.
         if ($this->scalestatetrace) {
             $data['scalestatetrace'] = $this->scalestatetrace;
+        }
+        // Issue #168: like the trace, the key is only there once there is something in it.
+        if ($this->answerhistory) {
+            $data['answerhistory'] = $this->answerhistory;
         }
         return $data;
     }
@@ -1616,6 +1650,48 @@ class progress implements JsonSerializable {
      */
     public function get_ability_trace(): array {
         return $this->abilitytrace;
+    }
+
+    /**
+     * Records the state after the last answer for the history of the attempt (issue #168).
+     *
+     * Called by the selection with every answer, before the progress is saved - where the history used to be written
+     * into the feedback data. An entry is recorded under the condition the history added a row: there is a last
+     * response, its question was played, and not every played question has an entry yet. A question is recorded once.
+     *
+     * @param float|null $rootability The ability of the root scale after the answer (the context of the selection).
+     * @param int $precision As the history rounds.
+     * @return bool Whether an entry was recorded.
+     */
+    public function record_answer_state(?float $rootability, int $precision = 2): bool {
+        $last = $this->get_last_response();
+        if (!is_array($last) || !isset($last['qid']) || !array_key_exists($last['qid'], $this->playedquestions)) {
+            return false;
+        }
+        if (count($this->answerhistory) === count($this->playedquestions)) {
+            return false;
+        }
+        $qid = (string) $last['qid'];
+        foreach ($this->answerhistory as $entry) {
+            if ((string) $entry['q'] === $qid) {
+                return false;
+            }
+        }
+        $this->answerhistory[] = [
+            'q' => $qid,
+            'a' => $rootability === null ? null : round($rootability, $precision),
+            's' => array_map(fn($value) => round($value, $precision), $this->abilities),
+        ];
+        return true;
+    }
+
+    /**
+     * The state after each answer, as record_answer_state() recorded it (issue #168).
+     *
+     * @return array
+     */
+    public function get_answer_history(): array {
+        return $this->answerhistory;
     }
 
     /**

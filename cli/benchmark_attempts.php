@@ -369,6 +369,13 @@ if ($options['worker'] >= 0) {
                 [$attemptid]
             );
             $bytes = $row ? (int) $row->jsonbytes + (int) $row->debugbytes : 0;
+            // Issue #168: the progress is written with every answer as well - it is part of what an answer writes.
+            $progressbytes = (int) $DB->get_field_sql(
+                'SELECT LENGTH(p.json) FROM {local_catquiz_progress} p
+                   JOIN {local_catquiz_attempts} a ON a.id = p.attemptid
+                  WHERE a.attemptid = ?',
+                [$attemptid]
+            );
             $step = [
                 'attempt' => $number, 'n' => $i + 1, 'wallms' => round($wall, 2), 'cpums' => round($cpu, 2),
                 'sqlms' => round($sql, 2), 'waitms' => round(max(0, $wall - $cpu - $sql), 2),
@@ -376,6 +383,7 @@ if ($options['worker'] >= 0) {
                 'peerqueries' => local_catquiz_benchmark_peers() - $peer,
                 'peakkb' => (int) (memory_get_peak_usage() / 1024), 'jsonbytes' => $row ? (int) $row->jsonbytes : 0,
                 'storedbytes' => $bytes, 'writtenbytes' => $bytes > 0 && $bytes !== $previousbytes ? $bytes : 0,
+                'progressbytes' => $progressbytes,
                 'qid' => (int) ($result[0] ?? 0), 'spans' => array_map(fn($ms) => round($ms, 2), $spans),
             ];
             $previousbytes = $bytes;
@@ -500,8 +508,9 @@ foreach (array_keys($spannames) as $span) {
 }
 // The data of the attempt by its length (issue #168): at the step closest to each mark.
 cli_writeln("\nStored attempt data by answers (issue #168):");
-$header = ['answers', 'json bytes', 'stored bytes', 'written so far', 'DML step', 'DML so far', 'step ms', 'peak KB'];
-cli_writeln(sprintf('%8s %12s %14s %16s %10s %12s %12s %10s', ...$header));
+$header = ['answers', 'json bytes', 'stored bytes', 'written so far', 'DML step', 'DML so far', 'step ms', 'peak KB',
+    'progress bytes', 'progress so far'];
+cli_writeln(sprintf('%8s %12s %14s %16s %10s %12s %12s %10s %15s %16s', ...$header));
 foreach ([25, 100, 250, 625] as $mark) {
     $rows = array_values(array_filter($steps, fn($s) => $s['n'] === $mark + 1));
     if (!$rows) {
@@ -509,9 +518,11 @@ foreach ([25, 100, 250, 625] as $mark) {
     }
     $written = 0;
     $dml = 0;
+    $progresswritten = 0;
     foreach ($steps as $step) {
         if ($step['attempt'] === $rows[0]['attempt'] && $step['n'] <= $mark + 1) {
             $written += $step['writtenbytes'];
+            $progresswritten += $step['progressbytes'] ?? 0;
             $dml += $step['writes'] ?? 0;
         }
     }
@@ -520,9 +531,10 @@ foreach ([25, 100, 250, 625] as $mark) {
         'writes' => $rows[0]['writes'] ?? null, 'writessofar' => $dml,
         'wallms' => $rows[0]['wallms'], 'peakkb' => $rows[0]['peakkb'], 'sqlms' => $rows[0]['sqlms'],
         'feedbackms' => $rows[0]['spans']['strategy:update_attemptfeedback'] ?? null,
+        'progressbytes' => $rows[0]['progressbytes'] ?? 0, 'progresswritten' => $progresswritten,
     ];
     cli_writeln(sprintf(
-        '%8d %12d %14d %16d %10d %12d %12.1f %10d',
+        '%8d %12d %14d %16d %10d %12d %12.1f %10d %15d %16d',
         $mark,
         $rows[0]['jsonbytes'],
         $rows[0]['storedbytes'],
@@ -530,7 +542,9 @@ foreach ([25, 100, 250, 625] as $mark) {
         $rows[0]['writes'] ?? 0,
         $dml,
         $rows[0]['wallms'],
-        $rows[0]['peakkb']
+        $rows[0]['peakkb'],
+        $rows[0]['progressbytes'] ?? 0,
+        $progresswritten
     ));
 }
 cli_writeln(sprintf(

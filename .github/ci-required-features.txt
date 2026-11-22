@@ -1,4 +1,5 @@
-# Behat features the issues of local_catquiz name; each must exist, carry @local_catquiz and no skip tag.
+# Behat features the issues of local_catquiz name; each must exist, carry @local_catquiz and no skip tag - and, since
+# issue #176, every scenario of it must have run and passed in the CI run (behat-executed.jsonl).
 catquiz_statistics_id_lists          # #175
 catquiz_feedback_single_scale        # adapter #2
 catquiz_feedback_after_cleanup       # #159, #166

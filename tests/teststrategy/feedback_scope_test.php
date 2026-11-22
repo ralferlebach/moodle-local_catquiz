@@ -42,8 +42,9 @@ require_once($CFG->dirroot . '/question/editlib.php');
 require_once($CFG->dirroot . '/mod/adaptivequiz/locallib.php');
 
 /**
- * Issue #168 AK2 (decision of 19.11.2026): with an answer only the feedback that records every answer is built - the
- * history of the graphical summary and the debug information. What describes the state of the attempt is built once
+ * Issue #168 AK2 (decision of 19.11.2026): with an answer only the feedback that records every answer is built - since
+ * the decision of 21.11.2026 only the debug information; the history of the graphical summary is built at the end from
+ * what the progress records with each answer. What describes the state of the attempt is built once
  * at its end - by the selection when it ends the attempt, else by the finalisation - and, for a running attempt, when
  * somebody looks at it, without storing it. The feedback at the end is the same as when everything was built with
  * every answer.
@@ -245,15 +246,54 @@ final class feedback_scope_test extends advanced_testcase {
     }
 
     /**
-     * With an answer only the history: the graphical summary grows by one entry per question, the context of the
-     * selection is kept, the state of the attempt is not built.
+     * The history of the attempt as the progress records it: one entry per processed answer (issue #168).
+     *
+     * @param int $attemptid
+     * @return array
      */
-    public function test_with_an_answer_only_the_history_is_built(): void {
+    private function answer_history(int $attemptid): array {
+        global $DB;
+        $json = $DB->get_field_sql(
+            'SELECT p.json FROM {local_catquiz_progress} p JOIN {local_catquiz_attempts} a ON a.id = p.attemptid
+              WHERE a.attemptid = ?',
+            [$attemptid]
+        );
+        return json_decode((string) $json, true)['answerhistory'] ?? [];
+    }
+
+    /**
+     * Rows of the history without what belongs to the one attempt: its question attempts, and the text of the answer
+     * (the choices are shuffled per attempt). Compared as stored (JSON).
+     *
+     * @param array $rows
+     * @return array
+     */
+    private static function rows(array $rows): array {
+        // As stored: a view builds them in memory, where 0.0 is still a float.
+        $rows = json_decode(json_encode($rows), true);
+        return array_map(function ($row) {
+            unset($row['questionattemptid'], $row['responsesummary']);
+            return $row;
+        }, $rows);
+    }
+
+    /**
+     * With an answer no history in the feedback data (decision of 21.11.2026): the progress records the state after
+     * each answer, compactly; the context of the selection is kept, the state of the attempt is not built.
+     */
+    public function test_with_an_answer_no_history_is_written(): void {
         $run = $this->play($this->getDataGenerator()->create_and_enrol($this->course, 'student'), 0, 3);
         $this->assertFalse($run['ended']);
         $stored = $this->stored($run['attemptid']);
         $this->assertSame(attemptfeedback::SCOPE_ANSWER, $stored[attemptfeedback::SCOPE_KEY]);
-        $this->assertCount(3, $stored['graphicalsummary_data'], 'One entry per processed answer.');
+        $this->assertArrayNotHasKey('graphicalsummary_data', $stored, 'The history is built at the end.');
+        $this->assertArrayNotHasKey('graphicalsummary_otherscales', $stored);
+        $history = $this->answer_history($run['attemptid']);
+        $this->assertCount(3, $history, 'One entry per processed answer, in the progress.');
+        foreach ($history as $entry) {
+            $this->assertSame(['q', 'a', 's'], array_keys($entry));
+            $this->assertArrayHasKey($this->rootid, $entry['s']);
+        }
         $this->assertArrayHasKey('se', $stored, 'The standard errors of the last selection are kept.');
         $this->assertNotEmpty($stored['se']);
         foreach (self::STATE_KEYS as $key) {
@@ -285,6 +325,13 @@ final class feedback_scope_test extends advanced_testcase {
             $this->assertArrayHasKey($key, $data, "Built for the view: $key.");
             $this->assertEquals($old[$key], $data[$key], "The same $key as when it was built with every answer.");
         }
+        // The history, built for the view from the progress, row by row as with every answer.
+        $this->assertCount(4, $data['graphicalsummary_data']);
+        $this->assertSame(self::rows($old['graphicalsummary_data']), self::rows($data['graphicalsummary_data']));
+        $this->assertSame(
+            $old['graphicalsummary_otherscales'],
+            json_decode(json_encode($data['graphicalsummary_otherscales']), true)
+        );
         $this->assertNotEmpty($feedback->get_feedback_for_attempt());
         $this->assertSame(
             $json,
@@ -325,11 +372,15 @@ final class feedback_scope_test extends advanced_testcase {
         );
         $newstored = $this->stored($new['attemptid']);
         $this->assertSame(attemptfeedback::SCOPE_END, $newstored[attemptfeedback::SCOPE_KEY], 'Completed at the end.');
-        // The history (graphicalsummary_data) is built with every answer either way; it carries the ids of each attempt.
         foreach (['personabilities_abilities', 'customscalefeedback_abilities', 'primaryscale', 'se', 'userability'] as $key) {
             $this->assertArrayHasKey($key, $newstored, $key);
             $this->assertEquals($oldstored[$key], $newstored[$key], "The same $key as when it was built with every answer.");
         }
+        // The history: built once at the end from the progress - the same rows as built with every answer.
+        $this->assertCount(4, $newstored['graphicalsummary_data']);
+        $this->assertSame(self::rows($oldstored['graphicalsummary_data']), self::rows($newstored['graphicalsummary_data']));
+        $this->assertSame($oldstored['graphicalsummary_otherscales'], $newstored['graphicalsummary_otherscales']);
+        $this->assertSame($oldstored['teststrategyname'], $newstored['teststrategyname']);
         $this->assertEquals($oldresult, $this->validated($new['attemptid']), 'The same result.');
 
         // Idempotent: a second finalisation and a second completion change nothing.

@@ -36,12 +36,16 @@
 import AxeBuilder from '@axe-core/playwright';
 import {expect, test} from '@playwright/test';
 import {catpath, keep, loginAdmin, watchErrors, WCAG} from '../support/catpath';
+import {scriptsReady} from '../support/results';
 
 test.describe('Feedback editors of a scale @a11y', () => {
     test('switched in without a reload: the colour by keyboard, axe on the section', async({page}, testInfo) => {
         const errors = watchErrors(page);
         await loginAdmin(page);
         await page.goto(`/course/modedit.php?update=${catpath('CMID_FASTEST')}`);
+        // Not before the scripts of the form are done: a header clicked earlier opened its section, but the editors
+        // it loads without a reload never came (4.5, 22.11.2026; the race of chart-series in the CI of 20.11.).
+        await scriptsReady(page);
 
         // The root first, then a subscale: its editors are loaded into the form without a reload.
         await page.getByText('Feedback for “Simulation”', {exact: true}).click();

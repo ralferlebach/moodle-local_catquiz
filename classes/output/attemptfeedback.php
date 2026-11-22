@@ -956,7 +956,10 @@ class attemptfeedback implements renderable, templatable {
         // the attempt has no valid result: show exactly one central notice that
         // carries the rejection reason, instead of scattering "not available"/
         // exclusion blocks across several tabs.
-        if (!$hasvalidresult && is_array($abilities)) {
+        /* No notice when the test reports no scale at all (decision of 21.11.2026): the teacher switched the output
+           off - there is no problem of the measurement to explain, and the result tab the notice points to is not
+           shown either. */
+        if (!$hasvalidresult && is_array($abilities) && !$state->reportingoff) {
             $context['studentfeedback'] = $context['studentfeedback'] ?? [];
             $content = $this->notice($state, (int) ($feedbackdata['teststrategy'] ?? $this->teststrategy ?? 0));
             // In front of what remains, not instead of it: the quiz history stays (issue #120).
@@ -979,10 +982,13 @@ class attemptfeedback implements renderable, templatable {
      * With a reportable scale the global scale is valid as well: its N is never smaller.
      *
      * @param array $feedbackdata
-     * @return stdClass reportable, global, globalreasons (global_scale_validity), subreasons (of the other scales).
+     * @return stdClass reportable, global, globalreasons (global_scale_validity), subreasons (of the other scales),
+     *     reportingoff (no scale is reported: the output of every scale is switched off).
      */
     public function result_state(array $feedbackdata): stdClass {
-        $state = (object) ['reportable' => true, 'global' => true, 'globalreasons' => [], 'subreasons' => []];
+        $state = (object) [
+            'reportable' => true, 'global' => true, 'globalreasons' => [], 'subreasons' => [], 'reportingoff' => false,
+        ];
         $abilities = $feedbackdata['customscalefeedback_abilities'] ?? null;
         if (!is_array($abilities)) {
             return $state;
@@ -1001,6 +1007,12 @@ class attemptfeedback implements renderable, templatable {
                 + ($progress ? ['progress' => $progress] : [])
         );
         $state->reportable = $result->has_reportable_result();
+        // Decision of 21.11.2026: the test reports no scale at all - switched off, not a problem of the measurement.
+        $scaleresults = $result->get_scale_results();
+        $state->reportingoff = !$state->reportable && $scaleresults !== [] && !array_filter(
+            $scaleresults,
+            fn($r) => !in_array(scale_result::REASON_REPORTING_DISABLED, $r->rejectionreasons, true)
+        );
 
         $settings = $progress ? $progress->get_quiz_settings() : null;
         $globalscaleid = (int) ($settings->catquiz_catscales ?? $feedbackdata['catscaleid'] ?? 0);

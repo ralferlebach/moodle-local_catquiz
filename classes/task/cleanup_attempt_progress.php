@@ -92,6 +92,9 @@ class cleanup_attempt_progress extends scheduled_task {
             }
 
             foreach (array_slice($rows, 0, self::BATCH) as $row) {
+                // Issue #159: what the page of the result reads from the progress, and the stored data lack, is kept
+                // first - afterwards the result is shown from the stored data alone.
+                progress_retention::preserve_for_display((int) $row->catattemptid);
                 // Through progress::delete() so the cache is cleared as well; a row
                 // removed behind the cache's back would come back on the next read.
                 progress::delete((int) $row->componentattemptid, $row->component);
