@@ -91,6 +91,11 @@ jobs:
         if: ${{ always() }}
         run: set -o pipefail; bash plugin/.github/scripts/await_dependencies_selftest.sh 2>&1 | tee ci-logs/await-selftest.log
 
+      # Issue #176: the evidence must fail for a required Behat feature the run did not execute (RED/GREEN self-test).
+      - name: Selbsttest der CI-Evidenz
+        if: ${{ always() }}
+        run: set -o pipefail; python3 -B plugin/.github/scripts/ci_evidence_selftest.py 2>&1 | tee ci-logs/evidence-selftest.log
+
       - name: Collect error summary
         if: ${{ always() }}
         run: |
@@ -786,6 +791,8 @@ jobs:
         if: ${{ always() }}
         env:
           MOODLE_START_BEHAT_SERVERS: 'NO'
+          # Issue #176: every scenario of the run records itself here (tests/behat/behat_catquiz_evidence.php).
+          CATQUIZ_BEHAT_EXECUTED: ${{ github.workspace }}/ci-logs/behat-executed.jsonl
         run: set -o pipefail; moodle-plugin-ci behat --profile chrome --dump 2>&1 | tee ci-logs/behat.log
 
       # Re-audit 19.11.2026 (CI P0): which commits of engine, host and adapter ran together, on which Moodle, PHP
@@ -804,6 +811,7 @@ jobs:
           --component adaptivequizcatmodel_catquiz=moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz
           --behat-log ci-logs/behat.log --required-features plugin/.github/ci-required-features.txt
           --features-dir plugin/tests/behat --tag @local_catquiz
+          --behat-executed ci-logs/behat-executed.jsonl
           --out ci-logs/evidence-behat
 
       - name: Upload evidence
@@ -814,6 +822,7 @@ jobs:
           path: |
             ci-logs/evidence-behat
             ci-logs/behat.log
+            ci-logs/behat-executed.jsonl
           retention-days: 90
           if-no-files-found: warn
 

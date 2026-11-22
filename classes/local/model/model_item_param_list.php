@@ -766,6 +766,11 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
     /**
      * Only keep itemparams that are associated with the given component IDs.
      *
+     * Issue #161 (re-audit 20.11.2026): looked up by key. in_array() over the answered items for every parameter of
+     * the pool made the standard error of every scale cost pool x answers - the span grew with the pool although it
+     * needs the answered items only. Component ids are ids or hashes in their canonical form, so the key of their
+     * string is the comparison in_array() made.
+     *
      * @param array $itemids
      * @param bool $clone
      * @return model_item_param_list
@@ -775,7 +780,11 @@ class model_item_param_list implements ArrayAccess, Countable, IteratorAggregate
             $obj = clone $this;
             return $obj->filter_by_componentids($itemids, false);
         }
-        $this->itemparams = array_filter($this->itemparams, fn ($ip) => in_array($ip->get_componentid(), $itemids));
+        $wanted = [];
+        foreach ($itemids as $itemid) {
+            $wanted[(string) $itemid] = true;
+        }
+        $this->itemparams = array_filter($this->itemparams, fn ($ip) => isset($wanted[(string) $ip->get_componentid()]));
         return $this;
     }
 

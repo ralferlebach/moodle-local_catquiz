@@ -179,7 +179,7 @@ final class invalid_result_feedback_test extends advanced_testcase {
      * The global scale 1 and the subscale 5, which the strategy reports first. Valid: the subscale was
      * measured. Global only: the subscale was not, the global scale was. None: neither.
      *
-     * @param string $state valid, global or none
+     * @param string $state valid, global, none, or off: valid, but the output of every scale is switched off
      * @return array The feedback context.
      */
     private function feedback(string $state): array {
@@ -199,8 +199,13 @@ final class invalid_result_feedback_test extends advanced_testcase {
                 5 => ['value' => 0.3, 'toreport' => true, 'primary' => true],
             ],
             // Measured or not: without a productive answer a scale has no result.
-            'nbyscale' => [1 => $state === 'none' ? 0 : 8, 5 => $state === 'valid' ? 4 : 0],
+            'nbyscale' => [1 => $state === 'none' ? 0 : 8, 5 => in_array($state, ['valid', 'off']) ? 4 : 0],
         ];
+        if ($state === 'off') {
+            foreach ($feedbackdata['customscalefeedback_abilities'] as $scaleid => $entry) {
+                $feedbackdata['customscalefeedback_abilities'][$scaleid][feedbacksettings::FIELD_NOTREPORTED] = true;
+            }
+        }
 
         $reflection = new \ReflectionClass(attemptfeedback::class);
         $instance = $reflection->newInstanceWithoutConstructor();
@@ -269,6 +274,21 @@ final class invalid_result_feedback_test extends advanced_testcase {
         $export = new debuginfo(new feedbacksettings(LOCAL_CATQUIZ_STRATEGY_LOWESTSUB), new feedback_helper());
 
         $this->assertTrue($export->has_data_for(['attemptid' => 7, 'contextid' => 1]));
+    }
+
+    /**
+     * The test reports no scale - the output of every scale is switched off: no notice (decision of 21.11.2026). It
+     * pointed to the tab "Overview", which is not there, and named an invalid result, which it is not. RED before.
+     */
+    public function test_no_notice_when_the_output_of_every_scale_is_switched_off(): void {
+        $this->resetAfterTest();
+
+        $context = $this->feedback('off');
+        $student = array_column($context['studentfeedback'], 'generatorname');
+        $this->assertNotContains('novalidresult', $student);
+        $this->assertNotContains('customscalefeedback', $student, 'Nothing reported: no scale feedback either.');
+        $this->assertContains('graphicalsummary', $student, 'What the attempt contained stays.');
+        $this->assertNotContains('novalidresult', array_column($context['teacherfeedback'] ?? [], 'generatorname'));
     }
 
     /**

@@ -2,6 +2,49 @@
 
 ## 1.2.1 (in Arbeit)
 
+- Re-Audit vom 20.11.2026 („CATquiz_GitHub_ReAudit_AKs_DoDs_CI_2026-11-20“), Entscheidungen vom 21.11.2026
+  (2026111711; Nachweise `doc/re-audit-2026-11-20-nachweise.md`, nur im ZIP):
+  - **#168 – Verlauf erst am Ende (Entscheidung 21.11.):** Der Antwortverlauf (`graphicalsummary_data`) wird nicht
+    mehr mit jeder Antwort in die Feedbackdaten geschrieben. Bisher wurden die Daten je Antwort ganz neu geschrieben,
+    und der Verlauf war ihr Großteil. Jetzt hält der Progress je Antwort nur den Zustand, den der Verlauf braucht und
+    sonst niemand hat (`progress::record_answer_state()`: Frage, Fähigkeit der Wurzelskala, Fähigkeiten der Skalen,
+    gerundet wie im Verlauf). Daraus baut `graphicalsummary` die Zeilen beim Abschluss und für die Ansicht eines
+    laufenden Versuchs. Der Kontext der Auswahl (Fähigkeiten, SE) wird weiter je Antwort gespeichert, mit gleich
+    bleibender Größe; der Abschluss durch die Aktivität braucht ihn. Zeilen eines Versuchs, der beim Update lief,
+    bleiben. Die Debug-Information (nur mit `store_debug_info`) wird weiter je Antwort geschrieben.
+    - `feedback_scope_test`: je Antwort kein Verlauf in den Daten, ein Eintrag je Antwort im Progress. Am Ende und in
+      der Ansicht sind die Zeilen gleich denen, die mit jeder Antwort gebaut wurden.
+    - Abgleich alt gegen neu auf demselben Prüfstand (4.5/MariaDB, 625 Antworten): gleiche Fragenfolge, gleicher
+      Endstand der Daten und gleiches Ergebnis. Geschrieben werden 4,1 statt 87 MB Feedbackdaten; Schritt p95 1.818 →
+      998 ms.
+    - Befund: Den größten Teil der Schreiblast macht jetzt der Progress aus, und das war schon vorher so (342 → 392 MB;
+      69 % davon sind die gespielten Fragen als volle Objekte). Er wird je Antwort ganz neu geschrieben. Das ist ein
+      Folgepunkt, siehe Nachweise §6.
+  - **#159 – Vor der Retention sichern (Entscheidung 21.11.):** `progress_retention::preserve_for_display()` übernimmt
+    vor dem Löschen des Progress, was die Ergebnisseite aus ihm liest und die gespeicherten Daten nicht haben: die
+    beantworteten Fragen mit Antwort, Skala, Schwierigkeit und Information (`retention_history`) und die Fähigkeiten
+    (`retention_abilities`). Kopiert, nicht berechnet; vollständige Daten bleiben unberührt. `progress::load_historical()`
+    liest sie. Ergebnisse ohne Antwortverlauf oder ohne Fähigkeiten zeigen nach der Retention dasselbe wie vorher.
+    - `historical_feedback_cleanup_test`: beide Fälle textgleich vor und nach dem echten Task. Zahntest: ohne den
+      Schritt beide rot. Browser `view-results` #159: alle sechs Altzustände textgleich.
+  - **Hinweis bei abgeschalteter Ausgabe (Entscheidung 21.11.: kein Hinweis):** Berichtet ein Test keine Skala, weil
+    die Ausgabe aller Skalen abgeschaltet ist, erscheint kein Hinweis mehr. Er verwies auf den Reiter „Overview“, den es
+    dann nicht gibt, und nannte ein ungültiges Ergebnis. `invalid_result_feedback_test`, Zahntest rot.
+  - **#161 – SE unabhängig von der Antwortzahl:** `model_item_param_list::filter_by_componentids()` schlägt die IDs per
+    Schlüssel nach statt mit `in_array()`. Die SE kostete bisher Pool × Antworten je Skala. Gleiches Ergebnis wie
+    vorher (`model_item_param_list_test`, Golden-Folgen und SE-Tests unverändert). SE-Spanne p95 167 → 79 ms bei 625 Antworten.
+  - **#176 – Behat-Pflichtfeatures müssen gelaufen sein:** Der Kontext `tests/behat/behat_catquiz_evidence.php`
+    schreibt mit `CATQUIZ_BEHAT_EXECUTED` jedes Szenario des Laufs mit Ergebnis. `ci_evidence.py --behat-executed`
+    prüft jedes Pflichtfeature Szenario für Szenario (jede Beispielzeile einer Outline): gelaufen und im letzten Lauf
+    bestanden, sonst rot. Ohne die Aufzeichnung ist die Evidenz rot. Selbsttest `ci_evidence_selftest.py` im Job
+    lint-php (10 Fälle; gegen das alte Skript rot).
+  - `cli/benchmark_attempts.php` misst auch die Bytes des Progress je Antwort.
+  - Playwright: `scale-feedback-editor` wartet vor dem ersten Klick auf die Seitenskripte (einmal flaky auf 4.5; die
+    Ursache ließ sich nicht nachstellen, siehe Nachweise §4).
+  - Entscheidungen vom 21./22.11.2026: `doc/entscheidungen-2026-11-21.md`; der lineare Progress (#177) folgt als
+    eigenes Paket.
+
+
 - Playwright in der CI (2026111710; Läufe vom 20.11.2026 auf 1.3 `54ffbea` und 1.2 `f2a7471`, rot in „Playwright
   (CAT manager UI)“, je 36 von 37 grün):
   - `chart-series` (#150) klickte auf der Feedbackseite den ersten Reiter, bevor `local_catquiz/feedback` seinen

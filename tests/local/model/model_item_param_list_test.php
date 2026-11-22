@@ -172,4 +172,33 @@ final class model_item_param_list_test extends advanced_testcase {
         self::assertStringContainsString('42', $messages[0]);
         self::assertStringContainsString('0.00', $messages[0]);
     }
+    /**
+     * Issue #161 (re-audit 20.11.2026): filter_by_componentids() looks the ids up by key now - with the same result as
+     * the in_array() it replaced, for ids given as integers or strings and for hashes, and without changing the list it
+     * was called on.
+     */
+    public function test_filter_by_componentids_keeps_what_in_array_kept(): void {
+        $list = new model_item_param_list();
+        $componentids = array_merge(array_map('strval', range(1, 300)), ['a3f9c2', '0f12ab', '1001']);
+        foreach ($componentids as $componentid) {
+            $list->add(new model_item_param($componentid, 'rasch'));
+        }
+        $cases = [
+            'integers' => [3, 7, 150, 299, 5000],
+            'strings' => ['3', '7', '150', '299', '5000'],
+            'mixed, with hashes' => [3, '7', 'a3f9c2', '0f12ab', 1001, 'missing'],
+            'none' => [],
+            'all' => $componentids,
+        ];
+        foreach ($cases as $name => $itemids) {
+            // The implementation up to 2026111711.
+            $expected = array_keys(array_filter(
+                $list->as_array(),
+                fn($ip) => in_array($ip->get_componentid(), $itemids)
+            ));
+            $filtered = $list->filter_by_componentids($itemids);
+            $this->assertSame($expected, array_keys($filtered->as_array()), $name);
+        }
+        $this->assertCount(count($componentids), $list->as_array(), 'The list itself is not changed.');
+    }
 }

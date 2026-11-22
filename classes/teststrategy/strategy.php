@@ -403,6 +403,7 @@ abstract class strategy {
                 ->and_then(fn() => $this->traced('select_question', fn() => $this->select_question()))
                 ->and_then(
                     function ($res) {
+                        $this->record_answer_state();
                         timeline::span('strategy:progress_save', fn() => $this->progress->save());
                         timeline::span(
                             'strategy:update_attemptfeedback',
@@ -502,6 +503,7 @@ abstract class strategy {
      * @return result
      */
     private function after_error(result $result) {
+        $this->record_answer_state();
         $this->progress->save();
         // Issue #64: the end of the selection travels with the feedback data of the attempt as well.
         $this->endstatus = (string) $result->get_status();
@@ -536,6 +538,34 @@ abstract class strategy {
     }
 
     /**
+     * Records the state after the answer in the progress, for the history built at the end (issue #168).
+     *
+     * Under the conditions the feedback is updated (update_attemptfeedback()): a reload records nothing.
+     *
+     * @return void
+     */
+    private function record_answer_state(): void {
+        if (getenv('CATQUIZ_TESTING_SKIP_FEEDBACK') || !$this->feedback_is_due()) {
+            return;
+        }
+        $root = $this->context['catscaleid'] ?? null;
+        $ability = $root !== null ? ($this->context['person_ability'][$root] ?? null) : null;
+        $this->progress->record_answer_state(is_numeric($ability) ? (float) $ability : null);
+    }
+
+    /**
+     * Whether this request brings something new for the feedback: not a reload of the page.
+     *
+     * @return bool
+     */
+    private function feedback_is_due(): bool {
+        return !$this->progress->get_ignore_last_response()
+            && ($this->progress->is_first_question()
+                || $this->progress->has_new_response()
+                || $this->progress->get_force_new_question());
+    }
+
+    /**
      * Helper method to update attempt feedback data
      *
      * @param mixed $context
@@ -553,13 +583,7 @@ abstract class strategy {
         }
 
         // Do not update feedback data if the page was reloaded.
-        if (
-            $this->progress->get_ignore_last_response()
-            || (!$this->progress->is_first_question()
-                && !$this->progress->has_new_response()
-                && !$this->progress->get_force_new_question()
-            )
-        ) {
+        if (!$this->feedback_is_due()) {
             return;
         }
 

@@ -173,15 +173,6 @@ class graphicalsummary extends feedbackgenerator {
     }
 
     /**
-     * Recorded with every answer: one entry per answer, which cannot be rebuilt afterwards (issue #168).
-     *
-     * @return bool
-     */
-    public function records_every_answer(): bool {
-        return true;
-    }
-
-    /**
      * Get required context keys.
      *
      * @return array
@@ -211,74 +202,43 @@ class graphicalsummary extends feedbackgenerator {
         // If we already have all the data, just return them instead of adding
         // the last response again.
         $playedquestions = $progress->get_playedquestions();
-
-        if (
-            array_key_exists('graphicalsummary_data', $existingdata)
-            && count($existingdata['graphicalsummary_data']) === count($playedquestions)
-        ) {
+        $rows = $existingdata['graphicalsummary_data'] ?? [];
+        if (array_key_exists('graphicalsummary_data', $existingdata) && count($rows) === count($playedquestions)) {
             return $existingdata;
         }
 
-        $lastresponse = $progress->get_last_response();
-        if (!is_array($lastresponse) || !isset($lastresponse['qid'])) {
-            return null;
+        /* Issue #168 (decision of 21.11.2026): the history is no longer written into the feedback data with every
+           answer - the whole data were written again with each answer, and the history was most of it. The progress
+           records the state after each answer (progress::record_answer_state()); the rows are built here, when the
+           attempt ends or a running attempt is looked at. Rows stored before - an attempt that was running during
+           the update - stay as they are; a question gets its row once. */
+        $responses = $progress->get_responses();
+        $otherscales = $existingdata['graphicalsummary_otherscales'] ?? [];
+        $have = [];
+        foreach ($rows as $row) {
+            if (isset($row['id'])) {
+                $have[(string) $row['id']] = true;
+            }
         }
-
-        $playedquestions = $progress->get_playedquestions();
-        if (!array_key_exists($lastresponse['qid'], $playedquestions)) {
-            return null;
+        $added = false;
+        foreach ($progress->get_answer_history() as $entry) {
+            $qid = (string) $entry['q'];
+            if (isset($have[$qid]) || empty($playedquestions[$qid]) || !isset($responses[$qid])) {
+                continue;
+            }
+            $rows[] = $this->row_of($playedquestions[$qid], (array) $responses[$qid], $entry['a'], $existingdata);
+            foreach ((array) $entry['s'] as $scaleid => $value) {
+                $otherscales[$scaleid][] = $value;
+            }
+            $have[$qid] = true;
+            $added = true;
         }
-
-        $lastquestion = $playedquestions[$lastresponse['qid']];
-        if (empty($lastquestion)) {
+        if (!$added && !array_key_exists('graphicalsummary_data', $existingdata)) {
             return null;
         }
 
         $abilitieslist = $this->select_scales_for_report($newdata, $this->feedbacksettings, $existingdata['teststrategy']);
         $primaryscale = array_filter($abilitieslist, fn ($a) => array_key_exists('primary', $a) && $a['primary'] === true);
-
-        // Append the data from the latest response to the existing graphical summary.
-        $graphicalsummary = $existingdata['graphicalsummary_data'] ?? [];
-        $new = [];
-        $new['id'] = $lastquestion->id;
-        $new['questionname'] = $lastquestion->label;
-        // The technical CAT item label (questionname) is kept for backward
-        // compatibility; questiontitle carries the real Moodle question title so
-        // the table can show the title as primary and the label as secondary.
-        $new['questiontitle'] = $this->get_question_title((int) $lastquestion->id, (string) $lastquestion->label);
-        $new['lastresponse'] = round($lastresponse['fraction'], self::PRECISION);
-        // A pilot item is shown to teachers only and kept out of the chart (decision of 2026-10-14).
-        $new['pilot'] = !empty($lastquestion->is_pilot);
-        // Store the real QUBA slot and question attempt id so the
-        // "show question" modal fetches exactly this question attempt instead of
-        // reconstructing the slot from the table row index (which is wrong after
-        // reloads, duplicate slots or missing rows). responsesummary carries the
-        // actually given answer. All three are absent for legacy attempts.
-        $new['slot'] = $lastresponse['slot'] ?? null;
-        $new['questionattemptid'] = $lastresponse['questionattemptid'] ?? null;
-        $new['responsesummary'] = $lastresponse['responsesummary'] ?? null;
-        $new['difficulty'] = $lastquestion->difficulty;
-        $new['questionscale'] = $lastquestion->catscaleid;
-        $new['questionscale_name'] = catscale::return_catscale_object(
-            $lastquestion->catscaleid
-        )->name;
-        if (
-            property_exists($lastquestion, 'fisherinformation')
-            && is_float($lastquestion->fisherinformation)
-        ) {
-            $new['fisherinformation'] = sprintf('%.2f', $lastquestion->fisherinformation);
-        } else {
-            $new['fisherinformation'] = $lastquestion->is_pilot
-                ? null
-                : $this->get_rounded_or_null($lastquestion->fisherinformation, $existingdata['catscaleid']);
-        }
-        $new['personability_after'] = round($newdata['person_ability'][$newdata['catscaleid']], self::PRECISION);
-
-        $graphicalsummary[] = $new;
-        $otherscales = $existingdata['graphicalsummary_otherscales'] ?? [];
-        foreach ($this->get_progress()->get_abilities() as $scaleid => $value) {
-            $otherscales[$scaleid][] = round($value, self::PRECISION);
-        }
 
         $teststrategyname = get_string(
             'teststrategy',
@@ -287,15 +247,61 @@ class graphicalsummary extends feedbackgenerator {
             ->get_description()
         );
 
-        $progress = $this->get_progress();
         return [
-            'graphicalsummary_data' => $graphicalsummary,
+            'graphicalsummary_data' => $rows,
             'teststrategyname' => $teststrategyname,
             'personabilities' => $progress->get_abilities(true),
             'graphicalsummary_primaryscale' => $primaryscale,
             'graphicalsummary_otherscales' => $otherscales,
             'primaryscale' => $this->get_primary_scale($existingdata, $newdata),
         ];
+    }
+
+    /**
+     * The row of the history for an answered question - as it was written with the answer up to issue #168.
+     *
+     * @param \stdClass $question The played question.
+     * @param array $response Its response in the progress.
+     * @param float|null $abilityafter The ability of the root scale after the answer (rounded).
+     * @param array $existingdata
+     * @return array
+     */
+    private function row_of(\stdClass $question, array $response, ?float $abilityafter, array $existingdata): array {
+        $new = [];
+        $new['id'] = $question->id;
+        $new['questionname'] = $question->label;
+        // The technical CAT item label (questionname) is kept for backward
+        // compatibility; questiontitle carries the real Moodle question title so
+        // the table can show the title as primary and the label as secondary.
+        $new['questiontitle'] = $this->get_question_title((int) $question->id, (string) $question->label);
+        $new['lastresponse'] = round($response['fraction'], self::PRECISION);
+        // A pilot item is shown to teachers only and kept out of the chart (decision of 2026-10-14).
+        $new['pilot'] = !empty($question->is_pilot);
+        // Store the real QUBA slot and question attempt id so the
+        // "show question" modal fetches exactly this question attempt instead of
+        // reconstructing the slot from the table row index (which is wrong after
+        // reloads, duplicate slots or missing rows). responsesummary carries the
+        // actually given answer. All three are absent for legacy attempts.
+        $new['slot'] = $response['slot'] ?? null;
+        $new['questionattemptid'] = $response['questionattemptid'] ?? null;
+        $new['responsesummary'] = $response['responsesummary'] ?? null;
+        $new['difficulty'] = $question->difficulty;
+        $new['questionscale'] = $question->catscaleid;
+        $new['questionscale_name'] = catscale::return_catscale_object(
+            $question->catscaleid
+        )->name;
+        if (
+            property_exists($question, 'fisherinformation')
+            && is_float($question->fisherinformation)
+        ) {
+            $new['fisherinformation'] = sprintf('%.2f', $question->fisherinformation);
+        } else {
+            $new['fisherinformation'] = $question->is_pilot
+                ? null
+                : $this->get_rounded_or_null((array) $question->fisherinformation, $existingdata['catscaleid']);
+        }
+        $new['personability_after'] = $abilityafter;
+        return $new;
     }
 
     /**
