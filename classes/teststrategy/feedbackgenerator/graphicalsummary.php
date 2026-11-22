@@ -24,6 +24,7 @@
 
 namespace local_catquiz\teststrategy\feedbackgenerator;
 
+use local_catquiz\local\attempt\history_completion;
 use html_table;
 use html_table_cell;
 use html_table_row;
@@ -53,14 +54,17 @@ class graphicalsummary extends feedbackgenerator {
     public function get_studentfeedback(array $feedbackdata): array {
         global $OUTPUT;
 
-        if (isset($feedbackdata['graphicalsummary_data'])) {
-            $rows = array_values($feedbackdata['graphicalsummary_data']);
+        $rows = array_values((array) ($feedbackdata['graphicalsummary_data'] ?? []));
+        $otherscales = $feedbackdata['graphicalsummary_otherscales'] ?? [];
+        // Issue #159 (re-audit of 22.11.2026): the history of a finished attempt can lack rows of answers it had, or be
+        // missing - old data. It is completed for the display, read only (history_completion).
+        $catattemptid = $this->get_progress()->get_catattemptid();
+        if ($catattemptid) {
+            [$rows, $otherscales] = history_completion::complete($rows, $otherscales, (int) $catattemptid);
+        }
+        if ($rows) {
             $pilots = $this->pilot_flags($rows);
-            [$chartrows, $otherscales] = self::without_pilots(
-                $rows,
-                $pilots,
-                $feedbackdata['graphicalsummary_otherscales'] ?? []
-            );
+            [$chartrows, $otherscales] = self::without_pilots($rows, $pilots, $otherscales);
             $primaryscaleid = null;
             if (array_key_exists('graphicalsummary_primaryscale', $feedbackdata)) {
                 $primaryscaleid = array_key_first($feedbackdata['graphicalsummary_primaryscale']);
@@ -591,6 +595,12 @@ class graphicalsummary extends feedbackgenerator {
                 : (string) ++$number);
             // Rows of the older format carry the ability as personability (issue #152).
             $ability = $values['personability_after'] ?? $values['personability'] ?? null;
+            // A row completed for the display (issue #159): the ability after the answer was not stored.
+            $notrecorded = html_writer::tag(
+                'span',
+                get_string('feedback_table_notrecorded', 'local_catquiz'),
+                ['class' => 'text-muted']
+            );
             $newrow = [
                 $numbercell,
             ];
@@ -600,7 +610,7 @@ class graphicalsummary extends feedbackgenerator {
             $newrow = array_merge($newrow, [
                 $questioncell,
                 $values['questionscale_name'],
-                $ispilot || $ability === null ? '' : sprintf('%.2f', $ability),
+                $ispilot ? '' : ($ability !== null ? sprintf('%.2f', $ability) : (!empty($values['source']) ? $notrecorded : '')),
             ]);
 
             if ($viewquestion) {

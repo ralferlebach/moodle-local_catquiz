@@ -2908,7 +2908,8 @@ class catquiz {
         unset($attemptdata['quizsettings']);
         // The progress data are saved in their own table - we do not need to save them here.
         unset($attemptdata['progress']);
-        $data->json = json_encode($attemptdata);
+        // Issue #168 (re-audit of 22.11.2026): the encoding of the stored data as a span of its own.
+        $data->json = \local_catquiz\local\monitoring\timeline::span('feedback:json_encode', fn() => json_encode($attemptdata));
 
         // Ensure there is only one row per attempt. Issue #168: the id and the end time only - the stored data and the
         // debug information grow with every answer, and were read back whole before every write.

@@ -442,4 +442,207 @@ final class historical_feedback_cleanup_test extends advanced_testcase {
             catquiz::get_max_questions_answered_per_person($this->contextid, $this->rootid, (int) $this->course->id)
         );
     }
+
+    /**
+     * Removes rows from the stored history of an attempt, as old data lack them: the rows and their values in the
+     * series of the other scales, and the entries of the answers in the progress (a progress of before #168 had none).
+     *
+     * @param int $catattemptid
+     * @param int[] $indexes Indexes of the rows to remove.
+     * @return array The removed rows.
+     */
+    private function remove_rows(int $catattemptid, array $indexes): array {
+        global $DB;
+        $json = json_decode((string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), true);
+        $rows = $json['graphicalsummary_data'];
+        $count = count($rows);
+        $removed = [];
+        foreach ($indexes as $index) {
+            $removed[] = $rows[$index];
+            unset($rows[$index]);
+        }
+        $json['graphicalsummary_data'] = array_values($rows);
+        foreach ($json['graphicalsummary_otherscales'] ?? [] as $scaleid => $values) {
+            $values = array_values($values);
+            $offset = $count - count($values);
+            foreach ($indexes as $index) {
+                unset($values[$index - $offset]);
+            }
+            $json['graphicalsummary_otherscales'][$scaleid] = array_values($values);
+        }
+        $DB->set_field('local_catquiz_attempts', 'json', json_encode($json), ['id' => $catattemptid]);
+        $progress = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]), true);
+        if (is_array($progress)) {
+            unset($progress['answerhistory']);
+            $DB->set_field('local_catquiz_progress', 'json', json_encode($progress), ['attemptid' => $catattemptid]);
+        }
+        $this->purge_caches();
+        return $removed;
+    }
+
+    /**
+     * The rows of the history table of a section, as text per row.
+     *
+     * @param string $section The text of the section.
+     * @param array $rows Rows of the history.
+     * @return void
+     */
+    private function assert_rows_shown(string $section, array $rows): void {
+        foreach ($rows as $row) {
+            $this->assertStringContainsString((string) $row['questionname'], $section, 'The answer is shown.');
+        }
+    }
+
+    /**
+     * Re-audit of 22.11.2026 (#159): a history that lacks some answers - old data - is complete on the page before the
+     * cleanup and after it, the same; the retention copied the rows of the missing answers, nothing else.
+     * RED before: the page showed the history without them, and the retention did not keep them.
+     */
+    public function test_a_history_without_some_answers_is_complete_before_and_after_the_cleanup(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, 15);
+        $attemptid = $this->play_and_finish();
+        $catattemptid = (int) catquiz::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
+        $answers = (int) $DB->get_field('local_catquiz_attempts', 'number_of_testitems_used', ['id' => $catattemptid]);
+        $removed = $this->remove_rows($catattemptid, [3, 9]);
+
+        $before = $this->result_page($attemptid);
+        $this->assert_rows_shown($before['student/graphicalsummary'], $removed);
+        $this->assertSame(2, substr_count($before['student/graphicalsummary'], 'Not recorded'), 'Two answers without ability.');
+
+        set_config('progressretention', 'minimal', 'local_catquiz');
+        ob_start();
+        (new cleanup_attempt_progress())->execute();
+        ob_end_clean();
+        $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid]));
+        $this->purge_caches();
+
+        $this->assertSame($before, $this->result_page($attemptid), 'The same values and labels after the cleanup.');
+        $stored = json_decode((string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), true);
+        $this->assertSame(
+            array_map(fn($row) => (string) $row['id'], $removed),
+            array_map(fn($row) => (string) $row['id'], $stored['retention_history']),
+            'Kept: the rows of the missing answers, in their order.'
+        );
+        $this->assertCount($answers - 2, $stored['graphicalsummary_data'], 'The stored rows as they were.');
+    }
+
+    /**
+     * Re-audit of 22.11.2026 (#159): without the progress and without kept rows - an attempt whose progress went before
+     * anything was kept - the answers the history lacks come from the question usage: question, scale and answer, in
+     * the order of the slots, the ability not recorded. Nothing is written. RED before: the rows were missing.
+     */
+    public function test_without_progress_the_missing_answers_come_from_the_question_usage(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, 15);
+        $attemptid = $this->play_and_finish();
+        $catattemptid = (int) catquiz::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
+        $full = $this->result_page($attemptid);
+        $removed = $this->remove_rows($catattemptid, [0, 5]);
+        // The progress removed without keeping anything: as a cleanup before #159 did it.
+        \local_catquiz\teststrategy\progress::delete($attemptid, 'mod_adaptivequiz');
+        $json = $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]);
+        $this->purge_caches();
+
+        $after = $this->result_page($attemptid);
+        $this->assert_rows_shown($after['student/graphicalsummary'], $removed);
+        $this->assertSame(2, substr_count($after['student/graphicalsummary'], 'Not recorded'));
+        // The order of the slots: the first answer is the first row again.
+        $first = (string) $removed[0]['questionname'];
+        $second = (string) $removed[1]['questionname'];
+        $order = fn(string $text) => strpos($text, $first) < strpos($text, $second);
+        $this->assertSame($order($full['student/graphicalsummary']), $order($after['student/graphicalsummary']));
+        $this->assertSame($json, $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), 'Read only.');
+    }
+
+    /**
+     * Re-audit of 22.11.2026 (#159): a progress that cannot be read (before #174 a non-finite estimate made it empty)
+     * holds nothing the page could read. The task removes it and names its attempt; the stored data stay as they are.
+     */
+    public function test_an_unreadable_progress_is_removed_and_reported(): void {
+        global $DB;
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, 15);
+        $attemptid = $this->play_and_finish();
+        $catattemptid = (int) catquiz::get_cat_attempt_id($attemptid, 'mod_adaptivequiz');
+        $json = $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]);
+        foreach (['', '{"truncated', 'false'] as $broken) {
+            $DB->set_field('local_catquiz_progress', 'json', $broken, ['attemptid' => $catattemptid]);
+            $this->assertSame(
+                [\local_catquiz\local\progress_retention::UNREADABLE],
+                \local_catquiz\local\progress_retention::preserve_for_display($catattemptid),
+                "Unreadable: '$broken'."
+            );
+        }
+        set_config('progressretention', 'minimal', 'local_catquiz');
+        ob_start();
+        (new cleanup_attempt_progress())->execute();
+        $log = ob_get_clean();
+        $this->assertStringContainsString("the progress of CAT attempt $catattemptid could not be read; removed", $log);
+        $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid]));
+        $this->assertSame($json, $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]));
+    }
+
+    /**
+     * Re-audit of 22.11.2026 (#159): keeping and removing are one step. When the removal fails after the rows were
+     * kept, both are rolled back - the progress stays, the stored data are as before -, the task names the attempt
+     * and goes on with the others; the next run removes it. RED before: the progress was removed without a check.
+     */
+    public function test_a_failed_removal_keeps_both_and_is_retried(): void {
+        global $DB;
+        // A real transaction, as in a cron run: the reset of the test by rollback would wrap it in one of its own.
+        $this->preventResetByRollback();
+        $this->settings(LOCAL_CATQUIZ_STRATEGY_CLASSIC, 15);
+        $first = $this->play_and_finish();
+        $second = $this->play_and_finish();
+        $failing = (int) catquiz::get_cat_attempt_id($first, 'mod_adaptivequiz');
+        $other = (int) catquiz::get_cat_attempt_id($second, 'mod_adaptivequiz');
+        $this->remove_rows($failing, [2]);
+        $json = $DB->get_field('local_catquiz_attempts', 'json', ['id' => $failing]);
+        set_config('progressretention', 'minimal', 'local_catquiz');
+
+        $task = new class ($failing) extends cleanup_attempt_progress {
+            /** @var int The CAT attempt whose removal fails. */
+            private int $failing;
+
+            /**
+             * Constructor.
+             *
+             * @param int $failing
+             */
+            public function __construct(int $failing) {
+                $this->failing = $failing;
+            }
+
+            /**
+             * Fails for one attempt, after its rows were kept.
+             *
+             * @param \stdClass $row
+             */
+            protected function delete_progress(\stdClass $row): void {
+                if ((int) $row->catattemptid === $this->failing) {
+                    throw new \dml_write_exception('the write failed');
+                }
+                parent::delete_progress($row);
+            }
+        };
+        ob_start();
+        $task->execute();
+        $log = ob_get_clean();
+        $this->assertStringContainsString(
+            "the progress of CAT attempt $failing was kept, its removal failed (dml_write_exception)",
+            $log
+        );
+        $this->assertStringContainsString("CAT attempts $failing.", $log);
+        $this->assertTrue($DB->record_exists('local_catquiz_progress', ['attemptid' => $failing]), 'The progress stays.');
+        $this->assertSame($json, $DB->get_field('local_catquiz_attempts', 'json', ['id' => $failing]), 'Rolled back.');
+        $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => $other]), 'The others go on.');
+
+        // The next run.
+        ob_start();
+        (new cleanup_attempt_progress())->execute();
+        ob_end_clean();
+        $this->assertFalse($DB->record_exists('local_catquiz_progress', ['attemptid' => $failing]));
+        $stored = json_decode((string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $failing]), true);
+        $this->assertCount(1, $stored['retention_history'], 'Kept on the retry.');
+    }
 }

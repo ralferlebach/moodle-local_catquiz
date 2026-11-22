@@ -135,7 +135,7 @@ jobs:
           pin ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz "${{ github.event.inputs.host_ref }}"
           pin ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz "${{ github.event.inputs.adapter_ref }}"
           # Push order (CI runs of 17.11.2026): wait until host and adapter carry the versions version.php requires.
-          bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
+          AWAIT_PARTNERS=./plugin/.github/ci-partner-versions.txt bash ./plugin/.github/scripts/await_dependencies.sh ./plugin/version.php \
             mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz v-3.0 "${{ github.event.inputs.host_ref }}" \
             adaptivequizcatmodel_catquiz ./moodle-plugin-ci-plugins/moodle-adaptivequizcatmodel_catquiz v-3.0 \
             "${{ github.event.inputs.adapter_ref }}"

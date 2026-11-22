@@ -456,6 +456,14 @@ class progress implements JsonSerializable {
         }
         if (empty($stored->graphicalsummary_data) && !empty($stored->retention_history)) {
             $stored->graphicalsummary_data = $stored->retention_history;
+        } else if (!empty($stored->retention_history)) {
+            // Re-audit of 22.11.2026: a history that lacked some answers got their rows from the progress.
+            $have = array_flip(array_map(fn($row) => (string) (((object) $row)->id ?? ''), (array) $stored->graphicalsummary_data));
+            foreach ((array) $stored->retention_history as $row) {
+                if (!isset($have[(string) (((object) $row)->id ?? '')])) {
+                    $stored->graphicalsummary_data[] = $row;
+                }
+            }
         }
         if (empty($stored->personabilities)) {
             return null;
@@ -967,7 +975,8 @@ class progress implements JsonSerializable {
             'attemptid' => $this->catattemptid,
             'userid' => $this->userid,
             'component' => $this->component,
-            'json' => json_encode($this),
+            // Issue #168 (re-audit of 22.11.2026): the encoding of the progress as a span of its own, for the matrix of costs.
+            'json' => \local_catquiz\local\monitoring\timeline::span('progress:json_encode', fn() => json_encode($this)),
         ];
         /* The settings go along with every save, not only the first: a progress stored before they were kept with
            it gets them on its next save (populate_from_object()), as intended - an update without them left the
@@ -1659,6 +1668,12 @@ class progress implements JsonSerializable {
      * into the feedback data. An entry is recorded under the condition the history added a row: there is a last
      * response, its question was played, and not every played question has an entry yet. A question is recorded once.
      *
+     * Issue #159 (re-audit of 22.11.2026): an answer the selection never saw gets its entry as well - the answer a reload
+     * gave as wrong (catquiz::mark_last_question_failed()) is stored in the progress and the question usage, and the
+     * request then redirects without a selection. Before, only the last response was recorded, so such an answer never
+     * had a row in the history, nor had it before #168. It is recorded before the last one, in the order of the
+     * responses, without an ability: none was estimated between the two answers. Nothing is estimated for it now.
+     *
      * @param float|null $rootability The ability of the root scale after the answer (the context of the selection).
      * @param int $precision As the history rounds.
      * @return bool Whether an entry was recorded.
@@ -1671,14 +1686,28 @@ class progress implements JsonSerializable {
         if (count($this->answerhistory) === count($this->playedquestions)) {
             return false;
         }
-        $qid = (string) $last['qid'];
+        $lastqid = (string) $last['qid'];
+        $recorded = [];
         foreach ($this->answerhistory as $entry) {
-            if ((string) $entry['q'] === $qid) {
-                return false;
+            $recorded[(string) $entry['q']] = true;
+        }
+        if (isset($recorded[$lastqid])) {
+            return false;
+        }
+        // Answers before the last one without an entry, in the order of the responses.
+        foreach ($this->responses as $qid => $response) {
+            $qid = (string) $qid;
+            if (
+                $qid === $lastqid || isset($recorded[$qid]) || !array_key_exists($qid, $this->playedquestions)
+                || !is_array($response) || !isset($response['fraction'])
+            ) {
+                continue;
             }
+            $this->answerhistory[] = ['q' => $qid, 'a' => null, 's' => array_map(fn($value) => null, $this->abilities)];
+            $recorded[$qid] = true;
         }
         $this->answerhistory[] = [
-            'q' => $qid,
+            'q' => $lastqid,
             'a' => $rootability === null ? null : round($rootability, $precision),
             's' => array_map(fn($value) => round($value, $precision), $this->abilities),
         ];

@@ -166,23 +166,27 @@ jobs:
       - name: Line 1.3 above line 1.2
         if: ${{ matrix.upgrade }}
         shell: bash
+        env:
+          # A manual run names its refs: no waiting, a wrong order fails at once.
+          AWAIT_PINNED: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: |
           # Moodle refuses to go back to a lower version, and with an equal one it skips the upgrade steps of the
-          # newer line. Each plugin of line 1.3 must therefore carry a higher version than its line-1.2 twin - which
-          # fails while only one branch has been pushed. Say so plainly instead of a downgrade stack trace.
+          # newer line. Each plugin of line 1.3 must therefore carry a higher version than its line-1.2 twin. The
+          # lines are pushed one after the other: when line 1.2 comes first, this run waits up to 15 minutes for the
+          # push of line 1.3 (re-audit of 22.11.2026, run 44) and fails with a plain message after that.
           set -euo pipefail
-          ver() { grep -o '$plugin->version *= *[0-9]*' "$1/version.php" | grep -o '[0-9]*$'; }
-          bad=0
-          for pair in "catquiz12 catquiz13" "host12 host3" "adapter12 adapter3"; do
-            set -- $pair
-            low=$(ver "plugins/$1"); high=$(ver "plugins/$2")
-            echo "$1 $low -> $2 $high"
-            if [ "$high" -le "$low" ]; then
-              echo "::error::$2 ($high) is not above $1 ($low): push the line-1.3 branch with a higher version first."
-              bad=1
-            fi
+          # The script of the pushed commit: line 1.3 may still be the state of the previous delivery, and it is
+          # checked out again while waiting - so the script is copied away first.
+          src=plugins/catquiz13
+          for d in plugins/catquiz12 plugins/catquiz13; do
+            [ "$(git -C "$d" rev-parse HEAD)" = "$GITHUB_SHA" ] && src=$d
           done
-          exit $bad
+          cp "$src"/.github/scripts/await_line_order.sh "$src"/.github/scripts/await_line_order_selftest.sh "$RUNNER_TEMP/"
+          bash "$RUNNER_TEMP/await_line_order_selftest.sh"
+          bash "$RUNNER_TEMP/await_line_order.sh" \
+            plugins/catquiz12 plugins/catquiz13 "${{ inputs.catquiz13_ref || 'migration-zu-moodle-5.x' }}" \
+            plugins/host12 plugins/host3 "${{ inputs.host_v3_ref || 'v-3.0' }}" \
+            plugins/adapter12 plugins/adapter3 "${{ inputs.adapter_v3_ref || 'v-3.0' }}"
 
       - name: Upgrade to ${{ matrix.upgrade }} with line 1.3
         if: ${{ matrix.upgrade }}
