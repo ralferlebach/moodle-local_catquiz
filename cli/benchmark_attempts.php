@@ -33,7 +33,7 @@
  *     php local/catquiz/cli/benchmark_attempts.php --setup --confirm [--items=2500] [--users=40]
  *   Run:
  *     php local/catquiz/cli/benchmark_attempts.php --run --strategy=4 --attempts=3 --questions=26 \
- *        [--cold] [--workers=1] [--seed=4] [--json=FILE] [--everyanswer]
+ *        [--cold] [--workers=1] [--seed=4] [--json=FILE] [--everyanswer] [--hostend]
  *
  * The run deletes the earlier attempts of the benchmark test only (the activity the setup created), never others.
  *
@@ -67,7 +67,7 @@ use mod_adaptivequiz\local\attempt;
     'help' => false, 'setup' => false, 'confirm' => false, 'run' => false, 'items' => 2500, 'users' => 40,
     'strategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'attempts' => 3, 'questions' => 26, 'minquestions' => 20,
     'semin' => 0.05, 'cold' => false, 'workers' => 1, 'worker' => -1, 'seed' => 4, 'json' => '',
-    'everyanswer' => false,
+    'everyanswer' => false, 'hostend' => false,
 ], ['h' => 'help']);
 
 // Issue #168 AK2 (decision 19.11.2026): per answer only the generators with a history part; --everyanswer runs every
@@ -83,6 +83,8 @@ if ($options['help'] || (!$options['setup'] && !$options['run'])) {
     cli_writeln('  --run                  Plays --attempts attempts of --strategy (default 4, LOWESTSUB),');
     cli_writeln('                         --questions at most (default 26), --cold, --workers=N, --seed, --json=FILE.');
     cli_writeln('  --everyanswer          Every feedback generator per answer, as before #168 AK2 (comparison).');
+    cli_writeln('  --hostend              The end as the activity ends an attempt: the question usage finished and');
+    cli_writeln('                         saved, then mod_adaptivequiz completes it (result, grades, event, finaliser).');
     exit(0);
 }
 
@@ -305,6 +307,7 @@ if ($options['worker'] < 0) {
                 . ' --questions=' . (int) $options['questions'] . ' --minquestions=' . (int) $options['minquestions']
                 . ' --semin=' . (float) $options['semin'] . ' --seed=' . (int) $options['seed']
                 . ($options['cold'] ? ' --cold' : '') . ($options['everyanswer'] ? ' --everyanswer' : '')
+                . ($options['hostend'] ? ' --hostend' : '')
                 . ' --json=' . escapeshellarg($out);
             $processes[] = [proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes), $pipes, $out];
         }
@@ -391,15 +394,50 @@ if ($options['worker'] >= 0) {
             $previousbytes = $bytes;
             if (empty($result[0])) {
                 $step['stop'] = substr((string) ($result[2] ?? $result[1] ?? ''), 0, 60);
+                timeline::reset();
                 $finishstart = microtime(true);
-                $DB->set_field('adaptivequiz_attempt', 'attemptstate', 'complete', ['id' => $attemptid]);
-                $DB->set_field('adaptivequiz_attempt', 'timefinished', time(), ['id' => $attemptid]);
                 $peer = local_catquiz_benchmark_peers();
-                attempt_finalizer::finalize($attemptid, time(), (string) $step['stop']);
+                $endqueries = $DB->perf_get_queries();
+                $endwrites = $DB->perf_get_writes();
+                if ($options['hostend']) {
+                    // Critical-friend re-audit of 23.11.2026: the end of the whole request - the question usage, the
+                    // completion by the activity (result snapshot, grades, event) and, through the CAT model, the
+                    // finaliser.
+                    timeline::span('end:quba_finish', function () use ($quba) {
+                        $quba->finish_all_questions();
+                        question_engine::save_questions_usage_by_activity($quba);
+                    });
+                    $record = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
+                    // The benchmark drives the engine itself, so its test names no CAT model; the activity reaches
+                    // the finaliser through the one of the engine.
+                    $catquiz = clone $quiz;
+                    $catquiz->catmodel = 'catquiz';
+                    timeline::span('end:host_complete', fn() => adaptivequiz_complete_attempt_record(
+                        $record,
+                        $catquiz,
+                        $context,
+                        (int) $record->userid,
+                        (string) $step['stop']
+                    ));
+                } else {
+                    $DB->set_field('adaptivequiz_attempt', 'attemptstate', 'complete', ['id' => $attemptid]);
+                    $DB->set_field('adaptivequiz_attempt', 'timefinished', time(), ['id' => $attemptid]);
+                    attempt_finalizer::finalize($attemptid, time(), (string) $step['stop']);
+                }
                 $step['finalisems'] = round((microtime(true) - $finishstart) * 1000, 2);
+                $step['finalisequeries'] = $DB->perf_get_queries() - $endqueries;
+                $step['finalisewrites'] = $DB->perf_get_writes() - $endwrites;
+                $step['finalisepeakkb'] = (int) (memory_get_peak_usage() / 1024);
                 $step['finalisepeerqueries'] = local_catquiz_benchmark_peers() - $peer;
-                // The comparison with the other people of the test on its own (#166): its span in the finalisation.
+                // Each part of the end on its own (finalizer:*, end:*); the comparison with the other people (#166).
+                $step['endspans'] = [];
                 foreach (timeline::get_spans() as $span) {
+                    if (preg_match('/^(finalizer|end|adapter):/', $span['name']) && $span['ms'] !== null) {
+                        $step['endspans'][$span['name']] = round(
+                            ($step['endspans'][$span['name']] ?? 0) + (float) $span['ms'],
+                            2
+                        );
+                    }
                     if ($span['name'] === 'finalizer:peer_comparison' && $span['ms'] !== null) {
                         $step['peerms'] = round((float) $span['ms'], 2);
                     }
@@ -618,6 +656,37 @@ if ($finalisems) {
         $report['end']['peer_n'],
         json_encode($report['end']['peer_p50']),
         json_encode($report['end']['peer_p95'])
+    ));
+}
+// Critical-friend re-audit of 23.11.2026: the end of an attempt in its parts - the last step (in which the selection
+// ends and the feedback at the end is built), then the finalisation with its spans.
+$ends = array_values(array_filter($steps, fn($s) => isset($s['finalisems'])));
+if ($ends) {
+    $report['endparts'] = [];
+    $part = function (string $name, array $values) use (&$report) {
+        $report['endparts'][$name] = [
+            'p50' => local_catquiz_benchmark_percentile($values, 0.5),
+            'p95' => local_catquiz_benchmark_percentile($values, 0.95),
+            'max' => max($values),
+        ];
+        cli_writeln(sprintf('  %-36s %9.1f %9.1f %9.1f', $name, ...array_values($report['endparts'][$name])));
+    };
+    cli_writeln("\nEnd of the attempts in parts (ms; p50, p95, max):" . ($options['hostend'] ? ' completed by the activity' : ''));
+    $part('last step (wall)', array_map(fn($s) => (float) $s['wallms'], $ends));
+    $part('finalisation (wall)', array_map(fn($s) => (float) $s['finalisems'], $ends));
+    $names = [];
+    foreach ($ends as $end) {
+        $names += array_flip(array_keys($end['endspans'] ?? []));
+    }
+    ksort($names);
+    foreach (array_keys($names) as $name) {
+        $part($name, array_map(fn($s) => (float) ($s['endspans'][$name] ?? 0), $ends));
+    }
+    cli_writeln(sprintf(
+        '  finalisation: queries p95 %d, writes p95 %d, peak memory %d KB',
+        local_catquiz_benchmark_percentile(array_map(fn($s) => (float) ($s['finalisequeries'] ?? 0), $ends), 0.95),
+        local_catquiz_benchmark_percentile(array_map(fn($s) => (float) ($s['finalisewrites'] ?? 0), $ends), 0.95),
+        max(array_map(fn($s) => (int) ($s['finalisepeakkb'] ?? 0), $ends))
     ));
 }
 $stops = array_count_values(array_map(fn($s) => $s['stop'], array_filter($steps, fn($s) => isset($s['stop']))));

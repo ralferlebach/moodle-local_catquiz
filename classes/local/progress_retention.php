@@ -141,6 +141,12 @@ class progress_retention {
     /** @var string preserve_for_display(): the progress could not be read - there is nothing it could keep. */
     const UNREADABLE = 'unreadable';
 
+    /** @var string preserve_for_display(): the stored data of the attempt exist and cannot be read - the progress stays. */
+    const STORED_UNREADABLE = 'storedunreadable';
+
+    /** @var string preserve_for_display(): the progress has played questions and no responses - no answer to keep. */
+    const NO_RESPONSES = 'noresponses';
+
     /**
      * Before the progress of a finished attempt is removed: what the page of its result needs and its stored data do
      * not hold is kept from the progress (issue #159, decision of 21.11.2026).
@@ -159,7 +165,8 @@ class progress_retention {
      * the caller removes the progress only after this returned.
      *
      * @param int $catattemptid Id in local_catquiz_attempts.
-     * @return string[] What was kept: 'history', 'abilities'; or [UNREADABLE].
+     * @return string[] What was kept: 'history', 'abilities', and NO_RESPONSES when it held no answer; or [UNREADABLE],
+     *     or [STORED_UNREADABLE] (the progress must stay).
      */
     public static function preserve_for_display(int $catattemptid): array {
         global $DB;
@@ -174,8 +181,10 @@ class progress_retention {
         }
         $stored = json_decode((string) $attempt->json, true);
         if (!is_array($stored)) {
-            // The stored data of the attempt are not readable either: nothing to add them to. Left as they are.
-            return [];
+            // Critical-friend re-audit of 23.11.2026: stored data that exist and cannot be read leave the progress as
+            // the only readable source of the result - it is held (fail-closed), not removed. Without stored data
+            // (none, empty) there is nothing to add to, as before.
+            return trim((string) $attempt->json) === '' || $attempt->json === 'null' ? [] : [self::STORED_UNREADABLE];
         }
         $kept = [];
         $have = [];
@@ -185,6 +194,8 @@ class progress_retention {
                 $have[(string) $row['id']] = true;
             }
         }
+        // A progress with played questions and no responses at all (not even none) holds no answer to keep: said so.
+        $noresponses = !array_key_exists('responses', $progress) && !empty($progress['playedquestions']);
         $rows = self::rows_from_progress($progress, (string) ($stored['catscaleid'] ?? $attempt->scaleid), $have);
         if ($rows) {
             $stored['retention_history'] = array_merge((array) ($stored['retention_history'] ?? []), $rows);
@@ -200,7 +211,7 @@ class progress_retention {
         if ($kept) {
             $DB->set_field('local_catquiz_attempts', 'json', json_encode($stored), ['id' => $catattemptid]);
         }
-        return $kept;
+        return $noresponses ? array_merge($kept, [self::NO_RESPONSES]) : $kept;
     }
 
     /**

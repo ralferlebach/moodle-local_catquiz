@@ -130,7 +130,8 @@ class cleanup_attempt_progress extends scheduled_task {
      *
      * One transaction: the progress goes only once what it held for the page is stored with the attempt. A failure
      * rolls both back; the progress stays and the next run tries again. A progress that cannot be read holds nothing
-     * the page could read, and is removed (with its id in the log).
+     * the page could read, and is removed (with its id in the log). Stored data of the attempt that cannot be read keep
+     * the progress, the only readable source left (fail-closed, re-audit of 23.11.2026).
      *
      * @param \stdClass $row catattemptid, componentattemptid, component
      * @return bool Whether the progress was removed.
@@ -139,9 +140,22 @@ class cleanup_attempt_progress extends scheduled_task {
         global $DB;
         $transaction = $DB->start_delegated_transaction();
         try {
-            $kept = progress_retention::preserve_for_display((int) $row->catattemptid);
+            $kept = $this->preserve($row);
+            if ($kept === [progress_retention::STORED_UNREADABLE]) {
+                // Critical-friend re-audit of 23.11.2026: fail-closed - the progress is the only readable source left.
+                $transaction->allow_commit();
+                mtrace("local_catquiz: the stored data of CAT attempt {$row->catattemptid} cannot be read; its progress "
+                    . 'is kept.');
+                return false;
+            }
             if ($kept === [progress_retention::UNREADABLE]) {
+                // Decision of 22.11.2026, confirmed on 23.11.2026: nothing in it can be read or restored; the period
+                // of retention applies. Removed, with the id in the log.
                 mtrace("local_catquiz: the progress of CAT attempt {$row->catattemptid} could not be read; removed.");
+            }
+            if (in_array(progress_retention::NO_RESPONSES, $kept, true)) {
+                mtrace("local_catquiz: the progress of CAT attempt {$row->catattemptid} holds no responses; no answer kept "
+                    . 'from it (the page completes them from the question usage).');
             }
             // Through progress::delete() so the cache is cleared as well; a row removed behind the cache's back would
             // come back on the next read.
@@ -162,7 +176,17 @@ class cleanup_attempt_progress extends scheduled_task {
     }
 
     /**
-     * Removes the progress of the row.
+     * Keeps what the page needs from the progress of the row (a method of its own, so a test can make it fail).
+     *
+     * @param \stdClass $row catattemptid, componentattemptid, component
+     * @return string[] As progress_retention::preserve_for_display().
+     */
+    protected function preserve(\stdClass $row): array {
+        return progress_retention::preserve_for_display((int) $row->catattemptid);
+    }
+
+    /**
+     * Removes the progress of one attempt (a method of its own, so a test can make it fail).
      *
      * @param \stdClass $row catattemptid, componentattemptid, component
      */

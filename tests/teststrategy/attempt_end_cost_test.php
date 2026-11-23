@@ -121,4 +121,60 @@ final class attempt_end_cost_test extends \advanced_testcase {
         $this->assertCount(30, $read);
         $this->assertSame('T7', $read[$ids[7]]);
     }
+
+    /**
+     * The slots of the usage for the history on the result page: one query, whatever the number of slots, and the same
+     * as the usage says. RED before: the usage was loaded with the definition of every question (cold caches: some
+     * 3.700 queries for 625 answers).
+     */
+    public function test_the_slots_of_the_usage_are_read_at_once(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/question/engine/lib.php');
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category();
+        $context = \context_system::instance();
+        $quba = \question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
+        $quba->set_preferred_behaviour('deferredfeedback');
+        $ids = [];
+        for ($i = 0; $i < 40; $i++) {
+            $question = $generator->create_question('truefalse', null, ['category' => $category->id, 'name' => "S$i"]);
+            $ids[] = (int) $question->id;
+        }
+        // A question in two slots.
+        foreach ([...$ids, $ids[3]] as $questionid) {
+            $slot = $quba->add_question(\question_bank::load_question($questionid));
+            $quba->start_question($slot);
+        }
+        \question_engine::save_questions_usage_by_activity($quba);
+        $small = \question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
+        $small->set_preferred_behaviour('deferredfeedback');
+        $small->start_question($small->add_question(\question_bank::load_question($ids[0])));
+        \question_engine::save_questions_usage_by_activity($small);
+
+        // As many queries for 1 slot as for 41 (after the purge, the first read of a cache definition adds its own).
+        $queries = [];
+        foreach ([$small, $quba] as $usage) {
+            \cache_helper::purge_all();
+            $before = $DB->perf_get_queries();
+            $map = graphicalsummary::slot_map_of_usage((int) $usage->get_id());
+            $queries[] = $DB->perf_get_queries() - $before;
+        }
+        $this->assertSame($queries[0], $queries[1], 'No query per slot: ' . json_encode($queries));
+        $this->assertLessThanOrEqual(3, $queries[1], 'A fixed budget: ' . json_encode($queries));
+
+        $expected = [];
+        $loaded = \question_engine::load_questions_usage_by_activity($quba->get_id());
+        foreach ($loaded->get_slots() as $slot) {
+            $qa = $loaded->get_question_attempt($slot);
+            $expected[(int) $qa->get_question()->id][] = [
+                'slot' => (int) $slot,
+                'questionattemptid' => (int) $qa->get_database_id(),
+                'name' => (string) $qa->get_question()->name,
+            ];
+        }
+        $this->assertSame($expected, $map, 'What the usage says.');
+        $this->assertCount(2, $map[$ids[3]]);
+    }
 }
