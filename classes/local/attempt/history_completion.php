@@ -17,7 +17,6 @@
 namespace local_catquiz\local\attempt;
 
 use local_catquiz\local\progress_retention;
-use question_engine;
 
 /**
  * The history of a finished attempt, completed for its display from what was stored and what the question usage holds
@@ -112,17 +111,23 @@ class history_completion {
 
         $slots = self::answered_slots($attempt, count($entries));
         if ($slots !== null) {
+            $missing = [];
             foreach ($slots as $slot => $answer) {
-                if (isset($have[(string) $answer['questionid']])) {
-                    continue;
+                if (!isset($have[(string) $answer['questionid']])) {
+                    $missing[$slot] = $answer;
+                    $have[(string) $answer['questionid']] = true;
                 }
-                $entries[] = ['row' => self::row_from_usage($answer, (int) $attempt->contextid), 'index' => null];
-                $have[(string) $answer['questionid']] = true;
             }
-            // The order of the slots; a row whose question is not in the usage keeps its place after the one before.
+            // The items of all missing answers in one query (issue #159: no query per row).
+            $items = self::items(array_column($missing, 'questionid'), (int) $attempt->contextid);
+            foreach ($missing as $answer) {
+                $entries[] = ['row' => self::row_from_usage($answer, $items[$answer['questionid']] ?? null), 'index' => null];
+            }
+            // The order of the slots. A question given in more than one slot has its row at the first, as the history
+            // keeps the first answer to a question; a row whose question is not in the usage keeps its place.
             $slotof = [];
             foreach ($slots as $slot => $answer) {
-                $slotof[(string) $answer['questionid']] = $slot;
+                $slotof[(string) $answer['questionid']] = $slotof[(string) $answer['questionid']] ?? $slot;
             }
             $position = 0;
             foreach ($entries as $i => $entry) {
@@ -148,21 +153,33 @@ class history_completion {
         if (count($entries) === count($rows)) {
             return [$rows, $otherscales];
         }
-        // What the table shows of a row it did not have stored: the name of its scale and the title of its question.
+        // What the table shows of a row it did not have stored: the name of its scale and the title of its question -
+        // for all rows in two queries.
+        $scaleids = [];
+        $questionids = [];
+        foreach ($entries as $entry) {
+            if ($entry['index'] !== null) {
+                continue;
+            }
+            if (!isset($entry['row']['questionscale_name']) && !empty($entry['row']['questionscale'])) {
+                $scaleids[] = (int) $entry['row']['questionscale'];
+            }
+            if (!isset($entry['row']['questiontitle']) && !empty($entry['row']['id'])) {
+                $questionids[] = (int) $entry['row']['id'];
+            }
+        }
+        $scalenames = self::names('local_catquiz_catscales', $scaleids);
+        $questionnames = self::names('question', $questionids);
         foreach ($entries as $i => $entry) {
             if ($entry['index'] !== null) {
                 continue;
             }
             $row = $entry['row'];
             if (!isset($row['questionscale_name']) && !empty($row['questionscale'])) {
-                $row['questionscale_name'] = (string) $DB->get_field(
-                    'local_catquiz_catscales',
-                    'name',
-                    ['id' => (int) $row['questionscale']]
-                );
+                $row['questionscale_name'] = $scalenames[(int) $row['questionscale']] ?? '';
             }
             if (!isset($row['questiontitle']) && !empty($row['id'])) {
-                $row['questiontitle'] = (string) $DB->get_field('question', 'name', ['id' => (int) $row['id']]);
+                $row['questiontitle'] = $questionnames[(int) $row['id']] ?? '';
             }
             $row['personability_after'] = $row['personability_after'] ?? null;
             $entries[$i]['row'] = $row;
@@ -184,7 +201,9 @@ class history_completion {
      * The answered questions of the attempt's question usage, by slot - null when there is nothing to complete.
      *
      * The usage is read only when it can hold more answers than the history has rows: the number of questions the
-     * activity counted for the attempt says so, without loading it.
+     * activity counted for the attempt says so, without reading it. One query (issue #159, performance re-audit of
+     * 22.11.2026): the question attempts with their last step and the question each slot used - the version that was
+     * shown -, without loading the usage and the definition of every question.
      *
      * @param \stdClass $attempt Row of local_catquiz_attempts.
      * @param int $rows Rows the history has.
@@ -204,56 +223,123 @@ class history_completion {
         if (!$activity || empty($activity->uniqueid) || (int) $activity->questionsattempted <= $rows) {
             return null;
         }
-        require_once($CFG->libdir . '/questionlib.php');
-        try {
-            $quba = question_engine::load_questions_usage_by_activity((int) $activity->uniqueid);
-        } catch (\Throwable $e) {
-            return null;
-        }
+        require_once($CFG->dirroot . '/question/engine/lib.php');
+        // A finished question attempt has a fraction in its last step, and a state of the finished ones (gradedright,
+        // gradedwrong, gradedpartial, mangr*): the same condition as question_attempt::get_fraction() and
+        // question_state::is_finished().
+        $records = $DB->get_recordset_sql(
+            "SELECT qa.id, qa.slot, qa.questionid, qa.responsesummary, q.name, qbe.idnumber, qas.fraction, qas.state
+               FROM {question_attempts} qa
+               JOIN {question_attempt_steps} qas ON qas.questionattemptid = qa.id
+               JOIN {question} q ON q.id = qa.questionid
+          LEFT JOIN {question_versions} qv ON qv.questionid = q.id
+          LEFT JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+              WHERE qa.questionusageid = :usageid
+                AND qas.sequencenumber = (SELECT MAX(qasm.sequencenumber)
+                                            FROM {question_attempt_steps} qasm
+                                           WHERE qasm.questionattemptid = qa.id)
+           ORDER BY qa.slot",
+            ['usageid' => (int) $activity->uniqueid]
+        );
         $slots = [];
-        foreach ($quba->get_slots() as $slot) {
-            $qa = $quba->get_question_attempt($slot);
-            $fraction = $qa->get_fraction();
-            if ($fraction === null || !$qa->get_state()->is_finished()) {
+        foreach ($records as $record) {
+            if ($record->fraction === null || !\question_state::get((string) $record->state)->is_finished()) {
                 continue;
             }
-            $question = $qa->get_question(false);
-            $slots[(int) $slot] = [
-                'slot' => (int) $slot,
-                'questionid' => (int) $qa->get_question_id(),
-                'name' => (string) ($question->name ?? ''),
-                'idnumber' => (string) ($question->idnumber ?? ''),
-                'fraction' => (float) $fraction,
-                'responsesummary' => $qa->get_response_summary(),
-                'questionattemptid' => (int) $qa->get_database_id(),
+            $slots[(int) $record->slot] = [
+                'slot' => (int) $record->slot,
+                'questionid' => (int) $record->questionid,
+                'name' => (string) $record->name,
+                'idnumber' => (string) ($record->idnumber ?? ''),
+                'fraction' => (float) $record->fraction,
+                'responsesummary' => $record->responsesummary,
+                'questionattemptid' => (int) $record->id,
             ];
         }
-        ksort($slots);
+        $records->close();
         return $slots;
+    }
+
+    /**
+     * The items of the given questions in the CAT context, with their active parameters - in one query, and one more
+     * for questions whose item is of another version of the same question.
+     *
+     * @param int[] $questionids
+     * @param int $contextid
+     * @return array Question id => record (catscaleid, difficulty, status, usable, scalename).
+     */
+    private static function items(array $questionids, int $contextid): array {
+        global $DB;
+        $questionids = array_values(array_unique(array_map('intval', $questionids)));
+        if (!$questionids) {
+            return [];
+        }
+        $select = "SELECT %s AS questionid, i.catscaleid, p.difficulty, p.status, p.usable, s.name AS scalename
+                     FROM {local_catquiz_items} i
+                LEFT JOIN {local_catquiz_itemparams} p ON p.id = i.activeparamid
+                LEFT JOIN {local_catquiz_catscales} s ON s.id = i.catscaleid";
+        [$insql, $params] = $DB->get_in_or_equal($questionids, SQL_PARAMS_NAMED, 'q');
+        $items = [];
+        $records = $DB->get_recordset_sql(
+            sprintf($select, 'i.componentid') . "
+              WHERE i.componentname = 'question' AND i.contextid = :contextid AND i.componentid $insql
+           ORDER BY i.id",
+            $params + ['contextid' => $contextid]
+        );
+        foreach ($records as $record) {
+            $items[(int) $record->questionid] = $items[(int) $record->questionid] ?? $record;
+        }
+        $records->close();
+        $other = array_values(array_diff($questionids, array_keys($items)));
+        if ($other) {
+            // The question the slot used is a version whose item points to another version of the same entry.
+            [$insql, $params] = $DB->get_in_or_equal($other, SQL_PARAMS_NAMED, 'v');
+            $records = $DB->get_recordset_sql(
+                sprintf($select, 'qv.questionid') . "
+                  JOIN {question_versions} qvi ON qvi.questionid = i.componentid
+                  JOIN {question_versions} qv ON qv.questionbankentryid = qvi.questionbankentryid
+                 WHERE i.componentname = 'question' AND i.contextid = :contextid AND qv.questionid $insql
+              ORDER BY qvi.version DESC, i.id",
+                $params + ['contextid' => $contextid]
+            );
+            foreach ($records as $record) {
+                $items[(int) $record->questionid] = $items[(int) $record->questionid] ?? $record;
+            }
+            $records->close();
+        }
+        return $items;
+    }
+
+    /**
+     * The names of the given ids of a table with a name column, in one query.
+     *
+     * @param string $table
+     * @param int[] $ids
+     * @return array Id => name.
+     */
+    private static function names(string $table, array $ids): array {
+        global $DB;
+        $ids = array_values(array_unique(array_filter($ids)));
+        if (!$ids) {
+            return [];
+        }
+        [$insql, $params] = $DB->get_in_or_equal($ids);
+        return array_map('strval', $DB->get_records_select_menu($table, "id $insql", $params, '', 'id, name'));
     }
 
     /**
      * The row of an answer from the question usage and the item of the CAT context.
      *
      * @param array $answer As answered_slots() gives it.
-     * @param int $contextid The CAT context of the attempt.
+     * @param \stdClass|null $item As items() gives it, null when the question has no item in the context.
      * @return array
      */
-    private static function row_from_usage(array $answer, int $contextid): array {
-        global $CFG, $DB;
+    private static function row_from_usage(array $answer, ?\stdClass $item): array {
+        global $CFG;
         require_once($CFG->dirroot . '/local/catquiz/lib.php');
-        $item = $DB->get_record_sql(
-            "SELECT i.catscaleid, p.difficulty, p.status, p.usable
-               FROM {local_catquiz_items} i
-          LEFT JOIN {local_catquiz_itemparams} p ON p.id = i.activeparamid
-              WHERE i.componentid = :componentid AND i.componentname = 'question' AND i.contextid = :contextid",
-            ['componentid' => $answer['questionid'], 'contextid' => $contextid],
-            IGNORE_MULTIPLE
-        );
         $productive = $item && $item->difficulty !== null && is_numeric($item->difficulty)
             && (int) $item->status >= LOCAL_CATQUIZ_STATUS_UPDATED_MANUALLY && (int) $item->usable === 1;
         $scaleid = $item ? (int) $item->catscaleid : 0;
-        $scalename = $scaleid ? (string) $DB->get_field('local_catquiz_catscales', 'name', ['id' => $scaleid]) : '';
         return [
             'id' => $answer['questionid'],
             'questionname' => $answer['idnumber'] !== '' ? $answer['idnumber'] : $answer['name'],
@@ -265,7 +351,7 @@ class history_completion {
             'responsesummary' => $answer['responsesummary'],
             'difficulty' => $item && is_numeric($item->difficulty) ? (float) $item->difficulty : null,
             'questionscale' => $scaleid ?: null,
-            'questionscale_name' => $scalename,
+            'questionscale_name' => $item ? (string) $item->scalename : '',
             'fisherinformation' => null,
             'personability_after' => null,
             'source' => self::SOURCE_QUESTIONUSAGE,

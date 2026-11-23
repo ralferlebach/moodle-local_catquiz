@@ -81,6 +81,8 @@ $traces = $DB->get_records_select('local_catquiz_trace', "adaptiveattemptid $ins
 
 $bykind = [];
 $byspan = [];
+$answerno = [];
+$bystage = [];
 $cold = null;
 $requestids = [];
 foreach ($traces as $trace) {
@@ -98,6 +100,14 @@ foreach ($traces as $trace) {
         continue;
     }
     $bykind[$trace->kind][] = $row;
+    // Performance re-audit of 22.11.2026: next_item by the number of answers before it (the n-th next_item of its
+    // attempt answers the n-th question), in the stages the SLO is checked at.
+    if ($trace->kind === 'next_item') {
+        $answerno[$trace->adaptiveattemptid] = ($answerno[$trace->adaptiveattemptid] ?? 0) + 1;
+        $n = $answerno[$trace->adaptiveattemptid];
+        $stage = $n <= 10 ? '1-10' : ($n <= 50 ? '11-50' : ($n <= 100 ? '51-100' : ($n <= 150 ? '101-150' : '151+')));
+        $bystage[$stage][] = $row['ms'];
+    }
     foreach (array_slice($spans, 1) as $span) {
         $byspan[$span['name']]['ms'][] = isset($span['ms']) ? (float) $span['ms'] : null;
         $byspan[$span['name']]['db'][] = $span['queries'] ?? null;
@@ -114,6 +124,12 @@ foreach ($bykind as $kind => $rows) {
         'memorypeakkb' => local_catquiz_load_stats(array_column($rows, 'peakkb')),
         'fatal' => count(array_filter($rows, fn($r) => $r['fatal'])),
     ];
+}
+$stages = [];
+foreach (['1-10', '11-50', '51-100', '101-150', '151+'] as $stage) {
+    if (!empty($bystage[$stage])) {
+        $stages[$stage] = local_catquiz_load_stats($bystage[$stage]);
+    }
 }
 ksort($byspan);
 $spans = [];
@@ -238,6 +254,7 @@ echo json_encode([
     'requestids' => count(array_filter(array_unique($requestids))),
     'cold' => $cold,
     'kinds' => $kinds,
+    'nextitembyanswers' => $stages,
     'spans' => $spans,
     'usages' => $usages,
     'integrity' => $integrity,

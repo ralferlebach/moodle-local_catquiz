@@ -46,6 +46,10 @@ Zwei Arten von Dokumenten:
   #160/#166. Im ZIP; `doc/` steht in der `.gitignore`.
 - **evidence/ci-playwright-2026-11-21/** – Playwright-CI vom 20.11.2026 (`chart-series`, Klick vor den Seitenskripten):
   Strecke 5.1/4.5 je 37/37 und Zahntest von `scriptsReady()`; Beschreibung im CHANGELOG.
+- **performance-re-audit-2026-11-22-nachweise.md** – Performance-Re-Audit vom 22.11.2026, Antwort vom 23.11.2026:
+  #159 ohne N+1 (Abfragebudget), #161 A/B alt gegen neu bei 2.500/5.000 Kandidaten auf 5.1/PostgreSQL und in einer
+  produktionsnahen Zelle (4.5, Apache/PHP-FPM, MariaDB) mit SLO-Urteil je Antwortstufe, Abschluss bei 150/625,
+  #177-Schreiblast gemessen. Belege unter `evidence/performance-re-audit-2026-11-22/`.
 - **re-audit-2026-11-22-nacharbeit.md** – Re-Audit vom 22.11.2026, Antwort vom 22./23.11.2026: CI-Abgleich der sechs
   Commits (Partnerstände, Zeilenfolge der Install-Matrix), #159 Altdaten des Verlaufs, #168 Messmatrix, #174 sechs
   Strategien, Host #25 DoD5, #176-Randfälle. Belege unter `evidence/re-audit-2026-11-22/`.
