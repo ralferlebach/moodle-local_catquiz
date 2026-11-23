@@ -4,7 +4,7 @@
 # after it finds them filled. Per run: the k6 summary (client) and analyse_attempt_load.php (server: traces,
 # question usages, integrity, sessions). attempt_load_report.py turns the runs into the report and the verdict.
 #
-#   run_attempt_load.sh <moodle dir> <out dir> [plan]      plan: full (default) | quick | pool
+#   run_attempt_load.sh <moodle dir> <out dir> [plan]      plan: full (default) | quick | pool | ab
 #
 # Environment: what the seed printed (LOAD_BASE_URL, LOAD_USERS, LOAD_PASSWORD, LOAD_CMID_26, LOAD_IDNUMBER_26,
 # LOAD_CMID_150, LOAD_IDNUMBER_150); K6 (default: k6 on the PATH).
@@ -14,6 +14,8 @@
 # quick: 1 repetition x (cold, warm) x {1 x 26, 12 x 26}, then 1 x 25 x 26 under the same condition.
 # pool:  3 repetitions x (cold, warm) x {12 x 26, 1 x 150, 12 x 150}, no burst - for comparing pool sizes (re-audit
 #        "ab #147", #161: the same plan on a site seeded with --pool=2500 and one with --pool=5000).
+# ab:    1 repetition x (cold, warm) x {1 x 150, 12 x 150, 25 x 26} - one engine state against another (performance
+#        re-audit of 22.11.2026); the report gives next_item by answers and the SLO.
 set -euo pipefail
 moodle=$1
 out=$2
@@ -26,6 +28,12 @@ if [ "$plan" = quick ]; then
     reps=1
     stages="s1:1:26 s12:12:26"
     bursts=1
+elif [ "$plan" = ab ]; then
+    # Performance re-audit of 22.11.2026: one engine state against another on the same site - 1 x 150 and 12 x 150
+    # (next_item by answers up to 150, the SLO) and 25 x 26 (the burst), cold and warm, once.
+    reps=1
+    stages="l1:1:150 l12:12:150 b25:25:26"
+    bursts=0
 elif [ "$plan" = pool ]; then
     reps=3
     stages="s12:12:26 l1:1:150 l12:12:150"

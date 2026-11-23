@@ -199,6 +199,30 @@ def main():
             ms, db = a['subspans'][name]['ms'], a['subspans'][name]['db']
             cells.append('–' if ms[0] is None else f'{ms[0]:.0f}' + ('' if db[0] is None else f' ({db[0]:.0f})'))
         md.append(f'| {label} (`{name}`) | ' + ' | '.join(cells) + ' |')
+    # Performance re-audit of 22.11.2026: next_item by the number of answers, and the SLO decided on 22.11.2026 (from
+    # #136): first_item p95 <= 1500 ms; next_item p95 <= 500 ms and p99 <= 1000 ms up to 150 answers and 12 VUs.
+    # Longer attempts and more VUs are reported, not checked. A verdict, not a failure of the run: the hardware of a
+    # run decides it (a 2-CPU runner serves 12 VUs at a sixth of its speed).
+    md += ['', '### next_item by answers (ms, p50/p95/p99/max) and the SLO (decision 22.11.2026)', '',
+           '| Run | VUs × items | first_item p95 | 1-10 | 11-50 | 51-100 | 101-150 | SLO |',
+           '|---|---|---:|---|---|---|---|---|']
+    slo = []
+    for name, vus, items, temp, status in runs:
+        server = load(os.path.join(out, name + '.server.json'))
+        stages = server.get('nextitembyanswers') or {}
+        first = ((server.get('kinds') or {}).get('first_item') or {}).get('requestms') or {}
+        cell = lambda st: '–' if not st else f'{fmt(st.get("p50"))}/{fmt(st.get("p95"))}/{fmt(st.get("p99"))}/{fmt(st.get("max"))}'
+        checked = vus <= 12 and items <= 150
+        verdict = '–'
+        if checked:
+            breaches = [f'{k} p95 {v["p95"]:.0f}' for k, v in stages.items() if k != '151+' and v.get('p95', 0) > 500] \
+                + [f'{k} p99 {v["p99"]:.0f}' for k, v in stages.items() if k != '151+' and v.get('p99', 0) > 1000]
+            if first.get('p95') is not None and first['p95'] > 1500:
+                breaches.insert(0, f'first_item p95 {first["p95"]:.0f}')
+            verdict = 'erfüllt' if not breaches else 'nicht erfüllt: ' + ', '.join(breaches)
+            slo.append((name, not breaches))
+        md.append(f'| {name} | {vus} × {items} | {fmt(first.get("p95"))} | {cell(stages.get("1-10"))} | '
+                  f'{cell(stages.get("11-50"))} | {cell(stages.get("51-100"))} | {cell(stages.get("101-150"))} | {verdict} |')
     if os.path.exists(os.path.join(out, 'burst-skipped.txt')):
         md += ['', 'Burst (25 VUs) left out: a run before it was not correct.']
     md += ['', '### Correctness', '']
@@ -209,8 +233,8 @@ def main():
         else [f'- ✘ {x}' for x in problems]
     text = '\n'.join(md) + '\n'
     open(os.path.join(out, 'report.md'), 'w').write(text)
-    json.dump({'rows': rows, 'repetitions': agg, 'problems': problems}, open(os.path.join(out, 'report.json'), 'w'),
-              indent=2)
+    json.dump({'rows': rows, 'repetitions': agg, 'problems': problems, 'slo': slo},
+              open(os.path.join(out, 'report.json'), 'w'), indent=2)
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         open(os.environ['GITHUB_STEP_SUMMARY'], 'a').write(text)
     print(text)

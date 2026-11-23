@@ -2,6 +2,31 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Performance-Re-Audit vom 22.11.2026 („CATquiz_Performance_ReAudit_2026-11-22“) (2026111716, 2026111717; Nachweise
+  `doc/performance-re-audit-2026-11-22-nachweise.md` und `doc/evidence/performance-re-audit-2026-11-22/`, nur im ZIP):
+  - **#159 – kein N+1 in der Anzeige alter Verläufe:** `history_completion` liest die Antworten aus QUBA mit einer
+    Abfrage (letzter Schritt je Slot, Frage, Version, Eintrag der Fragenbank), statt die Fragennutzung mit allen
+    Fragendefinitionen zu laden; Items, Skalennamen und Fragentitel kommen gebündelt. Ein Item einer anderen Version
+    derselben Frage gilt; eine mehrfach vergebene Frage steht an ihrem ersten Slot mit ihrer ersten Antwort.
+    Abfragen bei 0/1/25/100/625 fehlenden Zeilen von 625: 1 bzw. 9–10, vorher 3.760–5.006 (`history_completion_test`,
+    Zahntest rot).
+  - **Abschluss langer Versuche (2026111717):** Die Messung bei 2.368 Antworten ergab 20,4 s für die Finalisierung.
+    - Ursache 1: `progress::get_num_answered_productive_questions()` und `get_fraction_for_scale()` liefen je Antwort
+      durch die Liste der Skala (O(N²) je Skala), und die Ergebnisprüfung fragt je Skala und Feedbackbereich. Jetzt
+      einmal eine Menge der IDs je Aufruf (O(N)); die Zählungen sind dieselben.
+    - Ursache 2: Der Verlauf lud für jede Zeile die Fragendefinition für den Titel (kalter Cache: rund 14.000 Abfragen).
+      Jetzt eine Abfrage für alle Titel; ohne Titel bleibt das Label.
+    - Feedback am Ende bei 2.368 Antworten: 14,2 s → 1,5 s (kalt), 1,2 s (warm). `attempt_end_cost_test`, beide
+      Zahntests rot (14,9 s für sechs Zählungen über 12.000 Antworten).
+  - **#161 – Lastplan `ab`:** 1×150, 12×150 und 25×26 Versuche, kalt und warm; `next_item` je Antwortstufe
+    (1–10, 11–50, 51–100, 101–150) mit p50/p95/p99/max und dem SLO-Urteil je Lauf (Entscheidung 22.11.2026:
+    `first_item` p95 ≤ 1,5 s; `next_item` p95 ≤ 0,5 s und p99 ≤ 1,0 s bis 150 Antworten bei 12 Nutzern; längere
+    Versuche und 25 Nutzer werden berichtet, nicht geprüft). Workflow `load-k6-attempts.yml` mit Plan `ab`.
+  - Gemessen (nur Nachweis, kein Code): alt gegen neu bei 2.500 und 5.000 Kandidaten auf 5.1/PostgreSQL und in einer
+    produktionsnahen Zelle (4.5, Apache/PHP-FPM, MariaDB); Abschluss bei 150 und 625 Antworten. **Das SLO ist bei
+    12 Nutzern nicht erreicht**; mit einem Nutzer bei 2.500 Kandidaten ja, bei 5.000 nicht. #177 (Schreiblast) bleibt
+    offen und kommt als eigenes Paket.
+
 - Re-Audit vom 22.11.2026 („CATquiz_ReAudit_2026-11-22_Auslieferung_CI_Issues_Nacharbeit“) (2026111714; Nachweise
   `doc/re-audit-2026-11-22-nacharbeit.md`, nur im ZIP; Entscheidung 22.11.: Nachweise werden nicht versioniert):
   - **#159 – Altdaten des Verlaufs:** Die Software geht mit Verläufen um, denen Antworten fehlen oder die ganz fehlen.

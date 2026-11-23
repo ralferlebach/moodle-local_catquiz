@@ -1192,12 +1192,13 @@ class progress implements JsonSerializable {
      */
     public function get_num_answered_productive_questions(?int $scaleid = null): int {
         $count = 0;
+        $inscale = $scaleid === null ? null : $this->question_ids_of_scale($scaleid);
         foreach (array_keys($this->responses) as $questionid) {
             $question = $this->playedquestions[$questionid] ?? null;
             if ($question !== null && !empty($question->is_pilot)) {
                 continue;
             }
-            if ($scaleid !== null && !$this->question_belongs_to_scale($questionid, $scaleid)) {
+            if ($inscale !== null && !isset($inscale[(int) $questionid])) {
                 continue;
             }
             $count++;
@@ -1222,13 +1223,14 @@ class progress implements JsonSerializable {
     public function get_fraction_for_scale(?int $scaleid = null): ?float {
         $sum = 0.0;
         $count = 0;
+        $inscale = $scaleid === null ? null : $this->question_ids_of_scale($scaleid);
 
         foreach ($this->responses as $questionid => $response) {
             $question = $this->playedquestions[$questionid] ?? null;
             if ($question !== null && !empty($question->is_pilot)) {
                 continue;
             }
-            if ($scaleid !== null && !$this->question_belongs_to_scale($questionid, $scaleid)) {
+            if ($inscale !== null && !isset($inscale[(int) $questionid])) {
                 continue;
             }
 
@@ -1250,21 +1252,22 @@ class progress implements JsonSerializable {
     }
 
     /**
-     * Shows whether an answered question was counted towards the given scale.
+     * The questions counted towards the given scale, as a set of ids.
      *
-     * @param int $questionid
+     * Performance re-audit of 22.11.2026: the two counts above asked, for every response, whether its question is in
+     * the list of the scale - a walk through that list each time, O(N²) per scale. The result check at the end asks
+     * for every scale of every feedback area: with 2.368 answers, 14 s of the 20 s of the end of the attempt. Built
+     * once per count, the same answer in O(N).
+     *
      * @param int $scaleid
-     *
-     * @return bool
+     * @return array Question id (int) => true.
      */
-    private function question_belongs_to_scale(int $questionid, int $scaleid): bool {
-        $inscale = $this->playedquestionsbyscale[$scaleid] ?? [];
-        foreach ($inscale as $question) {
-            if ((int) ($question->id ?? 0) === $questionid) {
-                return true;
-            }
+    private function question_ids_of_scale(int $scaleid): array {
+        $ids = [];
+        foreach ($this->playedquestionsbyscale[$scaleid] ?? [] as $question) {
+            $ids[(int) ($question->id ?? 0)] = true;
         }
-        return false;
+        return $ids;
     }
 
     /**

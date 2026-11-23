@@ -44,13 +44,14 @@ on:
           - MOODLE_503_STABLE
         default: MOODLE_501_STABLE
       plan:
-        description: 'full: 3 x cold/warm x {1x26, 12x26, 1x150, 12x150} + 3 x 25x26; quick: 1 x cold/warm x {1x26, 12x26} + 1 x 25x26; pool: 3 x cold/warm x {12x26, 1x150, 12x150}'
+        description: 'full: 3 x cold/warm x {1x26, 12x26, 1x150, 12x150} + 3 x 25x26; quick: 1 x cold/warm x {1x26, 12x26} + 1 x 25x26; pool: 3 x cold/warm x {12x26, 1x150, 12x150}; ab: 1 x cold/warm x {1x150, 12x150, 25x26}'
         type: choice
         default: full
         options:
           - full
           - quick
           - pool
+          - ab
       pool:
         description: Candidates in the pool
         default: '2500'

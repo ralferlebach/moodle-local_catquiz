@@ -225,6 +225,15 @@ class graphicalsummary extends feedbackgenerator {
             }
         }
         $added = false;
+        // Performance re-audit of 22.11.2026: the titles of the questions that get a row, in one query - not a
+        // question definition loaded per row (2.368 rows: some 14.000 queries with a cold question cache).
+        $missing = [];
+        foreach ($progress->get_answer_history() as $entry) {
+            if (!isset($have[(string) $entry['q']])) {
+                $missing[] = (int) $entry['q'];
+            }
+        }
+        $this->titles = self::question_titles($missing);
         foreach ($progress->get_answer_history() as $entry) {
             $qid = (string) $entry['q'];
             if (isset($have[$qid]) || empty($playedquestions[$qid]) || !isset($responses[$qid])) {
@@ -643,6 +652,25 @@ class graphicalsummary extends feedbackgenerator {
         );
     }
 
+    /** @var array Titles of the questions by id, read in one query for the rows built at once (load_data()). */
+    private array $titles = [];
+
+    /**
+     * The titles of the given questions, in one query; a question that is gone is left out (its row keeps the label).
+     *
+     * @param int[] $questionids
+     * @return array Question id => name.
+     */
+    private static function question_titles(array $questionids): array {
+        global $DB;
+        $titles = [];
+        foreach (array_chunk(array_values(array_unique($questionids)), 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk);
+            $titles += $DB->get_records_select_menu('question', "id $insql", $params, '', 'id, name');
+        }
+        return $titles;
+    }
+
     /**
      * Returns the real Moodle question title for a question id, falling back to
      * the CAT item label if the question can no longer be loaded.
@@ -652,6 +680,10 @@ class graphicalsummary extends feedbackgenerator {
      * @return string
      */
     private function get_question_title(int $questionid, string $fallback): string {
+        if (array_key_exists($questionid, $this->titles)) {
+            $name = (string) $this->titles[$questionid];
+            return $name !== '' ? $name : $fallback;
+        }
         try {
             $question = \question_bank::load_question($questionid);
             $name = $question->name ?? '';
