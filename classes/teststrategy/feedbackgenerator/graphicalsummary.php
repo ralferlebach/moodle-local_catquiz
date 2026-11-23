@@ -712,19 +712,40 @@ class graphicalsummary extends feedbackgenerator {
             if (!$attempt) {
                 return $map;
             }
-            $quba = \question_engine::load_questions_usage_by_activity($attempt->uniqueid);
-            foreach ($quba->get_slots() as $slot) {
-                $qa = $quba->get_question_attempt($slot);
-                $question = $qa->get_question();
-                $map[(int) $question->id][] = [
-                    'slot' => (int) $slot,
-                    'questionattemptid' => (int) $qa->get_database_id(),
-                    'name' => (string) $question->name,
-                ];
-            }
+            return self::slot_map_of_usage((int) $attempt->uniqueid);
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    /**
+     * The slots of a question usage by question, with the question attempt and the name of the question version.
+     *
+     * Critical-friend re-audit of 23.11.2026: one query. Loading the usage loaded the definition of every question
+     * (625 answers, cold caches: some 3.700 queries for the result page).
+     *
+     * @param int $usageid
+     * @return array<int, array<int, array{slot: int, questionattemptid: int, name: string}>>
+     */
+    public static function slot_map_of_usage(int $usageid): array {
+        global $DB;
+        $map = [];
+        $records = $DB->get_recordset_sql(
+            'SELECT qa.id, qa.slot, qa.questionid, q.name
+               FROM {question_attempts} qa
+               JOIN {question} q ON q.id = qa.questionid
+              WHERE qa.questionusageid = :usage
+           ORDER BY qa.slot',
+            ['usage' => $usageid]
+        );
+        foreach ($records as $record) {
+            $map[(int) $record->questionid][] = [
+                'slot' => (int) $record->slot,
+                'questionattemptid' => (int) $record->id,
+                'name' => (string) $record->name,
+            ];
+        }
+        $records->close();
         return $map;
     }
 }

@@ -17,6 +17,7 @@
 namespace local_catquiz\local\attempt;
 
 use local_catquiz\catquiz;
+use local_catquiz\local\monitoring\timeline;
 use local_catquiz\local\result\attempt_result_validator;
 use local_catquiz\local\result\personparam_repository;
 use local_catquiz\teststrategy\progress;
@@ -102,8 +103,12 @@ final class attempt_finalizer {
            ended is complete already; this completes one the activity ended (time limit, its own maximum). A
            failure leaves the snapshot as it is: the validator then decides from the measurement state alone. */
         try {
-            $completed = (new \local_catquiz\output\attemptfeedback($adaptiveattemptid, (int) ($catattempt->contextid ?? 0)))
-                ->complete_at_end();
+            // Critical-friend re-audit of 23.11.2026: each part of the end has a span of its own (finalizer:*).
+            $completed = timeline::span(
+                'finalizer:feedback',
+                fn() => (new \local_catquiz\output\attemptfeedback($adaptiveattemptid, (int) ($catattempt->contextid ?? 0)))
+                    ->complete_at_end()
+            );
             if ($completed) {
                 // The row is written back whole below: read it again, or the old snapshot would overwrite the new one.
                 $catattempt = $DB->get_record('local_catquiz_attempts', ['id' => $catattempt->id], '*', MUST_EXIST);
@@ -139,14 +144,14 @@ final class attempt_finalizer {
         // idempotency guard above prevents re-finalisation) and inside the same
         // transaction as the end-time stamp, so the attempt becomes
         // Completed -> Validated -> Persisted atomically.
-        $result = attempt_result_validator::validate($adaptiveattemptid);
+        $result = timeline::span('finalizer:validate', fn() => attempt_result_validator::validate($adaptiveattemptid));
         $contextid = ($catattempt->contextid !== null) ? (int) $catattempt->contextid : null;
-        personparam_repository::save_attempt_result(
+        timeline::span('finalizer:save_result', fn() => personparam_repository::save_attempt_result(
             (int) $catattempt->id,
             (int) $catattempt->userid,
             $contextid,
             $result
-        );
+        ));
 
         // Expose the validity verdict on the adaptivequiz attempt so
         // the completionvalidresult rule can query it. Guarded by a column check
@@ -175,8 +180,10 @@ final class attempt_finalizer {
                     && $DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid])
             ) {
                 try {
-                    $preattempt = progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid)
-                        ->get_preattempt_abilities();
+                    $preattempt = timeline::span(
+                        'finalizer:progress_load',
+                        fn() => progress::load($adaptiveattemptid, 'mod_adaptivequiz', $contextid)->get_preattempt_abilities()
+                    );
                 } catch (\Throwable $e) {
                     $preattempt = [];
                 }
@@ -249,12 +256,15 @@ final class attempt_finalizer {
         // so no listener sees a half-written result; here, and not on the result page, so it
         // happens whether or not anyone ever opens that page. The endtime guard above makes a
         // second finalize() return early, so an attempt is announced once.
-        self::announce_completion($catattempt, $adaptiveattemptid, $finishedat, $result->is_valid());
+        timeline::span(
+            'finalizer:announce',
+            fn() => self::announce_completion($catattempt, $adaptiveattemptid, $finishedat, $result->is_valid())
+        );
 
         // Issue #166: the comparison with the other people of the test, once, with the result - not with every answer.
         try {
             // A span of its own (re-audit "ab #147"): the cost of the comparison under load, apart from the rest of the end.
-            \local_catquiz\local\monitoring\timeline::span(
+            timeline::span(
                 'finalizer:peer_comparison',
                 fn() => \local_catquiz\output\attemptfeedback::peer_comparison_of($adaptiveattemptid, true)
             );
@@ -266,7 +276,7 @@ final class attempt_finalizer {
         // which may never happen. Only scales that route (valid, measured, selected) enrol anyone;
         // an invalid result enrols nobody.
         try {
-            attempt_enrolment::enrol($adaptiveattemptid);
+            timeline::span('finalizer:enrolment', fn() => attempt_enrolment::enrol($adaptiveattemptid));
         } catch (\Throwable $e) {
             debugging('Enrolment after the attempt failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
         }

@@ -2,6 +2,30 @@
 
 ## 1.3.0 (in Arbeit)
 
+- Critical-Friend-Re-Audit vom 23.11.2026 („CATquiz_CriticalFriend_ReAudit_2026-11-23“), Entscheidungen 12–14 vom
+  23.11.2026 (2026111718; Nachweise `doc/critical-friend-re-audit-2026-11-23-nachweise.md` und
+  `doc/evidence/critical-friend-re-audit-2026-11-23/`, nur im ZIP):
+  - **#176 Fall B:** `ci_evidence.py` mit Pflicht-Features, aber ohne `--behat-executed` meldete „All required tests
+    ran …“, obwohl nur Dateien und Tags geprüft waren. Jetzt ist das ein Befund, der Job wird rot. Selbsttest,
+    Zahntest. Gleiche Korrektur im Host (2026111709); `ci-partner-versions.txt` nennt ihn.
+  - **Ergebnisseite ohne N+1:** Der Verlauf lud für seine Slots die ganze Fragennutzung mit jeder Fragendefinition.
+    Bei 625 Antworten und kaltem Cache waren das 3.722 Abfragen und 2,0 s; jetzt eine Abfrage, 86 Abfragen und 0,7 s
+    (`graphicalsummary::slot_map_of_usage()`, `attempt_end_cost_test`).
+  - **Abschluss in Teilen:** Spans für jeden Teil des Finalisers. `benchmark_attempts.php --hostend` beendet den
+    Versuch wie die Aktivität (Fragennutzung, Ergebnis, Bewertung, Event, Finaliser). Gemessen bei 150, 625 und 2.190
+    Antworten.
+  - **Retention fail-closed:**
+    - Unlesbare gespeicherte Daten eines Versuchs halten seinen Progress, die einzige lesbare Quelle (vorher gelöscht).
+    - Ein Progress ohne `responses` wird im Protokoll benannt.
+    - Scheitert das Sichern, wird beides zurückgerollt und im nächsten Lauf wiederholt.
+    - Ein unlesbarer Progress wird weiter gelöscht und protokolliert (Entscheidung 13, bestätigt Entscheidung 10).
+    - Drei neue Tests.
+  - **#159:** Die Herkunft der Parameter in Zeilen aus QUBA ist als bekannte Grenze dokumentiert (Entscheidung 12, so
+    lassen).
+  - **#168-Matrix** alt (2026111710) gegen neu, 25/100/250/625 Antworten (nur Nachweis): Feedback-Schreibmenge
+    86,8 → 4,1 MB; Schritt p95 1.386 → 880 ms; gleiche Fragenfolge, gleiche Endfähigkeit. Der Progress wächst weiter
+    quadratisch (#177).
+
 - Performance-Re-Audit vom 22.11.2026 („CATquiz_Performance_ReAudit_2026-11-22“) (2026111716, 2026111717; Nachweise
   `doc/performance-re-audit-2026-11-22-nachweise.md` und `doc/evidence/performance-re-audit-2026-11-22/`, nur im ZIP):
   - **#159 – kein N+1 in der Anzeige alter Verläufe:** `history_completion` liest die Antworten aus QUBA mit einer

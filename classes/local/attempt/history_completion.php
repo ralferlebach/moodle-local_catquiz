@@ -264,6 +264,10 @@ class history_completion {
      * The items of the given questions in the CAT context, with their active parameters - in one query, and one more
      * for questions whose item is of another version of the same question.
      *
+     * Known limit (decision 12 of 23.11.2026): the active parameters and the scale of today. Whether they held when the
+     * attempt was played cannot be shown - items carry no time stamp, parameter rows are changed in place. In the test
+     * context they do not change. Rows from the progress or the retention carry the values of the attempt itself.
+     *
      * @param int[] $questionids
      * @param int $contextid
      * @return array Question id => record (catscaleid, difficulty, status, usable, scalename).
