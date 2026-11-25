@@ -30,8 +30,6 @@ use local_catquiz\teststrategy\feedbackgenerator\graphicalsummary;
  * @covers \local_catquiz\teststrategy\progress
  * @covers \local_catquiz\teststrategy\feedbackgenerator\graphicalsummary
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(progress::class)]
-#[\PHPUnit\Framework\Attributes\CoversClass(graphicalsummary::class)]
 final class attempt_end_cost_test extends \advanced_testcase {
     /**
      * A progress of $n answered questions: every one in scale 2 and its parent 1, every third also in scale 3, every

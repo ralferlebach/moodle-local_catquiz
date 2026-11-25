@@ -23,6 +23,7 @@
  */
 
 namespace local_catquiz\teststrategy\context\loader;
+
 use local_catquiz\teststrategy\context\contextloaderinterface;
 use local_catquiz\local\model\model_strategy;
 

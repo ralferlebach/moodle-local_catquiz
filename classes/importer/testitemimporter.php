@@ -20,7 +20,6 @@ use local_catquiz\import\csvsettings;
 use local_catquiz\import\fileparser;
 use stdClass;
 
-
 /**
  * Renderable class for the catscalemanagers
  *

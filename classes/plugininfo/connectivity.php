@@ -21,6 +21,7 @@
  * @copyright Georg Maißer, Wunderbyte GmbH 2022
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
 namespace local_catquiz\plugininfo;
 
 use core\plugininfo\base;

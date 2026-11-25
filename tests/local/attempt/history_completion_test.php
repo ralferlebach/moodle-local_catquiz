@@ -31,7 +31,6 @@ use question_engine;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers \local_catquiz\local\attempt\history_completion
  */
-#[\PHPUnit\Framework\Attributes\CoversClass(history_completion::class)]
 final class history_completion_test extends \advanced_testcase {
     /** @var int The CAT context of the items. */
     private int $contextid = 0;

@@ -23,6 +23,7 @@
  */
 
 namespace local_catquiz\local\model;
+
 use ArrayAccess;
 use ArrayIterator;
 use Countable;

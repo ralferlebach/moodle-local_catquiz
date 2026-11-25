@@ -24,6 +24,7 @@
  */
 
 namespace local_catquiz;
+
 /**
  * Models that implement this interface can use the catcalc class to estimate their parameters
  *

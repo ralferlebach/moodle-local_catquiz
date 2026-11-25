@@ -15,6 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace local_catquiz\output;
+
 use core\chart_axis;
 
 defined('MOODLE_INTERNAL') || die();

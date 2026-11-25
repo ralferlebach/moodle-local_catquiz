@@ -104,10 +104,12 @@ class catquiz_base {
             if (!isset($returnarray[$record->userid])) {
                 $returnarray[$record->userid] = [];
             }
-            if (!isset($returnarray[$record->userid]['question'])) { // This is the component.
+            if (!isset($returnarray[$record->userid]['question'])) {
+                // This is the component.
                 $returnarray[$record->userid]['question'] = [];
             }
-            if (!isset($returnarray[$record->userid]['question'][$record->questionid])) { // This is the component.
+            if (!isset($returnarray[$record->userid]['question'][$record->questionid])) {
+                // This is the component.
                 $returnarray[$record->userid]['question'][$record->questionid] = [];
             }
 
