@@ -23,6 +23,7 @@
  */
 
 namespace local_catquiz\event;
+
 use moodle_url;
 
 /**

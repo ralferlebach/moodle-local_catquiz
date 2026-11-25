@@ -82,3 +82,7 @@ tests/playwright/playwright-report/
 # Subplugin folders
 catquizcentralhub/client
 catquizcentralhub/host
+
+# Python
+__pycache__/
+*.pyc

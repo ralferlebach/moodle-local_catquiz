@@ -23,7 +23,7 @@ verifizierten Fixpunkte dieser Umgebung stehen in §0.
 | Moodle-Pfad       | `/home/claude/moodle`                                        |
 | dataroot          | `/home/claude/moodledata`                                    |
 | phpunit_dataroot  | `/home/claude/moodledata_phpu`, `phpunit_prefix=phpu_`       |
-| phpcs / moodle-cs | `/tmp/moodlecs` mit `moodlehq/moodle-cs 3.7.0` (exakt wie CI) |
+| phpcs / moodle-cs | `/tmp/moodlecs`: `squizlabs/php_codesniffer 4.0.4` + `moodlehq/moodle-cs 3.9.2` (wie die CI seit 23.11.2026) |
 | moodle-plugin-ci  | v4 unter `/home/claude/ci` (reproduziert die CI-Checks lokal) |
 | Abhängigkeiten    | mod_adaptivequiz **3.0.0** (ralferlebach `v-3.0`) + Adapter adaptivequizcatmodel_catquiz `v-3.0`; catquizcentralhub_{host,client}; local_wunderbyte_table (main); filter_shortcodes (master) |
 | Locale            | `en_AU.UTF-8` (vom PHPUnit-Init verlangt)                     |
@@ -178,18 +178,29 @@ php -d max_input_vars=5000 admin/cli/upgrade.php --non-interactive
 ```bash
 export COMPOSER_ALLOW_SUPERUSER=1          # im Container läuft man als root
 mkdir -p /tmp/moodlecs && cd /tmp/moodlecs
-composer require --dev moodlehq/moodle-cs:^3.7
+composer require --dev moodlehq/moodle-cs:3.9.2 squizlabs/php_codesniffer:4.0.4 -W
 ```
+
+Die Versionen sind die der CI: `moodle-plugin-ci ^4` zog am 23.11.2026 die Version 4.5.12 und damit
+phpcs 4.0.4 und moodle-cs 3.9.2. Die neuen Regeln (Leerzeile nach namespace-, use- und Docblock-Block;
+kein Kommentar hinter `{`) machten an dem Tag alle Code-Style-Jobs rot, während lokal noch phpcs 3.13.6
+mit moodle-cs 3.7.0 lief und nichts meldete. Zieht die CI eine neue Version, hier nachziehen
+(`grep -E 'moodle-plugin-ci \(|moodle-cs \(|php_codesniffer \(' <Job-Log>`).
 
 **Ohne Registrierung der Standard-Pfade** meldet phpcs nur
 „the 'moodle' coding standard is not installed". Der moodle-Standard baut auf
-PHPCSExtra auf, beide Pfade müssen eingetragen werden:
+PHPCSExtra und PHPCSUtils auf; seit moodle-cs 3.9 liegen die Standards unter `Standards/`:
 
 ```bash
-/tmp/moodlecs/vendor/bin/phpcs --config-set installed_paths \
-    /tmp/moodlecs/vendor/phpcsstandards/phpcsextra,/tmp/moodlecs/vendor/moodlehq/moodle-cs/moodle
-/tmp/moodlecs/vendor/bin/phpcs -i        # Kontrolle: "… and moodle"
+V=/tmp/moodlecs/vendor
+$V/bin/phpcs --config-set installed_paths \
+    $V/moodlehq/moodle-cs/Standards,$V/phpcsstandards/phpcsutils,$V/phpcsstandards/phpcsextra
+$V/bin/phpcs -i        # Kontrolle: "… moodle, moodle-extra, moodle600 …"
 ```
+
+Außerhalb des Moodle-Baums kennt moodle-cs die Moodle-Version nicht und lässt die versionsabhängigen
+Sniffs aus (u. a. `TestCaseCovers`, `LangFilesOrdering`). Die Matrix-Jobs der CI prüfen im Moodle-Baum;
+lokal dafür `--runtime-set moodleBranch 501` (1.3) bzw. `405` (1.2) mitgeben.
 
 Prüfen (Exit 0 = sauber). Die zwei genannten Sniffs werden bewusst ausgeschlossen:
 

@@ -16,7 +16,6 @@
 
 namespace local_catquiz\local\model;
 
-
 /**
  * filter_for_responses() keeps the same items in the same order, with a set of answered ids (issue #170).
  *

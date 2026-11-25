@@ -36,7 +36,6 @@ use local_catquiz\data\dataapi;
 use local_catquiz\data\catscale_structure;
 use context_system;
 
-
 /**
  * External Service for local catquiz.
  *

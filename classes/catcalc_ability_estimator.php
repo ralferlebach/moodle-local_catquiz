@@ -24,6 +24,7 @@
  */
 
 namespace local_catquiz;
+
 /**
  * Models that implement this interface can be used by the catcalc class to estimate the person ability
  *

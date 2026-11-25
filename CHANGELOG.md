@@ -2,6 +2,24 @@
 
 ## 1.3.0 (in Arbeit)
 
+- CI-Werkzeugwechsel vom 23.11.2026 (2026112301): `moodle-plugin-ci ^4` zog 4.5.12 und damit phpcs 4.0.4 und moodle-cs
+  3.9.2. Die Code-Style- und Grunt-Jobs wurden auf beiden Linien rot, ohne dass sich der Code geändert hatte.
+  - **Code-Style:** Leerzeile nach namespace-, use- und Docblock-Block (21 Dateien, phpcbf); Kommentare hinter `{`
+    stehen jetzt als erste Zeile im Block (`fileparser.php`, `catquiz_base.php`, `scaleselector.php`,
+    `item_model_override_selector.php`); `feedback_table_notrecorded` in der Sortierfolge der Sprachdateien. Nur
+    Leerzeilen, Kommentarposition und Reihenfolge, keine Logik.
+  - **Grunt:** `moodle-plugin-ci grunt` kopiert das Plugin weg und danach zurück; das Zurückkopieren scheiterte an den
+    schreibgeschützten Packdateien von `catquizcentralhub/client/.git` („Permission denied“). Ein Schritt vor Grunt gibt
+    nur den `.git`-Verzeichnissen des Plugins Schreibrecht (beide Workflows). Nachgestellt mit Symfony Filesystem aus
+    moodle-plugin-ci 4.5.12 als Nicht-root: ohne den Schritt rot, mit grün.
+  - Lokale Prüfung auf dieselben Versionen umgestellt (`doc/environment-setup.md` §5); `ci-partner-versions.txt` nennt
+    Host und Adapter 2026112301.
+  - `__pycache__/` ist nicht mehr versioniert (war versehentlich im lokalen Commit des Critical-Friend-Pakets, nicht im
+    ZIP und nicht auf GitHub).
+- Nachtrag #161 (Entscheidung 14), nur Dokumentation: Lastabnahme alt gegen neu, Plan `ab`, Pools 2.500 und 5.000, auf
+  5.1/PostgreSQL (1.3) und in der produktionsnahen Zelle 4.5 (1.2). Erfolgreich; Tabellen, Bewertung und Protokoll in
+  `doc/critical-friend-re-audit-2026-11-23-nachweise.md` §7, Belege unter `doc/evidence/…/last-161/` (nur im ZIP).
+
 - Critical-Friend-Re-Audit vom 23.11.2026 („CATquiz_CriticalFriend_ReAudit_2026-11-23“), Entscheidungen 12–14 vom
   23.11.2026 (2026111718; Nachweise `doc/critical-friend-re-audit-2026-11-23-nachweise.md` und
   `doc/evidence/critical-friend-re-audit-2026-11-23/`, nur im ZIP):

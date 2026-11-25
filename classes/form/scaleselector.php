@@ -58,7 +58,8 @@ class scaleselector extends dynamic_form {
         $ancestorslength = count($ancestorids);
         if ($ancestorslength == 0) {
             $id = ["0"]; // Scales go with ID 0.
-        } else { // If it's a subscale, we get the ID of the next ancestor.
+        } else {
+            // If it's a subscale, we get the ID of the next ancestor.
             $id = [$ancestorids[0]];
         }
 

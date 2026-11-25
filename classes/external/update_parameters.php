@@ -34,7 +34,6 @@ use core_external\external_single_structure;
 use local_catquiz\catmodel_info;
 use context_system;
 
-
 /**
  * External Service for local catquiz.
  *

@@ -23,7 +23,6 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-
 namespace local_catquiz\external;
 
 use context_system;
@@ -33,7 +32,6 @@ use core_external\external_value;
 use core_external\external_single_structure;
 use local_catquiz\execute_method_from_webservice;
 use moodle_exception;
-
 
 /**
  * External Service for local wunderbyte_table to (re)load data.

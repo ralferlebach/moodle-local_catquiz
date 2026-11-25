@@ -34,7 +34,6 @@ use local_catquiz\event\feedbacktab_clicked;
 use local_catquiz\local\access\context_resolver;
 use moodle_exception;
 
-
 /**
  * External Service for local catquiz.
  *

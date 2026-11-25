@@ -260,6 +260,9 @@ stellt, nicht nur „kein Absturz".
 
 - `$plugin->release` bleibt fix (aktuell `1.1.4`); nur die interne
   `$plugin->version` wird je Auslieferung erhöht.
+- Die interne Version trägt das Datum des Auslieferungstags: `YYYYMMDDxx`, z. B.
+  `2026112300` (Vorgabe vom 23.11.2026). Am selben Tag zählt `xx` hoch; 1.3 bleibt
+  über 1.2.
 - Zwei ZIPs, oberster Ordner `catquiz/`:
   - `…-release.zip`: via `git archive`, respektiert `.gitattributes`
     (`export-ignore` schließt `.github/`, `doc/`, Tooling aus) – das deploybare

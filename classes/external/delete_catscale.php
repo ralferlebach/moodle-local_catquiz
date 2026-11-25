@@ -35,7 +35,6 @@ use core_external\external_single_structure;
 use local_catquiz\data;
 use moodle_exception;
 
-
 /**
  * External Service for local catquiz.
  *

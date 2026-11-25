@@ -360,7 +360,8 @@ class item_model_override_selector extends dynamic_form {
                 $itemparam = $itemparamsbymodel->offsetGet($model);
                 $modelparams = $itemparam->get_params_array();
                 $modelstatus = $itemparam->get_status();
-            } else { // Set default data if there are no calculated data for the given model.
+            } else {
+                // Set default data if there are no calculated data for the given model.
                 $modelstatus = LOCAL_CATQUIZ_STATUS_NOT_CALCULATED;
             }
             // We make a difference between the status as int and status as localized string.

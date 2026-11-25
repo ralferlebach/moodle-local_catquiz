@@ -15,6 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace local_catquiz\form;
+
 use local_catquiz\local\model\model_item_param_list;
 
 defined('MOODLE_INTERNAL') || die();
