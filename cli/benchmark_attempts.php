@@ -179,9 +179,11 @@ if ($options['setup']) {
         ['root' => $root->id]
     );
     $existing = $DB->count_records('local_catquiz_items', ['contextid' => $contextid]);
+    // Any question of the imported pool names the category the synthetic ones go to (the fixture has no true/false
+    // question; a site restored from a dump with enough items never needed it).
     $template = $DB->get_record_sql(
         "SELECT q.* FROM {question} q JOIN {local_catquiz_items} i ON i.componentid = q.id
-          WHERE i.contextid = :c AND q.qtype = 'truefalse' ORDER BY q.id",
+          WHERE i.contextid = :c ORDER BY q.id",
         ['c' => $contextid],
         IGNORE_MULTIPLE
     );
@@ -223,8 +225,9 @@ if ($options['setup']) {
         $users[] = (int) $user->id;
     }
     $tests = [];
+    // Issue #177 (golden, AK4): all six strategies of the selection.
     $strategies = [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, LOCAL_CATQUIZ_STRATEGY_RELSUBS, LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB,
-        LOCAL_CATQUIZ_STRATEGY_CLASSIC];
+        LOCAL_CATQUIZ_STRATEGY_CLASSIC, LOCAL_CATQUIZ_STRATEGY_FASTEST, LOCAL_CATQUIZ_STRATEGY_ALLSUBS];
     foreach ($strategies as $strategy) {
         $quiz = $generator->get_plugin_generator('mod_adaptivequiz')->create_instance([
             'highestlevel' => 10, 'lowestlevel' => 1, 'standarderror' => 14, 'course' => $course->id,
@@ -288,6 +291,10 @@ if ($options['worker'] < 0) {
         $catids = $DB->get_fieldset_select('local_catquiz_attempts', 'id', "attemptid $insql", $params);
         foreach (array_chunk($catids, 500) as $catchunk) {
             [$insql2, $params2] = $DB->get_in_or_equal($catchunk);
+            if ($DB->get_manager()->table_exists('local_catquiz_progress_steps')) {
+                // Issue #177: the events of the working state, where the version has them.
+                $DB->delete_records_select('local_catquiz_progress_steps', "catattemptid $insql2", $params2);
+            }
             $DB->delete_records_select('local_catquiz_progress', "attemptid $insql2", $params2);
             $DB->delete_records_select('local_catquiz_personparams', "attemptid $insql2", $params2);
         }
@@ -336,6 +343,24 @@ if ($options['worker'] >= 0) {
         mt_srand((int) $options['seed'] * 1000 + $number);
         $trueability = mt_rand(-200, 200) / 100;
         $previousbytes = 0;
+        // Issue #177 (DoD6): the bytes the database writes per step - the write-ahead log of PostgreSQL, the redo log of
+        // MariaDB/MySQL -, all tables; and the events of the working state, where the version has them.
+        $dbwritten = function () use ($DB): ?int {
+            try {
+                if ($DB->get_dbfamily() === 'postgres') {
+                    return (int) $DB->get_field_sql("SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint");
+                }
+                if ($DB->get_dbfamily() === 'mysql') {
+                    $row = $DB->get_record_sql("SHOW GLOBAL STATUS LIKE 'Innodb_os_log_written'");
+                    return $row ? (int) $row->value : null;
+                }
+            } catch (\Throwable $e) {
+                return null;
+            }
+            return null;
+        };
+        $haseventtable = $DB->get_manager()->table_exists('local_catquiz_progress_steps');
+        $lastevent = 0;
         for ($i = 0; $i <= (int) $options['questions']; $i++) {
             if ($options['cold']) {
                 \cache_helper::purge_all();
@@ -347,6 +372,7 @@ if ($options['worker'] >= 0) {
             }
             $record = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], '*', MUST_EXIST);
             $attemptobject = new attempt($quiz, $record->userid);
+            $walbefore = $dbwritten();
             $queries = $DB->perf_get_queries();
             $writes = $DB->perf_get_writes();
             $peer = local_catquiz_benchmark_peers();
@@ -381,6 +407,33 @@ if ($options['worker'] >= 0) {
                   WHERE a.attemptid = ?',
                 [$attemptid]
             );
+            // Issue #177: the head as it is written with every save (JSON and settings), how often it was saved in the step,
+            // and the events the step appended.
+            $walafter = $dbwritten();
+            $head = $DB->get_record_sql(
+                'SELECT p.id, LENGTH(p.json) AS jsonbytes, LENGTH(p.quizsettings) AS settingsbytes, a.id AS catattemptid
+                   FROM {local_catquiz_progress} p
+                   JOIN {local_catquiz_attempts} a ON a.id = p.attemptid
+                  WHERE a.attemptid = ?',
+                [$attemptid]
+            );
+            $saves = 0;
+            foreach (timeline::get_spans() as $span) {
+                if ($span['name'] === 'progress:json_encode') {
+                    $saves++;
+                }
+            }
+            $events = ['n' => 0, 'textbytes' => 0];
+            if ($haseventtable && $head) {
+                $events = (array) $DB->get_record_sql(
+                    'SELECT COUNT(1) AS n, COALESCE(SUM(' . $DB->sql_length('COALESCE(diagnostics, \'\')') . ' + '
+                        . $DB->sql_length('COALESCE(estimatesdelta, \'\')') . '), 0) AS textbytes, MAX(id) AS maxid
+                       FROM {local_catquiz_progress_steps} WHERE catattemptid = ? AND id > ?',
+                    [$head->catattemptid, $lastevent]
+                );
+                $lastevent = max($lastevent, (int) ($events['maxid'] ?? 0));
+            }
+            $headbytes = $head ? (int) $head->jsonbytes + (int) $head->settingsbytes : 0;
             $step = [
                 'attempt' => $number, 'n' => $i + 1, 'wallms' => round($wall, 2), 'cpums' => round($cpu, 2),
                 'sqlms' => round($sql, 2), 'waitms' => round(max(0, $wall - $cpu - $sql), 2),
@@ -389,13 +442,35 @@ if ($options['worker'] >= 0) {
                 'peakkb' => (int) (memory_get_peak_usage() / 1024), 'jsonbytes' => $row ? (int) $row->jsonbytes : 0,
                 'storedbytes' => $bytes, 'writtenbytes' => $bytes > 0 && $bytes !== $previousbytes ? $bytes : 0,
                 'progressbytes' => $progressbytes,
+                'headbytes' => $headbytes, 'progresssaves' => $saves, 'headwritten' => $saves * $headbytes,
+                'events' => (int) $events['n'], 'eventtextbytes' => (int) $events['textbytes'],
+                'debugbytes' => $row ? (int) $row->debugbytes : 0,
+                'walbytes' => $walbefore !== null && $walafter !== null ? $walafter - $walbefore : null,
                 'qid' => (int) ($result[0] ?? 0), 'spans' => array_map(fn($ms) => round($ms, 2), $spans),
             ];
             $previousbytes = $bytes;
+            // Issue #177 (golden, AK4): the estimates after the step - the measure and standard error the activity keeps and
+            // the abilities of the attempt by scale -, read after the measurement of the step.
+            $after = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid], 'measure, standarderror, questionsattempted');
+            $step['measure'] = $after ? (float) $after->measure : null;
+            $step['se'] = $after ? (float) $after->standarderror : null;
+            $step['answered'] = $after ? (int) $after->questionsattempted : null;
+            if ($head) {
+                $step['abilities'] = array_map(
+                    fn($pp) => [(float) $pp->ability, $pp->standarderror === null ? null : (float) $pp->standarderror],
+                    $DB->get_records(
+                        'local_catquiz_personparams',
+                        ['attemptid' => $head->catattemptid],
+                        'catscaleid',
+                        'catscaleid, ability, standarderror'
+                    )
+                );
+            }
             if (empty($result[0])) {
                 $step['stop'] = substr((string) ($result[2] ?? $result[1] ?? ''), 0, 60);
                 timeline::reset();
                 $finishstart = microtime(true);
+                $finishwal = $dbwritten();
                 $peer = local_catquiz_benchmark_peers();
                 $endqueries = $DB->perf_get_queries();
                 $endwrites = $DB->perf_get_writes();
@@ -425,10 +500,21 @@ if ($options['worker'] >= 0) {
                     attempt_finalizer::finalize($attemptid, time(), (string) $step['stop']);
                 }
                 $step['finalisems'] = round((microtime(true) - $finishstart) * 1000, 2);
+                $finishwalafter = $dbwritten();
+                $step['finalisewalbytes'] = $finishwal !== null && $finishwalafter !== null ? $finishwalafter - $finishwal : null;
                 $step['finalisequeries'] = $DB->perf_get_queries() - $endqueries;
                 $step['finalisewrites'] = $DB->perf_get_writes() - $endwrites;
                 $step['finalisepeakkb'] = (int) (memory_get_peak_usage() / 1024);
                 $step['finalisepeerqueries'] = local_catquiz_benchmark_peers() - $peer;
+                // Issue #177 (AK9): the stored data of the ended attempt - the final snapshot and the debug data.
+                $final = $DB->get_record_sql(
+                    'SELECT ' . $DB->sql_length('COALESCE(json, \'\')') . ' AS jsonbytes, '
+                        . $DB->sql_length('COALESCE(debug_info, \'\')') . ' AS debugbytes
+                       FROM {local_catquiz_attempts} WHERE attemptid = ?',
+                    [$attemptid]
+                );
+                $step['finaljsonbytes'] = $final ? (int) $final->jsonbytes : null;
+                $step['finaldebugbytes'] = $final ? (int) $final->debugbytes : null;
                 // Each part of the end on its own (finalizer:*, end:*); the comparison with the other people (#166).
                 $step['endspans'] = [];
                 foreach (timeline::get_spans() as $span) {

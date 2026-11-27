@@ -61,6 +61,13 @@ $definitions = [
         'staticaccelerationsize' => 1,
         'invalidationevents' => ['changesincatcontexts'],
     ],
+    // Issue #177: within a request, the working states known to be current (progress::is_current()) - one read of the
+    // head per attempt and request, not one per load.
+    'progresscurrent' => [
+        'mode' => cache_store::MODE_REQUEST,
+        'simplekeys' => true,
+        'simpledata' => true,
+    ],
     'adaptivequizattempt' => [
         'mode' => cache_store::MODE_SESSION,
         'simplekeys' => true,

@@ -346,9 +346,12 @@ class attemptfeedback implements renderable, templatable {
         );
         $completed = $this->load_data_from_generators($generators, $existingdata, $newdata);
         $completed[self::SCOPE_KEY] = self::SCOPE_END;
-        if (get_config('local_catquiz', 'store_debug_info') && !array_key_exists('debuginfo', $completed)) {
-            // Stored in its own column; an empty one stays empty (catquiz::save_attempt_to_db() writes the key).
-            $completed['debuginfo'] = [];
+        if (get_config('local_catquiz', 'store_debug_info')) {
+            // Issue #177: the rows of the attempt are events of its progress until now; they go to the column here, once.
+            // Without any (debug storage switched on during the attempt), what the snapshot holds; an empty one stays
+            // empty (catquiz::save_attempt_to_db() writes the key).
+            $rows = $progress->get_debug_rows();
+            $completed['debuginfo'] = $rows ?: ($completed['debuginfo'] ?? []);
         }
         return $completed;
     }
@@ -422,6 +425,11 @@ class attemptfeedback implements renderable, templatable {
                 ['attemptid' => $this->attemptid]
             )
         ) {
+            // Issue #177: while the attempt runs, its rows are events of its progress; the column is written at the end.
+            $rows = $this->debug_rows_of_the_progress();
+            if ($rows) {
+                $feedbackdata['debuginfo'] = $rows;
+            }
             return $this->cached($feedbackdata, $writecache);
         }
 
@@ -429,6 +437,22 @@ class attemptfeedback implements renderable, templatable {
         $feedbackdata['debuginfo'] = $debuginfo;
 
         return $this->cached($feedbackdata, $writecache);
+    }
+
+    /**
+     * The rows of the debug information a running attempt keeps in its progress (issue #177), read only; none for an
+     * attempt without a progress.
+     *
+     * @return array
+     */
+    private function debug_rows_of_the_progress(): array {
+        global $DB;
+        $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id((int) $this->attemptid, 'mod_adaptivequiz');
+        if ($catattemptid === null || !$DB->record_exists('local_catquiz_progress', ['attemptid' => $catattemptid])) {
+            return [];
+        }
+        $progress = progress::load_for_reading($catattemptid);
+        return $progress ? $progress->get_debug_rows() : [];
     }
 
     /**

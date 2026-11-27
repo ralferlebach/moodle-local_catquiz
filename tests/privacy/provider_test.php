@@ -92,6 +92,10 @@ final class provider_test extends provider_testcase {
             'userid' => $user->id, 'attemptid' => $catid, 'component' => 'mod_adaptivequiz', 'json' => '{"answers":[1]}',
             'timemodified' => $now,
         ]);
+        // Issue #177: an event of the working state - it goes with the attempt.
+        $DB->insert_record('local_catquiz_progress_steps', (object) [
+            'catattemptid' => $catid, 'seq' => 1, 'eventtype' => 'shown', 'itemid' => 7, 'timecreated' => $now,
+        ]);
         $DB->insert_record('local_catquiz_trace', (object) [
             'adaptiveattemptid' => $hostid, 'userid' => $user->id, 'kind' => 'first_item', 'timecreated' => $now,
         ]);
@@ -129,7 +133,8 @@ final class provider_test extends provider_testcase {
         global $DB;
         return $DB->count_records('local_catquiz_attempts', ['id' => $catid])
             + $DB->count_records('local_catquiz_personparams', ['attemptid' => $catid])
-            + $DB->count_records('local_catquiz_progress', ['attemptid' => $catid]);
+            + $DB->count_records('local_catquiz_progress', ['attemptid' => $catid])
+            + $DB->count_records('local_catquiz_progress_steps', ['catattemptid' => $catid]);
     }
 
     /**
@@ -265,7 +270,7 @@ final class provider_test extends provider_testcase {
 
         $this->assertSame(0, $this->rows_of($mine));
         $this->assertSame(0, $this->rows_of($theirs));
-        $this->assertSame(3, $this->rows_of($elsewhere));
+        $this->assertSame(4, $this->rows_of($elsewhere));
         $this->assertSame(1, $DB->count_records('local_catquiz_trace'), 'Only the trace of the other activity is left.');
         $this->assertTrue($DB->record_exists_select('local_catquiz_personparams', 'attemptid IS NULL'));
     }
@@ -290,8 +295,8 @@ final class provider_test extends provider_testcase {
         ]));
 
         $this->assertSame(0, $this->rows_of($mine));
-        $this->assertSame(3, $this->rows_of($theirs));
-        $this->assertSame(3, $this->rows_of($elsewhere), 'Not approved: the other activity.');
+        $this->assertSame(4, $this->rows_of($theirs));
+        $this->assertSame(4, $this->rows_of($elsewhere), 'Not approved: the other activity.');
         $this->assertFalse($DB->record_exists_select('local_catquiz_personparams', 'attemptid IS NULL'));
         $this->assertFalse($DB->record_exists('local_catquiz_subscriptions', ['userid' => $user->id]));
         $this->assertSame(1, $DB->count_records('local_catquiz_sync_event', ['userid' => 0]), 'Anonymised, kept.');
@@ -310,7 +315,7 @@ final class provider_test extends provider_testcase {
         provider::delete_data_for_users(new approved_userlist($context, 'local_catquiz', [$user->id]));
 
         $this->assertSame(0, $this->rows_of($mine));
-        $this->assertSame(3, $this->rows_of($theirs));
+        $this->assertSame(4, $this->rows_of($theirs));
     }
 
     /**
@@ -323,11 +328,15 @@ final class provider_test extends provider_testcase {
             'userid' => $user->id, 'attemptid' => 999999, 'component' => 'mod_adaptivequiz', 'instanceid' => 999999,
             'timecreated' => time(), 'timemodified' => time(),
         ]);
+        $DB->insert_record('local_catquiz_progress_steps', (object) [
+            'catattemptid' => $catid, 'seq' => 1, 'eventtype' => 'shown', 'timecreated' => time(),
+        ]);
         $usercontext = context_user::instance($user->id);
         $this->assertContains((int) $usercontext->id, array_map('intval', provider::get_contexts_for_userid((int) $user->id)
             ->get_contextids()));
 
         provider::delete_data_for_all_users_in_context($usercontext);
         $this->assertFalse($DB->record_exists('local_catquiz_attempts', ['id' => $catid]));
+        $this->assertFalse($DB->record_exists('local_catquiz_progress_steps', ['catattemptid' => $catid]));
     }
 }

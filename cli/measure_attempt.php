@@ -230,6 +230,7 @@ function run_attempt(int $cmid, stdClass $cm, int $questions, array $answers): a
     $DB->delete_records('adaptivequiz_attempt', ['id' => $attemptid]);
     if ($catattemptid !== null) {
         $DB->delete_records('local_catquiz_personparams', ['attemptid' => $catattemptid]);
+        $DB->delete_records('local_catquiz_progress_steps', ['catattemptid' => $catattemptid]);
         $DB->delete_records('local_catquiz_progress', ['attemptid' => $catattemptid]);
         $DB->delete_records('local_catquiz_attempts', ['id' => $catattemptid]);
     }

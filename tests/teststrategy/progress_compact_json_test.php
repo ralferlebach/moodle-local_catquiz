@@ -19,11 +19,15 @@ namespace local_catquiz\teststrategy;
 use advanced_testcase;
 
 /**
- * The stored progress holds every administered question once (issue #143).
+ * The stored progress holds every administered question once (issue #143) - since issue #177 as one shown event each.
  *
  * playedquestionsbyscale kept the full question again for its scale and every ancestor, lastquestion
  * once more: three to five copies of each question in the JSON written on every answer. Both now
  * refer to the played questions by id. Readers see the same as before; older records still load.
+ *
+ * Issue #177 (A): a played question read back from its event holds what is read of it - id, scale, pilot flag,
+ * active parameters with their difficulty, Fisher information for the root scale, label -, no longer the 38 fields of
+ * the selection. The question handed out last stays in full (the head).
  *
  * @package    local_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -108,8 +112,13 @@ final class progress_compact_json_test extends advanced_testcase {
         foreach ($progress->get_playedquestions(true) as $scaleid => $questions) {
             $byscale[$scaleid] = $ids($questions);
         }
+        // Issue #177 (A): of the played questions, what is read of them.
+        $played = [];
+        foreach ($progress->get_playedquestions() as $id => $question) {
+            $played[(string) $id] = [(string) $question->catscaleid, (bool) $question->is_pilot, (float) $question->difficulty];
+        }
         return [
-            'played' => json_encode($progress->get_playedquestions()),
+            'played' => $played,
             'byscale' => $byscale,
             'last' => json_encode($progress->get_last_question()),
             'productive' => $progress->get_num_answered_productive_questions(),
@@ -149,12 +158,17 @@ final class progress_compact_json_test extends advanced_testcase {
         $loaded = progress::load_for_reading($this->catattemptid);
 
         $this->assertEquals($before, $this->view($loaded));
-        $this->assertSame(progress::FORMAT_COMPACT, $json['progressformat']);
-        $this->assertSame($n, substr_count($this->stored_json(), '"label"'), 'Every question once.');
-        foreach ($json['playedquestionsbyscale'] as $entries) {
-            $this->assertContainsOnly('int', $entries);
-        }
-        $this->assertSame(5000 + $n, $json['lastquestion']);
+        // Issue #177: the head holds the question handed out last, in full, and no list of played questions; every
+        // question is one shown event.
+        $this->assertSame(progress::FORMAT_STEPS, $json['progressformat']);
+        $this->assertArrayNotHasKey('playedquestions', $json);
+        $this->assertSame(1, substr_count($this->stored_json(), '"label"'), 'The last question only.');
+        $this->assertSame(5000 + $n, $json['lastquestion']['id']);
+        global $DB;
+        $this->assertSame($n, $DB->count_records(
+            'local_catquiz_progress_steps',
+            ['catattemptid' => $this->catattemptid, 'eventtype' => progress::EVENT_SHOWN]
+        ));
 
         // Loaded, the entries are the played questions themselves, not copies.
         $played = $loaded->get_playedquestions();
@@ -174,6 +188,7 @@ final class progress_compact_json_test extends advanced_testcase {
         $this->attempt();
         $progress = $this->progress(150, 4);
 
+        // The format of #143 - what jsonSerialize() still gives, for the way back of #177.
         $compact = strlen(json_encode($progress));
         $full = strlen(json_encode(array_merge(
             $progress->jsonSerialize(),
@@ -194,13 +209,15 @@ final class progress_compact_json_test extends advanced_testcase {
         $before = $this->view($progress);
         $progress->save();
 
-        // As the previous version wrote it.
-        $old = array_merge(json_decode($this->stored_json(), true), [
+        // As the version before #143 wrote it: the format of #143 (jsonSerialize()) with full copies.
+        $old = array_merge(json_decode(json_encode($progress), true), [
             'playedquestionsbyscale' => $progress->get_playedquestions(true),
             'lastquestion' => $progress->get_last_question(),
         ]);
         unset($old['progressformat']);
         $DB->set_field('local_catquiz_progress', 'json', json_encode($old), ['attemptid' => $this->catattemptid]);
+        $DB->set_field('local_catquiz_progress', 'lastseq', 0, ['attemptid' => $this->catattemptid]);
+        $DB->delete_records('local_catquiz_progress_steps', ['catattemptid' => $this->catattemptid]);
 
         $this->assertEquals($before, $this->view(progress::load_for_reading($this->catattemptid)));
     }

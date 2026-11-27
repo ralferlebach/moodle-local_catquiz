@@ -253,12 +253,14 @@ final class feedback_scope_test extends advanced_testcase {
      */
     private function answer_history(int $attemptid): array {
         global $DB;
-        $json = $DB->get_field_sql(
-            'SELECT p.json FROM {local_catquiz_progress} p JOIN {local_catquiz_attempts} a ON a.id = p.attemptid
+        $row = $DB->get_record_sql(
+            'SELECT a.id, p.json FROM {local_catquiz_progress} p JOIN {local_catquiz_attempts} a ON a.id = p.attemptid
               WHERE a.attemptid = ?',
             [$attemptid]
         );
-        return json_decode((string) $json, true)['answerhistory'] ?? [];
+        // Issue #177: the history is stored with the events; the stored structure reads either format.
+        $stored = $row ? \local_catquiz\teststrategy\progress::stored_structure((int) $row->id, (string) $row->json) : null;
+        return $stored['answerhistory'] ?? [];
     }
 
     /**

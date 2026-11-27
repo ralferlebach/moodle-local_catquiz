@@ -225,15 +225,8 @@ class graphicalsummary extends feedbackgenerator {
             }
         }
         $added = false;
-        // Performance re-audit of 22.11.2026: the titles of the questions that get a row, in one query - not a
-        // question definition loaded per row (2.368 rows: some 14.000 queries with a cold question cache).
-        $missing = [];
-        foreach ($progress->get_answer_history() as $entry) {
-            if (!isset($have[(string) $entry['q']])) {
-                $missing[] = (int) $entry['q'];
-            }
-        }
-        $this->titles = self::question_titles($missing);
+        // Issue #177 (D): the rows hold no titles, labels or names of scales - render_table() reads them, for all rows at
+        // once, when the table is shown.
         foreach ($progress->get_answer_history() as $entry) {
             $qid = (string) $entry['q'];
             if (isset($have[$qid]) || empty($playedquestions[$qid]) || !isset($responses[$qid])) {
@@ -282,27 +275,22 @@ class graphicalsummary extends feedbackgenerator {
     private function row_of(\stdClass $question, array $response, ?float $abilityafter, array $existingdata): array {
         $new = [];
         $new['id'] = $question->id;
-        $new['questionname'] = $question->label;
-        // The technical CAT item label (questionname) is kept for backward
-        // compatibility; questiontitle carries the real Moodle question title so
-        // the table can show the title as primary and the label as secondary.
-        $new['questiontitle'] = $this->get_question_title((int) $question->id, (string) $question->label);
+        // Issue #177 (D): no label, title or name of the scale in the stored row - texts of the question bank and of the
+        // scales, read when the table is shown (render_table()), as they are then. Rows stored before keep theirs.
         $new['lastresponse'] = round($response['fraction'], self::PRECISION);
         // A pilot item is shown to teachers only and kept out of the chart (decision of 2026-10-14).
         $new['pilot'] = !empty($question->is_pilot);
         // Store the real QUBA slot and question attempt id so the
         // "show question" modal fetches exactly this question attempt instead of
         // reconstructing the slot from the table row index (which is wrong after
-        // reloads, duplicate slots or missing rows). responsesummary carries the
-        // actually given answer. All three are absent for legacy attempts.
+        // reloads, duplicate slots or missing rows). Both are absent for legacy attempts.
+        // Issue #177 (D): the given answer is not stored with the row - it is a text of the question usage, read from
+        // there when the table is shown (render_table()).
         $new['slot'] = $response['slot'] ?? null;
         $new['questionattemptid'] = $response['questionattemptid'] ?? null;
-        $new['responsesummary'] = $response['responsesummary'] ?? null;
-        $new['difficulty'] = $question->difficulty;
+        // Issue #177 (C): a number, whichever way the played question was read (the question bank or an event).
+        $new['difficulty'] = is_numeric($question->difficulty ?? null) ? (float) $question->difficulty : null;
         $new['questionscale'] = $question->catscaleid;
-        $new['questionscale_name'] = catscale::return_catscale_object(
-            $question->catscaleid
-        )->name;
         if (
             property_exists($question, 'fisherinformation')
             && is_float($question->fisherinformation)
@@ -498,6 +486,22 @@ class graphicalsummary extends feedbackgenerator {
         // id were persisted) against the real question usage instead of guessing
         // the slot from the row index. Built once for the whole table.
         $slotmap = $this->build_slot_map_from_quba();
+        // Issue #177 (D): the given answers by question attempt, from the same usage.
+        $summaries = [];
+        foreach ($slotmap as $occurrencesofquestion) {
+            foreach ($occurrencesofquestion as $entry) {
+                $summaries[$entry['questionattemptid']] = $entry['responsesummary'];
+            }
+        }
+        // Issue #177 (D): the texts a row does not hold - the name of the question version its slot used, the label of
+        // the item, the name of the scale - for all rows at once.
+        $versionnames = [];
+        foreach ($slotmap as $occurrencesofquestion) {
+            foreach ($occurrencesofquestion as $entry) {
+                $versionnames[(int) $entry['questionattemptid']] = $entry['name'];
+            }
+        }
+        [$labels, $titles, $scalenames] = self::texts_of_the_rows($data);
         $occurrences = [];
         $number = 0;
         foreach ($data as $index => $values) {
@@ -507,7 +511,8 @@ class graphicalsummary extends feedbackgenerator {
             }
             $slot = $values['slot'] ?? null;
             $questionattemptid = $values['questionattemptid'] ?? null;
-            $resolvedtitle = $values['questiontitle'] ?? null;
+            $resolvedtitle = $values['questiontitle']
+                ?? (is_numeric($questionattemptid) ? ($versionnames[(int) $questionattemptid] ?? null) : null);
             $questionid = isset($values['id']) ? (int) $values['id'] : null;
             if ($questionid !== null && ($slot === null || $questionattemptid === null)) {
                 $occurrence = $occurrences[$questionid] ?? 0;
@@ -558,7 +563,8 @@ class graphicalsummary extends feedbackgenerator {
                     ['class' => 'visually-hidden catquiz-response-verdict']
                 );
 
-                $responsesummary = $values['responsesummary'] ?? null;
+                // A row stored before #177 may hold the given answer; else it is the one of the question usage.
+                $responsesummary = $values['responsesummary'] ?? ($summaries[(int) $questionattemptid] ?? null);
                 if ($responsesummary !== null && $responsesummary !== '') {
                     $answerhtml = format_text(
                         $responsesummary,
@@ -583,8 +589,8 @@ class graphicalsummary extends feedbackgenerator {
             // Question column: the real Moodle question title as primary text and
             // the technical CAT item label as secondary information. Legacy rows
             // without a stored title fall back to the label.
-            $title = (string) ($resolvedtitle ?? $values['questionname']);
-            $itemlabel = (string) $values['questionname'];
+            $itemlabel = (string) ($values['questionname'] ?? ($labels[(int) ($values['id'] ?? 0)] ?? ''));
+            $title = (string) ($resolvedtitle ?? ($titles[(int) ($values['id'] ?? 0)] ?? $itemlabel));
             $questionhtml = html_writer::tag('span', s($title), ['class' => 'catquiz-question-title']);
             if ($itemlabel !== '' && $itemlabel !== $title) {
                 $questionhtml .= html_writer::empty_tag('br')
@@ -618,7 +624,7 @@ class graphicalsummary extends feedbackgenerator {
             }
             $newrow = array_merge($newrow, [
                 $questioncell,
-                $values['questionscale_name'],
+                $values['questionscale_name'] ?? ($scalenames[(int) ($values['questionscale'] ?? 0)] ?? ''),
                 $ispilot ? '' : ($ability !== null ? sprintf('%.2f', $ability) : (!empty($values['source']) ? $notrecorded : '')),
             ]);
 
@@ -652,8 +658,46 @@ class graphicalsummary extends feedbackgenerator {
         );
     }
 
-    /** @var array Titles of the questions by id, read in one query for the rows built at once (load_data()). */
-    private array $titles = [];
+    /**
+     * The texts the rows of the history do not hold themselves (issue #177, D): the label of each item (the idnumber of
+     * its question bank entry), the title of each question and the name of each scale - three queries for the table.
+     *
+     * @param array $rows
+     * @return array [question id => label, question id => title, scale id => name]
+     */
+    private static function texts_of_the_rows(array $rows): array {
+        global $DB;
+        $questionids = [];
+        $scaleids = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            if (!empty($row['id']) && (!isset($row['questionname']) || !isset($row['questiontitle']))) {
+                $questionids[(int) $row['id']] = true;
+            }
+            if (!isset($row['questionscale_name']) && !empty($row['questionscale'])) {
+                $scaleids[(int) $row['questionscale']] = true;
+            }
+        }
+        $labels = [];
+        $titles = [];
+        foreach (array_chunk(array_keys($questionids), 1000) as $chunk) {
+            [$insql, $params] = $DB->get_in_or_equal($chunk);
+            $labels += $DB->get_records_sql_menu(
+                "SELECT qv.questionid, qbe.idnumber
+                   FROM {question_versions} qv
+                   JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+                  WHERE qv.questionid $insql",
+                $params
+            );
+            $titles += self::question_titles($chunk);
+        }
+        $scalenames = [];
+        if ($scaleids) {
+            $scalenames = $DB->get_records_list('local_catquiz_catscales', 'id', array_keys($scaleids), '', 'id, name');
+            $scalenames = array_map(fn($scale) => (string) $scale->name, $scalenames);
+        }
+        return [$labels, $titles, $scalenames];
+    }
 
     /**
      * The titles of the given questions, in one query; a question that is gone is left out (its row keeps the label).
@@ -672,28 +716,6 @@ class graphicalsummary extends feedbackgenerator {
     }
 
     /**
-     * Returns the real Moodle question title for a question id, falling back to
-     * the CAT item label if the question can no longer be loaded.
-     *
-     * @param int $questionid
-     * @param string $fallback
-     * @return string
-     */
-    private function get_question_title(int $questionid, string $fallback): string {
-        if (array_key_exists($questionid, $this->titles)) {
-            $name = (string) $this->titles[$questionid];
-            return $name !== '' ? $name : $fallback;
-        }
-        try {
-            $question = \question_bank::load_question($questionid);
-            $name = $question->name ?? '';
-            return $name !== '' ? $name : $fallback;
-        } catch (\Throwable $e) {
-            return $fallback;
-        }
-    }
-
-    /**
      * Builds a map from question id to its occurrences in this attempt's question
      * usage, each carrying the real slot, question attempt id and title. Legacy
      * graphical-summary rows stored before the slot and question attempt id were
@@ -701,7 +723,7 @@ class graphicalsummary extends feedbackgenerator {
      * rather than by guessing the slot from the table row index. Loaded once per
      * table, so no N+1 usage/DB lookups are issued per row.
      *
-     * @return array<int, array<int, array{slot: int, questionattemptid: int, name: string}>>
+     * @return array<int, array<int, array{slot: int, questionattemptid: int, name: string, responsesummary: ?string}>>
      */
     private function build_slot_map_from_quba(): array {
         global $DB;
@@ -725,13 +747,16 @@ class graphicalsummary extends feedbackgenerator {
      * (625 answers, cold caches: some 3.700 queries for the result page).
      *
      * @param int $usageid
-     * @return array<int, array<int, array{slot: int, questionattemptid: int, name: string}>>
+     * Issue #177 (D): with the response summary the usage keeps for each question attempt - the text the history
+     * shows, read from the usage instead of a copy in the progress.
+     *
+     * @return array<int, array<int, array{slot: int, questionattemptid: int, name: string, responsesummary: ?string}>>
      */
     public static function slot_map_of_usage(int $usageid): array {
         global $DB;
         $map = [];
         $records = $DB->get_recordset_sql(
-            'SELECT qa.id, qa.slot, qa.questionid, q.name
+            'SELECT qa.id, qa.slot, qa.questionid, q.name, qa.responsesummary
                FROM {question_attempts} qa
                JOIN {question} q ON q.id = qa.questionid
               WHERE qa.questionusageid = :usage
@@ -743,6 +768,7 @@ class graphicalsummary extends feedbackgenerator {
                 'slot' => (int) $record->slot,
                 'questionattemptid' => (int) $record->id,
                 'name' => (string) $record->name,
+                'responsesummary' => $record->responsesummary === null ? null : (string) $record->responsesummary,
             ];
         }
         $records->close();

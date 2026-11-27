@@ -31,7 +31,7 @@ $plugin->component = 'local_catquiz';
 // the public webroot - is not verified yet; narrow this again if that work stalls.
 $plugin->supported = [501, 503];
 $plugin->release = '1.3.0';
-$plugin->version = 2026112301;
+$plugin->version = 2026112701;
 $plugin->requires = 2025100600;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [
@@ -42,5 +42,6 @@ $plugin->dependencies = [
     // Since 19.11.2026 the triple of this delivery: host with the switch of the request timing (host #17),
     // adapter with its callback, the stop matrix and the link-function goldens (adapter #12, host #25).
     'mod_adaptivequiz' => 2026111703,
-    'adaptivequizcatmodel_catquiz' => 2026111707,
+    // Since 27.11.2026 (#177): the adapter that deletes the events of the working state with their head.
+    'adaptivequizcatmodel_catquiz' => 2026112701,
 ];

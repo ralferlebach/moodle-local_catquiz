@@ -359,6 +359,31 @@ liest, prüft je nach Timing die Seite vor dem Absenden (sporadisch rot, im Reru
 `catquiz_id_namespaces.feature`). Vor dem Klick die alte Seite markieren (`window.<marker> = true`) und warten,
 bis der Marker verschwunden und die neue Seite fertig ist; ohne Seitenwechsel fehlschlagen.
 
+## 6a. Messen von Schreiblast und Golden (#177, 27.11.2026)
+
+- **DB-Schreibbytes isoliert messen:**
+  - Das WAL von PostgreSQL ist clusterweit. Laufen parallel PHPUnit-Suiten auf demselben Cluster, zählen deren
+    Schreibvorgänge mit.
+  - Benchmarks deshalb auf einem eigenen Cluster fahren:
+    - `pg_createcluster 16 bench -p 5433 --start`;
+    - Site über `fresh_site_bench.sh`.
+  - Auf MariaDB ist `Innodb_os_log_written` je Server; der Harness hat einen eigenen.
+- **Golden heißt: gleicher Datenbankstand.**
+  - Die Auswahl hängt vom Zustand des Pools ab: Item-Statistik, frühere Versuche der Person, Fähigkeiten.
+  - Zwei Läufe hintereinander auf derselben Site sind darum nicht vergleichbar, auch nicht mit demselben Code.
+  - Jeder Lauf startet von der zurückgespielten Basis:
+    - PostgreSQL: `pg_dump -Fc` und `pg_restore < datei`, über stdin, weil der Benutzer `postgres` den
+      Scratchpad nicht lesen darf;
+    - MariaDB: `bench2500.sql`;
+    - dazu immer ein Kontrolllauf alt gegen alt.
+  - Am 27.11. war die Kontrolle bitgleich mit neu. Der erste Altlauf wich ab Schritt 376 ab, obwohl der Code gleich
+    war. Ohne Kontrolle wäre das als Regression gelesen worden.
+- **Was der Dump nicht kennt, bleibt:** Eine neue Tabelle (hier `local_catquiz_progress_steps`) übersteht das
+  Zurückspielen eines älteren Dumps samt Zeilen. Vor dem Lauf `DROP TABLE IF EXISTS`; das Upgrade legt sie neu an.
+- **Lange Läufe schreiben ihre Ergebnisse stückweise.** Die erste MariaDB-Simulation bis 10.000 Antworten brach bei
+  rund 9.000 ab, am `max_allowed_packet` des Altformats, und verlor dabei alle Längen. Die Simulation schreibt
+  deshalb nach jeder Länge.
+
 ## 7. Checkliste vor Auslieferung
 
 1. Alle 7 Modell-Suiten grün (erwartete Test-/Skip-Zahlen unverändert).

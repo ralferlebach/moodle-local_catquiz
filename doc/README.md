@@ -55,6 +55,8 @@ Zwei Arten von Dokumenten:
   #177-Schreiblast gemessen. Belege unter `evidence/performance-re-audit-2026-11-22/`.
 - **issue-177-feldinventur.md** – #177 Teil A: welche Felder des Progress gelesen werden und wohin sie im neuen Modell
   gehen.
+- **issue-177-datenmodell.md** – #177: Kopf fester Größe und Ereignistabelle, ID-Domänen, Schreiben/Lesen, Texte, Abschluss und Retention, Upgrade/Konversion/Rückweg (CLI), Privacy/Backup, Grenzen (Sitzungs-Cache).
+- **issue-177-nachweise.md** – #177: AK/DoD-Stand, Engine-Läufe 625 Antworten (5.1/PG, 4.5/MariaDB), Persistenz-Simulation bis 10.000, Golden sechs Strategien, Tests und Zahntests, Befunde; Belege in `evidence/issue-177/` (nur 1.3-Paket).
 - **re-audit-2026-11-22-nacharbeit.md** – Re-Audit vom 22.11.2026, Antwort vom 22./23.11.2026: CI-Abgleich der sechs
   Commits (Partnerstände, Zeilenfolge der Install-Matrix), #159 Altdaten des Verlaufs, #168 Messmatrix, #174 sechs
   Strategien, Host #25 DoD5, #176-Randfälle. Belege unter `evidence/re-audit-2026-11-22/`.

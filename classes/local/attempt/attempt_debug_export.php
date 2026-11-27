@@ -127,9 +127,18 @@ final class attempt_debug_export {
             'schema' => self::SCHEMA,
             'snapshot' => self::decode($catattempt->json ?? null),
             'snapshottime' => (int) $catattempt->timemodified,
-            'debuginfo' => self::decode($catattempt->debug_info ?? null),
+            // Issue #177: a running attempt keeps its rows in the events of its progress; the column is written at its end.
+            'debuginfo' => self::decode($catattempt->debug_info ?? null)
+                ?? ($progress ? (\local_catquiz\teststrategy\progress::stored_structure(
+                    (int) $progress->attemptid,
+                    (string) $progress->json
+                )['debugrows'] ?? null) : null),
             'progressstate' => $progress ? self::PROGRESS_PRESENT : self::PROGRESS_ABSENT,
-            'progress' => $progress ? self::decode($progress->json) : null,
+            // Issue #177: in either format, the played questions and responses of the steps included.
+            'progress' => $progress
+                ? (\local_catquiz\teststrategy\progress::stored_structure((int) $progress->attemptid, (string) $progress->json)
+                    ?? self::decode($progress->json))
+                : null,
             'progresstime' => $progress ? (int) $progress->timemodified : null,
             'foreignprogressrows' => $foreign,
             'administrations' => array_values(administration_history::for_attempt($hostattemptid)),

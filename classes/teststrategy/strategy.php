@@ -545,6 +545,11 @@ abstract class strategy {
      * @return void
      */
     private function record_answer_state(): void {
+        // Issue #177 (C): the standard errors after the answer go with the estimates the events keep - also when no
+        // feedback is due; they do not change on a reload, so nothing is stored then.
+        if (isset($this->context['se']) && is_array($this->context['se'])) {
+            $this->progress->record_standard_errors($this->context['se']);
+        }
         if (getenv('CATQUIZ_TESTING_SKIP_FEEDBACK') || !$this->feedback_is_due()) {
             return;
         }

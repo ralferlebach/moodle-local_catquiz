@@ -453,6 +453,8 @@ final class historical_feedback_cleanup_test extends advanced_testcase {
      */
     private function remove_rows(int $catattemptid, array $indexes): array {
         global $DB;
+        // Old data are data of the format before #177: the working state goes back to it first (the way back of #177).
+        \local_catquiz\local\attempt\progress_steps_maintenance::rollback([$catattemptid], true);
         $json = json_decode((string) $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), true);
         $rows = $json['graphicalsummary_data'];
         $count = count($rows);
@@ -481,6 +483,27 @@ final class historical_feedback_cleanup_test extends advanced_testcase {
     }
 
     /**
+     * The label a row of the history is shown with: the one it holds (rows before #177), else the idnumber of the entry
+     * of its question in the question bank, as the page reads it (#177, D: the rows hold no texts).
+     *
+     * @param array $row
+     * @return string
+     */
+    private function label(array $row): string {
+        global $DB;
+        if (isset($row['questionname'])) {
+            return (string) $row['questionname'];
+        }
+        return (string) $DB->get_field_sql(
+            'SELECT qbe.idnumber
+               FROM {question_versions} qv
+               JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+              WHERE qv.questionid = ?',
+            [(int) $row['id']]
+        );
+    }
+
+    /**
      * The rows of the history table of a section, as text per row.
      *
      * @param string $section The text of the section.
@@ -489,7 +512,7 @@ final class historical_feedback_cleanup_test extends advanced_testcase {
      */
     private function assert_rows_shown(string $section, array $rows): void {
         foreach ($rows as $row) {
-            $this->assertStringContainsString((string) $row['questionname'], $section, 'The answer is shown.');
+            $this->assertStringContainsString($this->label($row), $section, 'The answer is shown.');
         }
     }
 
@@ -548,8 +571,8 @@ final class historical_feedback_cleanup_test extends advanced_testcase {
         $this->assert_rows_shown($after['student/graphicalsummary'], $removed);
         $this->assertSame(2, substr_count($after['student/graphicalsummary'], 'Not recorded'));
         // The order of the slots: the first answer is the first row again.
-        $first = (string) $removed[0]['questionname'];
-        $second = (string) $removed[1]['questionname'];
+        $first = $this->label($removed[0]);
+        $second = $this->label($removed[1]);
         $order = fn(string $text) => strpos($text, $first) < strpos($text, $second);
         $this->assertSame($order($full['student/graphicalsummary']), $order($after['student/graphicalsummary']));
         $this->assertSame($json, $DB->get_field('local_catquiz_attempts', 'json', ['id' => $catattemptid]), 'Read only.');

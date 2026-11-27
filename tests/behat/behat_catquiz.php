@@ -2063,11 +2063,17 @@ JS;
             $fail('Played questions and the question usage differ: ' . json_encode([$ids, $asked]));
         }
         foreach ($played as $questionid => $question) {
-            $item = $DB->get_record('local_catquiz_items', ['id' => $question->itemid]);
+            // Issue #177: a played question holds what the code reads of it - its scale and the parameters it was
+            // played with (activeparamid) -, not the id of its item row.
+            $item = $DB->get_record(
+                'local_catquiz_items',
+                ['componentid' => $questionid, 'contextid' => $contextid, 'catscaleid' => $question->catscaleid]
+            );
             if (!$item || (int) $item->contextid !== $contextid || (int) $item->componentid !== (int) $questionid) {
                 $fail("Question $questionid was played with an item of another context.");
             }
-            $param = $item->activeparamid ? $DB->get_record('local_catquiz_itemparams', ['id' => $item->activeparamid]) : null;
+            $paramid = !empty($question->activeparamid) ? (int) $question->activeparamid : (int) $item->activeparamid;
+            $param = $paramid ? $DB->get_record('local_catquiz_itemparams', ['id' => $paramid]) : null;
             if (!$param || (int) $param->itemid !== (int) $item->id || (int) $param->contextid !== $contextid) {
                 $fail("Question $questionid has no active parameters of its item in $contextname.");
             }
@@ -2996,6 +3002,20 @@ JS;
         }
         $texts = ['attempt' => (string) $catattempt->json,
             'progress' => (string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattempt->id])];
+        // Issue #177: the estimates and diagnostics of the events of the working state, where the version has them.
+        if ($DB->get_manager()->table_exists('local_catquiz_progress_steps')) {
+            foreach (
+                $DB->get_records(
+                    'local_catquiz_progress_steps',
+                    ['catattemptid' => $catattempt->id],
+                    'seq',
+                    'id, seq, estimatesdelta, diagnostics'
+                ) as $event
+            ) {
+                $texts["event {$event->seq} estimates"] = (string) $event->estimatesdelta;
+                $texts["event {$event->seq} diagnostics"] = (string) $event->diagnostics;
+            }
+        }
         foreach ($texts as $where => $text) {
             if (preg_match('/\b(NAN|-?INF)\b/i', $text, $m)) {
                 $problems[] = "$where holds $m[0]";
