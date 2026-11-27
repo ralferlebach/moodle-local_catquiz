@@ -226,6 +226,43 @@ final class progress_events_test extends advanced_testcase {
     }
 
     /**
+     * A question handed out in a new slot of the usage that fails there, as the host and the strategy leave it: given
+     * up (finished without an answer) or, after a reload past the time limit, answered wrong by
+     * catquiz::mark_last_question_failed(). The usage is read again afterwards.
+     *
+     * @param int $number
+     * @param bool $reload true: the strategy path (reload past the time limit), false: given up
+     * @return int the slot
+     */
+    private function fail_in_usage(int $number, bool $reload): int {
+        $slot = $this->quba->add_question(\question_bank::load_question($this->questions[$number]));
+        $this->quba->start_question($slot);
+        if (!$reload) {
+            $this->quba->finish_question($slot);
+        }
+        \question_engine::save_questions_usage_by_activity($this->quba);
+        if ($reload) {
+            \local_catquiz\catquiz::mark_last_question_failed((int) $this->quba->get_id());
+        }
+        $this->quba = \question_engine::load_questions_usage_by_activity($this->quba->get_id());
+        return $slot;
+    }
+
+    /**
+     * The final step of a slot of the usage.
+     *
+     * @param int $slot
+     * @return int
+     */
+    private function step_of(int $slot): int {
+        global $DB;
+        return (int) $DB->get_field_sql(
+            'SELECT MAX(id) FROM {question_attempt_steps} WHERE questionattemptid = ?',
+            [$this->quba->get_question_attempt($slot)->get_database_id()]
+        );
+    }
+
+    /**
      * Head and events give back what the code read before - after the cache is gone, and after a question was handed
      * out again (a reload adds it once more). RED before: the head of fixed size holds no played question, no response.
      */
@@ -523,8 +560,9 @@ final class progress_events_test extends advanced_testcase {
         $progress->mark_lastquestion_failed();
         $progress->save();
 
-        // Question 1 is handed out again and fails (strategy: the page was reloaded).
+        // Question 1 is handed out again in a new slot and fails there (strategy: the page was reloaded).
         $progress->add_playedquestion($this->question(1));
+        $this->fail_in_usage(1, true);
         $progress->mark_lastquestion_failed();
         $progress->save();
 
@@ -559,6 +597,88 @@ final class progress_events_test extends advanced_testcase {
             'catattemptid = ? AND eventtype = ? AND itemid = ?',
             [$this->catattemptid, progress::EVENT_GAVEUP, $this->questions[1]]
         ));
+    }
+
+    /**
+     * Re-audit 27.11.2026 evening (#177 P0): a failure is identified by the step of the usage it left - the gave-up
+     * step, or the step catquiz::mark_last_question_failed() writes - and taken in once: called twice, again after a
+     * crash before the save of the CAT attempt, and once more when the regular path takes in the same step. A failure
+     * without a step of the usage gets the key "failed:<question>:<latest slot>"; no step is made up. Exact rows.
+     * RED before: the failure had no identity - a second call logged a later response, and the regular path took the
+     * gave-up step in once more as a later response.
+     */
+    public function test_a_failure_is_known_by_its_step_and_taken_in_once(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->attempt(3);
+        $progress = $this->load();
+        $this->answer($progress, 1, true);
+
+        // Question 2 is handed out and given up in the usage; the failure is taken in twice, saved.
+        $progress->add_playedquestion($this->question(2))->save();
+        $slot2 = $this->fail_in_usage(2, false);
+        $progress->mark_lastquestion_failed()->mark_lastquestion_failed()->save();
+        // A second request takes the same failure in and crashes before the CAT attempt is saved.
+        $this->forget();
+        $this->load()->mark_lastquestion_failed();
+        $this->forget();
+        // The next request: the regular path sees the gave-up step as the last response, the strategy marks again.
+        $progress = $this->load();
+        $progress->update_cached_responses()->mark_lastquestion_failed()->save();
+
+        // Question 1 is handed out again in slot 3, the page is reloaded past the time limit: twice, and after a reload.
+        $progress->add_playedquestion($this->question(1))->save();
+        $slot3 = $this->fail_in_usage(1, true);
+        $progress->mark_lastquestion_failed()->mark_lastquestion_failed()->save();
+        $this->forget();
+        $progress = $this->load();
+        $progress->mark_lastquestion_failed()->save();
+
+        // Question 3 fails without a step of the usage (no slot): a key, no step.
+        $progress->add_playedquestion($this->question(3));
+        $progress->mark_lastquestion_failed()->mark_lastquestion_failed()->save();
+        $this->forget();
+        $progress = $this->load();
+        $progress->mark_lastquestion_failed()->save();
+
+        $usage = (int) $this->quba->get_id();
+        $qa = fn(int $slot) => (int) $this->quba->get_question_attempt($slot)->get_database_id();
+        $rows = array_map(function ($e) {
+            $r = json_decode((string) $e->diagnostics, true)['r'] ?? [];
+            return [
+                $e->eventtype, (int) $e->itemid, $e->questionusageid === null ? null : (int) $e->questionusageid,
+                $e->slot === null ? null : (int) $e->slot,
+                $e->questionattemptid === null ? null : (int) $e->questionattemptid,
+                $e->questionattemptstepid === null ? null : (int) $e->questionattemptstepid,
+                (float) $e->fraction, $r['failurekey'] ?? null,
+            ];
+        }, array_values(array_filter(
+            $this->events(),
+            fn($e) => in_array($e->eventtype, [progress::EVENT_ANSWER, progress::EVENT_GAVEUP, progress::EVENT_LATER], true)
+        )));
+        $this->assertSame([
+            [progress::EVENT_ANSWER, $this->questions[1], $usage, 1, $qa(1), $this->step_of(1), 1.0, null],
+            [progress::EVENT_ANSWER, $this->questions[2], $usage, $slot2, $qa($slot2), $this->step_of($slot2), 0.0, null],
+            [progress::EVENT_LATER, $this->questions[1], $usage, $slot3, $qa($slot3), $this->step_of($slot3), 0.0, null],
+            [progress::EVENT_ANSWER, $this->questions[3], $usage, null, null, null, 0.0, 'failed:' . $this->questions[3] . ':0'],
+        ], $rows);
+
+        $this->forget();
+        $progress = $this->load();
+        $this->assertSame(3, $progress->get_num_answered_questions());
+        $this->assertEquals(1.0, (float) $progress->get_responses()[$this->questions[1]]['fraction'], 'The first answer counts.');
+        $this->assertCount(1, $progress->get_later_responses());
+        $this->assertSame([], array_filter(
+            progress_steps_maintenance::check([$this->catattemptid])['findings'],
+            fn($v, $k) => $v && in_array($k, progress_steps_maintenance::ERRORS, true),
+            ARRAY_FILTER_USE_BOTH
+        ));
+        $this->assertSame(0, $DB->count_records_select(
+            'local_catquiz_progress_steps',
+            'catattemptid = ? AND questionattemptstepid IS NOT NULL AND questionattemptstepid NOT IN
+                (SELECT id FROM {question_attempt_steps})',
+            [$this->catattemptid]
+        ), 'Every step named in the events is a step of the usage.');
     }
 
     /**
