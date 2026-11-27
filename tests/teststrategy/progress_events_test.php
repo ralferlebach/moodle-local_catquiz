@@ -504,11 +504,12 @@ final class progress_events_test extends advanced_testcase {
     }
 
     /**
-     * Contract (DoD2): a question given up is stored as a gave-up event of its response; an answer changed afterwards
-     * (mark_lastquestion_failed()) as a new event of the same question - the later one counts on reading, nothing is
-     * counted twice. RED before: the head held the responses, and a changed one was found only in the whole JSON.
+     * Contract (DoD2, decision 8 of 21.11.2026): a question given up is stored as a gave-up event of its response. A
+     * question answered before and given up when it is handed out again (a reload, a technical duplicate of the host)
+     * is logged as a later event - the first processed answer counts, also after reading head and events again.
+     * RED before (27.11.2026): mark_lastquestion_failed() overwrote the first answer, which then counted as wrong.
      */
-    public function test_a_given_up_and_a_changed_answer_are_events_of_their_own(): void {
+    public function test_a_given_up_question_and_a_later_failure_of_an_answered_one(): void {
         global $DB;
         $this->resetAfterTest();
         $this->attempt(3);
@@ -522,7 +523,7 @@ final class progress_events_test extends advanced_testcase {
         $progress->mark_lastquestion_failed();
         $progress->save();
 
-        // Question 1 is marked failed afterwards (a changed answer of the same question).
+        // Question 1 is handed out again and fails (strategy: the page was reloaded).
         $progress->add_playedquestion($this->question(1));
         $progress->mark_lastquestion_failed();
         $progress->save();
@@ -534,22 +535,151 @@ final class progress_events_test extends advanced_testcase {
         $this->assertSame([
             [progress::EVENT_ANSWER, $this->questions[1]],
             [progress::EVENT_GAVEUP, $this->questions[2]],
-            [progress::EVENT_ANSWER, $this->questions[1]],
+            [progress::EVENT_LATER, $this->questions[1]],
         ], $types);
 
-        $this->forget();
-        $loaded = $this->load();
-        $responses = $loaded->get_responses();
-        $this->assertCount(2, $responses);
-        $this->assertEquals(0.0, (float) $responses[$this->questions[1]]['fraction']);
-        $this->assertEquals(0.0, (float) $responses[$this->questions[2]]['fraction']);
-        $this->assertSame([(string) $this->questions[2]], array_map('strval', $gaveup->getValue($loaded)));
-        $this->assertSame(2, $loaded->get_num_answered_questions());
+        foreach ([false, true] as $cold) {
+            if ($cold) {
+                $this->forget();
+                $progress = $this->load();
+            }
+            $responses = $progress->get_responses();
+            $this->assertCount(2, $responses);
+            $this->assertEquals(1.0, (float) $responses[$this->questions[1]]['fraction'], 'The first answer counts.');
+            $this->assertEquals(0.0, (float) $responses[$this->questions[2]]['fraction']);
+            $later = $progress->get_later_responses();
+            $this->assertCount(1, $later);
+            $this->assertSame((string) $this->questions[1], (string) $later[0]['questionid']);
+            $this->assertEquals(0.0, (float) $later[0]['fraction']);
+            $this->assertSame([(string) $this->questions[2]], array_map('strval', $gaveup->getValue($progress)));
+            $this->assertSame(2, $progress->get_num_answered_questions());
+        }
         $this->assertSame(0, (int) $DB->count_records_select(
             'local_catquiz_progress_steps',
             'catattemptid = ? AND eventtype = ? AND itemid = ?',
             [$this->catattemptid, progress::EVENT_GAVEUP, $this->questions[1]]
         ));
+    }
+
+    /**
+     * P0 of the re-audit of 27.11.2026 (#177 AK3/DoD2): the same question in two slots of the usage - the host hands a
+     * question named again out once more (technical duplicate) - with different fractions. Both answers stay apart with
+     * their identities of the usage, also after reading head and events again; the first counts (decision 8), the
+     * second is logged. RED before: the second answer was dropped without a trace (the response was known by the id
+     * of the question).
+     */
+    public function test_the_same_question_in_two_slots_keeps_both_answers_apart(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->attempt(3);
+        $progress = $this->load();
+        $this->answer($progress, 1, true);
+        $this->answer($progress, 2, false);
+        $this->answer($progress, 1, false);
+
+        $step = fn(int $slot) => (int) $DB->get_field_sql(
+            'SELECT MAX(id) FROM {question_attempt_steps} WHERE questionattemptid = ?',
+            [$this->quba->get_question_attempt($slot)->get_database_id()]
+        );
+        $rows = array_map(fn($e) => [
+            $e->eventtype, (int) $e->itemid, (int) $e->questionusageid, (int) $e->slot, (int) $e->questionattemptid,
+            (int) $e->questionattemptstepid, (float) $e->fraction, (int) $e->catattemptid,
+        ], array_values(array_filter(
+            $this->events(),
+            fn($e) => in_array($e->eventtype, [progress::EVENT_ANSWER, progress::EVENT_LATER], true)
+        )));
+        $usage = (int) $this->quba->get_id();
+        $qa = fn(int $slot) => (int) $this->quba->get_question_attempt($slot)->get_database_id();
+        $this->assertSame([
+            [progress::EVENT_ANSWER, $this->questions[1], $usage, 1, $qa(1), $step(1), 1.0, $this->catattemptid],
+            [progress::EVENT_ANSWER, $this->questions[2], $usage, 2, $qa(2), $step(2), 0.0, $this->catattemptid],
+            [progress::EVENT_LATER, $this->questions[1], $usage, 3, $qa(3), $step(3), 0.0, $this->catattemptid],
+        ], $rows);
+
+        foreach ([false, true] as $cold) {
+            if ($cold) {
+                $this->forget();
+                $progress = $this->load();
+            }
+            $responses = $progress->get_responses();
+            $this->assertSame(
+                [(string) $this->questions[1], (string) $this->questions[2]],
+                array_map('strval', array_keys($responses))
+            );
+            $this->assertEquals(1.0, (float) $responses[$this->questions[1]]['fraction']);
+            $this->assertSame(1, (int) $responses[$this->questions[1]]['slot']);
+            $later = $progress->get_later_responses();
+            $this->assertCount(1, $later);
+            $this->assertSame(3, (int) $later[0]['slot']);
+            $this->assertSame($qa(3), (int) $later[0]['questionattemptid']);
+            $this->assertSame($step(3), (int) $later[0]['id']);
+            $this->assertEquals(0.0, (float) $later[0]['fraction']);
+            $this->assertSame(2, $progress->get_num_answered_questions(), 'Each question counts once.');
+            $this->assertSame(2, $progress->get_num_answered_productive_questions($this->root));
+            // Taking in the responses again changes nothing: the step is known.
+            $progress->update_cached_responses()->save();
+            $this->assertCount(3, array_filter(
+                $this->events(),
+                fn($e) => in_array($e->eventtype, [progress::EVENT_ANSWER, progress::EVENT_LATER], true)
+            ));
+        }
+        // The readers of the stored structure see the later answer as well (export, retention).
+        $stored = progress::stored_structure($this->catattemptid);
+        $this->assertCount(1, $stored['laterresponses']);
+        $this->assertSame(3, (int) $stored['laterresponses'][0]['slot']);
+
+        // The check counts the later event (head and events agree); the way back keeps it, the next save converts it
+        // again, once.
+        $check = progress_steps_maintenance::check([$this->catattemptid]);
+        foreach (progress_steps_maintenance::ERRORS as $error) {
+            $this->assertArrayNotHasKey($error, array_filter($check['findings']), $error);
+        }
+        $this->assertSame([], progress_steps_maintenance::rollback([$this->catattemptid], true)['failed']);
+        $old = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $this->catattemptid]), true);
+        $this->assertSame(3, (int) $old['laterresponses'][0]['slot']);
+        $this->forget();
+        $this->load()->save();
+        $this->assertSame(1, $DB->count_records(
+            'local_catquiz_progress_steps',
+            ['catattemptid' => $this->catattemptid, 'eventtype' => progress::EVENT_LATER]
+        ));
+        $this->forget();
+        $this->assertSame(3, (int) $this->load()->get_later_responses()[0]['slot']);
+    }
+
+    /**
+     * A later step of the same slot - a manual grade of the answer - is logged with its step and does not change the
+     * answer that counts; the same step taken in twice (a second submit, a reload, a second request after a crash
+     * before the save of the CAT attempt) is one event. RED before: the changed step was not recorded at all.
+     */
+    public function test_a_changed_step_of_a_slot_is_logged_and_a_step_is_taken_in_once(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->attempt(2);
+        $progress = $this->load();
+        $this->answer($progress, 1, true);
+
+        // The answer is graded by hand afterwards: a new step of slot 1 (a finished state).
+        $this->quba->manual_grade(1, 'Teacher', 0.25, FORMAT_HTML);
+        \question_engine::save_questions_usage_by_activity($this->quba);
+        // A crash after the step of the usage, before the CAT attempt is saved: the object of the request is lost.
+        $progress->update_cached_responses();
+        $this->forget();
+        $progress = $this->load();
+        $progress->update_cached_responses()->save();
+        $progress->update_cached_responses()->save();
+
+        $later = array_values(array_filter($this->events(), fn($e) => $e->eventtype === progress::EVENT_LATER));
+        $this->assertCount(1, $later);
+        $this->assertSame(1, (int) $later[0]->slot);
+        $this->assertEquals(0.25, (float) $later[0]->originalfraction);
+        $answers = array_values(array_filter($this->events(), fn($e) => $e->eventtype === progress::EVENT_ANSWER));
+        $this->assertCount(1, $answers);
+        $this->assertNotSame((int) $answers[0]->questionattemptstepid, (int) $later[0]->questionattemptstepid);
+        $this->forget();
+        $loaded = $this->load();
+        $this->assertEquals(1.0, (float) $loaded->get_responses()[$this->questions[1]]['fraction']);
+        $this->assertCount(1, $loaded->get_later_responses());
     }
 
     /**
@@ -588,6 +718,56 @@ final class progress_events_test extends advanced_testcase {
             [...progress_steps_maintenance::ERRORS, progress_steps_maintenance::PARAMS_GONE],
             []
         )], progress_steps_maintenance::check([$this->catattemptid]));
+    }
+
+    /**
+     * A conversion that was interrupted - events written, the head not switched (a crash outside the transaction, a
+     * copy of the database taken in between) - leaves the format before standing; the next save converts it once,
+     * without the events of the interrupted run twice. Reading converts nothing (re-audit 27.11.2026, AK5).
+     */
+    public function test_an_interrupted_conversion_is_done_once_by_the_next_save(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->attempt(4);
+        $progress = $this->load();
+        for ($i = 1; $i <= 3; $i++) {
+            $this->answer($progress, $i, $i !== 2);
+        }
+        $expected = $this->view($progress);
+        $events = $this->events();
+        // The state an interrupted conversion leaves: the format before in the head, its events (in part) present.
+        $DB->set_field('local_catquiz_progress', 'json', json_encode($progress), ['attemptid' => $this->catattemptid]);
+        $DB->set_field('local_catquiz_progress', 'lastseq', 0, ['attemptid' => $this->catattemptid]);
+        $DB->delete_records_select(
+            'local_catquiz_progress_steps',
+            'catattemptid = ? AND seq > ?',
+            [$this->catattemptid, 2]
+        );
+        $this->forget();
+        $this->assertEquals($expected, $this->view(progress::load_for_reading($this->catattemptid)), 'Read as before.');
+
+        $this->load()->save();
+        // The same events, each once (a conversion writes the lists one after the other, not interleaved as they came).
+        $kinds = function (array $rows): array {
+            $out = array_map(fn($e) => $e->eventtype . ':' . $e->itemid, $rows);
+            sort($out);
+            return $out;
+        };
+        $this->assertSame($kinds($events), $kinds($this->events()));
+        $this->forget();
+        $this->assertEquals($expected, $this->view($this->load()));
+        $findings = progress_steps_maintenance::check([$this->catattemptid])['findings'];
+        foreach (progress_steps_maintenance::ERRORS as $error) {
+            $this->assertSame([], $findings[$error] ?? [], $error);
+        }
+
+        // A working state of the format before that is only read (an ended attempt: the readers of history, retention,
+        // export) stays as it is.
+        $DB->set_field('local_catquiz_progress', 'json', json_encode($progress), ['attemptid' => $this->catattemptid]);
+        $before = $DB->get_record('local_catquiz_progress', ['attemptid' => $this->catattemptid]);
+        $this->forget();
+        progress::load_for_reading($this->catattemptid);
+        $this->assertEquals($before, $DB->get_record('local_catquiz_progress', ['attemptid' => $this->catattemptid]));
     }
 
     /**

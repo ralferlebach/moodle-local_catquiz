@@ -125,6 +125,28 @@ class check_features_test(unittest.TestCase):
         self.assertFalse(rows[0]['ok'])
         self.assertIn('no scenario of this file: 21', problems[0])
 
+    def test_scenarios_of_the_same_name_in_another_feature_do_not_count(self):
+        # Re-audit of 27.11.2026 (#176 DoD3): a second feature with the same scenarios, the same titles and lines. A
+        # record of the one is no record of the other.
+        with open(os.path.join(self.dir, 'catquiz_other.feature'), 'w', encoding='utf-8') as f:
+            f.write(FEATURE)
+        executed = [self.record(line, feature='catquiz_other.feature') for line in RUNS]
+        rows, problems = ci_evidence.check_features(['catquiz_sample', 'catquiz_other'], self.dir, '@local_catquiz',
+                                                    executed)
+        self.assertFalse(rows[0]['ok'])
+        self.assertIn('ran 0 of 4', problems[0])
+        self.assertTrue(rows[1]['ok'])
+        self.assertEqual(1, len(problems))
+
+    def test_a_required_feature_missing_in_this_branch_is_red(self):
+        # Re-audit of 27.11.2026 (#176 DoD3): the list names a feature that exists in the other line only.
+        executed = [self.record(line) for line in RUNS]
+        rows, problems = ci_evidence.check_features(['catquiz_sample', 'catquiz_only_elsewhere'], self.dir,
+                                                    '@local_catquiz', executed)
+        self.assertTrue(rows[0]['ok'])
+        self.assertFalse(rows[1]['ok'])
+        self.assertEqual(['catquiz_only_elsewhere: feature file missing'], problems)
+
 
 class main_test(unittest.TestCase):
     def run_evidence(self, executed_lines=None, with_file=True, with_option=True):
@@ -171,6 +193,13 @@ class main_test(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn('without --behat-executed', result.stdout)
         self.assertNotIn('All required tests ran', result.stdout)
+
+    def test_the_job_fails_with_an_empty_record(self):
+        # Re-audit of 27.11.2026 (#176 DoD3): the record file is there and empty.
+        result = self.run_evidence([], with_file=True)
+        self.assertEqual(1, result.returncode)
+        self.assertIn('is empty - no scenario was recorded', result.stdout)
+        self.assertIn('ran 0 of 4', result.stdout)
 
     def test_the_job_passes_when_everything_ran(self):
         result = self.run_evidence(RUNS)

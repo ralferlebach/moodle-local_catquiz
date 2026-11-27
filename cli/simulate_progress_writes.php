@@ -85,6 +85,31 @@ function local_catquiz_sim_dbwritten(): ?int {
 }
 
 /**
+ * Switches the timeline of local_catquiz on for one save (on = true) and returns the milliseconds of its spans by name
+ * when switched off (on = false).
+ *
+ * @param bool $on
+ * @return array
+ */
+function local_catquiz_sim_timeline(bool $on): array {
+    $enabled = new ReflectionProperty(\local_catquiz\local\monitoring\timeline::class, 'enabled');
+    if ($on) {
+        \local_catquiz\local\monitoring\timeline::reset();
+        $enabled->setValue(null, true);
+        return [];
+    }
+    $out = [];
+    foreach (\local_catquiz\local\monitoring\timeline::get_spans() as $span) {
+        if ($span['ms'] !== null) {
+            $out[$span['name']] = round(($out[$span['name']] ?? 0) + (float) $span['ms'], 3);
+        }
+    }
+    \local_catquiz\local\monitoring\timeline::reset();
+    $enabled->setValue(null, false);
+    return $out;
+}
+
+/**
  * A candidate of the selection with the 38 fields it has (field inventory of #177).
  *
  * @param int $id
@@ -190,13 +215,17 @@ foreach ($lengths as $n) {
         &$beforeid,
         &$beforefailed,
         $packet,
-        $sampled
+        $sampled,
+        $n
     ): void {
         $events = $DB->count_records('local_catquiz_progress_steps', ['catattemptid' => $created['new'][1]]);
         $wal = local_catquiz_sim_dbwritten();
+        // Re-audit 27.11.2026: the parts of a save - events, head, session cache - from the spans of the timeline.
+        local_catquiz_sim_timeline(true);
         $start = microtime(true);
         $progress->save();
         $ms = (microtime(true) - $start) * 1000;
+        $parts = local_catquiz_sim_timeline(false);
         $walafter = local_catquiz_sim_dbwritten();
         $head = $DB->get_record('local_catquiz_progress', ['attemptid' => $created['new'][1]], 'json, quizsettings, lastseq');
         $newevents = $DB->get_records_select(
@@ -215,7 +244,30 @@ foreach ($lengths as $n) {
             'headbytes' => strlen((string) $head->json) + strlen((string) $head->quizsettings),
             'events' => count($newevents), 'eventtextbytes' => $textbytes,
             'walnew' => $wal !== null && $walafter !== null ? $walafter - $wal : null,
+            'eventsms' => $parts['progress:events'] ?? null, 'headms' => $parts['progress:json_encode'] ?? null,
+            'cachems' => $parts['progress:cache'] ?? null,
         ];
+        if ($what === 'answer' && ($i === $n || ($i % 25 === 0 && ($i <= 625 || $i % 125 === 0)))) {
+            // Re-audit 27.11.2026: what a request costs that finds no session cache - head and events read again (the
+            // way a request cache instead of the session cache would go every time): time, queries, memory.
+            // The entry of the session cache: the whole working state, serialised.
+            $save['sessionbytes'] = strlen(serialize($progress));
+            \cache::make('local_catquiz', 'adaptivequizattempt')->purge();
+            \cache::make('local_catquiz', 'progresscurrent')->purge();
+            gc_collect_cycles();
+            $memory = memory_get_usage();
+            if (function_exists('memory_reset_peak_usage')) {
+                memory_reset_peak_usage();
+            }
+            $queries = $DB->perf_get_queries();
+            $cold = microtime(true);
+            $loaded = progress::load($created['new'][0], 'mod_adaptivequiz', 0, $settings);
+            $save['coldms'] = round((microtime(true) - $cold) * 1000, 3);
+            $save['coldqueries'] = $DB->perf_get_queries() - $queries;
+            $save['coldpeakkb'] = (int) ((memory_get_peak_usage() - $memory) / 1024);
+            $save['coldresponses'] = count($loaded->get_responses());
+            unset($loaded);
+        }
         if ($sampled($i) && $beforefailed === null) {
             // The format before: what progress::save() wrote before #177 - the whole progress and the settings.
             $json = json_encode($progress);

@@ -1,5 +1,53 @@
 # Changelog – local_catquiz
 
+## 1.2.2 (2026112702, 27.11.2026)
+
+Nacharbeit zum Critical-Friend-Re-Audit vom 27.11.2026 (Push-Stand 2026112701/2026112700). Messung und Belege:
+`doc/re-audit-2026-11-27-nachweise.md`, Belege im Nachweis-ZIP.
+
+- **#177 P0 – Identität einer Antwort (Mehrfachslots):**
+  - Eine Antwort wird an ihrem Schritt der Usage erkannt, nicht an der Frage.
+  - Dieselbe Frage in einem weiteren Slot (technisches Duplikat des Hosts) und ein späterer Schritt desselben Slots
+    (manuelle Bewertung) werden als neues Ereignis `later` protokolliert, mit Usage/Slot/Question-Attempt/Schritt,
+    aber nicht gezählt. Es zählt weiter die erste verarbeitete Antwort (Entscheidung 8).
+  - Bisher ging eine solche Antwort spurlos verloren.
+  - Ein Schritt wird einmal aufgenommen, auch nach Reload, zweitem Submit oder Absturz vor dem CAT-Commit.
+  - **Fachkorrektur:** `mark_lastquestion_failed()` überschreibt eine vorhandene Antwort nicht mehr (Reload einer
+    erneut ausgegebenen, schon beantworteten Frage). Bisher zählte die erste Antwort danach als falsch.
+  - Replay, Kopfzähler (`counts.later`), Prüf-CLI, Rückweg und `stored_structure()` kennen die späteren Antworten.
+    Neue API: `progress::get_later_responses()`.
+  - Tests mit echter Usage:
+    - zwei Slots derselben Frage;
+    - manueller Bewertungsschritt;
+    - doppelter Schritt nach Absturz;
+    - Aufgegeben und Fehlschlag;
+    - unterbrochene Konversion (AK5).
+  - Rot gegen 2026112701/2026112700, grün danach; 11 Zahntests, alle rot ohne Schutz.
+- **#177 P1 – Messung:**
+  - Persistenz-Simulation bis 10.000 Antworten, je Speichern aufgeteilt in Ereignisse, Kopf und Sitzungs-Cache; dazu
+    Kaltladen (Zeit, Abfragen, Speicher) und Sitzungsbytes.
+  - Redo-Bytes je Span auf MariaDB (`benchmark_attempts.php --spanbytes`; `timeline::set_byte_probe()`, im Betrieb
+    aus).
+  - k6-A/B mit Web-Requests.
+  - Neu: Span `progress:cache` um das Schreiben des Sitzungs-Caches.
+  - **Ergebnis Datenbank:**
+    - WAL je Antwort konstant 5,1–6,4 KB bis 10.000 Antworten, R² ≥ 0,998.
+    - Kaltladen mit konstant 10 Abfragen.
+  - **Ergebnis Sitzungs-Cache:**
+    - Der Sitzungs-Cache serialisiert je Speichern das ganze Objekt: O(N).
+    - 9,6 ms und 1,2 MB bei 625 Antworten, 374 ms und 19,7 MB bei 10.000.
+    - Nicht geändert; Entscheidung offen (so lassen, Request-Cache, Sitzung nur mit Kopf).
+  - **MariaDB-Redo 25 → 47 KB je Schritt:** zum größeren Teil in Spans ohne eigene Schreibvorgänge (vermutlich
+    InnoDB-Hintergrund). Die schreibenden Spans wachsen von 14,8 auf 18,7 KB.
+- **#157:** Aufrufstellen-Audit `doc/issue-157-aufrufstellen.md` (nur Dokument) und drei Zahntests auf die Schranken
+  des Pools, alle rot.
+- **#176 DoD3 / #177 DoD7 – Evidence:**
+  - Ein leerer Record wird als solcher gemeldet.
+  - Selbsttests für gleiche Szenarien in einer anderen Feature-Datei und für ein Pflichtfeature, das nur in einem
+    Zweig existiert (19 statt 16).
+  - `progress_events_test` und `progress_integrity_test` sind Pflichttests (`.github/ci-required-tests.txt`).
+- Versionsname 1.2.2, auch der Catmodel-Subplugins (ohne Versionswechsel dort).
+
 ## 1.2.1 (in Arbeit)
 
 - **#177 Lineare Schreiblast** (2026112700; Datenmodell und Betrieb `doc/issue-177-datenmodell.md`, Messung

@@ -30,6 +30,6 @@ $plugin->version   = 2026101700;
 $plugin->requires  = 2024100700;
 $plugin->supported = [405, 405];
 $plugin->incompatible = 500;
-$plugin->release   = '1.2.1';
+$plugin->release   = '1.2.2';
 $plugin->maturity  = MATURITY_STABLE;
 $plugin->component = 'catmodel_grm';

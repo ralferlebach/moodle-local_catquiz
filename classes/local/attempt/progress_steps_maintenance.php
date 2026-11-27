@@ -130,7 +130,7 @@ final class progress_steps_maintenance {
         $gap = false;
         $unreadable = false;
         $texts = false;
-        $counts = ['shown' => 0, 'excluded' => 0, 'gaveup' => 0, 'history' => 0];
+        $counts = ['shown' => 0, 'excluded' => 0, 'gaveup' => 0, 'later' => 0, 'history' => 0];
         $responses = [];
         $paramids = [];
         $last = 0;
@@ -162,6 +162,9 @@ final class progress_steps_maintenance {
                 case progress::EVENT_ANSWER:
                     $responses[(string) $row->itemid] = true;
                     break;
+                case progress::EVENT_LATER:
+                    $counts['later']++;
+                    break;
             }
             $counts['history'] += count((array) ($diagnostics['h'] ?? []));
             if (!empty($row->paramid)) {
@@ -171,7 +174,8 @@ final class progress_steps_maintenance {
         $headcounts = (array) ($head->counts ?? []);
         $counts['responses'] = count($responses);
         foreach ($counts as $kind => $count) {
-            if ((int) ($headcounts[$kind] ?? -1) !== $count) {
+            // A head written before later responses were logged (27.11.2026) has no count of them: none.
+            if ((int) ($headcounts[$kind] ?? ($kind === 'later' ? 0 : -1)) !== $count) {
                 $findings[] = self::COUNT_MISMATCH;
                 break;
             }

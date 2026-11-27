@@ -33,7 +33,12 @@
  *     php local/catquiz/cli/benchmark_attempts.php --setup --confirm [--items=2500] [--users=40]
  *   Run:
  *     php local/catquiz/cli/benchmark_attempts.php --run --strategy=4 --attempts=3 --questions=26 \
- *        [--cold] [--workers=1] [--seed=4] [--json=FILE] [--everyanswer] [--hostend]
+ *        [--cold] [--workers=1] [--seed=4] [--json=FILE] [--everyanswer] [--hostend] [--spanbytes]
+ *
+ * --spanbytes (issue #177, re-audit 27.11.2026, AK12): the bytes the database writes per span of the engine (the insert
+ * position of the write-ahead log of PostgreSQL, the LSN of the redo log of MariaDB/MySQL), read over a connection of
+ * its own, so that the queries of the request are not changed. Costs two reads per span: the times are then not those
+ * of a run without it.
  *
  * The run deletes the earlier attempts of the benchmark test only (the activity the setup created), never others.
  *
@@ -67,7 +72,7 @@ use mod_adaptivequiz\local\attempt;
     'help' => false, 'setup' => false, 'confirm' => false, 'run' => false, 'items' => 2500, 'users' => 40,
     'strategy' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 'attempts' => 3, 'questions' => 26, 'minquestions' => 20,
     'semin' => 0.05, 'cold' => false, 'workers' => 1, 'worker' => -1, 'seed' => 4, 'json' => '',
-    'everyanswer' => false, 'hostend' => false,
+    'everyanswer' => false, 'hostend' => false, 'spanbytes' => false,
 ], ['h' => 'help']);
 
 // Issue #168 AK2 (decision 19.11.2026): per answer only the generators with a history part; --everyanswer runs every
@@ -360,6 +365,8 @@ if ($options['worker'] >= 0) {
             return null;
         };
         $haseventtable = $DB->get_manager()->table_exists('local_catquiz_progress_steps');
+        $probe = $options['spanbytes'] ? local_catquiz_benchmark_byte_probe() : null;
+        timeline::set_byte_probe($probe);
         $lastevent = 0;
         for ($i = 0; $i <= (int) $options['questions']; $i++) {
             if ($options['cold']) {
@@ -387,11 +394,17 @@ if ($options['worker'] >= 0) {
                 + $after['ru_stime.tv_usec'] - $usage['ru_stime.tv_usec']) / 1000;
             $sql = ($DB->perf_get_queries_time() - $sqltime) * 1000;
             $spans = [];
+            $spanbytes = [];
             foreach (timeline::get_spans() as $span) {
                 // The encodings of the stored data lie deeper; they are taken by name (issue #168, re-audit 22.11.2026).
                 $deep = in_array($span['name'], ['progress:json_encode', 'feedback:json_encode'], true);
                 if ((($span['depth'] ?? 0) <= 2 || $deep) && $span['ms'] !== null) {
                     $spans[$span['name']] = ($spans[$span['name']] ?? 0) + (float) $span['ms'];
+                }
+                // Issue #177 (AK12): the bytes by span, every depth - the depth goes with the name.
+                if (isset($span['dbbytes'])) {
+                    $key = ($span['depth'] ?? 0) . ':' . $span['name'];
+                    $spanbytes[$key] = ($spanbytes[$key] ?? 0) + (int) $span['dbbytes'];
                 }
             }
             $row = $DB->get_record_sql(
@@ -448,6 +461,9 @@ if ($options['worker'] >= 0) {
                 'walbytes' => $walbefore !== null && $walafter !== null ? $walafter - $walbefore : null,
                 'qid' => (int) ($result[0] ?? 0), 'spans' => array_map(fn($ms) => round($ms, 2), $spans),
             ];
+            if ($probe !== null) {
+                $step['spanbytes'] = $spanbytes;
+            }
             $previousbytes = $bytes;
             // Issue #177 (golden, AK4): the estimates after the step - the measure and standard error the activity keeps and
             // the abilities of the attempt by scale -, read after the measurement of the step.
@@ -779,4 +795,41 @@ $stops = array_count_values(array_map(fn($s) => $s['stop'], array_filter($steps,
 cli_writeln("\nStops: " . json_encode($stops));
 if ($options['json'] !== '') {
     file_put_contents((string) $options['json'], json_encode($report, JSON_PRETTY_PRINT));
+}
+
+/**
+ * A probe of the bytes the database wrote so far, over a connection of its own (issue #177, AK12): the insert position
+ * of the write-ahead log (PostgreSQL), the LSN of the redo log (MariaDB/MySQL). Null where it cannot be read.
+ *
+ * @return callable|null
+ */
+function local_catquiz_benchmark_byte_probe(): ?callable {
+    global $CFG, $DB;
+    $port = (int) ($CFG->dboptions['dbport'] ?? 0);
+    if ($DB->get_dbfamily() === 'postgres' && function_exists('pg_connect')) {
+        $connection = pg_connect(sprintf(
+            "host=%s port=%d dbname=%s user=%s password=%s",
+            $CFG->dbhost,
+            $port ?: 5432,
+            $CFG->dbname,
+            $CFG->dbuser,
+            $CFG->dbpass
+        ));
+        if (!$connection) {
+            return null;
+        }
+        return function () use ($connection): ?int {
+            $result = pg_query($connection, "SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), '0/0')::bigint");
+            return $result ? (int) pg_fetch_result($result, 0, 0) : null;
+        };
+    }
+    if ($DB->get_dbfamily() === 'mysql' && class_exists('mysqli')) {
+        $connection = new mysqli($CFG->dbhost, $CFG->dbuser, $CFG->dbpass, $CFG->dbname, $port ?: 3306);
+        return function () use ($connection): ?int {
+            $result = $connection->query("SHOW GLOBAL STATUS LIKE 'Innodb_lsn_current'");
+            $row = $result ? $result->fetch_row() : null;
+            return $row ? (int) $row[1] : null;
+        };
+    }
+    return null;
 }
