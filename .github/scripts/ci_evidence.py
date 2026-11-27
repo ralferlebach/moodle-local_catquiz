@@ -308,6 +308,11 @@ def main():
             else:
                 if os.path.isfile(args.behat_executed):
                     executed = read_executed(args.behat_executed)
+                    if not executed:
+                        # Re-audit of 27.11.2026 (#176 DoD3): a record that is there but holds no scenario - the
+                        # recording context ran, nothing was recorded. Said as such, not only as features not run.
+                        problems.append(f'Record of the executed scenarios {args.behat_executed} is empty - no '
+                                        'scenario was recorded')
                 else:
                     executed = []
                     problems.append(f'Record of the executed scenarios {args.behat_executed} missing - nothing ran, '

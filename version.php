@@ -30,8 +30,8 @@ $plugin->component = 'local_catquiz';
 // builds 5.1, 5.2 and 5.3. The browser side - Bootstrap 5 markup, core modals,
 // the public webroot - is not verified yet; narrow this again if that work stalls.
 $plugin->supported = [501, 503];
-$plugin->release = '1.3.0';
-$plugin->version = 2026112701;
+$plugin->release = '1.3.2';
+$plugin->version = 2026112703;
 $plugin->requires = 2025100600;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [

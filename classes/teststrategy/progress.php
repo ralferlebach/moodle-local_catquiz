@@ -67,8 +67,15 @@ class progress implements JsonSerializable {
     /** @var string Issue #177: a question was handed out (add_playedquestion()). */
     public const EVENT_SHOWN = 'shown';
 
-    /** @var string Issue #177: a response was taken in, or changed (mark_lastquestion_failed()). */
+    /** @var string Issue #177: the response that counts for a question was taken in (the first processed one). */
     public const EVENT_ANSWER = 'answer';
+
+    /**
+     * @var string Issue #177 (re-audit 27.11.2026, decision 8): a later response to a question that has its answer - the
+     * question in another slot of the usage (handed out once more), a later step of its slot (a manual grade), a
+     * failure when it was handed out again. Logged with its identities of the usage, not counted.
+     */
+    public const EVENT_LATER = 'later';
 
     /** @var string Issue #177: the person gave up the question; with the response it was counted as. */
     public const EVENT_GAVEUP = 'gaveup';
@@ -343,6 +350,25 @@ class progress implements JsonSerializable {
 
     /** @var int Issue #177: how many given up questions are stored as events. */
     private int $savedgaveup = 0;
+
+    /**
+     * Issue #177 (re-audit 27.11.2026): later responses to questions that have their answer, in order - logged, not
+     * counted (decision 8). Each as the usage gives it, without its texts.
+     *
+     * @var array[]
+     */
+    private array $laterresponses = [];
+
+    /** @var int Issue #177: how many later responses are stored as events. */
+    private int $savedlater = 0;
+
+    /**
+     * Issue #177 (AK3): the steps of the usage taken in - by the response that counts or as a later one -, so that a
+     * step is taken in once (a reload, a second submit, a request after a crash). Built from the responses when null.
+     *
+     * @var array<string,bool>|null
+     */
+    private ?array $recordedsteps = null;
 
     /** @var int Issue #177: how many entries of the answer history are stored with events. */
     private int $savedhistory = 0;
@@ -888,6 +914,8 @@ class progress implements JsonSerializable {
         $instance->session = $data->session ?? null;
         $instance->excludedquestions = $data->excludedquestions ?? [];
         $instance->gaveupquestions = $data->gaveupquestions ?? [];
+        $instance->laterresponses = array_map(fn($response) => (array) $response, (array) ($data->laterresponses ?? []));
+        $instance->recordedsteps = null;
         $instance->starttime = $data->starttime ?? 0;
         if ($markers !== null) {
             $instance->format = self::FORMAT_STEPS;
@@ -896,6 +924,7 @@ class progress implements JsonSerializable {
             $instance->savedresponses = $markers['savedresponses'];
             $instance->savedexcluded = $markers['savedexcluded'];
             $instance->savedgaveup = $markers['savedgaveup'];
+            $instance->savedlater = $markers['savedlater'];
             $instance->savedhistory = $markers['savedhistory'];
             $instance->savedscalestates = $markers['savedscalestates'];
             $instance->savedtrace = $markers['savedtrace'];
@@ -961,6 +990,7 @@ class progress implements JsonSerializable {
         $order = [];
         $responses = [];
         $gaveup = [];
+        $later = [];
         $excluded = [];
         $history = [];
         $trace = [];
@@ -996,6 +1026,9 @@ class progress implements JsonSerializable {
                     if (isset($diagnostics['r'])) {
                         $responses[$qid] = (array) $diagnostics['r'];
                     }
+                    break;
+                case self::EVENT_LATER:
+                    $later[] = (array) ($diagnostics['r'] ?? ['questionid' => $qid]);
                     break;
                 case self::EVENT_EXCLUDED:
                     $excluded[] = (int) $qid;
@@ -1058,6 +1091,7 @@ class progress implements JsonSerializable {
         $data->playedquestionsbyscale = (object) $byscale;
         $data->responses = (object) $responses;
         $data->gaveupquestions = $gaveup;
+        $data->laterresponses = $later;
         $data->excludedquestions = $excluded;
         $data->answerhistory = $history;
         $data->abilitytrace = (object) $trace;
@@ -1070,6 +1104,7 @@ class progress implements JsonSerializable {
             'savedresponses' => count($responses),
             'savedexcluded' => count($excluded),
             'savedgaveup' => count($gaveup),
+            'savedlater' => count($later),
             'savedhistory' => count($history),
             'savedscalestates' => count($scalestates),
             'savedtrace' => array_map('count', $trace),
@@ -1187,6 +1222,8 @@ class progress implements JsonSerializable {
         $instance->session = sesskey();
         $instance->excludedquestions = [];
         $instance->gaveupquestions = [];
+        $instance->laterresponses = [];
+        $instance->recordedsteps = [];
         $instance->starttime = time();
         $instance->quizsettings = $quizsettings;
         // Issue #177: a new working state is stored as head and events from its first save on.
@@ -1247,6 +1284,10 @@ class progress implements JsonSerializable {
         // Issue #168: like the trace, the key is only there once there is something in it.
         if ($this->answerhistory) {
             $data['answerhistory'] = $this->answerhistory;
+        }
+        // Issue #177 (decision 8): later responses only once there is one - the JSON stays as it was otherwise.
+        if ($this->laterresponses) {
+            $data['laterresponses'] = $this->laterresponses;
         }
         return $data;
     }
@@ -1399,7 +1440,8 @@ class progress implements JsonSerializable {
         }
 
         self::note_current((int) $this->catattemptid, $this->lastseq);
-        $this->save_to_cache();
+        // Re-audit 27.11.2026: the session cache holds the whole working state - O(N); measured on its own.
+        \local_catquiz\local\monitoring\timeline::span('progress:cache', fn() => $this->save_to_cache());
     }
 
     /**
@@ -1502,6 +1544,7 @@ class progress implements JsonSerializable {
                 'responses' => count($this->responses),
                 'excluded' => count($this->excludedquestions),
                 'gaveup' => count($this->gaveupquestions),
+                'later' => count($this->laterresponses),
                 'history' => count($this->answerhistory),
                 'debug' => count($this->debugrows),
             ],
@@ -1532,7 +1575,7 @@ class progress implements JsonSerializable {
         return [
             $this->format, $this->lastseq, $this->unsavedshown, $this->dirtyresponses, $this->savedshown,
             $this->savedresponses, $this->savedexcluded, $this->savedgaveup, $this->savedhistory, $this->savedscalestates,
-            $this->savedtrace, $this->savedestimates, $this->saveddebugrows,
+            $this->savedtrace, $this->savedestimates, $this->saveddebugrows, $this->savedlater,
         ];
     }
 
@@ -1546,7 +1589,7 @@ class progress implements JsonSerializable {
         [
             $this->format, $this->lastseq, $this->unsavedshown, $this->dirtyresponses, $this->savedshown,
             $this->savedresponses, $this->savedexcluded, $this->savedgaveup, $this->savedhistory, $this->savedscalestates,
-            $this->savedtrace, $this->savedestimates, $this->saveddebugrows,
+            $this->savedtrace, $this->savedestimates, $this->saveddebugrows, $this->savedlater,
         ] = $markers;
     }
 
@@ -1599,6 +1642,10 @@ class progress implements JsonSerializable {
         foreach ($gaveup as $qid) {
             $events[] = (object) ['eventtype' => self::EVENT_GAVEUP, 'itemid' => (int) $qid, 'ispilot' => 0];
         }
+        foreach (array_slice($this->laterresponses, $this->savedlater) as $response) {
+            $events[] = $this->response_row($response, self::EVENT_LATER);
+        }
+        $this->savedlater = count($this->laterresponses);
         foreach (array_slice($this->excludedquestions, $this->savedexcluded) as $qid) {
             $events[] = (object) ['eventtype' => self::EVENT_EXCLUDED, 'itemid' => (int) $qid, 'ispilot' => 0];
         }
@@ -1621,6 +1668,7 @@ class progress implements JsonSerializable {
         $this->savedresponses = 0;
         $this->savedexcluded = 0;
         $this->savedgaveup = 0;
+        $this->savedlater = 0;
         $this->savedhistory = 0;
         $this->savedscalestates = 0;
         $this->savedtrace = [];
@@ -1777,7 +1825,19 @@ class progress implements JsonSerializable {
      * @return stdClass
      */
     private function response_event(string $qid, string $type): stdClass {
-        $response = (array) $this->responses[$qid];
+        return $this->response_row((array) $this->responses[$qid], $type, $qid);
+    }
+
+    /**
+     * The event of a response as the usage gave it, with its identities of the usage (AK3).
+     *
+     * @param array $response
+     * @param string $type EVENT_ANSWER, EVENT_GAVEUP or EVENT_LATER.
+     * @param string|null $qid The question; the one of the response when null.
+     * @return stdClass
+     */
+    private function response_row(array $response, string $type, ?string $qid = null): stdClass {
+        $qid = $qid ?? (string) ($response['questionid'] ?? '');
         $question = $this->playedquestions[$qid] ?? null;
         $int = fn($value) => is_numeric($value) ? (int) $value : null;
         $number = fn($value) => is_numeric($value) ? (float) $value : null;
@@ -2710,15 +2770,71 @@ class progress implements JsonSerializable {
             return $this;
         }
 
-        // Do not count a response to the same question twice.
+        /* Issue #177 (AK3, re-audit 27.11.2026): a step of the usage is taken in once - a reload, a second submit or a
+           request after a crash before the save of the CAT attempt meet the same step again. Known by the step, not by
+           the question: the same question can have another slot (the host hands a question named again out once
+           more) or a later step of its slot (a manual grade). */
+        $step = isset($lastresponse->id) ? (string) $lastresponse->id : null;
+        $recorded = $this->recorded_steps();
+        if ($step !== null && isset($recorded[$step])) {
+            return $this;
+        }
+
+        // Decision 8 (21.11.2026): the first processed answer of a question counts; a later one is logged, not counted.
         if (array_key_exists($lastresponse->questionid, $this->responses)) {
+            $this->log_later_response(array_diff_key((array) $lastresponse, array_flip(self::RESPONSE_TEXTS)));
             return $this;
         }
 
         $this->responses[$lastresponse->questionid] = (array) $lastresponse;
+        if ($step !== null) {
+            $this->recordedsteps[$step] = true;
+        }
         // Issue #177: stored as an event with the next save.
         $this->dirtyresponses[(string) $lastresponse->questionid] = true;
         return $this;
+    }
+
+    /**
+     * Logs a later response to a question that has its answer (decision 8): stored as an event, not counted.
+     *
+     * @param array $response As the usage gave it, without its texts.
+     * @return void
+     */
+    private function log_later_response(array $response): void {
+        $this->laterresponses[] = $response;
+        if (isset($response['id'])) {
+            $this->recorded_steps();
+            $this->recordedsteps[(string) $response['id']] = true;
+        }
+    }
+
+    /**
+     * The steps of the usage taken in, by the responses that count and the later ones (built once per object).
+     *
+     * @return array<string,bool>
+     */
+    private function recorded_steps(): array {
+        if ($this->recordedsteps === null) {
+            $this->recordedsteps = [];
+            foreach ([...array_values($this->responses), ...$this->laterresponses] as $response) {
+                $response = (array) $response;
+                if (isset($response['id'])) {
+                    $this->recordedsteps[(string) $response['id']] = true;
+                }
+            }
+        }
+        return $this->recordedsteps;
+    }
+
+    /**
+     * Later responses to questions that have their answer, in order - logged, not counted (decision 8). Each with its
+     * identities of the usage (questionusageid, slot, questionattemptid, id of the step), without texts.
+     *
+     * @return array[]
+     */
+    public function get_later_responses(): array {
+        return $this->laterresponses;
     }
 
     /**
@@ -2727,6 +2843,19 @@ class progress implements JsonSerializable {
      * @return $this
      */
     public function mark_lastquestion_failed() {
+        /* Decision 8 (re-audit 27.11.2026): a question with its answer that fails when it is handed out again (a reload,
+           a technical duplicate of the host) keeps the answer that counts; the failure is logged. Before, the first
+           answer was overwritten and counted as wrong. */
+        if (array_key_exists($this->lastquestion->id, $this->responses)) {
+            $this->log_later_response([
+                'questionid' => $this->lastquestion->id,
+                'fraction' => 0.0,
+                'state' => 'gaveup',
+                'questionusageid' => $this->usageid,
+                'userlastattempttime' => time(),
+            ]);
+            return $this;
+        }
         $this->responses[$this->lastquestion->id] = array_merge(
             $this->responses[$this->lastquestion->id] ?? [],
             [

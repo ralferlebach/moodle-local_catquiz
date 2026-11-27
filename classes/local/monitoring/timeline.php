@@ -97,6 +97,14 @@ final class timeline {
     private static $errorsource = null;
 
     /**
+     * Issue #177 (re-audit 27.11.2026, AK12): a probe of the bytes the database wrote so far (write-ahead or redo log),
+     * set by a measurement (cli/benchmark_attempts.php --spanbytes). Each span then carries 'dbbytes'. Null: off.
+     *
+     * @var callable|null
+     */
+    private static $byteprobe = null;
+
+    /**
      * Whether the trace is switched on.
      *
      * @return bool
@@ -150,6 +158,15 @@ final class timeline {
     }
 
     /**
+     * Sets the probe of the bytes the database wrote (issue #177, AK12): only a measurement does, never a request.
+     *
+     * @param callable|null $probe Returns the bytes written so far, or null; null switches it off.
+     */
+    public static function set_byte_probe(?callable $probe): void {
+        self::$byteprobe = $probe;
+    }
+
+    /**
      * Opens a span.
      *
      * @param string $name Fixed name from the code, e.g. 'context:questions'.
@@ -168,6 +185,7 @@ final class timeline {
             'queriesatstart' => self::queries(),
             'memoryatstart' => memory_get_usage(),
             'peakatstart' => memory_get_peak_usage(),
+            'dbatstart' => self::$byteprobe !== null ? (self::$byteprobe)() : null,
             'meta' => self::clean($meta),
         ];
         self::$open[] = array_key_last(self::$spans);
@@ -213,6 +231,10 @@ final class timeline {
         self::$spans[$index]['memdeltakb'] = self::kb($memory - self::$spans[$index]['memoryatstart']);
         self::$spans[$index]['peakkb'] = self::kb($peak);
         self::$spans[$index]['peakgrewkb'] = self::kb($peak - self::$spans[$index]['peakatstart']);
+        if (self::$byteprobe !== null && self::$spans[$index]['dbatstart'] !== null) {
+            $written = (self::$byteprobe)();
+            self::$spans[$index]['dbbytes'] = $written === null ? null : $written - self::$spans[$index]['dbatstart'];
+        }
         if ($open) {
             self::$spans[$index]['open'] = true;
         }
@@ -299,7 +321,7 @@ final class timeline {
                 'offsetms' => $span['offsetms'],
                 'ms' => $span['durationns'] === null ? null : round($span['durationns'] / 1e6, 3),
             ];
-            foreach (['queries', 'memdeltakb', 'peakkb', 'peakgrewkb', 'open'] as $key) {
+            foreach (['queries', 'memdeltakb', 'peakkb', 'peakgrewkb', 'dbbytes', 'open'] as $key) {
                 if (isset($span[$key])) {
                     $row[$key] = $span[$key];
                 }

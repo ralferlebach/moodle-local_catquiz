@@ -31,3 +31,5 @@ chart_input_test                     # #150
 ability_histogram_test               # #150
 learning_progress_chart_test         # #160
 finalisation_enrolment_test          # host #23 AK4 (a technical end with a valid result enrols)
+progress_events_test                 # #177 head and events, identities of the usage, later answers
+progress_integrity_test              # #96, #177 a foreign row is not written over

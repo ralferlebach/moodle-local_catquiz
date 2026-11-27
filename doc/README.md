@@ -57,6 +57,9 @@ Zwei Arten von Dokumenten:
   gehen.
 - **issue-177-datenmodell.md** – #177: Kopf fester Größe und Ereignistabelle, ID-Domänen, Schreiben/Lesen, Texte, Abschluss und Retention, Upgrade/Konversion/Rückweg (CLI), Privacy/Backup, Grenzen (Sitzungs-Cache).
 - **issue-177-nachweise.md** – #177: AK/DoD-Stand, Engine-Läufe 625 Antworten (5.1/PG, 4.5/MariaDB), Persistenz-Simulation bis 10.000, Golden sechs Strategien, Tests und Zahntests, Befunde; Belege in `evidence/issue-177/` (nur 1.3-Paket).
+- **re-audit-2026-11-27-nachweise.md** – Nacharbeit zum Re-Audit vom 27.11.2026 (1.3.2/1.2.2): #177 P0 QUBA-Identität (rot/grün, Zahntests), Persistenz bis 10.000 mit Sitzungs-Cache und Kaltladen, MariaDB-Redo je Span, k6 A/B, #168-Reihe, #157- und #176-Zahntests, volle Suiten; Rohdaten im Nachweis-ZIP.
+- **issue-157-aufrufstellen.md** – #157: jede Stelle, die Itempool oder Itemparameter liest, mit Filter und Verbraucher; Zuordnung von `context_item_pool_test`; was nur der Betrieb belegen kann.
+- **ci-evidenzkette.md** – #176 AK4: von Commit und Partnerständen zum Evidence-Artefakt je Nachweisart; was ein grüner Job nicht sagt; Abgleich mit einem Lauf.
 - **re-audit-2026-11-22-nacharbeit.md** – Re-Audit vom 22.11.2026, Antwort vom 22./23.11.2026: CI-Abgleich der sechs
   Commits (Partnerstände, Zeilenfolge der Install-Matrix), #159 Altdaten des Verlaufs, #168 Messmatrix, #174 sechs
   Strategien, Host #25 DoD5, #176-Randfälle. Belege unter `evidence/re-audit-2026-11-22/`.
