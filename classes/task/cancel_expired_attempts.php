@@ -29,8 +29,10 @@ use cache_helper;
 use context_module;
 use dml_exception;
 use local_catquiz\catquiz;
+use local_catquiz\local\attempt\expiry_policy;
 use local_catquiz\local\status;
 use mod_adaptivequiz\local\attempt\attempt_state;
+use core\lock\lock_config;
 use stdClass;
 
 defined('MOODLE_INTERNAL') || die();
@@ -39,7 +41,14 @@ global $CFG;
 require_once("$CFG->dirroot/mod/adaptivequiz/locallib.php");
 
 /**
- * Cancels open CAT quiz attempts that exceeded the timeout.
+ * Closes open CAT quiz attempts whose time is over, by the effective expiry policy of their test (#178).
+ *
+ * The policy: expiry_policy (doc/issue-178-ablaufpolicy.md). An attempt is closed under the lock of its item
+ * administration (the lock of mod_adaptivequiz the question requests hold): an attempt in a request right now - a last
+ * answer, a resume - is left for the next run. Under the lock the attempt is read again; only an attempt still in
+ * progress and still expired is closed, with the stop code "timelimit". The engine status is set only for an attempt
+ * closed by this run: one completed by its own request in the meantime keeps its end.
+ * Each decision is logged with the attempt, the activity, the limit and its source - no data of a person or an answer.
  *
  * @package local_catquiz
  * @author David Szkiba <david.szkiba@wunderbyte.at>
@@ -51,7 +60,13 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
      * Allow some extra time before closing an expired attempt.
      * @var float
      */
-    const BUFFER_TIME_FACTOR = 1.5;
+    const BUFFER_TIME_FACTOR = expiry_policy::BUFFER_FACTOR;
+
+    /**
+     * Seconds the task waits for the lock of an attempt: none, a request holds it, the next run tries again.
+     * @var int
+     */
+    public static int $locktimeout = 0;
 
     /**
      * Holds adaptivequiz records as stdClass entires.
@@ -60,22 +75,16 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
     private array $quizzes = [];
 
     /**
-     * Holds the local_catquiz_tests of open attempts.
-     * @var array
+     * The policies of the activities with open attempts, by activity id.
+     * @var expiry_policy[]
      */
-    private array $maxtimepertest = [];
+    private array $policies = [];
 
     /**
      * Current timestamp
      * @var int
      */
     private int $currenttime;
-
-    /**
-     * Default maximum time for attempts
-     * @var int
-     */
-    private int $defaultmaxtime;
 
     /**
      * Returns task name.
@@ -93,8 +102,8 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
     public function execute() {
         global $DB, $CFG;
         mtrace("Running cancel_expired_attempts task.");
-
-        $this->initialize();
+        $this->currenttime = time();
+        $this->policies = [];
 
         $sql = <<<SQL
         SELECT aa.*
@@ -110,28 +119,101 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
             return;
         }
 
-        $completed = 0;
         $statusmessage = get_string('attemptclosedbytimelimit', 'local_catquiz');
         require_once($CFG->dirroot . '/mod/adaptivequiz/locallib.php');
+        $decisions = [];
         foreach ($records as $record) {
-            if (!$this->exceeds_maxtime($record)) {
-                continue;
-            }
+            $decision = $this->decide($record, $statusmessage);
+            $decisions[$decision] = ($decisions[$decision] ?? 0) + 1;
+        }
+        ksort($decisions);
+        $summary = implode(', ', array_map(fn($k, $v) => "$k $v", array_keys($decisions), $decisions));
+        mtrace(sprintf(
+            'Processed %d open attempts in %d seconds and marked %d as completed (%s)',
+            count($records),
+            time() - $this->currenttime,
+            $decisions['closed'] ?? 0,
+            $summary
+        ));
+    }
+
+    /**
+     * Decides about one open attempt and logs what it did unless it was kept.
+     *
+     * @param stdClass $record adaptivequiz_attempt record, as read at the start of the run
+     * @param string $statusmessage
+     * @return string closed, kept, unlimited, locked, ended, error
+     */
+    public function decide(stdClass $record, string $statusmessage): string {
+        $policy = $this->policy_of((int) $record->instance);
+        if ($policy->seconds === null) {
+            return 'unlimited';
+        }
+        if (!$policy->expired((int) $record->timecreated, $this->currenttime)) {
+            return 'kept';
+        }
+        $resource = 'adaptivequiz_itemadministration_' . (int) $record->instance . '_' . (int) $record->userid;
+        $lock = lock_config::get_lock_factory('mod_adaptivequiz')->get_lock($resource, self::$locktimeout);
+        if (!$lock) {
+            $this->log($record, $policy, 'locked', 'a request holds the attempt; the next run tries again');
+            return 'locked';
+        }
+        try {
+            return $this->close_locked($record, $policy, $statusmessage);
+        } catch (\Throwable $e) {
             // One attempt that cannot be closed - a broken record, a missing course module - does not stop the
             // others (mod_adaptivequiz #5).
-            try {
-                $this->complete($record, $statusmessage);
-                $completed++;
-            } catch (\Throwable $e) {
-                mtrace(sprintf('Attempt %d could not be closed: %s', (int) $record->id, $e->getMessage()));
-            }
+            $this->log($record, $policy, 'error', $e->getMessage());
+            return 'error';
+        } finally {
+            $lock->release();
         }
-        $duration = time() - $this->currenttime;
+    }
+
+    /**
+     * Closes an attempt with the lock of its item administration held, if it is still open and expired.
+     *
+     * @param stdClass $record
+     * @param expiry_policy $policy
+     * @param string $statusmessage
+     * @return string closed or ended
+     */
+    private function close_locked(stdClass $record, expiry_policy $policy, string $statusmessage): string {
+        global $DB;
+        $current = $DB->get_record('adaptivequiz_attempt', ['id' => $record->id]);
+        if (!$current || $current->attemptstate !== attempt_state::IN_PROGRESS) {
+            $this->log($record, $policy, 'ended', 'completed or removed by another request meanwhile');
+            return 'ended';
+        }
+        if (!$this->complete($current, $statusmessage)) {
+            $this->log($current, $policy, 'ended', 'completed by another request meanwhile');
+            return 'ended';
+        }
+        $this->log($current, $policy, 'closed', 'time over');
+        return 'closed';
+    }
+
+    /**
+     * Writes one decision to the log of the task: the attempt, the activity, the limit and its source, run time and the
+     * time since the last change. No user, no answer.
+     *
+     * @param stdClass $record
+     * @param expiry_policy $policy
+     * @param string $decision
+     * @param string $reason
+     */
+    private function log(stdClass $record, expiry_policy $policy, string $decision, string $reason): void {
         mtrace(sprintf(
-            'Processed %d open attempts in %d seconds and marked %d as completed',
-            count($records),
-            $duration,
-            $completed
+            '  attempt %d (activity %d): %s - %s; limit %s s (%s%s), run time %d s, last change %d s ago',
+            (int) $record->id,
+            (int) $record->instance,
+            $decision,
+            $reason,
+            $policy->seconds === null ? 'none' : (string) $policy->seconds,
+            $policy->source,
+            $policy->note !== '' ? ', ' . $policy->note : '',
+            $this->currenttime - (int) $record->timecreated,
+            $this->currenttime - (int) ($record->timemodified ?? $record->timecreated)
         ));
     }
 
@@ -143,15 +225,16 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
      *
      * @param stdClass $record adaptivequiz_attempt record.
      * @param string $statusmessage
+     * @return bool whether this call completed it (false: it was completed already)
      */
-    private function complete(stdClass $record, string $statusmessage): void {
+    private function complete(stdClass $record, string $statusmessage): bool {
         $quiz = $this->get_adaptivequiz($record->instance);
         $cm = get_coursemodule_from_instance('adaptivequiz', $record->instance, 0, false, MUST_EXIST);
         $context = context_module::instance($cm->id);
         // The code of mod_adaptivequiz's stop_reason::TIMELIMIT (issue #20), written out: an older activity has
         // neither the class nor the parameter and ignores it.
         if (function_exists('adaptivequiz_complete_attempt_by_id')) {
-            adaptivequiz_complete_attempt_by_id((int) $record->id, $quiz, $context, $statusmessage, 'timelimit');
+            $completed = adaptivequiz_complete_attempt_by_id((int) $record->id, $quiz, $context, $statusmessage, 'timelimit');
         } else {
             adaptivequiz_complete_attempt(
                 (int) $record->uniqueid,
@@ -161,71 +244,38 @@ class cancel_expired_attempts extends \core\task\scheduled_task {
                 $statusmessage,
                 'timelimit'
             );
+            $completed = true;
         }
-        catquiz::set_final_attempt_status($record->id, status::CLOSED_BY_TIMELIMIT);
+        if ($completed) {
+            // Only the attempt this run closed: an attempt completed by its own request keeps its status (#178 AK03).
+            catquiz::set_final_attempt_status($record->id, status::CLOSED_BY_TIMELIMIT);
+        }
         cache_helper::purge_by_event('changesinquizattempts');
+        return $completed;
     }
 
     /**
-     * Initialize the task properties
+     * The policy of an activity, read once per run.
+     *
+     * @param int $adaptivequizid
+     * @return expiry_policy
      */
-    private function initialize() {
-        $this->currenttime = time();
-        $this->defaultmaxtime = 60 * 60 * intval(get_config('local_catquiz', 'maximum_attempt_duration_hours') ?? 24);
-        $this->load_max_times_per_test();
+    private function policy_of(int $adaptivequizid): expiry_policy {
+        if (!isset($this->policies[$adaptivequizid])) {
+            $this->policies[$adaptivequizid] = expiry_policy::for_activity($adaptivequizid);
+        }
+        return $this->policies[$adaptivequizid];
     }
 
     /**
-     * Load maximum times for all tests
-     */
-    private function load_max_times_per_test() {
-        global $DB;
-
-        $records = $DB->get_records('adaptivequiz', ['catmodel' => 'catquiz']);
-        $openinstances = array_map(fn($r) => $r->id, $records);
-
-        if (!$openinstances) {
-            return;
-        }
-        // The test rows of the activity component only (both spellings), the newest per instance: another
-        // component's test with the same id lent its limit before (issue #104).
-        [$insql, $params] = $DB->get_in_or_equal($openinstances, SQL_PARAMS_NAMED);
-        $tests = $DB->get_records_select(
-            'local_catquiz_tests',
-            "componentid $insql AND component IN ('mod_adaptivequiz', 'adaptivequiz')",
-            $params,
-            'id ASC'
-        );
-        foreach ($tests as $tr) {
-            // The same reading as the selection and the host (mod_adaptivequiz #5): an empty limit is none - it
-            // used to become 60 minutes - and seconds are a unit, too.
-            $limit = \local_catquiz\catquiz_handler::time_limits(json_decode((string) $tr->json) ?: null)['attempt'];
-            $this->maxtimepertest[$tr->componentid] = $limit;
-        }
-    }
-
-    /**
-     * Checks whether the given attempt exceeds the max attempt time
+     * Checks whether the given attempt exceeds the max attempt time of its test (expiry_policy).
      *
      * @param stdClass $record The attempt record
      * @return bool
      */
     public function exceeds_maxtime(stdClass $record): bool {
-        // An activity without a limit of its own - no CAT settings, or none set - falls back to the default.
-        $quizmaxtime = $this->maxtimepertest[$record->instance] ?? null;
-        if ($quizmaxtime !== null) {
-            // A limit of 0 is no limit.
-            if ((int) $quizmaxtime === 0) {
-                return false;
-            }
-            // The test's own limit, with a buffer for the last answer - not the default when that is longer: a
-            // 30 minute test was closed only after a day (mod_adaptivequiz #5).
-            return $this->currenttime - $record->timecreated > $quizmaxtime * self::BUFFER_TIME_FACTOR;
-        }
-        if ($this->defaultmaxtime === 0) {
-            return false;
-        }
-        return $this->currenttime - $record->timecreated > $this->defaultmaxtime;
+        $this->currenttime = $this->currenttime ?? time();
+        return $this->policy_of((int) $record->instance)->expired((int) $record->timecreated, $this->currenttime);
     }
 
     /**

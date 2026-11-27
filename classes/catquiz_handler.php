@@ -1288,7 +1288,8 @@ class catquiz_handler {
         foreach (['attempt' => 'attempt', 'item' => 'item'] as $key => $suffix) {
             $value = $group->{'catquiz_maxtimeper' . $suffix} ?? null;
             $unit = $group->{'catquiz_timeselect_' . $suffix} ?? null;
-            if (empty($value) || empty($unit)) {
+            // Issue #178: a unit the form does not offer is no limit - it was read as seconds before.
+            if (empty($value) || !in_array($unit, ['h', 'min', 'sec'], true)) {
                 continue;
             }
             $seconds = (int) self::get_number_of_seconds((string) $unit, (int) $value);

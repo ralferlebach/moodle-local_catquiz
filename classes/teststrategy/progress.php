@@ -549,8 +549,9 @@ class progress implements JsonSerializable {
 
         // If the user gave up, count it as negative response.
         if ($instance->user_gave_up_last_question()) {
-            $instance->gaveupquestions[] = $instance->lastquestion->id;
-            $instance->mark_lastquestion_failed();
+            if ($instance->take_in_failure()) {
+                $instance->gaveupquestions[] = $instance->lastquestion->id;
+            }
             $instance->hasnewresponse = true;
 
             return $instance;
@@ -2803,9 +2804,10 @@ class progress implements JsonSerializable {
      */
     private function log_later_response(array $response): void {
         $this->laterresponses[] = $response;
-        if (isset($response['id'])) {
+        $key = self::step_key($response);
+        if ($key !== null) {
             $this->recorded_steps();
-            $this->recordedsteps[(string) $response['id']] = true;
+            $this->recordedsteps[$key] = true;
         }
     }
 
@@ -2818,13 +2820,26 @@ class progress implements JsonSerializable {
         if ($this->recordedsteps === null) {
             $this->recordedsteps = [];
             foreach ([...array_values($this->responses), ...$this->laterresponses] as $response) {
-                $response = (array) $response;
-                if (isset($response['id'])) {
-                    $this->recordedsteps[(string) $response['id']] = true;
+                $key = self::step_key((array) $response);
+                if ($key !== null) {
+                    $this->recordedsteps[$key] = true;
                 }
             }
         }
         return $this->recordedsteps;
+    }
+
+    /**
+     * The identity of a response taken in: its step of the usage, else the key of a failure without a step.
+     *
+     * @param array $response
+     * @return string|null
+     */
+    private static function step_key(array $response): ?string {
+        if (isset($response['id'])) {
+            return (string) $response['id'];
+        }
+        return isset($response['failurekey']) ? (string) $response['failurekey'] : null;
     }
 
     /**
@@ -2838,35 +2853,60 @@ class progress implements JsonSerializable {
     }
 
     /**
-     * Marks the last question as failed
+     * Takes in that the last question failed: given up, or the page reloaded past the time limit (#177).
      *
-     * @return $this
+     * The failure is a step of the usage like an answer. Its identity is that step (the final step of the latest slot
+     * of the question, catquiz::get_last_finished_step_of_question()). Without a step - no usage, or the question has
+     * no finished step - it is the key "failed:<question>:<latest slot>", and no step is made up. Taken in once: a
+     * second call for the same step or key changes nothing, also after a reload from the events.
+     * Decision 8 (21.11.2026): a question that already has an answer that counts keeps it; the failure is logged as a
+     * later response and does not count.
+     *
+     * @return self
      */
     public function mark_lastquestion_failed() {
-        /* Decision 8 (re-audit 27.11.2026): a question with its answer that fails when it is handed out again (a reload,
-           a technical duplicate of the host) keeps the answer that counts; the failure is logged. Before, the first
-           answer was overwritten and counted as wrong. */
-        if (array_key_exists($this->lastquestion->id, $this->responses)) {
-            $this->log_later_response([
-                'questionid' => $this->lastquestion->id,
-                'fraction' => 0.0,
-                'state' => 'gaveup',
-                'questionusageid' => $this->usageid,
-                'userlastattempttime' => time(),
-            ]);
-            return $this;
-        }
-        $this->responses[$this->lastquestion->id] = array_merge(
-            $this->responses[$this->lastquestion->id] ?? [],
-            [
-                'questionid' => $this->lastquestion->id,
-                'fraction' => 0.0,
-                'userlastattempttime' => time(),
-            ],
-        );
-        // Issue #177: stored as an event with the next save.
-        $this->dirtyresponses[(string) $this->lastquestion->id] = true;
+        $this->take_in_failure();
         return $this;
+    }
+
+    /**
+     * See mark_lastquestion_failed().
+     *
+     * @return bool whether the failure was new (false: the same step or key was taken in before)
+     */
+    private function take_in_failure(): bool {
+        $qid = $this->lastquestion->id;
+        $entry = [
+            'questionid' => $qid,
+            'fraction' => 0.0,
+            'state' => 'gaveup',
+            'questionusageid' => $this->usageid,
+            'userlastattempttime' => time(),
+        ];
+        $step = $this->usageid ? catquiz::get_last_finished_step_of_question((int) $this->usageid, (int) $qid) : null;
+        if ($step !== null) {
+            $entry['id'] = (int) $step->id;
+            $entry['questionattemptid'] = (int) $step->questionattemptid;
+            $entry['slot'] = (int) $step->slot;
+            $entry['stepstate'] = (string) $step->state;
+            $key = (string) $step->id;
+        } else {
+            $slot = $this->usageid ? catquiz::get_last_slot_of_question((int) $this->usageid, (int) $qid) : 0;
+            $key = 'failed:' . $qid . ':' . $slot;
+            $entry['failurekey'] = $key;
+        }
+        if (isset($this->recorded_steps()[$key])) {
+            return false;
+        }
+        if (array_key_exists($qid, $this->responses)) {
+            $this->log_later_response($entry);
+            return true;
+        }
+        $this->responses[$qid] = array_merge($this->responses[$qid] ?? [], $entry);
+        $this->recordedsteps[$key] = true;
+        // Issue #177: stored as an event with the next save.
+        $this->dirtyresponses[(string) $qid] = true;
+        return true;
     }
 
     /**

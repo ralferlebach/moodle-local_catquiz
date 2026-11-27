@@ -1,5 +1,33 @@
 # Changelog – local_catquiz
 
+## 1.2.2 (2026112703, 27.11.2026 abends)
+
+Nacharbeit zum Re-Audit vom 27.11.2026 abends (Push-Stand 2026112703/2026112702) und die neuen P0-Issues.
+Belege: `doc/re-audit-2026-11-27-abend-nachweise.md` (Arbeitspaket) und das Nachweis-ZIP.
+
+- **#177 P0 – Fehlschläge:**
+  - `mark_lastquestion_failed()` erkennt einen Fehlschlag (aufgegeben; Reload nach Zeitablauf) an dem Schritt, den er
+    in der Usage hinterlässt.
+  - Ohne Schritt gilt der Schlüssel `failed:<Frage>:<letzter Slot>`; es wird kein Schritt erfunden.
+  - Ein Fehlschlag wird einmal aufgenommen, auch bei Wiederholung, nach einem Absturz vor dem CAT-Commit und wenn der
+    reguläre Pfad denselben Aufgabe-Schritt sieht. Vorher entstanden dabei zusätzliche `later`-Ereignisse.
+  - Antwortvertrag mit allen Fällen und dem Wortlaut der Entscheidung 8: `doc/issue-177-antwortvertrag.md`.
+- **#178 – Ablaufpolicy:**
+  - `local\attempt\expiry_policy`: Policy des Tests (`none` oder Sekunden, vom Lab gesetzt), Zeitlimit des Tests ×
+    1,5, sonst der Standard der Site.
+  - Standard der Site nicht gesetzt: 24 h (vorher 0, also nie). Eine Einheit, die das Formular nicht kennt, ist kein
+    Limit (vorher Sekunden).
+  - `cancel_expired_attempts` schließt unter der Sperre der Itemadministration des Hosts und liest den Versuch neu.
+  - Den Engine-Status „durch Zeitlimit geschlossen“ setzt der Task nur für einen Versuch, den er selbst geschlossen
+    hat. Vorher überschrieb er das Ende eines regulär abgeschlossenen.
+  - Jede Entscheidung wird ohne Nutzerdaten protokolliert. Dokument: `doc/issue-178-ablaufpolicy.md`.
+- **#176, #157, #177:** Die Vertragsdokumente sind versioniert (`.gitignore`-Ausnahme, Entscheidung 15 vom 27.11.):
+  `ci-evidenzkette.md` mit Abgleich der Läufe vom 27.11., `issue-157-aufrufstellen.md`, `issue-177-datenmodell.md`,
+  `issue-177-antwortvertrag.md`, `issue-178-ablaufpolicy.md`.
+- **Partner:** mod_adaptivequiz 2026112700 (Host #27: Reset nach Generation, Frageseite nur für den eigenen Versuch).
+  Push-Reihenfolge: zuerst Host, dann Engine.
+- Kein Schemawechsel, kein Upgrade-Schritt.
+
 ## 1.2.2 (2026112702, 27.11.2026)
 
 Nacharbeit zum Critical-Friend-Re-Audit vom 27.11.2026 (Push-Stand 2026112701/2026112700). Messung und Belege:
