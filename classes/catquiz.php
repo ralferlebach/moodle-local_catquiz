@@ -2879,7 +2879,12 @@ class catquiz {
         // untouched so a finalised end time is never clobbered.
 
         if (get_config('local_catquiz', 'store_debug_info')) {
-            $data->debug_info = json_encode($attemptdata['debuginfo']);
+            /* Issue #177 (AK1): the rows of a running attempt are events of its progress; the column - one row per
+               answer, all of them - is written once, when the feedback is complete, not again with every answer. */
+            $scope = $attemptdata[\local_catquiz\output\attemptfeedback::SCOPE_KEY] ?? null;
+            if ($scope !== \local_catquiz\output\attemptfeedback::SCOPE_ANSWER) {
+                $data->debug_info = json_encode($attemptdata['debuginfo'] ?? []);
+            }
             unset($attemptdata['debuginfo']);
         }
 

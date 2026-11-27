@@ -241,6 +241,7 @@
         <FIELD NAME="json" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="all data needed to continue the attempt"/>
         <FIELD NAME="quizsettings" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="The quiz settings used for this attempt"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="When this progress was last saved on the server. Not when the person was last active in the browser; for that, the start time of the current question counts. 0 for rows saved before this field existed."/>
+        <FIELD NAME="lastseq" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="Issue #177: the last event of this working state in local_catquiz_progress_steps; 0 for a progress in a format before. Written with every save, in the same transaction as the events."/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
@@ -248,6 +249,38 @@
         <KEY NAME="attemptid" TYPE="foreign-unique" FIELDS="attemptid" REFTABLE="local_catquiz_attempts" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
+      </INDEXES>
+    </TABLE>
+    <TABLE NAME="local_catquiz_progress_steps" COMMENT="Issue #177: the events of a running CAT attempt, only ever inserted - a question shown, an answer, a question given up or excluded, a change of the scale state. The progress row is the head of fixed size; head and events together are the working state.">
+      <FIELDS>
+        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="catattemptid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="The CAT attempt: local_catquiz_attempts.id, as local_catquiz_progress.attemptid. Never the attempt of the host."/>
+        <FIELD NAME="seq" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="1, 2, 3 ... in the order the events happened; the head names the last one (local_catquiz_progress.lastseq)."/>
+        <FIELD NAME="eventtype" TYPE="char" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="shown, answer, gaveup, excluded or scalestate."/>
+        <FIELD NAME="questionusageid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The question usage of the host attempt the answer was taken from."/>
+        <FIELD NAME="slot" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="questionattemptid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
+        <FIELD NAME="questionattemptstepid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The graded step of the question usage the answer was taken from (decision 7: the usage is the source; an answer event is idempotent by it)."/>
+        <FIELD NAME="itemid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The question (local_catquiz_items.componentid). Not unique per attempt: a question can be shown in more than one slot (#125)."/>
+        <FIELD NAME="catscaleid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The scale of the item when it was shown."/>
+        <FIELD NAME="ispilot" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="paramid" TYPE="int" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="The active item parameters when the item was shown: local_catquiz_itemparams.id (decision 6, provenance of the calibration)."/>
+        <FIELD NAME="fraction" TYPE="number" LENGTH="12" NOTNULL="false" SEQUENCE="false" DECIMALS="7" COMMENT="The fraction the estimation used (gave up: 0)."/>
+        <FIELD NAME="originalfraction" TYPE="number" LENGTH="12" NOTNULL="false" SEQUENCE="false" DECIMALS="7" COMMENT="The fraction of the graded step of the usage."/>
+        <FIELD NAME="difficulty" TYPE="float" NOTNULL="false" SEQUENCE="false" COMMENT="The difficulty of the active parameters when the item was shown."/>
+        <FIELD NAME="information" TYPE="float" NOTNULL="false" SEQUENCE="false" COMMENT="The Fisher information of the item for the root scale when it was shown (it depends on the ability at that moment)."/>
+        <FIELD NAME="estimatesdelta" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON, numbers only: the scales whose estimate changed with this event, root included - scale id: [ability, standard error, number of productive answers]."/>
+        <FIELD NAME="diagnostics" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON, no texts: what the working state needs besides the columns - the scale path of a shown item, the response as the estimation read it, entries of the answer history and, in trace mode, of the traces."/>
+        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="formatversion" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="1" SEQUENCE="false" COMMENT="Version of the event format."/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="catattemptid" TYPE="foreign" FIELDS="catattemptid" REFTABLE="local_catquiz_attempts" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="catattemptseq" UNIQUE="true" FIELDS="catattemptid, seq" COMMENT="One event per place: two writers of the same attempt cannot both append the same place."/>
+        <INDEX NAME="catattemptstep" UNIQUE="false" FIELDS="catattemptid, questionattemptstepid" COMMENT="Finds the event of a graded step of the usage (idempotence, decision 7)."/>
       </INDEXES>
     </TABLE>
     <TABLE NAME="local_catquiz_qhashmap" COMMENT="Maps questions between instances using hashes">

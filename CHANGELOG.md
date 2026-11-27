@@ -2,6 +2,71 @@
 
 ## 1.2.1 (in Arbeit)
 
+- **#177 Lineare Schreiblast** (2026112700; Datenmodell und Betrieb `doc/issue-177-datenmodell.md`, Messung
+  `doc/issue-177-nachweise.md`, Belege `doc/evidence/issue-177/`, nur im ZIP).
+  - **Vorher:** Jede Antwort schrieb den ganzen Progress neu, zweimal je Request: gespielte Fragen mit 38 Feldern,
+    Antworten mit Texten, Historie. Die Schreibmenge je Antwort wuchs mit N, die Summe über den Versuch mit N².
+  - **Kopf (`local_catquiz_progress`):**
+    - nur noch Felder fester Größe (Format 3);
+    - neue Spalte `lastseq` als Versionszähler.
+  - **Ereignisse (`local_catquiz_progress_steps`, neu):**
+    - werden nur eingefügt: `shown`, `answer`, `gaveup`, `excluded`, `scalestate`;
+    - tragen die QUBA-Identitäten (Usage, Slot, Question-Attempt, Step), Item, Skala, Pilotstatus, Kalibrierung
+      (`paramid`), Bewertung, Schwierigkeit und Information;
+    - eindeutig über (CAT-Versuch, `seq`), kein Unique über die Item-ID.
+  - **Je Antwort:** 2 Ereignisse und 2 Kopf-Updates fester Größe.
+  - **Delta-Schätzungen (C):** `estimatesdelta` enthält nur geänderte Skalen als `[θ, SE, n]`, ohne künstliche Rundung.
+    Eine nicht endliche SE wird `null`, INF/NaN gibt es nie.
+  - **Textfrei (D):**
+    - Ereignisse, Kopf, laufendes Feedback und Debug-Zeilen enthalten keine `questionsummary`, `rightanswer`,
+      `responsesummary`, Titel, Labels oder Skalennamen mehr.
+    - Die Ergebnisseite holt sie gebündelt: drei Abfragen für den Verlauf, die gegebene Antwort aus der QUBA.
+    - **Fachänderung:** Eine umbenannte Skala erscheint im Verlauf mit dem neuen Namen. Zahlen, SE und Noten bleiben
+      gespeichert.
+  - **`debug_info`:** wird nicht mehr je Antwort neu geschrieben, sondern einmal beim Abschluss. Die Zeilen liegen
+    numerisch in den Ereignissen, nur mit `store_debug_info`.
+  - **Konflikt:** Hat ein anderer Request (zweites Fenster) inzwischen gespeichert, schreibt `save()` nichts und wirft
+    `progress_conflict_exception` („bitte neu laden“). Es geht nichts verloren und es wird nichts doppelt gezählt.
+  - **Einstellungen:** werden mit dem Kopf nur noch geschrieben, wenn sie sich geändert haben (erstes Speichern,
+    Änderung). Sie sind der größte Teil des Kopfs und ändern sich im Versuch nicht.
+  - **Fehlschlag:** Ein fehlgeschlagenes Speichern speichert nichts; das nächste holt es nach.
+  - **Upgrade:** legt nur Tabelle und Spalte an und schreibt nichts um. Laufende Altversuche werden beim nächsten
+    Speichern unter der Sperre in einer Transaktion umgestellt; abgeschlossene Versuche bleiben unverändert.
+  - **Rückweg und Prüfung:**
+    - `cli/progress_steps.php --check`;
+    - `--rollback [--execute]`, schreibt im Wartungsmodus ins Format 2 zurück.
+  - **Leser beider Formate über `progress::stored_structure()`:**
+    - Retention, Verlaufsvervollständigung, Debug-Export, Operator-Prüfungen, Privacy-Export.
+    - Gelöscht werden Kopf und Ereignisse zusammen: Privacy, Retention, `progress::delete()`, Adapter.
+  - **Adapter** (2026112700, Abhängigkeit): `attempt_cleanup` löscht die Ereignisse mit dem Kopf; die
+    Waisen-Inventur kennt `progress_steps_orphan`.
+  - **Tests:**
+    - `progress_events_test` (12 Tests: Rundweg, fester Kopf, Einstellungen, Textfreiheit, QUBA-Identität, Deltas,
+      Konflikt, Fehlschlag, Aufgegeben/geänderte Antwort, Altformat, Rückweg/Prüfung, Löschen); Privacy-Tests mit
+      Ereignissen;
+    - Zahntests für Konflikt, Textfreiheit, festen Kopf, Deltas, Einstellungen und Rücksetzen nach Fehlschlag: alle
+      rot ohne Schutz.
+    - Angepasste Tests lesen den Arbeitsstand über `stored_structure()`.
+  - **Messwerkzeuge:**
+    - `benchmark_attempts.php`: WAL-/Redo-Bytes, Kopf, Ereignisse und Schätzungen je Schritt;
+    - `simulate_progress_writes.php`: Persistenz bis 10.000 Antworten, alt gegen neu.
+  - **Messung (`doc/issue-177-nachweise.md`):**
+    - Linie 1.2, 4.5/MariaDB, Strategie 4, 625 Antworten: bitgleich mit dem Kontrolllauf der alten Engine;
+      Redo-Bytes 7× kleiner, Progress-Schreibmenge 155× kleiner.
+    - Linie 1.3 (gleiches `progress.php`), 5.1/PostgreSQL, 625 Antworten, sechs Strategien, jeder Lauf von derselben
+      Basis:
+      - DB-Schreibbytes 21–31× kleiner;
+      - Progress-Schreibmenge 152–160× kleiner, 4–5 MB statt 670–830 MB;
+      - Fragefolge, Fähigkeit und SE je Skala und Stopp bitgleich mit der alten Engine, auch kalt (Lesen aus Kopf und
+        Ereignissen).
+    - Persistenz bis 10.000 Antworten: rund 5 KB WAL (PostgreSQL) bzw. 10 KB Redo (MariaDB) je Antwort, gleichbleibend,
+      R² ≥ 0,999.
+    - Finaler Snapshot bei 625 Antworten: 204 KB (Baseline 311 KB).
+  - **Grenzen:**
+    - Der Sitzungs-Cache hält den Progress weiter in voller Größe, O(N) in der Sitzung.
+    - Die IRT-Neuschätzung bleibt O(N) Rechenaufwand (#161).
+    - Backup/Restore enthält wie bisher keine CAT-Nutzerdaten.
+
 - CI-Werkzeugwechsel vom 23.11.2026 (2026112300): `moodle-plugin-ci ^4` zog 4.5.12 und damit phpcs 4.0.4 und moodle-cs
   3.9.2. Die Code-Style- und Grunt-Jobs wurden auf beiden Linien rot, ohne dass sich der Code geändert hatte.
   - **Code-Style:** Leerzeile nach namespace-, use- und Docblock-Block (20 Dateien, phpcbf); Kommentare hinter `{`

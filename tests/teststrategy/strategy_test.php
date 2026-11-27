@@ -2958,7 +2958,8 @@ final class strategy_test extends advanced_testcase {
 
         // Read back what was saved: the exclusion set of the next request comes from there.
         $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id((int) $attempt->get_attempt()->id, 'mod_adaptivequiz');
-        $saved = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]), true);
+        // Issue #177: the played questions are stored as events; the stored structure reads either format.
+        $saved = json_decode(json_encode(\local_catquiz\teststrategy\progress::stored_structure((int) $catattemptid)), true);
         $this->assertArrayHasKey(
             (int) $firstid,
             $saved['playedquestions'] ?? [],
@@ -3130,7 +3131,8 @@ final class strategy_test extends advanced_testcase {
             );
             $administered[] = (int) $questionid;
             $catattemptid = \local_catquiz\catquiz::get_cat_attempt_id((int) $attemptid, 'mod_adaptivequiz');
-            $saved = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]), true);
+            // Issue #177: read as stored, in either format.
+            $saved = json_decode(json_encode(\local_catquiz\teststrategy\progress::stored_structure((int) $catattemptid)), true);
             $pilots += empty($saved['playedquestions'][$questionid]['is_pilot']) ? 0 : 1;
 
             $this->createresponse(question_bank::load_question($questionid), $i % 2 === 0);

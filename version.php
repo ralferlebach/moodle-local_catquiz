@@ -34,7 +34,7 @@ $plugin->supported = [405, 405];
 // Issue #31: "supported" only informs; this keeps the 1.2 line off Moodle 5.0 and later (the 1.3 line is for 5.x).
 $plugin->incompatible = 500;
 $plugin->release = '1.2.1';
-$plugin->version = 2026112300;
+$plugin->version = 2026112700;
 $plugin->requires = 2024100700;
 $plugin->maturity = MATURITY_STABLE;
 $plugin->dependencies = [
@@ -45,5 +45,6 @@ $plugin->dependencies = [
     // Since 19.11.2026 the triple of this delivery: host with the switch of the request timing (host #17),
     // adapter with its callback, the stop matrix and the link-function goldens (adapter #12, host #25).
     'mod_adaptivequiz' => 2026111701,
-    'adaptivequizcatmodel_catquiz' => 2026111706,
+    // Since 27.11.2026 (#177): the adapter that deletes the events of the working state with their head.
+    'adaptivequizcatmodel_catquiz' => 2026112700,
 ];

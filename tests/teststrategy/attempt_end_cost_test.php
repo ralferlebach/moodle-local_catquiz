@@ -89,35 +89,33 @@ final class attempt_end_cost_test extends \advanced_testcase {
     }
 
     /**
-     * The titles of the history come from the titles read at once for the rows, without a query per row; a question
-     * without a title keeps its label. RED before: the definition of every question was loaded (a question that is
-     * not in the question bank fell back to the label).
+     * The texts of the history - labels, titles, names of the scales - are read at once for all rows (issue #177, D: the
+     * rows no longer hold them): three queries, whatever the number of rows; a question that is gone is left out (its
+     * row keeps the label it has). RED before: the definition of every question was loaded (a query per row).
      */
-    public function test_the_titles_of_the_history_are_read_at_once(): void {
+    public function test_the_texts_of_the_history_are_read_at_once(): void {
         global $DB;
         $this->resetAfterTest();
-        $generator = (new \ReflectionClass(graphicalsummary::class))->newInstanceWithoutConstructor();
-        (new \ReflectionProperty(graphicalsummary::class, 'titles'))->setValue($generator, [900001 => 'Title', 900002 => '']);
-        $title = new \ReflectionMethod(graphicalsummary::class, 'get_question_title');
-        $before = $DB->perf_get_queries();
-        $this->assertSame('Title', $title->invoke($generator, 900001, 'label'));
-        $this->assertSame('label', $title->invoke($generator, 900002, 'label'));
-        $this->assertSame(0, $DB->perf_get_queries() - $before);
-
-        // The titles of real questions, in one query.
         $questiongenerator = $this->getDataGenerator()->get_plugin_generator('core_question');
         $category = $questiongenerator->create_question_category();
+        $scale = $DB->insert_record('local_catquiz_catscales', (object) ['name' => 'Scale X', 'parentid' => 0]);
+        $rows = [];
         $ids = [];
         for ($i = 0; $i < 30; $i++) {
             $question = $questiongenerator->create_question('truefalse', null, ['category' => $category->id, 'name' => "T$i"]);
             $ids[] = (int) $question->id;
+            $rows[] = ['id' => (int) $question->id, 'questionscale' => $scale];
         }
-        $titles = new \ReflectionMethod(graphicalsummary::class, 'question_titles');
+        $rows[] = ['id' => 123456789, 'questionscale' => $scale];
+        $texts = new \ReflectionMethod(graphicalsummary::class, 'texts_of_the_rows');
         $before = $DB->perf_get_queries();
-        $read = $titles->invoke(null, [...$ids, 123456789]);
-        $this->assertSame(1, $DB->perf_get_queries() - $before);
-        $this->assertCount(30, $read);
-        $this->assertSame('T7', $read[$ids[7]]);
+        [$labels, $titles, $scalenames] = $texts->invoke(null, $rows);
+        $this->assertSame(3, $DB->perf_get_queries() - $before);
+        $this->assertCount(30, $titles);
+        $this->assertSame('T7', $titles[$ids[7]]);
+        $this->assertArrayNotHasKey(123456789, $titles);
+        $this->assertCount(30, $labels);
+        $this->assertSame(['Scale X'], array_values($scalenames));
     }
 
     /**
@@ -170,6 +168,7 @@ final class attempt_end_cost_test extends \advanced_testcase {
                 'slot' => (int) $slot,
                 'questionattemptid' => (int) $qa->get_database_id(),
                 'name' => (string) $qa->get_question()->name,
+                'responsesummary' => $qa->get_response_summary(),
             ];
         }
         $this->assertSame($expected, $map, 'What the usage says.');

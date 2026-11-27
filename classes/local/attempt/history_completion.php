@@ -99,8 +99,8 @@ class history_completion {
 
         // While the progress is still there: the rows the retention would copy from it, so that the page is the same
         // before and after the progress is removed.
-        $progressjson = $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]);
-        $progress = $progressjson ? json_decode((string) $progressjson, true) : null;
+        // Issue #177: the stored progress in either format.
+        $progress = \local_catquiz\teststrategy\progress::stored_structure($catattemptid);
         if (is_array($progress)) {
             $root = (string) ($stored['catscaleid'] ?? $attempt->scaleid);
             foreach (progress_retention::rows_from_progress($progress, $root, $have) as $row) {

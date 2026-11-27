@@ -321,6 +321,14 @@ final class operator_checks {
                 ['id', 'userid', 'attemptid', 'timemodified'],
                 'json'
             ),
+            // Issue #177: the events of the other attempts' working state.
+            'progress_steps' => self::checksum(
+                'local_catquiz_progress_steps',
+                "NOT (catattemptid $insql)",
+                $inparams,
+                ['id', 'catattemptid', 'seq', 'eventtype', 'itemid', 'timecreated'],
+                'diagnostics'
+            ),
             'abilities' => self::checksum(
                 'local_catquiz_personparams',
                 "(attemptid IS NULL OR NOT (attemptid $insql))",
@@ -495,7 +503,9 @@ final class operator_checks {
             $records++;
             $strategy = $strategies[(int) $row->teststrategy] ?? ('strategy ' . (int) $row->teststrategy);
             $min = $minimums[(int) $row->instance] ?? 0;
-            $progress = $row->progress ? json_decode($row->progress, true) : null;
+            // Issue #177: the stored progress in either format (head and steps, or the JSON before).
+            $progress = $row->progress ? \local_catquiz\teststrategy\progress::stored_structure((int) $row->id, $row->progress)
+                : null;
             $scaleset = $progress === null ? 'no progress'
                 : (empty($progress['activescales']) ? 'empty' : 'not empty');
             $played = $progress['playedquestions'] ?? [];

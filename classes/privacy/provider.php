@@ -75,6 +75,10 @@ class provider implements
                 'status', 'n', 'fraction', 'isprimary', 'isvalid', 'resultsource', 'validationstatus', 'rangelower', 'rangeupper',
                 'rangebackfilled', 'timecreated', 'timemodified'],
             'local_catquiz_progress' => ['userid', 'component', 'attemptid', 'json', 'quizsettings', 'timemodified'],
+            // Issue #177: the events of the working state, only ever added; numbers and identities, no texts.
+            'local_catquiz_progress_steps' => ['catattemptid', 'seq', 'eventtype', 'questionusageid', 'slot',
+                'questionattemptid', 'questionattemptstepid', 'itemid', 'catscaleid', 'ispilot', 'paramid', 'fraction',
+                'originalfraction', 'difficulty', 'information', 'estimatesdelta', 'diagnostics', 'timecreated'],
             'local_catquiz_trace' => ['adaptiveattemptid', 'userid', 'kind', 'questionnumber', 'requestms', 'dbqueries', 'spans',
                 'timecreated'],
             'local_catquiz_subscriptions' => ['userid', 'itemid', 'area', 'status', 'usermodified', 'timecreated',
@@ -364,7 +368,12 @@ class provider implements
             'debuginfo' => json_decode((string) $attempt->debug_info),
             'timecreated' => transform::datetime($attempt->timecreated),
             'scales' => array_values(array_map(fn($s) => self::ability_export($s), $scales)),
-            'workingstate' => $progress ? json_decode((string) $progress->json) : null,
+            // Issue #177: the working state with its answers (the steps), in the structure it had before.
+            'workingstate' => $progress
+                ? json_decode(json_encode(
+                    \local_catquiz\teststrategy\progress::stored_structure((int) $attempt->id, (string) $progress->json)
+                ))
+                : null,
         ];
     }
 
@@ -545,6 +554,7 @@ class provider implements
         foreach (array_chunk($catattemptids, 500) as $chunk) {
             [$insql, $inparams] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED);
             $DB->delete_records_select('local_catquiz_personparams', "attemptid $insql", $inparams);
+            $DB->delete_records_select('local_catquiz_progress_steps', "catattemptid $insql", $inparams);
             $DB->delete_records_select('local_catquiz_progress', "attemptid $insql", $inparams);
             $DB->delete_records_select('local_catquiz_attempts', "id $insql", $inparams);
         }

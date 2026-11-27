@@ -61,6 +61,37 @@ class progress implements JsonSerializable {
     /** @var int JSON format that refers to played questions by id (issue #143). */
     public const FORMAT_COMPACT = 2;
 
+    /** @var int Issue #177: the JSON is the head of fixed size; the rest are events in local_catquiz_progress_steps. */
+    public const FORMAT_STEPS = 3;
+
+    /** @var string Issue #177: a question was handed out (add_playedquestion()). */
+    public const EVENT_SHOWN = 'shown';
+
+    /** @var string Issue #177: a response was taken in, or changed (mark_lastquestion_failed()). */
+    public const EVENT_ANSWER = 'answer';
+
+    /** @var string Issue #177: the person gave up the question; with the response it was counted as. */
+    public const EVENT_GAVEUP = 'gaveup';
+
+    /** @var string Issue #177: a question was excluded from the selection (exclude_question()). */
+    public const EVENT_EXCLUDED = 'excluded';
+
+    /** @var string Issue #177: the state of the scales changed without a question event (carries estimates, history). */
+    public const EVENT_SCALESTATE = 'scalestate';
+
+    /** @var int Issue #177: version of the event format. */
+    public const EVENT_FORMAT = 1;
+
+    /** @var string[] Issue #177: the columns of an event (local_catquiz_progress_steps), but its id. */
+    private const EVENT_COLUMNS = [
+        'catattemptid', 'seq', 'eventtype', 'questionusageid', 'slot', 'questionattemptid', 'questionattemptstepid',
+        'itemid', 'catscaleid', 'ispilot', 'paramid', 'fraction', 'originalfraction', 'difficulty', 'information',
+        'estimatesdelta', 'diagnostics', 'timecreated', 'formatversion',
+    ];
+
+    /** @var string[] Response fields that are texts of the question usage: stored nowhere by the progress (D). */
+    public const RESPONSE_TEXTS = ['questionsummary', 'rightanswer', 'responsesummary'];
+
     /**
      * @var ?int $id The ID in the database.
      */
@@ -250,11 +281,117 @@ class progress implements JsonSerializable {
     private stdClass $quizsettings;
 
     /**
+     * Issue #177: the settings as they are stored with the head (JSON), null when not known to be stored. The head
+     * writes them again only when they differ - they are the largest part of it and do not change during an attempt.
+     *
+     * @var string|null
+     */
+    private ?string $savedsettings = null;
+
+    /**
+     * Issue #177: the head was filed by this save - there was none before, so no event of this attempt can be its own.
+     *
+     * @var bool
+     */
+    private bool $freshhead = false;
+
+    /**
      * Issue #159: rebuilt from what was stored with a finished attempt after its progress was removed - read only.
      *
      * @var bool
      */
     private bool $historical = false;
+
+    /**
+     * Issue #177: the format this progress is stored in - FORMAT_STEPS, or 0 for one that was read from (or cached in)
+     * a format before and is converted by its next save: all its events at once, then the head.
+     *
+     * @var int
+     */
+    private int $format = 0;
+
+    /**
+     * Issue #177: the last event of this working state that is stored (local_catquiz_progress.lastseq).
+     *
+     * @var int
+     */
+    private int $lastseq = 0;
+
+    /**
+     * Issue #177: the questions handed out since the last save, as their shown events will be stored - in the order
+     * add_playedquestion() was called, a question again when it was added again (a reload).
+     *
+     * @var array
+     */
+    private array $unsavedshown = [];
+
+    /**
+     * Issue #177: the responses taken in or changed since the last save, by question id.
+     *
+     * @var array
+     */
+    private array $dirtyresponses = [];
+
+    /** @var int Issue #177: how many calls of add_playedquestion() are stored as shown events. */
+    private int $savedshown = 0;
+
+    /** @var int Issue #177: how many responses are stored as events (the responses are only added to, in order). */
+    private int $savedresponses = 0;
+
+    /** @var int Issue #177: how many excluded questions are stored as events. */
+    private int $savedexcluded = 0;
+
+    /** @var int Issue #177: how many given up questions are stored as events. */
+    private int $savedgaveup = 0;
+
+    /** @var int Issue #177: how many entries of the answer history are stored with events. */
+    private int $savedhistory = 0;
+
+    /** @var int Issue #177: how many entries of the scale state trace are stored with events (trace mode). */
+    private int $savedscalestates = 0;
+
+    /** @var array Issue #177: per scale, how many entries of the ability trace are stored with events (trace mode). */
+    private array $savedtrace = [];
+
+    /**
+     * Issue #177 (C): the estimate of every scale as last stored - scale id => [ability, standard error, n]. An event
+     * carries the scales that differ from it.
+     *
+     * @var array
+     */
+    private array $savedestimates = [];
+
+    /**
+     * Issue #177 (C): the standard error of every scale after the last answer, as the selection computed it.
+     *
+     * @var array
+     */
+    private array $standarderrors = [];
+
+    /**
+     * Issue #177: the rows of the debug information (store_debug_info), one per answer - numbers and identities only.
+     * Stored with the events; the column of the attempt is written once, at its end.
+     *
+     * @var array
+     */
+    private array $debugrows = [];
+
+    /** @var int Issue #177: how many rows of the debug information are stored with events. */
+    private int $saveddebugrows = 0;
+
+    /**
+     * Returns the internal CAT attempt id for the attempt of a component.
+     *
+     * Kept as a thin delegate: the resolution lives in catquiz because more than the progress
+     * needs it, and it must read the same way everywhere.
+     *
+     * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
+     * @param string $component The component the attempt belongs to.
+     * @return int|null The id in local_catquiz_attempts, null when there is no CAT attempt yet.
+     */
+    public static function get_cat_attempt_id(int $adaptiveattemptid, string $component): ?int {
+        return catquiz::get_cat_attempt_id($adaptiveattemptid, $component);
+    }
 
     /**
      * Files the CAT attempt for a test that is starting.
@@ -336,7 +473,7 @@ class progress implements JsonSerializable {
      * @return progress
      */
     public static function load(int $adaptiveattemptid, string $component, int $contextid, ?stdClass $quizsettings = null): self {
-        $catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, $component);
+        $catattemptid = self::get_cat_attempt_id($adaptiveattemptid, $component);
 
         /* Issue #101: the CAT attempt exists before the first progress access. Until now it was
            written only by the result page at the end of a test, so during the whole attempt there
@@ -359,8 +496,8 @@ class progress implements JsonSerializable {
             $instance = self::create_new($adaptiveattemptid, $component, $contextid, $quizsettings);
         }
 
-        // The CAT attempt may appear after this progress was first built - the component starts its
-        // attempt, the CAT model files its own right after. Pick it up when it does.
+        // The CAT attempt may have been created after this progress was first built - the component
+        // starts its attempt, the CAT model files its own right after. Pick it up when it appears.
         $instance->catattemptid = $catattemptid ?? $instance->catattemptid;
         // Re-audit 28.10.2026 (#149): a reader leaves the cache as it is - the move to the key of the CAT attempt is a
         // write, and only a writer makes it.
@@ -423,7 +560,7 @@ class progress implements JsonSerializable {
      */
     public static function load_historical(int $adaptiveattemptid, string $component): ?self {
         global $DB;
-        $catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, $component);
+        $catattemptid = self::get_cat_attempt_id($adaptiveattemptid, $component);
         if ($catattemptid === null) {
             return null;
         }
@@ -539,8 +676,6 @@ class progress implements JsonSerializable {
      * @throws coding_exception
      */
     private static function load_from_cache(?int $catattemptid, int $adaptiveattemptid, string $component = '') {
-        global $USER;
-
         $attemptcache = cache::make('local_catquiz', 'adaptivequizattempt');
         $cachekey = self::get_cache_key($catattemptid, $adaptiveattemptid, $component);
         $cached = $attemptcache->get($cachekey);
@@ -553,19 +688,43 @@ class progress implements JsonSerializable {
             return false;
         }
 
-        /* A cached progress is taken over only after it has been shown to belong here. The cache
-           key carries the user, but a stale entry could still name another one, and the component
-           has never been part of the key at all. */
-        if (
-            (int) $cached->userid !== (int) $USER->id
-                || ($component !== '' && $cached->component !== $component)
-        ) {
+        // The cache key carries the user, but a stale entry could still name another one, and the
+        // component has never been part of the key at all. Progress of one component must not be
+        // handed to another under the same numeric id.
+        if (!$cached->belongs_to_current_request($component)) {
+            $attemptcache->delete($cachekey);
+
+            return false;
+        }
+
+        // Issue #177 (AK3): another session went on with the attempt - the stored working state is ahead of this cache.
+        if (!$cached->is_current()) {
             $attemptcache->delete($cachekey);
 
             return false;
         }
 
         return $cached;
+    }
+
+    /**
+     * Returns whether this progress belongs to the user and component asking for it.
+     *
+     * The identity of a progress record is the pair (component, attemptid) plus the user it was
+     * created for - a numeric attempt id on its own says nothing. Ids are reused across components
+     * and survive as orphans, so a record found under one must still be proven to belong here.
+     *
+     * @param string $component Component asking, empty to skip the component check.
+     * @return bool
+     */
+    private function belongs_to_current_request(string $component): bool {
+        global $USER;
+
+        if ((int) $this->userid !== (int) $USER->id) {
+            return false;
+        }
+
+        return $component === '' || $this->component === $component;
     }
 
     /**
@@ -660,6 +819,11 @@ class progress implements JsonSerializable {
 
         // Set properties from json encoded data.
         $data = json_decode($object->json);
+        // Issue #177: a head in the format of events gets its lists from them; the code below reads the structure as
+        // it was. A progress in a format before is converted by its next save.
+        $markers = (int) ($data->progressformat ?? 0) === self::FORMAT_STEPS
+            ? self::replay_events($data, (int) $instance->catattemptid)
+            : null;
         // Old records saved before contextid was part of the serialized state don't have it.
         $instance->contextid = $data->contextid ?? $contextid;
         $instance->playedquestions = (array) $data->playedquestions;
@@ -725,7 +889,23 @@ class progress implements JsonSerializable {
         $instance->excludedquestions = $data->excludedquestions ?? [];
         $instance->gaveupquestions = $data->gaveupquestions ?? [];
         $instance->starttime = $data->starttime ?? 0;
+        if ($markers !== null) {
+            $instance->format = self::FORMAT_STEPS;
+            $instance->lastseq = $markers['lastseq'];
+            $instance->savedshown = $markers['savedshown'];
+            $instance->savedresponses = $markers['savedresponses'];
+            $instance->savedexcluded = $markers['savedexcluded'];
+            $instance->savedgaveup = $markers['savedgaveup'];
+            $instance->savedhistory = $markers['savedhistory'];
+            $instance->savedscalestates = $markers['savedscalestates'];
+            $instance->savedtrace = $markers['savedtrace'];
+            $instance->savedestimates = $markers['savedestimates'];
+            $instance->saveddebugrows = $markers['saveddebugrows'];
+            $instance->debugrows = array_map(fn($row) => (array) $row, (array) ($data->debugrows ?? []));
+        }
 
+        // Issue #177: what is stored, so that a save writes the settings only when they changed.
+        $instance->savedsettings = isset($object->quizsettings) ? (string) $object->quizsettings : null;
         // Fallback for old attempts that did not store the quizsettings: use the current ones.
         if (!property_exists($object, 'quizsettings') || $object->quizsettings === null) {
             // The CAT attempt of this progress, by its own id - its external number may be another component's.
@@ -759,6 +939,213 @@ class progress implements JsonSerializable {
     }
 
     /**
+     * The working state of a head in the format of events (issue #177): its events in order, one query, replayed into
+     * the lists the code reads - the played questions and those by scale, the responses, the given up and excluded
+     * questions, the history and, in trace mode, the traces. What was stored is what is read: nothing is estimated or
+     * looked up again, except the label of a played question (D: from the question bank, for the history).
+     *
+     * @param stdClass $data The head; the lists are set in it, in the structure of the format before.
+     * @param int $catattemptid
+     * @return array The markers of what is stored: savedexcluded, savedgaveup, savedhistory, savedscalestates,
+     *      savedtrace, savedestimates, lastseq.
+     */
+    private static function replay_events(stdClass $data, int $catattemptid): array {
+        global $DB;
+        $rows = $DB->get_records(
+            'local_catquiz_progress_steps',
+            ['catattemptid' => $catattemptid],
+            'seq ASC',
+            'id, seq, eventtype, itemid, catscaleid, ispilot, paramid, difficulty, information, estimatesdelta, diagnostics'
+        );
+        $played = [];
+        $order = [];
+        $responses = [];
+        $gaveup = [];
+        $excluded = [];
+        $history = [];
+        $trace = [];
+        $scalestates = [];
+        $estimates = [];
+        $debugrows = [];
+        $lastseq = 0;
+        foreach ($rows as $row) {
+            $lastseq = (int) $row->seq;
+            $diagnostics = $row->diagnostics !== null ? json_decode((string) $row->diagnostics, true) : [];
+            $diagnostics = is_array($diagnostics) ? $diagnostics : [];
+            $qid = $row->itemid === null ? null : (string) $row->itemid;
+            switch ($row->eventtype) {
+                case self::EVENT_SHOWN:
+                    $pilot = (bool) $row->ispilot;
+                    $played[$qid] = (object) [
+                        'id' => $qid,
+                        'componentid' => $qid,
+                        'catscaleid' => $row->catscaleid === null ? null : (string) $row->catscaleid,
+                        'is_pilot' => $pilot,
+                        'activeparamid' => $row->paramid === null ? null : (string) $row->paramid,
+                        'difficulty' => $diagnostics['d'] ?? null,
+                        'fisherinformation' => (array) ($diagnostics['fi'] ?? []),
+                        'label' => null,
+                    ];
+                    $order[] = [$qid, array_map('strval', (array) ($diagnostics['sp'] ?? [$row->catscaleid]))];
+                    break;
+                case self::EVENT_ANSWER:
+                    $responses[$qid] = (array) ($diagnostics['r'] ?? []);
+                    break;
+                case self::EVENT_GAVEUP:
+                    $gaveup[] = (int) $qid;
+                    if (isset($diagnostics['r'])) {
+                        $responses[$qid] = (array) $diagnostics['r'];
+                    }
+                    break;
+                case self::EVENT_EXCLUDED:
+                    $excluded[] = (int) $qid;
+                    break;
+            }
+            foreach ((array) ($diagnostics['h'] ?? []) as $entry) {
+                $entry = (array) $entry;
+                $entry['s'] = (array) ($entry['s'] ?? []);
+                $history[] = $entry;
+            }
+            foreach ((array) ($diagnostics['t'] ?? []) as $scaleid => $entries) {
+                foreach ((array) $entries as $entry) {
+                    $trace[$scaleid][] = (array) $entry;
+                }
+            }
+            foreach ((array) ($diagnostics['ss'] ?? []) as $entry) {
+                $scalestates[] = (array) $entry;
+            }
+            foreach ((array) ($diagnostics['dbg'] ?? []) as $entry) {
+                $debugrows[] = (array) $entry;
+            }
+            if ($row->estimatesdelta !== null) {
+                foreach ((array) json_decode((string) $row->estimatesdelta, true) as $scaleid => $estimate) {
+                    $estimates[$scaleid] = array_values((array) $estimate);
+                }
+            }
+        }
+
+        // D: the label of a played question is the idnumber of its question bank entry - read for all of them at once.
+        if ($played) {
+            [$insql, $params] = $DB->get_in_or_equal(array_map('intval', array_keys($played)));
+            $labels = $DB->get_records_sql_menu(
+                "SELECT qv.questionid, qbe.idnumber
+                   FROM {question_versions} qv
+                   JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+                  WHERE qv.questionid $insql",
+                $params
+            );
+            foreach ($played as $qid => $question) {
+                $question->label = $labels[$qid] ?? null;
+            }
+        }
+        // The question handed out last is in the head in full; it stands for its played question again, so that both
+        // are one object, as they are before a save.
+        if (is_object($data->lastquestion ?? null) && isset($data->lastquestion->id)) {
+            $lastid = (string) $data->lastquestion->id;
+            if (isset($played[$lastid])) {
+                $played[$lastid] = $data->lastquestion;
+            }
+        }
+        // The list by scale is the order of adding replayed, as add_playedquestion() builds it: by reference to the
+        // played question, as populate_from_object() resolves it.
+        $byscale = [];
+        foreach ($order as [$qid, $path]) {
+            foreach ($path as $scaleid) {
+                $byscale[$scaleid][] = $qid;
+            }
+        }
+        $data->playedquestions = (object) $played;
+        $data->playedquestionsbyscale = (object) $byscale;
+        $data->responses = (object) $responses;
+        $data->gaveupquestions = $gaveup;
+        $data->excludedquestions = $excluded;
+        $data->answerhistory = $history;
+        $data->abilitytrace = (object) $trace;
+        if ($scalestates) {
+            $data->scalestatetrace = $scalestates;
+        }
+        $data->debugrows = $debugrows;
+        return [
+            'savedshown' => count($order),
+            'savedresponses' => count($responses),
+            'savedexcluded' => count($excluded),
+            'savedgaveup' => count($gaveup),
+            'savedhistory' => count($history),
+            'savedscalestates' => count($scalestates),
+            'savedtrace' => array_map('count', $trace),
+            'savedestimates' => $estimates,
+            'saveddebugrows' => count($debugrows),
+            'lastseq' => $lastseq,
+        ];
+    }
+
+    /**
+     * The stored progress of a CAT attempt in the structure of the format before #177 - played questions, responses,
+     * abilities and the rest, decoded to arrays - for code that reads it without loading a progress (retention,
+     * display, reports, privacy export, debug export). A head in the format of events is replayed with its events.
+     *
+     * @param int $catattemptid
+     * @param string|null $json The JSON of the row when the caller has it; null to read it.
+     * @return array|null Null without a readable progress.
+     */
+    public static function stored_structure(int $catattemptid, ?string $json = null): ?array {
+        global $DB;
+        $json = $json ?? $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]);
+        $data = $json ? json_decode((string) $json) : null;
+        if (!$data instanceof stdClass) {
+            return null;
+        }
+        if ((int) ($data->progressformat ?? 0) === self::FORMAT_STEPS) {
+            self::replay_events($data, $catattemptid);
+            $data->progressformat = self::FORMAT_COMPACT;
+            // In the structure before, the list by scale and the last question refer to the played questions by id.
+            if (is_object($data->lastquestion ?? null) && isset($data->lastquestion->id)) {
+                $data->lastquestion = (string) $data->lastquestion->id;
+            }
+            unset($data->estimates, $data->counts, $data->lastseq);
+        }
+        return json_decode(json_encode($data), true);
+    }
+
+    /**
+     * Whether this progress, taken from the session cache, is the stored working state (issue #177, AK3): another
+     * session of the same person may have gone on with the attempt - a second device - and the cache of this one is
+     * behind. One read of the head per attempt and request.
+     *
+     * @return bool
+     */
+    private function is_current(): bool {
+        global $DB;
+        if ($this->id === null || $this->catattemptid === null) {
+            return true;
+        }
+        $known = cache::make('local_catquiz', 'progresscurrent')->get((string) $this->catattemptid);
+        if ($known !== false && (int) $known === $this->lastseq) {
+            return true;
+        }
+        $stored = $DB->get_field('local_catquiz_progress', 'lastseq', ['id' => $this->id]);
+        if ($stored === false) {
+            return false;
+        }
+        if ((int) $stored !== $this->lastseq) {
+            return false;
+        }
+        self::note_current((int) $this->catattemptid, $this->lastseq);
+        return true;
+    }
+
+    /**
+     * Notes for the rest of the request that the working state of a CAT attempt is stored up to this event.
+     *
+     * @param int $catattemptid
+     * @param int $lastseq
+     * @return void
+     */
+    private static function note_current(int $catattemptid, int $lastseq): void {
+        cache::make('local_catquiz', 'progresscurrent')->set((string) $catattemptid, $lastseq);
+    }
+
+    /**
      * This sets default data for a new instance.
      *
      * @param int $adaptiveattemptid Id of the attempt of the component: adaptivequiz_attempt.id - not local_catquiz_attempts.id.
@@ -773,7 +1160,7 @@ class progress implements JsonSerializable {
         $instance->id = null;
         $instance->component = $component;
         $instance->attemptid = $adaptiveattemptid;
-        $instance->catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, $component);
+        $instance->catattemptid = self::get_cat_attempt_id($adaptiveattemptid, $component);
         // The progress belongs to the person of its CAT attempt, as the CAT attempt itself - also when somebody
         // else is the first to touch it (issue #95). Before, it was filed under that somebody, and the owner's
         // next request was refused as somebody else's progress.
@@ -802,6 +1189,8 @@ class progress implements JsonSerializable {
         $instance->gaveupquestions = [];
         $instance->starttime = time();
         $instance->quizsettings = $quizsettings;
+        // Issue #177: a new working state is stored as head and events from its first save on.
+        $instance->format = self::FORMAT_STEPS;
         return $instance;
     }
 
@@ -904,7 +1293,7 @@ class progress implements JsonSerializable {
     public static function delete(int $adaptiveattemptid, string $component = 'mod_adaptivequiz'): void {
         global $DB;
 
-        $catattemptid = catquiz::get_cat_attempt_id($adaptiveattemptid, $component);
+        $catattemptid = self::get_cat_attempt_id($adaptiveattemptid, $component);
 
         // Delete cache - under both keys.
         $cache = cache::make('local_catquiz', 'adaptivequizattempt');
@@ -914,12 +1303,20 @@ class progress implements JsonSerializable {
         }
 
         if ($catattemptid !== null) {
+            // Issue #177: the events with their head.
+            $DB->delete_records('local_catquiz_progress_steps', ['catattemptid' => $catattemptid]);
             $DB->delete_records('local_catquiz_progress', ['attemptid' => $catattemptid]);
         }
     }
 
     /**
      * Saves the object to the cache and DB so that it can be re-used later.
+     *
+     * Issue #177: the head of fixed size is written, and what happened since the last save is appended as events - both
+     * in one transaction, never one without the other. A progress in a format before is converted by its first save
+     * here: all its events, then the head (AK5). The save runs under the lock of the item administration of the host;
+     * it still refuses to write over a working state that went on in another session (AK3, no lost update).
+     *
      * @return void
      */
     public function save(): void {
@@ -931,6 +1328,86 @@ class progress implements JsonSerializable {
         }
 
         // Save to the DB.
+        if ($this->catattemptid === null) {
+            /* Without a CAT attempt there is nothing to attach the progress to, and guessing a
+               reference is what issue #95 is about. The state stays in memory and in the cache;
+               the next save once the CAT model has filed its attempt persists it. */
+            $this->save_to_cache();
+
+            return;
+        }
+
+        // The first save of an attempt files the head, as before: a parallel request may have filed it (issue #95), and
+        // the fallback of an insert that fails cannot run inside a transaction (PostgreSQL aborts it).
+        if (!$this->id) {
+            $this->insert_head();
+        }
+
+        // The row of this attempt, as long as it is still ours (issue #96), and not ahead of this request (#177): checked
+        // before anything is written. Under the lock of the item administration nobody writes in between; should
+        // somebody, the place of the first event is taken already (unique index) and nothing of this save is stored.
+        $stored = $this->refuse_a_foreign_row((int) $this->id);
+        if ($this->format === self::FORMAT_STEPS && $stored !== null && (int) $stored->lastseq !== $this->lastseq) {
+            cache::make('local_catquiz', 'adaptivequizattempt')
+                ->delete(self::get_cache_key($this->catattemptid, (int) $this->attemptid, (string) $this->component));
+            throw new progress_conflict_exception((int) $this->catattemptid, $this->lastseq, (int) $stored->lastseq);
+        }
+
+        $markers = $this->save_markers();
+        $transaction = $DB->start_delegated_transaction();
+        try {
+            $events = \local_catquiz\local\monitoring\timeline::span(
+                'progress:events',
+                fn() => $this->format === self::FORMAT_STEPS ? $this->unsaved_events() : $this->all_events()
+            );
+            if ($this->format !== self::FORMAT_STEPS || $this->freshhead) {
+                /* AK5: the conversion writes the whole set of events; whatever an earlier attempt of it left is not
+                   part of this working state (its head was never switched). A head filed just now had no head before
+                   it: events of the attempt are left over (a cleanup without them, a number given out again after a
+                   restore) and would take the places of its first events. */
+                $DB->delete_records('local_catquiz_progress_steps', ['catattemptid' => $this->catattemptid]);
+                $this->lastseq = 0;
+            }
+            $now = time();
+            foreach ($events as $i => $event) {
+                // One structure for all rows of the insert.
+                $row = array_fill_keys(self::EVENT_COLUMNS, null);
+                foreach ((array) $event as $column => $value) {
+                    $row[$column] = $value;
+                }
+                $row['catattemptid'] = $this->catattemptid;
+                $row['seq'] = ++$this->lastseq;
+                $row['ispilot'] = (int) ($row['ispilot'] ?? 0);
+                $row['timecreated'] = $now;
+                $row['formatversion'] = self::EVENT_FORMAT;
+                $events[$i] = (object) $row;
+            }
+            if ($events) {
+                $DB->insert_records('local_catquiz_progress_steps', $events);
+            }
+            $this->format = self::FORMAT_STEPS;
+            $record = $this->head_record();
+            $record->id = $this->id;
+            $DB->update_record('local_catquiz_progress', $record);
+            $transaction->allow_commit();
+            $this->savedsettings = $record->quizsettings ?? $this->savedsettings;
+            $this->freshhead = false;
+        } catch (\Throwable $e) {
+            // Nothing was stored: what this save would have stored counts as unsaved, so that the next save stores it.
+            $this->restore_markers($markers);
+            $transaction->rollback($e);
+        }
+
+        self::note_current((int) $this->catattemptid, $this->lastseq);
+        $this->save_to_cache();
+    }
+
+    /**
+     * The row of the head as it is written (issue #177): the JSON of fixed size and the last event.
+     *
+     * @return stdClass
+     */
+    private function head_record(): stdClass {
         $record = (object) [
             // When this progress was last persisted (issue #122) - for live monitoring.
             'timemodified' => time(),
@@ -938,54 +1415,496 @@ class progress implements JsonSerializable {
             'userid' => $this->userid,
             'component' => $this->component,
             // Issue #168 (re-audit of 22.11.2026): the encoding of the progress as a span of its own, for the matrix of costs.
-            'json' => \local_catquiz\local\monitoring\timeline::span('progress:json_encode', fn() => json_encode($this)),
+            'json' => \local_catquiz\local\monitoring\timeline::span(
+                'progress:json_encode',
+                fn() => json_encode($this->head_data())
+            ),
+            'lastseq' => $this->lastseq,
         ];
-        /* The settings go along with every save, not only the first: a progress stored before they were kept with
-           it gets them on its next save (populate_from_object()), as intended - an update without them left the
-           fallback running on every load (issue #149). */
+        /* The settings go along with a save whenever they are not stored as they are: a progress stored before they were
+           kept with it gets them on its next save (populate_from_object()), as intended - an update without them left
+           the fallback running on every load (issue #149). Issue #177: not again with every save while they are the
+           same - they are the largest part of the head and do not change during an attempt. */
         if (isset($this->quizsettings)) {
-            $record->quizsettings = json_encode($this->quizsettings);
+            $settings = json_encode($this->quizsettings);
+            if ($settings !== $this->savedsettings) {
+                $record->quizsettings = $settings;
+            }
         }
+        return $record;
+    }
 
-        if ($this->catattemptid === null) {
-            /* Without a CAT attempt there is nothing to attach the progress to, and guessing a
-               reference is what issue #95 is about. The state stays in the cache; the next save
-               once the CAT model has filed its attempt persists it. */
-            $this->save_to_cache();
+    /**
+     * Files the head of a progress saved for the first time, without events yet.
+     */
+    private function insert_head(): void {
+        global $DB;
+        $record = $this->head_record();
+        $record->quizsettings = json_encode($this->quizsettings);
+        // Until the first events are stored the head names none: a reader sees an empty working state.
+        $record->lastseq = 0;
+        try {
+            $id = $DB->insert_record('local_catquiz_progress', $record);
+            $this->freshhead = true;
+        } catch (\dml_write_exception $e) {
+            // Issue #95: a request in parallel saved the first progress of this attempt - the unique index
+            // on attemptid let only one insert through. That row is this attempt's progress; it is updated
+            // instead of failing the request with an error page.
+            $id = $DB->get_field('local_catquiz_progress', 'id', ['attemptid' => $this->catattemptid]);
+            if ($id === false) {
+                throw $e;
+            }
+            $id = (int) $id;
+            $stored = $this->refuse_a_foreign_row($id);
+            // Issue #177: the other request stored its events already; this one continues from them, not over them.
+            if ($stored !== null && (int) $stored->lastseq !== $this->lastseq) {
+                cache::make('local_catquiz', 'adaptivequizattempt')
+                    ->delete(self::get_cache_key($this->catattemptid, (int) $this->attemptid, (string) $this->component));
+                throw new progress_conflict_exception((int) $this->catattemptid, $this->lastseq, (int) $stored->lastseq);
+            }
+        }
+        if (! is_int($id)) {
+            throw new \Exception(sprintf("Could not save quiz progress of attempt %d to the database", $this->attemptid));
+        }
+        $this->id = $id;
+        $this->savedsettings = null;
+    }
 
+    /**
+     * The head as it is stored (issue #177): what does not grow with the number of answers. The played questions, the
+     * responses, the excluded and given up questions, the history and the traces are events.
+     *
+     * @return array
+     */
+    public function head_data(): array {
+        return [
+            'progressformat' => self::FORMAT_STEPS,
+            'isfirstquestion' => $this->isfirstquestion,
+            // The question handed out last, in full: what the next request reads of it (check_break(): the time it was
+            // handed out; a reload hands it out again) is not part of its shown event.
+            'lastquestion' => $this->lastquestion,
+            'breakend' => $this->breakend,
+            'activescales' => $this->activescales,
+            'droppedscales' => $this->droppedscales,
+            'contextid' => $this->contextid,
+            'abilities' => $this->abilities,
+            'preattemptabilities' => $this->preattemptabilities,
+            // C: the estimate of every scale as stored with the last event that changed it.
+            'estimates' => $this->savedestimates,
+            'forcedbreakend' => $this->forcedbreakend,
+            'lockedscales' => $this->lockedscales,
+            'usageid' => $this->usageid,
+            'session' => $this->session,
+            'starttime' => $this->starttime,
+            // How much of each list the events hold - the check of the working state compares them (CLI).
+            'counts' => [
+                'shown' => $this->count_shown(),
+                'responses' => count($this->responses),
+                'excluded' => count($this->excludedquestions),
+                'gaveup' => count($this->gaveupquestions),
+                'history' => count($this->answerhistory),
+                'debug' => count($this->debugrows),
+            ],
+            'lastseq' => $this->lastseq,
+        ];
+    }
+
+    /**
+     * How many times add_playedquestion() was called: the list of the root scale holds each call, the played questions
+     * each question once.
+     *
+     * @return int
+     */
+    private function count_shown(): int {
+        $max = count($this->playedquestions);
+        foreach ($this->playedquestionsbyscale as $questions) {
+            $max = max($max, count($questions));
+        }
+        return $max;
+    }
+
+    /**
+     * What a save changes before it is committed, to be put back when it fails.
+     *
+     * @return array
+     */
+    private function save_markers(): array {
+        return [
+            $this->format, $this->lastseq, $this->unsavedshown, $this->dirtyresponses, $this->savedshown,
+            $this->savedresponses, $this->savedexcluded, $this->savedgaveup, $this->savedhistory, $this->savedscalestates,
+            $this->savedtrace, $this->savedestimates, $this->saveddebugrows,
+        ];
+    }
+
+    /**
+     * Puts back what save_markers() returned.
+     *
+     * @param array $markers
+     * @return void
+     */
+    private function restore_markers(array $markers): void {
+        [
+            $this->format, $this->lastseq, $this->unsavedshown, $this->dirtyresponses, $this->savedshown,
+            $this->savedresponses, $this->savedexcluded, $this->savedgaveup, $this->savedhistory, $this->savedscalestates,
+            $this->savedtrace, $this->savedestimates, $this->saveddebugrows,
+        ] = $markers;
+    }
+
+    /**
+     * The events of what happened since the last save (issue #177), in order: questions handed out, responses taken
+     * in or changed, questions given up, questions excluded. The entries of the history, the traces and the changed
+     * estimates go with the first event of a response, else with the last event; without any event they make one of
+     * their own (EVENT_SCALESTATE).
+     *
+     * @return stdClass[] Without catattemptid, seq, timecreated and formatversion.
+     */
+    private function unsaved_events(): array {
+        $events = [];
+        // The questions handed out since the last save: as add_playedquestion() took them; when the lists were set
+        // otherwise (a progress of a format before, a test), from the lists themselves.
+        $shown = $this->count_shown();
+        $new = $shown - $this->savedshown;
+        if ($new > 0) {
+            $entries = count($this->unsavedshown) === $new ? $this->unsavedshown : $this->shown_from_lists();
+            foreach ($entries as $entry) {
+                $events[] = self::shown_event($entry);
+            }
+        }
+        $this->unsavedshown = [];
+        $this->savedshown = $shown;
+
+        // Given up questions since the last save, in order; a response of the same question takes the first of them.
+        $gaveup = array_values(array_slice($this->gaveupquestions, $this->savedgaveup));
+        $this->savedgaveup = count($this->gaveupquestions);
+        $carrier = null;
+        // The responses added since the last save, and those changed (mark_lastquestion_failed()).
+        $keys = array_map('strval', array_keys($this->responses));
+        $changed = array_fill_keys(array_slice($keys, $this->savedresponses), true) + $this->dirtyresponses;
+        foreach ($keys as $qid) {
+            if (!isset($changed[$qid])) {
+                continue;
+            }
+            $type = self::EVENT_ANSWER;
+            $position = array_search((string) $qid, array_map('strval', $gaveup), true);
+            if ($position !== false) {
+                $type = self::EVENT_GAVEUP;
+                array_splice($gaveup, $position, 1);
+            }
+            $event = $this->response_event((string) $qid, $type);
+            $events[] = $event;
+            $carrier = $carrier ?? $event;
+        }
+        $this->dirtyresponses = [];
+        $this->savedresponses = count($keys);
+        foreach ($gaveup as $qid) {
+            $events[] = (object) ['eventtype' => self::EVENT_GAVEUP, 'itemid' => (int) $qid, 'ispilot' => 0];
+        }
+        foreach (array_slice($this->excludedquestions, $this->savedexcluded) as $qid) {
+            $events[] = (object) ['eventtype' => self::EVENT_EXCLUDED, 'itemid' => (int) $qid, 'ispilot' => 0];
+        }
+        $this->savedexcluded = count($this->excludedquestions);
+
+        $this->attach_state($events, $carrier ?? ($events ? end($events) : null), $carrier !== null);
+        return $events;
+    }
+
+    /**
+     * Every event of this working state, for a progress in a format before (AK5): its questions in the order they
+     * were handed out, its responses, given up and excluded questions, then the history and the traces.
+     *
+     * @return stdClass[]
+     */
+    private function all_events(): array {
+        $this->unsavedshown = [];
+        $this->dirtyresponses = [];
+        $this->savedshown = 0;
+        $this->savedresponses = 0;
+        $this->savedexcluded = 0;
+        $this->savedgaveup = 0;
+        $this->savedhistory = 0;
+        $this->savedscalestates = 0;
+        $this->savedtrace = [];
+        $this->savedestimates = [];
+        $this->saveddebugrows = 0;
+        return $this->unsaved_events();
+    }
+
+    /**
+     * Adds to the events what is not an event of its own: the entries of the history and of the traces recorded since
+     * the last save, and the scales whose estimate changed.
+     *
+     * @param array $events The events of this save; a scale state event is appended when one is needed.
+     * @param stdClass|null $carrier The event that takes them.
+     * @param bool $isresponse Whether the carrier is the event of a response - the estimates belong to it.
+     * @return void
+     */
+    private function attach_state(array &$events, ?stdClass $carrier, bool $isresponse): void {
+        $diagnostics = [];
+        $history = array_slice($this->answerhistory, $this->savedhistory);
+        if ($history) {
+            $diagnostics['h'] = array_values($history);
+            $this->savedhistory = count($this->answerhistory);
+        }
+        $trace = [];
+        foreach ($this->abilitytrace as $scaleid => $entries) {
+            $rest = array_slice(array_values((array) $entries), (int) ($this->savedtrace[$scaleid] ?? 0));
+            if ($rest) {
+                $trace[$scaleid] = $rest;
+            }
+            $this->savedtrace[$scaleid] = count((array) $entries);
+        }
+        if ($trace) {
+            $diagnostics['t'] = $trace;
+        }
+        $scalestates = array_slice($this->scalestatetrace, $this->savedscalestates);
+        if ($scalestates) {
+            $diagnostics['ss'] = array_values($scalestates);
+            $this->savedscalestates = count($this->scalestatetrace);
+        }
+        $debugrows = array_slice($this->debugrows, $this->saveddebugrows);
+        if ($debugrows) {
+            $diagnostics['dbg'] = array_values($debugrows);
+            $this->saveddebugrows = count($this->debugrows);
+        }
+        $delta = $this->estimates_delta($isresponse);
+        if (!$diagnostics && !$delta) {
             return;
         }
-
-        // If it does not exist yet, insert a new record.
-        if (! $this->id) {
-            $record->quizsettings = json_encode($this->quizsettings);
-            try {
-                $id = $DB->insert_record('local_catquiz_progress', $record);
-            } catch (\dml_write_exception $e) {
-                // Issue #95: a request in parallel saved the first progress of this attempt - the unique index
-                // on attemptid let only one insert through. That row is this attempt's progress; it is updated
-                // instead of failing the request with an error page.
-                $id = $DB->get_field('local_catquiz_progress', 'id', ['attemptid' => $this->catattemptid]);
-                if ($id === false) {
-                    throw $e;
-                }
-                $id = (int) $id;
-                $this->refuse_a_foreign_row($id);
-                $record->id = $id;
-                $DB->update_record('local_catquiz_progress', $record);
-            }
-            if (! is_int($id)) {
-                throw new \Exception(sprintf("Could not save quiz progress of attempt %d to the database", $this->attemptid));
-            }
-            $this->id = $id;
-        } else {
-            // Otherwise, just update - the row of this attempt, as long as it is still ours (issue #96).
-            $this->refuse_a_foreign_row((int) $this->id);
-            $record->id = $this->id;
-            $DB->update_record('local_catquiz_progress', $record);
+        if ($carrier === null) {
+            $carrier = (object) ['eventtype' => self::EVENT_SCALESTATE, 'ispilot' => 0];
+            $events[] = $carrier;
         }
+        if ($diagnostics) {
+            $existing = isset($carrier->diagnostics) ? (array) json_decode($carrier->diagnostics, true) : [];
+            $carrier->diagnostics = json_encode($existing + $diagnostics);
+        }
+        if ($delta) {
+            $carrier->estimatesdelta = json_encode($delta);
+        }
+    }
 
-        $this->save_to_cache();
+    /**
+     * The scales whose estimate differs from the one last stored (issue #177, C): ability, standard error and number
+     * of productive answers, with the precision they have - no rounding, no value that is not finite (a standard error
+     * without information is null), no value for a scale that has none.
+     *
+     * @param bool $counts Whether the numbers of answers are taken anew (after a response; they change only then).
+     * @return array Scale id => [ability, standard error or null, n].
+     */
+    private function estimates_delta(bool $counts): array {
+        $delta = [];
+        foreach ($this->abilities as $scaleid => $ability) {
+            if (!is_numeric($ability) || !is_finite((float) $ability)) {
+                continue;
+            }
+            $se = $this->standarderrors[$scaleid] ?? null;
+            $se = is_numeric($se) && is_finite((float) $se) ? (float) $se : null;
+            $n = $counts ? $this->get_num_answered_productive_questions((int) $scaleid)
+                : (int) ($this->savedestimates[$scaleid][2] ?? $this->get_num_answered_productive_questions((int) $scaleid));
+            $estimate = [(float) $ability, $se, $n];
+            if (($this->savedestimates[$scaleid] ?? null) !== $estimate) {
+                $delta[$scaleid] = $estimate;
+                $this->savedestimates[$scaleid] = $estimate;
+            }
+        }
+        return $delta;
+    }
+
+    /**
+     * What a shown event holds of a question, taken when it is handed out (issue #177, field inventory A): its scale and
+     * the path of scales it was filed under, the pilot flag, its active parameters with their difficulty, and its
+     * Fisher information for the root scale. Exact values in the diagnostics; the columns are a copy for queries.
+     *
+     * @param stdClass $question
+     * @param array $path The scale and its ancestors as add_playedquestion() filed it.
+     * @return array
+     */
+    private function shown_entry(stdClass $question, array $path): array {
+        $root = (int) ($this->quizsettings->catquiz_catscales ?? 0);
+        $pilot = !empty($question->is_pilot);
+        $information = null;
+        // The information of a pilot question is kept as well: it is one number, and a reader decides what counts.
+        if (isset($question->fisherinformation)) {
+            $fi = (array) $question->fisherinformation;
+            $information = isset($fi[$root]) && is_numeric($fi[$root]) ? (float) $fi[$root] : null;
+        }
+        $difficulty = isset($question->difficulty) && is_numeric($question->difficulty) ? (float) $question->difficulty : null;
+        return [
+            'itemid' => (int) $question->id,
+            'catscaleid' => isset($question->catscaleid) && is_numeric($question->catscaleid) ? (int) $question->catscaleid : null,
+            'ispilot' => $pilot ? 1 : 0,
+            'paramid' => !empty($question->activeparamid) && is_numeric($question->activeparamid)
+                ? (int) $question->activeparamid : null,
+            'difficulty' => $difficulty,
+            'information' => $information,
+            'root' => $root,
+            'path' => array_map('intval', $path),
+        ];
+    }
+
+    /**
+     * The shown event of an entry of shown_entry().
+     *
+     * @param array $shown
+     * @return stdClass
+     */
+    private static function shown_event(array $shown): stdClass {
+        $diagnostics = ['sp' => $shown['path']];
+        if ($shown['difficulty'] !== null) {
+            $diagnostics['d'] = $shown['difficulty'];
+        }
+        if ($shown['information'] !== null) {
+            $diagnostics['fi'] = [$shown['root'] => $shown['information']];
+        }
+        return (object) [
+            'eventtype' => self::EVENT_SHOWN,
+            'itemid' => $shown['itemid'],
+            'catscaleid' => $shown['catscaleid'],
+            'ispilot' => $shown['ispilot'],
+            'paramid' => $shown['paramid'],
+            'difficulty' => $shown['difficulty'],
+            'information' => $shown['information'],
+            'diagnostics' => json_encode($diagnostics),
+        ];
+    }
+
+    /**
+     * The event of a response (issue #177): its identities in the question usage as columns, the response as the
+     * estimation reads it - without the texts of the usage (D) - in the diagnostics.
+     *
+     * @param string $qid
+     * @param string $type EVENT_ANSWER or EVENT_GAVEUP.
+     * @return stdClass
+     */
+    private function response_event(string $qid, string $type): stdClass {
+        $response = (array) $this->responses[$qid];
+        $question = $this->playedquestions[$qid] ?? null;
+        $int = fn($value) => is_numeric($value) ? (int) $value : null;
+        $number = fn($value) => is_numeric($value) ? (float) $value : null;
+        return (object) [
+            'eventtype' => $type,
+            'questionusageid' => $int($response['questionusageid'] ?? $this->usageid),
+            'slot' => $int($response['slot'] ?? null),
+            'questionattemptid' => $int($response['questionattemptid'] ?? null),
+            'questionattemptstepid' => $int($response['id'] ?? null),
+            'itemid' => (int) $qid,
+            'catscaleid' => $question !== null ? $int($question->catscaleid ?? null) : null,
+            'ispilot' => $question !== null && !empty($question->is_pilot) ? 1 : 0,
+            'paramid' => $question !== null ? $int($question->activeparamid ?? null) : null,
+            'fraction' => $number($response['fraction'] ?? null),
+            'originalfraction' => $number($response['originalfraction'] ?? null),
+            'diagnostics' => json_encode(['r' => array_diff_key($response, array_flip(self::RESPONSE_TEXTS))]),
+        ];
+    }
+
+    /**
+     * The scales a question was filed under when it was added: its scale and its ancestors (add_playedquestion()).
+     *
+     * @param stdClass $question
+     * @return array
+     */
+    private function path_of(stdClass $question): array {
+        return [$question->catscaleid, ...catscale::get_ancestors($question->catscaleid)];
+    }
+
+    /**
+     * The order in which the questions of a progress in a format before were added (AK5): the list by scale that
+     * holds each of them as often as it was added - the root scale -, else the order of the played questions.
+     *
+     * @return stdClass[]
+     */
+    private function add_order(): array {
+        $ids = array_map('strval', array_keys($this->playedquestions));
+        $best = null;
+        foreach ($this->playedquestionsbyscale as $questions) {
+            $list = array_map(fn($q) => (string) (is_object($q) ? $q->id : $q), (array) $questions);
+            if ($best !== null && count($list) <= count($best)) {
+                continue;
+            }
+            $set = array_flip($list);
+            $complete = true;
+            foreach ($ids as $id) {
+                if (!isset($set[$id])) {
+                    $complete = false;
+                    break;
+                }
+            }
+            if ($complete) {
+                $best = $list;
+            }
+        }
+        $order = [];
+        foreach ($best ?? $ids as $qid) {
+            if (isset($this->playedquestions[$qid])) {
+                $order[] = $this->playedquestions[$qid];
+            }
+        }
+        return $order;
+    }
+
+    /**
+     * The shown entries of the questions not stored yet, from the lists (a progress whose lists were not built by
+     * add_playedquestion() in this request): the order of adding from the last stored one on, each with the scales
+     * whose lists hold it.
+     *
+     * @return array
+     */
+    private function shown_from_lists(): array {
+        $entries = [];
+        $lists = [];
+        foreach ($this->playedquestionsbyscale as $scaleid => $questions) {
+            foreach ((array) $questions as $entry) {
+                $lists[(string) (is_object($entry) ? $entry->id : $entry)][(string) $scaleid] = (int) $scaleid;
+            }
+        }
+        foreach (array_slice($this->add_order(), $this->savedshown) as $question) {
+            $member = $lists[(string) $question->id] ?? [];
+            // The path as add_playedquestion() files it, restricted to the lists that hold the question; a list that
+            // holds it beyond that path (the scales were moved in between) is kept as well.
+            $path = [];
+            foreach ($this->path_of($question) as $scaleid) {
+                if (isset($member[(string) $scaleid])) {
+                    $path[] = (int) $scaleid;
+                    unset($member[(string) $scaleid]);
+                }
+            }
+            $entries[] = $this->shown_entry($question, array_merge($path, array_values($member)));
+        }
+        return $entries;
+    }
+
+    /**
+     * Records the standard error of every scale after the answer, as the selection computed it (issue #177, C) - for
+     * the estimates the events keep. Nothing the selection reads.
+     *
+     * @param array $standarderrors Scale id => standard error.
+     * @return self
+     */
+    public function record_standard_errors(array $standarderrors): self {
+        foreach ($standarderrors as $scaleid => $se) {
+            $this->standarderrors[$scaleid] = is_numeric($se) ? (float) $se : null;
+        }
+        return $this;
+    }
+
+    /**
+     * Adds a row of the debug information (issue #177): stored with the events, not in the column of the attempt.
+     *
+     * @param array $row
+     * @return self
+     */
+    public function add_debug_row(array $row): self {
+        $this->debugrows[] = $row;
+        return $this;
+    }
+
+    /**
+     * The rows of the debug information recorded during the attempt (issue #177).
+     *
+     * @return array
+     */
+    public function get_debug_rows(): array {
+        return $this->debugrows;
     }
 
     /**
@@ -997,18 +1916,21 @@ class progress implements JsonSerializable {
      * the stored owner is compared first, with one read by primary key; on a mismatch nothing is written, the cached
      * state is dropped, and the attempt stops with the integrity message, as a load from the database does.
      *
+     * Issue #177: the row read is returned - its last event tells whether the stored working state went on without
+     * this request.
+     *
      * @param int $id local_catquiz_progress.id
-     * @return void
+     * @return stdClass|null The stored head (id, attemptid, userid, component, lastseq), null without one.
      */
-    private function refuse_a_foreign_row(int $id): void {
+    private function refuse_a_foreign_row(int $id): ?stdClass {
         global $DB;
-        $stored = $DB->get_record('local_catquiz_progress', ['id' => $id], 'id, attemptid, userid, component');
+        $stored = $DB->get_record('local_catquiz_progress', ['id' => $id], 'id, attemptid, userid, component, lastseq');
         if (!$stored) {
-            return;
+            return null;
         }
         $samecomponent = in_array((string) $stored->component, catquiz::component_names((string) $this->component), true);
         if ((int) $stored->userid === (int) $this->userid && $samecomponent) {
-            return;
+            return $stored;
         }
         cache::make('local_catquiz', 'adaptivequizattempt')
             ->delete(self::get_cache_key($this->catattemptid, (int) $this->attemptid, (string) $this->component));
@@ -1307,6 +2229,8 @@ class progress implements JsonSerializable {
             }
             $this->playedquestionsbyscale[$scaleid][] = $q;
         }
+        // Issue #177: stored as a shown event with the next save - what is read of it later, taken now.
+        $this->unsavedshown[] = $this->shown_entry($q, $affectedscales);
 
         $this->lastquestion = $q;
 
@@ -1792,6 +2716,8 @@ class progress implements JsonSerializable {
         }
 
         $this->responses[$lastresponse->questionid] = (array) $lastresponse;
+        // Issue #177: stored as an event with the next save.
+        $this->dirtyresponses[(string) $lastresponse->questionid] = true;
         return $this;
     }
 
@@ -1809,6 +2735,8 @@ class progress implements JsonSerializable {
                 'userlastattempttime' => time(),
             ],
         );
+        // Issue #177: stored as an event with the next save.
+        $this->dirtyresponses[(string) $this->lastquestion->id] = true;
         return $this;
     }
 

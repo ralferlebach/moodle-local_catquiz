@@ -25,7 +25,6 @@
 namespace local_catquiz\teststrategy\feedbackgenerator;
 
 use context_system;
-use local_catquiz\catquiz;
 use local_catquiz\local\access\context_resolver;
 use local_catquiz\local\attempt\attempt_statistics;
 use local_catquiz\teststrategy\feedbackgenerator;
@@ -103,9 +102,11 @@ class debuginfo extends feedbackgenerator {
         $debugenabled = (bool) get_config('local_catquiz', 'store_debug_info');
 
         $csvstring = "";
+        $texts = self::texts_of_the_usage($data['debuginfo'] ?? []);
+        $names = self::names_of_the_rows($data['debuginfo'] ?? []);
 
         foreach (($data['debuginfo'] ?? []) as $row) {
-            $newrow = $this->convert($row);
+            $newrow = $this->convert((array) $row, $texts, $names);
             $csvstring .= $this
                 ->set_row_data($newrow)
                 ->add_column_value('questionsattempted')
@@ -213,14 +214,139 @@ class debuginfo extends feedbackgenerator {
      * Converts from a possible old format to a new one.
      *
      * @param array $row The current row
+     * @param array $texts Right and given answer by question attempt id (texts_of_the_usage()).
+     * @param array $names Names of scales and labels of items the rows name by id (names_of_the_rows()).
      * @return array
      */
-    private function convert(array $row): array {
+    private function convert(array $row, array $texts = [], array $names = ['scales' => [], 'labels' => []]): array {
         $updated = $row;
-        if (is_array($row['lastresponse']) && array_key_exists('fraction', $row['lastresponse'])) {
+        if (is_array($row['lastresponse'] ?? null) && array_key_exists('fraction', $row['lastresponse'])) {
             $updated['lastresponse'] = $row['lastresponse']['fraction'];
         }
+        // Issue #177 (D): a newer row names scales and items by id; the names are those of today, read for the export.
+        $scalename = fn($scaleid) => (string) ($names['scales'][(int) $scaleid] ?? $scaleid);
+        if (is_array($row['personabilities'] ?? null)) {
+            $parts = [];
+            foreach ($row['personabilities'] as $scaleid => $ability) {
+                $parts[] = $scalename($scaleid) . ': ' . $ability;
+            }
+            $updated['personabilities'] = '"' . implode(', ', $parts) . '"';
+        }
+        if (is_array($row['activescales'] ?? null)) {
+            $updated['activescales'] = '"' . implode(', ', array_map($scalename, $row['activescales'])) . '"';
+        }
+        if (is_array($row['invaliditemparams'] ?? null)) {
+            $warnings = [];
+            foreach ($row['invaliditemparams'] as $warning) {
+                $warning = (array) $warning;
+                $warning['label'] = $names['labels'][(int) ($warning['itemid'] ?? 0)] ?? '';
+                $warnings[] = $warning;
+            }
+            $updated['invaliditemparams'] = self::format_invalid_itemparams($warnings);
+        }
+        // Issue #177 (D): a row stored before keeps its texts; a newer one gets them from the question usage.
+        $qaid = is_numeric($row['questionattemptid'] ?? null) ? (int) $row['questionattemptid'] : null;
+        foreach (['rightanswer', 'responsesummary'] as $field) {
+            if (!array_key_exists($field, $row) && $qaid !== null && isset($texts[$qaid])) {
+                $value = $texts[$qaid]->$field;
+                $updated[$field] = $value === null ? self::NA : trim((string) $value);
+            }
+        }
         return $updated;
+    }
+
+    /**
+     * The names of the scales and the labels of the items the rows name by id (issue #177, D) - two queries for the
+     * whole export, the names of today.
+     *
+     * @param array $rows
+     * @return array 'scales' => [scale id => name], 'labels' => [question id => label]
+     */
+    private static function names_of_the_rows(array $rows): array {
+        global $DB;
+        $scales = [];
+        $items = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            foreach (array_keys(is_array($row['personabilities'] ?? null) ? $row['personabilities'] : []) as $scaleid) {
+                $scales[(int) $scaleid] = true;
+            }
+            foreach (is_array($row['activescales'] ?? null) ? $row['activescales'] : [] as $scaleid) {
+                $scales[(int) $scaleid] = true;
+            }
+            foreach (is_array($row['invaliditemparams'] ?? null) ? $row['invaliditemparams'] : [] as $warning) {
+                $items[(int) (((array) $warning)['itemid'] ?? 0)] = true;
+            }
+        }
+        $names = ['scales' => [], 'labels' => []];
+        if ($scales) {
+            $records = $DB->get_records_list('local_catquiz_catscales', 'id', array_keys($scales), '', 'id, name');
+            $names['scales'] = array_map(fn($scale) => (string) $scale->name, $records);
+        }
+        unset($items[0]);
+        if ($items) {
+            [$insql, $params] = $DB->get_in_or_equal(array_keys($items));
+            $names['labels'] = $DB->get_records_sql_menu(
+                "SELECT qv.questionid, qbe.idnumber
+                   FROM {question_versions} qv
+                   JOIN {question_bank_entries} qbe ON qbe.id = qv.questionbankentryid
+                  WHERE qv.questionid $insql",
+                $params
+            );
+        }
+        return $names;
+    }
+
+    /**
+     * The fields of a question that are numbers, identities or codes - what a debug row keeps of it (issue #177, D):
+     * no label, no name, no text of the question bank.
+     *
+     * @param array $question
+     * @return array
+     */
+    private static function numbers_of(array $question): array {
+        $kept = [];
+        foreach ($question as $key => $value) {
+            if ($key === 'model' || $key === 'qtype') {
+                $kept[$key] = $value;
+            } else if (is_int($value) || is_float($value) || is_bool($value) || $value === null) {
+                $kept[$key] = $value;
+            } else if (is_string($value) && is_numeric($value)) {
+                $kept[$key] = $value;
+            } else if (is_array($value) || is_object($value)) {
+                $numbers = array_filter((array) $value, fn($v) => is_int($v) || is_float($v) || (is_string($v) && is_numeric($v)));
+                if (count($numbers) === count((array) $value)) {
+                    $kept[$key] = $numbers;
+                }
+            }
+        }
+        return $kept;
+    }
+
+    /**
+     * The right and the given answer of the question attempts the rows name and do not hold themselves (issue #177,
+     * D) - one query for the whole export.
+     *
+     * @param array $rows
+     * @return array Question attempt id => record with rightanswer and responsesummary.
+     */
+    private static function texts_of_the_usage(array $rows): array {
+        global $DB;
+        $ids = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            if (!array_key_exists('responsesummary', $row) && is_numeric($row['questionattemptid'] ?? null)) {
+                $ids[(int) $row['questionattemptid']] = true;
+            }
+        }
+        if (!$ids) {
+            return [];
+        }
+        $texts = [];
+        foreach (array_chunk(array_keys($ids), 1000) as $chunk) {
+            $texts += $DB->get_records_list('question_attempts', 'id', $chunk, '', 'id, rightanswer, responsesummary');
+        }
+        return $texts;
     }
 
     /**
@@ -390,36 +516,38 @@ class debuginfo extends feedbackgenerator {
         );
         $reflect = new \ReflectionClass($teststrategy[array_key_first($teststrategy)]);
 
-        $debuginfo = $existingdata['debuginfo'] ?? [];
-        $catscales = catquiz::get_catscales(array_keys($newdata['person_ability']));
+        // Issue #177: the rows of a running attempt are events of its progress - the column is written once, at the end
+        // (catquiz::save_attempt_to_db()), not with every answer. An attempt that was running during the update brings
+        // the rows of the column along, once.
+        $progress = $this->get_progress();
+        $debuginfo = $progress->get_debug_rows();
+        if (!$debuginfo && !empty($existingdata['debuginfo'])) {
+            foreach ((array) $existingdata['debuginfo'] as $earlier) {
+                $progress->add_debug_row((array) $earlier);
+            }
+            $debuginfo = $progress->get_debug_rows();
+        }
         $teststrategy = get_string($reflect->getShortName(), 'local_catquiz');
 
+        // Issue #177 (D): scales by id, with the ability - the names are read when the rows are exported (convert()).
         $personabilities = [];
         foreach ($newdata['person_ability'] as $catscaleid => $pp) {
-            if (empty($catscales[$catscaleid])) {
-                continue;
-            }
-            $personabilities[] = $catscales[$catscaleid]->name . ": " . $pp;
+            $personabilities[$catscaleid] = $pp;
         }
-
-        $personabilities = '"' . implode(", ", $personabilities) . '"';
 
         $questions = [];
         $questionsperscale = [];
 
-        $activescales = array_map(
-            fn ($scaleid) => $catscales[$scaleid]->name,
-            $this->get_progress()->get_active_scales()
-        );
-        $lastresponse = $this->get_progress()->get_last_response();
-        $debuginfo[] = [
+        $activescales = array_values(array_map('intval', $progress->get_active_scales()));
+        $lastresponse = $progress->get_last_response();
+        $row = [
             'pluginversion' => get_config('local_catquiz')->version ?? self::NA,
             'attemptid' => $adaptiveattemptid,
             'questionsattempted' => count($this->get_progress()->get_playedquestions()),
             'timestamp' => time(),
             'personabilities' => $personabilities,
             'questions' => $questions,
-            'activescales' => '"' . implode(", ", $activescales) . '"',
+            'activescales' => $activescales,
             // On the first question of an attempt these keys do not exist,
             // and catquiz.php removes lastquestion from the attempt data outright. On
             // a normal instance (array) null is simply [], but with DEBUG_DEVELOPER
@@ -428,19 +556,25 @@ class debuginfo extends feedbackgenerator {
             // question", pointing at the configuration instead of at this diagnostic
             // helper - so debug information was unobtainable exactly where it is
             // wanted. The neighbouring fields have always been guarded.
-            'lastquestion' => (array) ($newdata['lastquestion'] ?? []),
+            'lastquestion' => self::numbers_of((array) ($newdata['lastquestion'] ?? [])),
             'lastmiddleware' => $newdata['lastmiddleware'] ?? self::NA,
             'lastresponse' => isset($lastresponse) ? $lastresponse['fraction'] : self::NA,
             'numquestionsperscale' => '"'
                 . implode(", ", array_map(fn ($entry) => $entry['name'] . ": " . $entry['num'], $questionsperscale)) . '"',
             'state' => isset($lastresponse['state']) ? $lastresponse['state'] : self::NA,
-            'rightanswer' => isset($lastresponse['rightanswer']) ? trim($lastresponse['rightanswer']) : self::NA,
-            'responsesummary' => isset($lastresponse['responsesummary']) ? trim($lastresponse['responsesummary']) : self::NA,
+            // Issue #177 (D): the right and the given answer are texts of the question usage; they are read from there
+            // by the question attempt id when the export is built (get_teacherfeedback()), not stored with every answer.
             'originalfraction' => isset($lastresponse['originalfraction']) ? $lastresponse['originalfraction'] : self::NA,
             'fraction' => isset($lastresponse['fraction']) ? $lastresponse['fraction'] : self::NA,
             'questionattemptid' => isset($lastresponse['questionattemptid']) ? $lastresponse['questionattemptid'] : self::NA,
-            'invaliditemparams' => self::format_invalid_itemparams($newdata['invaliditemparams'] ?? []),
+            // Issue #177 (D): the item, its model and the reason; its label is read when the rows are exported.
+            'invaliditemparams' => array_values(array_map(
+                fn($warning) => array_diff_key((array) $warning, ['label' => true]),
+                (array) ($newdata['invaliditemparams'] ?? [])
+            )),
         ];
+        $progress->add_debug_row($row);
+        $debuginfo[] = $row;
 
         return ['debuginfo' => $debuginfo];
     }

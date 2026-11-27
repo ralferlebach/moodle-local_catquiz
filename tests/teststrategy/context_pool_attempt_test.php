@@ -297,7 +297,13 @@ final class context_pool_attempt_test extends advanced_testcase {
         global $DB;
         $this->assertNotEmpty($played);
         foreach ($played as $question) {
-            $item = $DB->get_record('local_catquiz_items', ['id' => $question->itemid], '*', MUST_EXIST);
+            // Issue #177: a played question holds what the code reads of it, not the id of its item row.
+            $item = $DB->get_record(
+                'local_catquiz_items',
+                ['componentid' => $question->id, 'contextid' => $contextid, 'catscaleid' => $question->catscaleid],
+                '*',
+                MUST_EXIST
+            );
             $this->assertSame($contextid, (int) $item->contextid, "Question {$question->id}: an item of the context.");
             $this->assertSame((int) $question->id, (int) $item->componentid);
             $this->assertSame((int) $item->catscaleid, (int) $question->catscaleid);

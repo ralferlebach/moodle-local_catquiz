@@ -25,6 +25,7 @@
 namespace local_catquiz\teststrategy\preselect_task;
 
 use local_catquiz\catscale;
+use local_catquiz\local\model\model_item_param;
 use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\result;
 use local_catquiz\teststrategy\preselect_task;
@@ -90,8 +91,12 @@ class filterbytestinfo extends preselect_task {
                 )
             );
             $remainingitems = clone ($allitems);
-            $playeditems = model_item_param_list::from_array(
-                $this->progress->without_pilots()->get_playedquestions(true, $scaleid)
+            // Issue #177: the parameters of the played items come from the items of the scale in this context, in the
+            // order they were played (a played question restored from a step holds no parameters); from_array() keyed
+            // them by question id, so a question added twice counts once.
+            $playeditems = self::played_items(
+                $this->progress->without_pilots()->get_playedquestions(true, $scaleid),
+                $allitems
             );
             foreach ($remainingitems as $i) {
                 if (in_array($i->get_componentid(), $playeditems->get_item_ids())) {
@@ -168,5 +173,29 @@ class filterbytestinfo extends preselect_task {
         }
 
         return result::ok($context);
+    }
+
+    /**
+     * The item parameters of played questions (issue #177): from the items of the scale, in the order of playing; a
+     * played item the scale does not hold any more by the active parameters it was played with.
+     *
+     * @param array $played Played questions of the scale, without pilots.
+     * @param model_item_param_list $scaleitems
+     * @return model_item_param_list
+     */
+    private static function played_items(array $played, model_item_param_list $scaleitems): model_item_param_list {
+        global $DB;
+        $list = new model_item_param_list();
+        foreach ($played as $question) {
+            $item = $scaleitems[$question->id] ?? null;
+            if ($item === null && !empty($question->activeparamid)) {
+                $record = $DB->get_record('local_catquiz_itemparams', ['id' => (int) $question->activeparamid]);
+                $item = $record ? model_item_param::from_record($record) : null;
+            }
+            if ($item !== null) {
+                $list->add($item);
+            }
+        }
+        return $list;
     }
 }

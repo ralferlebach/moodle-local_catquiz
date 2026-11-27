@@ -171,8 +171,8 @@ class progress_retention {
     public static function preserve_for_display(int $catattemptid): array {
         global $DB;
         $attempt = $DB->get_record('local_catquiz_attempts', ['id' => $catattemptid], 'id, json, scaleid');
-        $progressjson = $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattemptid]);
-        $progress = $progressjson ? json_decode((string) $progressjson, true) : null;
+        // Issue #177: the stored progress in either format (head and steps, or the JSON before).
+        $progress = \local_catquiz\teststrategy\progress::stored_structure($catattemptid);
         if (!is_array($progress)) {
             return [self::UNREADABLE];
         }
@@ -238,9 +238,9 @@ class progress_retention {
             $information = $question['fisherinformation'] ?? null;
             $rows[] = [
                 'id' => (string) $qid,
-                'questionname' => (string) ($question['label'] ?? ''),
+                // Issue #177 (D): no label - the table reads it from the question bank when it is shown.
                 'questionscale' => (string) ($question['catscaleid'] ?? ''),
-                'difficulty' => $question['difficulty'] ?? null,
+                'difficulty' => is_numeric($question['difficulty'] ?? null) ? (float) $question['difficulty'] : null,
                 'pilot' => $pilot,
                 'fisherinformation' => $pilot || !is_array($information) || !isset($information[$root])
                     ? null : round((float) $information[$root], 2),

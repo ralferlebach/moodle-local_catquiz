@@ -224,9 +224,13 @@ class filterbystandarderror extends preselect_task {
     private function check_scale_should_be_dropped(int $scaleid): bool {
         // All played items that belong to the scale or one of its ancestor scales.
 
-        $playeditems = model_item_param_list::from_array(
+        // Issue #177: what is counted is the distinct played items - their ids, not their parameters (a played question
+        // restored from a step holds no parameters). from_array() keyed them by question id, so a question added twice
+        // counted once; so it does here.
+        $playeditems = array_unique(array_map(
+            fn($q) => (string) $q->id,
             $this->progress->without_pilots()->get_playedquestions(true)[$scaleid]
-        );
+        ));
 
         // Special treatment for the main scale: exclude it only, if the minimum number of questions
         // per attempt AND questions per scale have been played.

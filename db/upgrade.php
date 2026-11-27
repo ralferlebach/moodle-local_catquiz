@@ -1604,6 +1604,49 @@ ENDSQL;
         upgrade_plugin_savepoint(true, 2026111706, 'local', 'catquiz');
     }
 
+    if ($oldversion < 2026112700) {
+        /* Issue #177: the working state of a running attempt is a head of fixed size (local_catquiz_progress) and
+           events that are only inserted (local_catquiz_progress_steps) - the whole progress is no longer written
+           again with every answer. Only the table and the column are created here: a running attempt moves to the new
+           format on its next save, under the lock of the item administration and in one transaction (events first,
+           then the head). Nothing stored is rewritten by the upgrade; finished attempts and their data stay as they
+           are. Line 1.3 has the same step (2026112701): every step checks first. */
+        $table = new xmldb_table('local_catquiz_progress_steps');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('catattemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('seq', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('eventtype', XMLDB_TYPE_CHAR, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('questionusageid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('slot', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('questionattemptid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('questionattemptstepid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('itemid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('catscaleid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('ispilot', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('paramid', XMLDB_TYPE_INTEGER, '10', null, null, null, null);
+        $table->add_field('fraction', XMLDB_TYPE_NUMBER, '12, 7', null, null, null, null);
+        $table->add_field('originalfraction', XMLDB_TYPE_NUMBER, '12, 7', null, null, null, null);
+        $table->add_field('difficulty', XMLDB_TYPE_FLOAT, null, null, null, null, null);
+        $table->add_field('information', XMLDB_TYPE_FLOAT, null, null, null, null, null);
+        $table->add_field('estimatesdelta', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('diagnostics', XMLDB_TYPE_TEXT, null, null, null, null, null);
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('formatversion', XMLDB_TYPE_INTEGER, '4', null, XMLDB_NOTNULL, null, '1');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('catattemptid', XMLDB_KEY_FOREIGN, ['catattemptid'], 'local_catquiz_attempts', ['id']);
+        $table->add_index('catattemptseq', XMLDB_INDEX_UNIQUE, ['catattemptid', 'seq']);
+        $table->add_index('catattemptstep', XMLDB_INDEX_NOTUNIQUE, ['catattemptid', 'questionattemptstepid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+        $progress = new xmldb_table('local_catquiz_progress');
+        $lastseq = new xmldb_field('lastseq', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'timemodified');
+        if (!$dbman->field_exists($progress, $lastseq)) {
+            $dbman->add_field($progress, $lastseq);
+        }
+        upgrade_plugin_savepoint(true, 2026112700, 'local', 'catquiz');
+    }
+
     return true;
 }
 
