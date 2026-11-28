@@ -384,6 +384,40 @@ bis der Marker verschwunden und die neue Seite fertig ist; ohne Seitenwechsel fe
   rund 9.000 ab, am `max_allowed_packet` des Altformats, und verlor dabei alle Längen. Die Simulation schreibt
   deshalb nach jeder Länge.
 
+---
+
+## 8. Code-Style nur im Moodle-Baum prüfen, Pakete nur nach grünem Preflight (28.11.2026)
+
+**Was passiert ist:** Host #28. Ein neuer Sprachstring stand nicht in alphabetischer Reihenfolge. Lokal meldete phpcs
+nichts, in der CI waren 13 von 16 Jobs rot. Die Regel `moodle.Files.LangFilesOrdering` greift nur, wenn phpcs die
+Datei an ihrem Ort im Moodle-Baum sieht (`lang/<sprache>/<komponente>.php` eines bekannten Plugins). Im Checkout
+bleibt sie stumm. Der Preflight hätte den Fehler gefunden, lief aber vor der Auslieferung nicht.
+
+**Werkzeuge, verbindlich:**
+- **`tools/phpcs-tree.sh <key> [--staged|--all|datei…]`:** phpcs mit moodle-cs 3.9.2 und php_codesniffer 4.0.4 wie
+  die CI, im Moodle-Baum des Spiegels. `--all` prüft die versionierten PHP-Dateien des Plugins abzüglich der Filter
+  aus `.moodle-plugin-ci.yml` (wie `moodle-plugin-ci codechecker --max-warnings 0`).
+  - Blockierend ist jeder Befund.
+  - Ausnahme Host legacy: Dort ist der Code-Style in der CI beratend, deshalb zählt nur, was gegenüber HEAD neu ist.
+- **pre-commit-Hook** `tools/git-hooks/pre-commit`, über `core.hooksPath` in allen sechs Repositories und ihren
+  Worktrees. Er prüft die gestagten PHP-Dateien im Baum; ein Commit mit neuem Befund wird abgelehnt. `--no-verify`
+  nur mit Begründung im Commit.
+- **Preflight Schritt 3b:** das ganze Plugin der blockierenden Komponenten im Baum. Ein grüner Lauf schreibt den
+  Stempel `/home/claude/preflight/last-green.txt` mit den geprüften Commits.
+- **`tools/zip-guard.sh <repo…>`** steht am Anfang jedes Paketbau-Skripts. Gebaut wird nur, wenn ein grüner Preflight
+  mit PHPUnit genau diese Commits geprüft hat und nichts seither geändert ist.
+
+**Merksätze:**
+- phpcs nie im Checkout als Abnahme werten. Ortsabhängige Regeln (Sprachdateien, Namespaces, Subplugins) sehen nur
+  den Baum.
+- Kein Paket ohne grünen Preflight für genau diese Commits. Ein Werkzeug, das nur empfohlen ist, wird unter Zeitdruck
+  ausgelassen; deshalb ist der Guard ein Abbruch, keine Warnung.
+
+**Nebenbefund derselben Runde:** Ein flakiger Konkurrenztest war ein echter Wettlauf im Plugin-Code. Ein Cache-Eintrag
+wurde gelöscht, während ein anderer Request ihn las; der Datei-Cache prüft erst `file_exists()` und öffnet dann.
+Abhängige Cache-Einträge deshalb nicht löschen, sondern über einen Fingerabdruck ihrer Quelle validieren
+(`catscale::hierarchy()`).
+
 ## 7. Checkliste vor Auslieferung
 
 1. Alle 7 Modell-Suiten grün (erwartete Test-/Skip-Zahlen unverändert).
@@ -398,7 +432,8 @@ bis der Marker verschwunden und die neue Seite fertig ist; ohne Seitenwechsel fe
    Und **im Moodle-Baum** (`make phpcs` tut das seit 02.11.2026): Nur dort kennt moodle-cs die Moodle-Version
    (auf 4.5 verstecken Attribute zwischen Docblock und Klasse die `@covers`-Angaben) und prüft die Sortierung der
    Sprachstrings. Aus dem Arbeitsbaum gemessen war beides unsichtbar; die Main-CI von 1.2 wurde rot.
-7. Interne Version erhöht; CHANGELOG + Session-Doku aktualisiert.
+7. Preflight grün für genau die gelieferten Commits; das Paketbau-Skript ruft `tools/zip-guard.sh` (§8).
+   Interne Version erhöht; CHANGELOG + Session-Doku aktualisiert.
 8. Beide ZIPs gebaut, Datei-/Ausschlusszahlen geprüft, präsentiert. Dabei
    sichergestellt, dass **kein** `.git`-Verzeichnis (auch kein verschachteltes)
    im Paket liegt: `unzip -l … | grep -c '/\.git/'` muss `0` sein.

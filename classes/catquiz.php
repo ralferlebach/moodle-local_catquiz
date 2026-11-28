@@ -1018,10 +1018,12 @@ class catquiz {
     }
 
     /**
-     * The step of the usage that finished a question last (#177): of the latest slot of the question, its final step.
+     * The step of the usage that finished a question last (#177): the newest slot of the question first, then its
+     * final step.
      *
      * A failure of a question (gave up, page reloaded past the time limit) is a step of the usage like an answer; this
-     * is its identity. Null when the question has no finished step in the usage.
+     * is its identity. Null when the newest slot of the question has no finished step - also when an older slot of
+     * the same question has one: that step belongs to the older slot (re-audit 28.11.2026, pending slot).
      *
      * @param int $questionusageid
      * @param int $questionid
@@ -1029,6 +1031,10 @@ class catquiz {
      */
     public static function get_last_finished_step_of_question(int $questionusageid, int $questionid): ?stdClass {
         global $DB;
+        $questionattempt = self::get_last_question_attempt_of_question($questionusageid, $questionid);
+        if ($questionattempt === null) {
+            return null;
+        }
         [$unfinishedsql, $params] = $DB->get_in_or_equal(
             self::get_unfinished_question_states(),
             SQL_PARAMS_NAMED,
@@ -1036,17 +1042,40 @@ class catquiz {
             false
         );
         $sql = <<<SQL
-        SELECT qs.id, qs.questionattemptid, qa.slot, qs.state
+        SELECT qs.id, qs.questionattemptid, qs.state
           FROM {question_attempt_steps} qs
-          JOIN {question_attempts} qa ON qs.questionattemptid = qa.id
-         WHERE qa.questionusageid = :questionusageid
-           AND qa.questionid = :questionid
+         WHERE qs.questionattemptid = :questionattemptid
            AND qs.state $unfinishedsql
-        ORDER BY qa.slot DESC, qs.sequencenumber DESC, qs.id DESC
+        ORDER BY qs.sequencenumber DESC, qs.id DESC
         SQL;
-        $params['questionusageid'] = $questionusageid;
-        $params['questionid'] = $questionid;
+        $params['questionattemptid'] = $questionattempt->id;
         $records = $DB->get_records_sql($sql, $params, 0, 1);
+        if (!$records) {
+            return null;
+        }
+        $step = reset($records);
+        $step->slot = $questionattempt->slot;
+        return $step;
+    }
+
+    /**
+     * The question attempt of the newest slot of a question in a usage (#177), null if it has none.
+     *
+     * @param int $questionusageid
+     * @param int $questionid
+     * @return stdClass|null id (question_attempts.id), slot
+     */
+    public static function get_last_question_attempt_of_question(int $questionusageid, int $questionid): ?stdClass {
+        global $DB;
+        $records = $DB->get_records_select(
+            'question_attempts',
+            'questionusageid = :u AND questionid = :q',
+            ['u' => $questionusageid, 'q' => $questionid],
+            'slot DESC',
+            'id, slot',
+            0,
+            1
+        );
         return $records ? reset($records) : null;
     }
 
@@ -1058,11 +1087,8 @@ class catquiz {
      * @return int
      */
     public static function get_last_slot_of_question(int $questionusageid, int $questionid): int {
-        global $DB;
-        return (int) $DB->get_field_sql(
-            'SELECT MAX(slot) FROM {question_attempts} WHERE questionusageid = :u AND questionid = :q',
-            ['u' => $questionusageid, 'q' => $questionid]
-        );
+        $questionattempt = self::get_last_question_attempt_of_question($questionusageid, $questionid);
+        return $questionattempt === null ? 0 : (int) $questionattempt->slot;
     }
 
     /**

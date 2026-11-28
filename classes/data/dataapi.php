@@ -71,8 +71,9 @@ class dataapi {
                 $allcatscales = [];
             }
             $cache->set('allcatscales', $allcatscales);
-            // Issue #169: the index of the hierarchy belongs to this list of scales.
-            $cache->delete('hierarchy');
+            // Issue #169: the index of the hierarchy belongs to this list of scales; catscale::hierarchy() checks it
+            // against the list (its fingerprint). It is not deleted here: a deletion while another request reads the
+            // index made the file store warn "Failed to open stream" (CI 27.11.2026, concurrent attempts).
         }
         return $allcatscales;
     }

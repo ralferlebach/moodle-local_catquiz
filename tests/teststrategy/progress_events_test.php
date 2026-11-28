@@ -600,6 +600,61 @@ final class progress_events_test extends advanced_testcase {
     }
 
     /**
+     * Re-audit 28.11.2026 (#177 P0, pending slot): a question answered in slot 1 and handed out again in a newer slot
+     * that has no finished step yet fails there. The failure belongs to the newer slot - not to the finished step of
+     * slot 1 - and is logged once as a later response: slot and question attempt named, no step made up, the first
+     * answer and N unchanged; warm and after a reload, called again and after the reload.
+     * RED before: the finished step of slot 1 was taken as the identity, known already - the failure was lost.
+     */
+    public function test_a_failure_in_a_pending_newer_slot_belongs_to_that_slot(): void {
+        $this->resetAfterTest();
+        $this->attempt(2);
+        $progress = $this->load();
+        $this->answer($progress, 1, true);
+
+        // Question 1 again in a newer slot, started, not finished.
+        $progress->add_playedquestion($this->question(1))->save();
+        $slot = $this->quba->add_question(\question_bank::load_question($this->questions[1]));
+        $this->quba->start_question($slot);
+        \question_engine::save_questions_usage_by_activity($this->quba);
+
+        $progress->mark_lastquestion_failed()->mark_lastquestion_failed()->save();
+        $this->forget();
+        $progress = $this->load();
+        $progress->mark_lastquestion_failed()->save();
+
+        $usage = (int) $this->quba->get_id();
+        $qa = fn(int $s) => (int) $this->quba->get_question_attempt($s)->get_database_id();
+        $rows = array_map(function ($e) {
+            $r = json_decode((string) $e->diagnostics, true)['r'] ?? [];
+            return [
+                $e->eventtype, (int) $e->itemid, $e->questionusageid === null ? null : (int) $e->questionusageid,
+                $e->slot === null ? null : (int) $e->slot,
+                $e->questionattemptid === null ? null : (int) $e->questionattemptid,
+                $e->questionattemptstepid === null ? null : (int) $e->questionattemptstepid,
+                (float) $e->fraction, $r['failurekey'] ?? null,
+            ];
+        }, array_values(array_filter(
+            $this->events(),
+            fn($e) => in_array($e->eventtype, [progress::EVENT_ANSWER, progress::EVENT_GAVEUP, progress::EVENT_LATER], true)
+        )));
+        $this->assertSame([
+            [progress::EVENT_ANSWER, $this->questions[1], $usage, 1, $qa(1), $this->step_of(1), 1.0, null],
+            [progress::EVENT_LATER, $this->questions[1], $usage, $slot, $qa($slot), null, 0.0,
+                'failed:' . $this->questions[1] . ':' . $slot],
+        ], $rows);
+
+        $this->forget();
+        $progress = $this->load();
+        $this->assertSame(1, $progress->get_num_answered_questions());
+        $this->assertEquals(1.0, (float) $progress->get_responses()[$this->questions[1]]['fraction'], 'The first answer counts.');
+        $later = $progress->get_later_responses();
+        $this->assertCount(1, $later);
+        $this->assertSame($slot, (int) $later[0]['slot'], 'The slot of the failure is named, not only in the key.');
+        $this->assertArrayNotHasKey('id', $later[0], 'No step is made up.');
+    }
+
+    /**
      * Re-audit 27.11.2026 evening (#177 P0): a failure is identified by the step of the usage it left - the gave-up
      * step, or the step catquiz::mark_last_question_failed() writes - and taken in once: called twice, again after a
      * crash before the save of the CAT attempt, and once more when the regular path takes in the same step. A failure

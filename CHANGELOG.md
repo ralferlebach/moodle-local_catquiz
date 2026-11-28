@@ -1,5 +1,32 @@
 # Changelog – local_catquiz
 
+## 1.2.2 (2026112800, 28.11.2026)
+
+CI-Fix und #177-Nachtrag aus dem Re-Audit vom 28.11.2026.
+
+- **CI 1.2, Lauf 46070366143:** `runtime_pool_test`, „concurrent attempts of several persons“, rot auf PHP 8.3/PostgreSQL.
+  - Meldung: `fopen(…/local_catquiz_catscales/…/hierarchy-….cache): Failed to open stream`.
+  - Ursache: `dataapi::get_all_catscales()` löschte beim Neuaufbau der Skalenliste den Index der Hierarchie, während
+    ein anderer Request ihn las. Der Datei-Cache von Moodle prüft erst die Existenz und öffnet dann; dazwischen war die
+    Datei weg.
+  - Jetzt trägt der Index den Fingerabdruck der Liste, aus der er gebaut wurde (IDs und Eltern), und wird nur neu
+    gebaut, wenn die Liste abweicht. Gelöscht wird nichts mehr.
+  - Test `catscale_hierarchy_index_test` (Pflichtliste), rot gegen den alten Stand. Der Konkurrenztest lief 10-mal
+    grün je Linie; die ursprüngliche Flakiness ist lokal nicht reproduziert.
+- **#177, Fehlschlag in einem offenen neueren Slot:**
+  - `catquiz::get_last_finished_step_of_question()` bestimmt zuerst den neuesten Slot der Frage und dann dessen
+    letzten fertigen Schritt.
+  - Vorher lieferte sie den fertigen Schritt eines älteren Slots, wenn der neuere noch offen war. Der Fehlschlag galt
+    dann als bekannt und ging verloren.
+  - Ohne fertigen Schritt nennt das Ereignis Slot und Question-Attempt ausdrücklich (`slot`, `questionattemptid`).
+    Der Schritt bleibt leer.
+  - Test `test_a_failure_in_a_pending_newer_slot_belongs_to_that_slot`, rot gegen den alten Stand; 2 Zahntests je
+    Linie.
+- **Entwicklungsumgebung:**
+  - phpcs läuft im Moodle-Baum wie die CI (`tools/phpcs-tree.sh`), als pre-commit-Hook in allen Repositories.
+  - Pakete werden nur nach grünem Preflight für genau die Commits gebaut (Host #28).
+- Kein Schemawechsel.
+
 ## 1.2.2 (2026112703, 27.11.2026 abends)
 
 Nacharbeit zum Re-Audit vom 27.11.2026 abends (Push-Stand 2026112703/2026112702) und die neuen P0-Issues.

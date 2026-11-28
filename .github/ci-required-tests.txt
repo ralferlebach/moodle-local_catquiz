@@ -35,3 +35,4 @@ progress_events_test                 # #177 head and events, identities of the u
 progress_integrity_test              # #96, #177 a foreign row is not written over
 cancel_expired_attempts_policy_test  # #178 policy of the lab, default of the site, lock of a request, an end kept
 cancel_expired_attempts_test         # #178 effective expiry policy (0/empty/none/seconds/units/24 h/pause)
+catscale_hierarchy_index_test        # CI 27.11.: the index of the hierarchy is kept on a rebuild and follows the list

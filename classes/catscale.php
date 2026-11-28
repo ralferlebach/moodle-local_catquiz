@@ -876,25 +876,34 @@ class catscale {
      * The index of the scale hierarchy (issue #169): parent by scale, children by parent in the order of all scales.
      *
      * Built once per revision of the scales and kept beside them in the cache 'catscales': a change of the scales
-     * purges both (event changesincatscales), and a rebuild of the list of scales drops the index
-     * (dataapi::get_all_catscales()). No session purge, nothing global beyond the scales themselves.
+     * purges both (event changesincatscales). The index carries the fingerprint of the list of scales it was built
+     * from (ids and parents, in order) and is rebuilt when the list differs - so a rebuild of the list of scales
+     * needs no deletion of the index, which raced with readers of it in other requests (CI 27.11.2026). No session
+     * purge, nothing global beyond the scales themselves.
      *
      * @return array ['parent' => [id => parentid], 'children' => [parentid => [id, ...]]]
      */
     public static function hierarchy(): array {
         $cache = cache::make('local_catquiz', 'catscales');
+        $scales = dataapi::get_all_catscales();
+        $pairs = [];
+        foreach ($scales as $scale) {
+            $pairs[] = (int) $scale->id . ':' . (int) $scale->parentid;
+        }
+        $fingerprint = sha1(implode(',', $pairs));
         $index = $cache->get('hierarchy');
-        if (is_array($index) && isset($index['parent'], $index['children'])) {
+        if (is_array($index) && isset($index['parent'], $index['children']) && ($index['of'] ?? '') === $fingerprint) {
+            unset($index['of']);
             return $index;
         }
         $index = ['parent' => [], 'children' => []];
-        foreach (dataapi::get_all_catscales() as $scale) {
+        foreach ($scales as $scale) {
             $id = (int) $scale->id;
             $parent = (int) $scale->parentid;
             $index['parent'][$id] = $parent;
             $index['children'][$parent][] = $id;
         }
-        $cache->set('hierarchy', $index);
+        $cache->set('hierarchy', $index + ['of' => $fingerprint]);
         return $index;
     }
 
