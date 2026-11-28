@@ -2891,7 +2891,13 @@ class progress implements JsonSerializable {
             $entry['stepstate'] = (string) $step->state;
             $key = (string) $step->id;
         } else {
-            $slot = $this->usageid ? catquiz::get_last_slot_of_question((int) $this->usageid, (int) $qid) : 0;
+            // No finished step in the newest slot: the slot and its question attempt are named, the step stays empty.
+            $attempt = $this->usageid ? catquiz::get_last_question_attempt_of_question((int) $this->usageid, (int) $qid) : null;
+            $slot = $attempt === null ? 0 : (int) $attempt->slot;
+            if ($attempt !== null) {
+                $entry['questionattemptid'] = (int) $attempt->id;
+                $entry['slot'] = $slot;
+            }
             $key = 'failed:' . $qid . ':' . $slot;
             $entry['failurekey'] = $key;
         }
